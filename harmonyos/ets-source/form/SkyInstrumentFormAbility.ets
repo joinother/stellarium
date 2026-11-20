@@ -210,8 +210,8 @@ export default class SkyInstrumentFormAbility extends FormExtensionAbility {
         entries.push({ eventId: eventId, reminderId: reminderId })
         writeRemindedEntries(this.context, entries)
         toast = '已预约提醒'
-        hilog.info(DOMAIN, TAG, 'widget reminder published: eventId=%{public}s id=%{public}d jd=%{public}f target=%{public}s',
-          eventId, reminderId, jd, target)
+        hilog.info(DOMAIN, TAG, 'widget reminder published: eventId=%{public}s id=%{public}d jd=%{public}s target=%{public}s',
+          eventId, reminderId, String(Math.round(jd)), target)
       } catch (error) {
         const err = error as BusinessError
         hilog.warn(DOMAIN, TAG, 'widget publishReminder failed: code=%{public}d msg=%{public}s', err?.code ?? -1, err?.message ?? String(error))

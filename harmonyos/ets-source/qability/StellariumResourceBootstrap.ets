@@ -38,6 +38,7 @@ const DETAIL_MEDIA_IMAGE_EXTENSION = /\.(?:png|jpe?g|webp)$/i;
 const TEXTURE_COMPAT_MARKER = '.ohos_texture_compat_v1';
 const TEXTURE_COMPAT_FILES: Array<string> = ['charon.png', 'neptune.png', 'sedna.png', 'uranus.png'];
 const MILKYWAY_TEXTURE_MARKER = '.ohos_milkyway_ai_4k_v2';
+const STARTUP_CORE_REFRESH_MARKER = '.ohos_startup_core_v1';
 const DETAIL_MODEL_TEXTURE_MARKER = '.ohos_detail_model_rgba_v2';
 const DETAIL_MODEL_TEXTURE_FILES: Array<string> = [
   'sun.png', 'mercury.png', 'venus.png', 'earth_cmap.png', 'moon.png', 'mars.png', 'jupiter.png', 'saturn.png',
@@ -304,6 +305,12 @@ async function refreshObjectTypeTranslations(appContext: common.ApplicationConte
 }
 
 async function refreshSkyCultureEditorialResources(appContext: common.ApplicationContext, installRoot: string): Promise<void> {
+  const markerPath = `${installRoot}/${SKYCULTURE_EDITORIAL_MARKER}`;
+  if (exists(markerPath) &&
+    fileSize(`${installRoot}/data/skyculture_editorial_context.json`) > 0 &&
+    fileSize(`${installRoot}/skycultures/modern/description.md`) > 0) {
+    return;
+  }
   const descriptionDomain = 'translations/stellarium-skycultures-descriptions';
   const paths: Array<string> = [
     'data/skyculture_editorial_context.json',
@@ -324,7 +331,6 @@ async function refreshSkyCultureEditorialResources(appContext: common.Applicatio
       paths.push(`${descriptionDomain}/${name}`);
     }
   }
-  const markerPath = `${installRoot}/${SKYCULTURE_EDITORIAL_MARKER}`;
   if (exists(markerPath) && paths.every((path: string) => fileSize(`${installRoot}/${path}`) > 0)) {
     return;
   }
@@ -1008,30 +1014,35 @@ export async function prepareStellariumResources(appContext: common.ApplicationC
   await refreshConstellationModels(appContext, installRoot);
   await refreshObjectTypeTranslations(appContext, installRoot);
 
-  // HAP updates preserve filesDir. Refresh these small, mandatory records on
-  // every start so upgraded installs can browse the restored categories even
-  // while the optional image collection is still being installed.
-  try {
-    await copyDeepSkyIndexes(appContext, installRoot);
-  } catch (err) {
-    hilog.error(LOG_DOMAIN, LOG_TAG, `Failed to refresh deep-sky indexes: ${JSON.stringify(err)}`);
+  // HAP updates preserve filesDir. Refresh startup-critical indexes & core textures
+  // once per revision marker instead of rewriting ~8MB on every cold launch.
+  const startupCoreMarker = `${installRoot}/${STARTUP_CORE_REFRESH_MARKER}`;
+  const startupCoreIntact = exists(startupCoreMarker) &&
+    fileSize(nebulaeMarker) > 0 &&
+    fileSize(defaultConfigPath) > 0 &&
+    fileSize(`${installRoot}/data/ssystem_major.ini`) > 0 &&
+    fileSize(`${installRoot}/textures/moon.png`) > 0 &&
+    fileSize(keyQmScripts) > 0;
+  if (!startupCoreIntact) {
+    try {
+      await copyDeepSkyIndexes(appContext, installRoot);
+    } catch (err) {
+      hilog.error(LOG_DOMAIN, LOG_TAG, `Failed to refresh deep-sky indexes: ${JSON.stringify(err)}`);
+    }
+    try {
+      await writeRawFileAsync(appContext, `${RAW_ROOT}/data/default_cfg.ini`, defaultConfigPath);
+      await writeRawFileAsync(appContext, `${RAW_ROOT}/data/ssystem_major.ini`, `${installRoot}/data/ssystem_major.ini`);
+      await writeRawFileAsync(appContext, `${RAW_ROOT}/textures/moon.png`, `${installRoot}/textures/moon.png`);
+      await writeRawFileAsync(appContext, `${RAW_ROOT}/textures/moon_normals.png`, `${installRoot}/textures/moon_normals.png`);
+      await writeRawFileAsync(appContext, `${RAW_ROOT}/textures/moon_horizon.png`, `${installRoot}/textures/moon_horizon.png`);
+      await writeRawFileAsync(appContext, `${RAW_ROOT}/translations/stellarium-scripts/zh_CN.qm`, keyQmScripts);
+      writeMarker(startupCoreMarker);
+    } catch (err) {
+      hilog.error(LOG_DOMAIN, LOG_TAG, `Failed to refresh Moon resources: ${JSON.stringify(err)}`);
+    }
   }
   hilog.info(LOG_DOMAIN, LOG_TAG,
-    `Deep-sky catalogue on disk: ${nebulaeMarker}, size=${fileSize(nebulaeMarker)}`);
-
-  // HAP updates preserve filesDir. Refresh startup-critical files even when
-  // an older install passes the extraction marker. In particular Qt aborts if
-  // default_cfg.ini is absent when it first creates the user configuration.
-  try {
-    await writeRawFileAsync(appContext, `${RAW_ROOT}/data/default_cfg.ini`, defaultConfigPath);
-    await writeRawFileAsync(appContext, `${RAW_ROOT}/data/ssystem_major.ini`, `${installRoot}/data/ssystem_major.ini`);
-    await writeRawFileAsync(appContext, `${RAW_ROOT}/textures/moon.png`, `${installRoot}/textures/moon.png`);
-    await writeRawFileAsync(appContext, `${RAW_ROOT}/textures/moon_normals.png`, `${installRoot}/textures/moon_normals.png`);
-    await writeRawFileAsync(appContext, `${RAW_ROOT}/textures/moon_horizon.png`, `${installRoot}/textures/moon_horizon.png`);
-    await writeRawFileAsync(appContext, `${RAW_ROOT}/translations/stellarium-scripts/zh_CN.qm`, keyQmScripts);
-  } catch (err) {
-    hilog.error(LOG_DOMAIN, LOG_TAG, `Failed to refresh Moon resources: ${JSON.stringify(err)}`);
-  }
+    `Deep-sky catalogue on disk: ${nebulaeMarker}, size=${fileSize(nebulaeMarker)}, fastPath=${startupCoreIntact}`);
 
   try {
     await refreshTextureCompatibility(appContext, installRoot);

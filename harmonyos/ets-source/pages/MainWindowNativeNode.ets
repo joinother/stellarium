@@ -2692,7 +2692,7 @@ export struct WindowNativeNode {
           setScriptMetadata: (raw: Object | undefined): void => { this.scriptPlaybackCtl().setScriptMetadata(raw) },
           reloadConfigurationSettings: (): void => { this.settingsCtl().loadConfigurationSettings() },
           // 引擎启动确认后由 StartupBridge 调用；立即读引擎状态，不排队、不延时。
-          refreshRuntimeState: (): void => { this.engineReady = true; this.refreshStateNow(); this.syncStarBrightnessFromEngine(); this.consumeCardRoute(); void this.notificationCtl().refreshSubscriptions() },
+          refreshRuntimeState: (): void => { this.engineReady = true; this.refreshStateNow(); this.syncStarBrightnessFromEngine(); this.consumeCardRoute(); void this.notificationCtl().refreshSubscriptions(); this.scheduleCardSnapshotSync(1800) },
           // Startbridge 的「引擎就绪」以 StelApp::isInitialized() 为准：
           // 出帧就绪可能早于 init 完成，提前投放查询会在 init 期间堆积重试链。
           enginePresentationReady: (): boolean => isEngineReady()
@@ -3207,6 +3207,7 @@ export struct WindowNativeNode {
           this.coordinateText = coordinate
           this.altitudeText = altitude
           void this.notificationCtl().refreshSubscriptions()
+          this.scheduleCardSnapshotSync(600)
         },
         privacyAllowed: (): boolean => this.privacyNativeStartupAllowed,
         inForeground: (): boolean => this.applicationInForeground,
@@ -4138,6 +4139,20 @@ export struct WindowNativeNode {
     this.setPanel(panel, true, true)
   }
 
+  private cardSnapshotSyncTimer: number = -1
+
+  // 防抖触发桌面卡片快照同步与按星球分键缓存（启动后、卡片点击入端、切换观测星球/位置时自动执行）。
+  private scheduleCardSnapshotSync(delayMs: number = 400): void {
+    if (!this.engineReady || !hasCurrentPrivacyConsent()) return
+    if (this.cardSnapshotSyncTimer >= 0) {
+      clearTimeout(this.cardSnapshotSyncTimer)
+    }
+    this.cardSnapshotSyncTimer = setTimeout(() => {
+      this.cardSnapshotSyncTimer = -1
+      this.persistAlmanacCardSnapshot()
+    }, Math.max(80, delayMs))
+  }
+
   // 年历加载完成后，拉取今夜天象并刷新桌面卡片快照。
   private persistAlmanacCardSnapshot(): void {
     this.callNativeWhenReady('getTonightEvents', '', (response: StellariumBridgeResponse) => {
@@ -4145,7 +4160,8 @@ export struct WindowNativeNode {
       const tonight = response.tonight as TonightEvents
       const context = this.getUIContext().getHostContext() as common.UIAbilityContext
       void publishAstronomyCard(context, tonight as CardTonightData).then((result) => {
-        hilog.info(0xD003, 'Stellarium', '[form-update] updated=%{public}d failed=%{public}d', result.updatedForms, result.failedForms)
+        hilog.info(0xD003, 'Stellarium', '[form-update] planet=%{public}s updated=%{public}d failed=%{public}d',
+          result.snapshot['observerPlanet'] ?? 'Earth', result.updatedForms, result.failedForms)
       }).catch((error: Error) => {
         hilog.warn(0xD003, 'Stellarium', 'save card snapshot failed: %{public}s', error.message)
       })
@@ -4165,12 +4181,15 @@ export struct WindowNativeNode {
       const kind = typeof route['kind'] === 'string' ? String(route['kind']).trim() : ''
       const target = typeof route['target'] === 'string' ? String(route['target']).trim() : ''
       const routePlanet = typeof route['observerPlanet'] === 'string' ? String(route['observerPlanet']).trim() : ''
-      const currentPlanet = this.sessionToolStore?.observerPlanet?.trim() || 'Earth'
-      if (routePlanet.length > 0 && routePlanet.toLowerCase() !== currentPlanet.toLowerCase()) {
+      if (routePlanet.length > 0) {
+        // 卡片显式携带星球视角时始终切换并立即同步刷新该星球桌面卡片缓存
         this.callInteractive('setObserverPlanet', routePlanet, () => {
           if (this.sessionToolStore) this.sessionToolStore.observerPlanet = routePlanet
           this.refreshState()
+          if (this.scheduleCardSnapshotSync !== undefined) this.scheduleCardSnapshotSync(320)
         })
+      } else if (this.scheduleCardSnapshotSync !== undefined) {
+        this.scheduleCardSnapshotSync(450)
       }
       const rawJd = route['jd'] === undefined ? NaN : Number(route['jd'])
       const eventAtMs = new Date(String(route['eventAt'] ?? '')).getTime()

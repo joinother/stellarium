@@ -303,10 +303,11 @@ struct SkyLiveFormPage {
 
   private scheduleOverflowShowcase(): void {
     if (this.animStarted) return
-    // Wait 24ms (1-2 frames) so ArkUI's first layout pass locks exact sub-pixel slotCenterX/Y via onAreaChange!
+    // Wait 240ms after onAppear so RenderService commits our 100% pixel-identical resting frame
+    // and SceneBoard finishes revealing the LiveForm surface BEFORE animateTo begins (prevents entry jump!).
     this.startTimerId = setTimeout(() => {
       this.runOverflowShowcase()
-    }, 24)
+    }, 240)
   }
 
   private runOverflowShowcase(): void {
@@ -322,8 +323,8 @@ struct SkyLiveFormPage {
       Math.round(this.peakCenterX()), Math.round(this.peakCenterY()),
       String(this.hasCardGlobal && this.hasRawSlot))
 
-    // Phase 1 (24ms -> 584ms): Smooth lift directly out of exact resting socket -> top-center overflow peak
-    this.uiContext?.animateTo({ duration: 560, curve: Curve.FastOutSlowIn }, () => {
+    // Phase 1 (240ms -> 880ms): Symmetric EaseInOut lift from velocity 0 out of exact resting socket -> top-center peak
+    this.uiContext?.animateTo({ duration: 640, curve: Curve.EaseInOut }, () => {
       this.orbDx = dx
       this.orbDy = dy
       this.orbScale = 1.0
@@ -341,20 +342,20 @@ struct SkyLiveFormPage {
       this.uiContext?.animateTo({ duration: 220, curve: Curve.EaseIn }, () => {
         this.meteorOpacity = 1.0
       })
-      this.uiContext?.animateTo({ duration: 1100, curve: Curve.FastOutSlowIn }, () => {
+      this.uiContext?.animateTo({ duration: 1050, curve: Curve.EaseInOut }, () => {
         this.meteorX = this.formRect.width * 0.88
         this.meteorY = -Math.max(8, Math.round(this.formRect.top * 0.48))
       })
       this.meteorFadeTimerId = setTimeout(() => {
-        this.uiContext?.animateTo({ duration: 320, curve: Curve.EaseOut }, () => {
+        this.uiContext?.animateTo({ duration: 300, curve: Curve.EaseOut }, () => {
           this.meteorOpacity = 0.0
         })
-      }, 1050)
+      }, 980)
     }
 
-    // Phase 3 (2050ms -> 2690ms): Smooth return ALL THE WAY back into exact resting socket + restore resting card UI
+    // Phase 3 (2170ms -> 2790ms): Smooth return ALL THE WAY back into exact resting socket + restore resting card UI
     this.returnTimerId = setTimeout(() => {
-      this.uiContext?.animateTo({ duration: 640, curve: Curve.EaseInOut }, () => {
+      this.uiContext?.animateTo({ duration: 620, curve: Curve.EaseInOut }, () => {
         this.orbDx = 0
         this.orbDy = 0
         this.orbScale = restScale
@@ -364,14 +365,14 @@ struct SkyLiveFormPage {
         this.controlsOffsetY = 10
         this.meteorOpacity = 0.0
       })
-    }, 2050)
+    }, 1930)
 
-    // Phase 4 (3020ms): After resting pixel-identically for ~330ms, release overflow cleanly with zero jump!
+    // Phase 4 (3100ms total): After resting pixel-identically for ~310ms, hand back cleanly!
     this.finishTimerId = setTimeout(() => {
       if (!this.userSwappedPlanet && this.formId.length > 0) {
         formProvider.cancelOverflow(this.formId).catch(() => {})
       }
-    }, 3020)
+    }, 2860)
   }
 
   private cycleFloatingPlanetInPlace(): void {

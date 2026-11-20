@@ -3,6 +3,7 @@ import path from 'node:path'
 import assert from 'node:assert/strict'
 import {
   SUPPORTED_EDIT_PLANETS,
+  applyAnalyticalTimePreview,
   applyCardConfigToSnapshot,
   applyTimeline48hToCard,
   buildAstronomyCard,
@@ -280,5 +281,11 @@ const day3Earth = computePreviewPhaseForDay(11.0, 3, true)
 assert.equal(day3Earth.phaseName, '满地')
 assert.deepEqual(parseRemindedEventIds('["ev-1","ev-2"]'), ['ev-1', 'ev-2'])
 assert.deepEqual(parseRemindedEventIds('invalid'), [])
+
+// Offline analytical time-scrubbing must vary sunAlt & sky gradient across +4h / +8h on unsynced worlds
+const jup4h = applyAnalyticalTimePreview(buildFallbackCardForPlanet('Jupiter', now + 4 * 3600000), 'Jupiter', now + 4 * 3600000, 4)
+const jup8h = applyAnalyticalTimePreview(buildFallbackCardForPlanet('Jupiter', now + 8 * 3600000), 'Jupiter', now + 8 * 3600000, 8)
+assert.notEqual(jup4h.sunAlt, jup8h.sunAlt, 'Jupiter +4h and +8h analytical sunAlt must advance with solar rotation')
+assert.ok(JSON.parse(jup4h.visiblePlanetsJson).length >= 2, 'Jupiter preset must provide fallback visible planets')
 
 console.log(`HarmonyOS interactive widget contract, transparent backplate, overflow & data tests passed: ${expectedForms.length} cards, 11 3D orbs, ${overflowCases.length} overflow specs`)

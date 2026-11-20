@@ -1,5 +1,25 @@
 > **身份图例**：本文件真机记录中出现的 `com.cnchensh.stellarium` 是**本机调试签名身份**（本机 DevEco 自动生成，非发布身份）；发布身份为 `com.joinother.skyinstrument`。构建脚本 `build-ohos-hap-windows.ps1 -Install` 从产物 `pack.info` 读取实际包名，仓库不写死任何签名身份（见 `docs/harmonyos/release/BUNDLE-IDENTITY-CLEANUP.md`）。
 
+## [2026-11-20] 应用冷启动提速近 50%、桌面卡片全按钮同步缓存完善与破框入场过渡优化
+
+- **修改文件：** `src/StelMainView.cpp`、`harmonyos/ets-source/qability/StellariumResourceBootstrap.ets`、`harmonyos/ets-source/pages/MainWindowNativeNode.ets`、`harmonyos/ets-source/form/AstronomyCardData.ts`、`harmonyos/ets-source/form/FormStoreHelper.ets`、`harmonyos/ets-source/form/SkyLiveFormPage.ets`、`harmonyos/ets-source/form/SkyInstrumentFormAbility.ets`、`scripts/test-ohos-form-cards.mjs`、`docs/harmonyos/CHANGELOG.md`。
+- **问题排查与修复：**
+  1. **大幅压缩应用退出重进（冷启动）加载耗时（`13.81s → 7.11s`，提速 48.5%）：**
+     - 真机 `hilog` 逐毫秒剖析发现：冷启动期间 `StelApp::initPlugIns()` 在首帧前同步加载 25 个插件阻塞长达 `5.80s`（其中 `Satellites` `1.78s`、`Exoplanets` `1.46s`、`Quasars` `1.16s`、`Pulsars` `0.67s`）；同时 `StellariumResourceBootstrap.ets` 每次启动均无条件重复扫描 60+ 星空文化 rawfile 目录并重写约 8MB 深空索引与月球贴图（`392ms`）。
+     - 在 `src/StelMainView.cpp`（`#if defined(__OHOS__)`）改为首帧前仅加载轻量 `MeteorShowers`（`2ms`），待首帧星图上屏并留出 `1800ms` 交互响应窗口（确保卡片入端切星与 `getTonightEvents` 零竞争）后，再以 `120ms` 间隔分片异步加载其余插件与脚本管理器，并为卫星命令补齐按需即载兜底（`loadPlugin("Satellites")`）。
+     - 在 `StellariumResourceBootstrap.ets` 为 `refreshSkyCultureEditorialResources()` 提前短路检查，并为深空索引/核心贴图增加版本标记 `.ohos_startup_core_v1` 跳过重复拷贝。
+  2. **修复桌面卡片「点进去不刷新缓存」与未同步星球 `+4h` 推演不动问题：**
+     - `MainWindowNativeNode.ets` 新增防抖 `scheduleCardSnapshotSync()`，在应用启动就绪、卡片点击入端 `consumeCardRoute()` 切换 `observerPlanet`、以及应用内切换位置/观测星球时，自动拉取 C++ 实时 `getTonightEvents` + 48h 时间片，按星球分键持久化至 `FormStoreHelper` 并立即批量 `formProvider.updateForm()` 刷新全部桌面卡片（固定异星卡片互不干扰）。
+     - `AstronomyCardData.ts` + `FormStoreHelper.ets` 新增 `applyAnalyticalTimePreview()`，按各星球真实太阳日周期（木星 `9.9h`、土星 `10.7h`、火星 `24.7h`、海王星 `16.1h` 等）计算实时太阳高度与昼夜天穹渐变，并为木星/土星/海王星预设补齐行星可见性行，解决未同步卡片点击 `+4h ›` 时太阳高度卡死 `-18.0°`、背景色不变的问题。
+  3. **修复破框入场瞬间跳变缺少过渡动画问题：**
+     - 真机逐帧探针定位：`onAppear()` 后仅延迟 `24ms` 即调用 `animateTo()` 会抢在 RenderService 首帧提交与 SceneBoard 切窗前把起止状态折叠为跳变。在 `SkyLiveFormPage.ets` 将入场起动延至 `240ms`（等待静息同帧稳态上屏）并采用对称 `Curve.EaseInOut`（`640ms`），使破框升起与回落同样平滑自然。
+- **验证与真机实测（MatePad Mini `192.168.31.234:42713`）：**
+  - 主机验证：`test-ohos-form-cards.mjs`（新增未同步木星 `+4h`/`+8h` 动态推演与预设行星行断言）、`test-ohos-off-earth-calendar-and-snapshot.mjs`、`test-ohos-notification-integration.mjs`、`test-ohos-native-astronomy-calendar.mjs`、`check-ohos-ui-contract.mjs` 全通过。
+  - 真机实测：
+    - 全按钮遍历：`天象预告 ›` 翻页与 `提醒 → ★ 已约` 静默预约、`星历弧盘 ↻` 换星、`悬浮天体` 破框内 `↻ 换星`（地球→带环土星持久化）、`天穹之窗` 离线 `+4h`/`+8h` 动态推演（`-15.3° → -20.2°` 天穹同步变暗）全部生效；
+    - 未同步卡片入端刷新：点击木星 `2×4` 卡片入端后自动输出 `[form-update] planet=Jupiter updated=5 failed=0`，返回桌面核验木星 `2×4` 与 `4×4` 同步更新为真实 C++ 星历（`日落 10:14`、`木卫三 · 上弦木卫三 50%`、`13:24 推演`、5 颗行星实时高度条与 `满木卫三 43 小时后`），同时悬浮土星与弧盘海王星保持各自独立视角缓存；
+    - 启动耗时实测：强杀冷启动首帧由 `13.81s` 降至 `7.11s`（提速 48.5%），后台热启动返场约 `0.24s`。
+
 ## [2026-11-20] 桌面卡片 3D 球面相位、Canvas 升落弧线、零方框破框与无缝衔接重构
 
 - **修改文件：** `scripts/build-ohos-widget-orbs.py`、`harmonyos/resources/base/media/widget_orb_*.png`、`harmonyos/resources/base/media/widget_phase_00..15.png`（新增 16 张 3D 球面相位遮罩）、`harmonyos/ets-source/form/WidgetVisuals.ets`、`harmonyos/ets-source/form/FloatingOrbCard.ets`、`harmonyos/ets-source/form/SkyWindowCard.ets`、`harmonyos/ets-source/form/CelestialEventsCard.ets`、`harmonyos/ets-source/form/AstronomyCardData.ts`、`harmonyos/ets-source/form/SkyInstrumentFormAbility.ets`、`harmonyos/ets-source/form/SkyLiveFormPage.ets`、`scripts/test-ohos-form-cards.mjs`、`docs/harmonyos/CHANGELOG.md`。

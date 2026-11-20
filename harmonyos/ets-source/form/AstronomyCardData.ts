@@ -680,6 +680,13 @@ export function buildFallbackCardForPlanet(planetId: string, now: number): Recor
     card['moonPhase'] = '木卫三 · 凌木巡天'
     card['moonIllumination'] = '76'
     card['moonSummary'] = '伽利略卫星系'
+    card['planetSummary'] = '木卫三 · 土星可见'
+    card['planetNames'] = '土星 · 火星 · 地球'
+    card['visiblePlanetsJson'] = JSON.stringify([
+      { n: '土星', e: 'Saturn', s: '♄', v: true, r: '18:40', t: '03:50', a: 36, m: 0.4 },
+      { n: '火星', e: 'Mars', s: '♂', v: true, r: '20:10', t: '05:20', a: 24, m: 1.5 },
+      { n: '地球', e: 'Earth', s: '⊕', v: false, r: '05:45', t: '14:30', a: -8, m: 0.8 }
+    ])
     card['nextEventTitle'] = '木星视角 · 伽利略四卫与外行星'
     card['nextEventTarget'] = 'Saturn'
     card['nextEventCountdown'] = '同步日历'
@@ -701,6 +708,12 @@ export function buildFallbackCardForPlanet(planetId: string, now: number): Recor
     card['moonPhase'] = '土卫六 · 15.9日公转'
     card['moonIllumination'] = '64'
     card['moonSummary'] = '土卫六相位'
+    card['planetSummary'] = '木星 · 天王星可见'
+    card['planetNames'] = '木星 · 天王星 · 海王星'
+    card['visiblePlanetsJson'] = JSON.stringify([
+      { n: '木星', e: 'Jupiter', s: '♃', v: true, r: '19:20', t: '04:30', a: 41, m: -1.8 },
+      { n: '天王星', e: 'Uranus', s: '⛢', v: true, r: '21:15', t: '06:10', a: 26, m: 5.8 }
+    ])
     card['nextEventTitle'] = '土星视角 · 土卫六巡行'
     card['nextEventTarget'] = 'Titan'
     card['nextEventCountdown'] = '同步日历'
@@ -722,6 +735,12 @@ export function buildFallbackCardForPlanet(planetId: string, now: number): Recor
     card['moonPhase'] = '海卫一 · 逆行伴星'
     card['moonIllumination'] = '58'
     card['moonSummary'] = '5.9日逆行轨道'
+    card['planetSummary'] = '天王星 · 土星可见'
+    card['planetNames'] = '天王星 · 土星 · 木星'
+    card['visiblePlanetsJson'] = JSON.stringify([
+      { n: '天王星', e: 'Uranus', s: '⛢', v: true, r: '18:30', t: '06:40', a: 34, m: 6.2 },
+      { n: '木星', e: 'Jupiter', s: '♃', v: true, r: '20:50', t: '08:10', a: 19, m: 0.9 }
+    ])
     card['nextEventTitle'] = '海王星视角 · 远日行星巡天'
     card['nextEventTarget'] = 'Uranus'
     card['nextEventCountdown'] = '同步日历'
@@ -733,6 +752,73 @@ export function buildFallbackCardForPlanet(planetId: string, now: number): Recor
   card['orbBody'] = 'moon'
   card['observationSummary'] = phase.phaseName + ' · ' + String(Math.round(phase.illumination)) + '%'
   card['subtitle'] = '本地天穹 · ' + dateStr
+  return card
+}
+
+// Analytical 48h solar-day preview when a world has not yet cached a native C++ timeline48h snapshot.
+// Ensures '+4h / -4h' scrubbing on ANY desktop planet card immediately updates sun altitude, sky gradient, and companion elevation!
+export function applyAnalyticalTimePreview(
+  card: Record<string, string>,
+  planetId: string,
+  evalMs: number,
+  offsetHours: number
+): Record<string, string> {
+  if (offsetHours <= 0) return card
+  const key = planetId.trim().toLowerCase()
+  let solarDayHours = 24.0
+  let dayTop = '#1C4E94'
+  let dayHorizon = '#6EA5DA'
+  let nightTop = '#060C1E'
+  let nightHorizon = '#142648'
+  if (key === 'mars') {
+    solarDayHours = 24.66
+    dayTop = '#5E3424'
+    dayHorizon = '#B8724B'
+    nightTop = '#140C10'
+    nightHorizon = '#2F1D1B'
+  } else if (key === 'jupiter') {
+    solarDayHours = 9.925
+    dayTop = '#4E3944'
+    dayHorizon = '#A87D5C'
+    nightTop = '#110E1A'
+    nightHorizon = '#2E2226'
+  } else if (key === 'saturn') {
+    solarDayHours = 10.656
+    dayTop = '#584B32'
+    dayHorizon = '#AD925E'
+    nightTop = '#12100E'
+    nightHorizon = '#312A20'
+  } else if (key === 'neptune') {
+    solarDayHours = 16.11
+    dayTop = '#0E2F6E'
+    dayHorizon = '#2B72C4'
+    nightTop = '#03091B'
+    nightHorizon = '#0B1F48'
+  } else if (key === 'titan') {
+    solarDayHours = 382.68
+    dayTop = '#5E3712'
+    dayHorizon = '#BE7328'
+    nightTop = '#1A1008'
+    nightHorizon = '#462810'
+  } else if (key === 'moon') {
+    solarDayHours = 708.73
+    dayTop = '#050814'
+    dayHorizon = '#0E1730'
+    nightTop = '#03050C'
+    nightHorizon = '#091022'
+  }
+  const hours = evalMs / 3600000
+  const phaseRad = ((hours % solarDayHours) / solarDayHours) * 2.0 * Math.PI
+  const sunAlt = Math.round((-4 + 46 * Math.sin(phaseRad)) * 10) / 10
+  const dayFactor = Math.max(0, Math.min(1, (sunAlt + 12) / 28))
+  card['sunAlt'] = sunAlt.toFixed(1)
+  if (card['cardThemeStyle'] !== 'deep') {
+    card['skyHexTop'] = lerpHex(nightTop, dayTop, dayFactor)
+    card['skyHexHorizon'] = lerpHex(nightHorizon, dayHorizon, dayFactor)
+  }
+  const compAlt = Math.round((12 + 44 * Math.sin(phaseRad * 0.7 + 0.9)) * 10) / 10
+  card['companionAlt'] = compAlt.toFixed(1)
+  card['dataStatus'] = '离线推演'
   return card
 }
 

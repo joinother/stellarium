@@ -3,6 +3,7 @@ import { preferences } from '@kit.ArkData'
 import { hilog } from '@kit.PerformanceAnalysisKit'
 import {
   CardInstanceConfig,
+  applyAnalyticalTimePreview,
   applyCardConfigToSnapshot,
   applyTimeline48hToCard,
   buildFallbackCardForPlanet,
@@ -259,6 +260,9 @@ export function resolveCardDataForConfig(
       }
       if (raw.length === 0) {
         const fb = applyCardConfigToSnapshot(buildFallbackCardForPlanet(config.planetMode, evalMs), config, now)
+        if (safeOffset > 0) {
+          applyAnalyticalTimePreview(fb, config.planetMode, evalMs, safeOffset)
+        }
         fb['timeOffsetHours'] = String(safeOffset)
         fb['timePreviewLabel'] = formatPreviewTimeBadge(safeOffset, evalMs)
         fb['remindedEventIds'] = JSON.stringify(remindedIds)
@@ -271,6 +275,9 @@ export function resolveCardDataForConfig(
       timelineRaw = typeof lTl === 'string' ? lTl : ''
       if (raw.length === 0) {
         const fb = applyCardConfigToSnapshot(defaultAstronomyCard(), config, now)
+        if (safeOffset > 0) {
+          applyAnalyticalTimePreview(fb, 'Earth', evalMs, safeOffset)
+        }
         fb['timeOffsetHours'] = String(safeOffset)
         fb['timePreviewLabel'] = formatPreviewTimeBadge(safeOffset, evalMs)
         fb['remindedEventIds'] = JSON.stringify(remindedIds)
@@ -280,6 +287,9 @@ export function resolveCardDataForConfig(
     const card = normalizeAstronomyCard(raw, now)
     const liveCard = applyTimeline48hToCard(card, timelineRaw, evalMs)
     const styled = applyCardConfigToSnapshot(liveCard, config, now)
+    if (safeOffset > 0 && liveCard['dataStatus'] !== '48h 离线星历') {
+      applyAnalyticalTimePreview(styled, styled['observerPlanet'] ?? config.planetMode, evalMs, safeOffset)
+    }
     styled['timeOffsetHours'] = String(safeOffset)
     styled['timePreviewLabel'] = formatPreviewTimeBadge(safeOffset, evalMs)
     styled['remindedEventIds'] = JSON.stringify(remindedIds)
