@@ -179,6 +179,42 @@ test('saving current settings updates a preset, details list the delta, and rest
   assert.equal(context.applied().starMagLimit, 21)
 })
 
+test('saving a dirty built-in preset preserves the modified marker', () => {
+  const context = fixture()
+  const { store } = context
+  store.applyPreset('observe')
+  context.current(makeSnapshot({ nightMode: false }))
+  store.noteManualChange()
+  const before = store.presets.find(preset => preset.id === 'observe')
+  assert.ok(store.isMarked(before))
+  store.saveCurrentToSelected()
+  const observe = store.presets.find(preset => preset.id === 'observe')
+  assert.equal(store.isModified(observe), true)
+  assert.ok(store.isMarked(observe))
+  const persisted = JSON.parse(context.persisted())
+  const savedObserve = persisted.presets.find(preset => preset.id === 'observe')
+  assert.equal(savedObserve.snapshot.nightMode, false)
+})
+
+test('saving current settings to a custom preset keeps its modified marker', () => {
+  const context = fixture()
+  const { store } = context
+  store.selectOnly('observe')
+  store.saveSelectedAsCustom()
+  const custom = store.presets.find(preset => preset.kind === 'custom')
+  assert.ok(custom.factory !== undefined)
+  assert.equal(store.isModified(custom), false)
+  context.current(makeSnapshot({ nightMode: false }))
+  store.saveCurrentToSelected()
+  const saved = store.presets.find(preset => preset.id === custom.id)
+  assert.equal(store.isModified(saved), true)
+  assert.ok(store.isMarked(saved))
+  const persisted = JSON.parse(context.persisted())
+  const savedCustom = persisted.presets.find(preset => preset.kind === 'custom')
+  assert.ok(savedCustom.factory !== undefined)
+  assert.equal(savedCustom.snapshot.nightMode, false)
+})
+
 test('custom presets are capped at three and can be reordered and disabled', () => {
   const context = fixture()
   const { store } = context
@@ -235,6 +271,8 @@ test('preset tab and host bridge expose the management and full-scene snapshot',
   assert.match(host, /applyLayerPresetSnapshot/)
   assert.match(host, /setActionStates/)
   assert.match(host, /snapshot\.starMagLimit/)
+  assert.match(host, /presetCaptureSerial/)
+  assert.match(host, /requestInteractive\('getState', captureSerial/)
   assert.match(host, /applyNightMode\(snapshot\.nightMode, true\)/)
   assert.match(host, /setDetailDisplayMode\(snapshot\.observeMode/)
   assert.match(host, /actionSwitch_Equatorial_Mount/)

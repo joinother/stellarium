@@ -1326,6 +1326,9 @@ export struct WindowNativeNode {
   // getState 的请求序号：作为 payload 附在命令后，使桥的 consume-on-read 缓存键
   // 每次刷新唯一。被放弃的轮询链留下的旧快照因此不会被后续刷新消费。
   private stateRefreshSerial: number = 0
+  // 预设快照的 getState 序号：与其他 getState 请求区分缓存键，避免详情/保存并发时
+  // 读到上一条 consume-on-read 缓存（会把保存前的旧夜间模式等状态写进预设）。
+  private presetCaptureSerial: number = 0
   /** 主界面 Dock 右上的常驻时钟文本（HH:mm），面板未打开时显示。 */
   @State private dockClockText: string = ''
   /** Dock 时钟的独立轻量刷新定时器（1s），不并入时间面板 125ms 高频刷新。 */
@@ -6211,7 +6214,8 @@ export struct WindowNativeNode {
   }
 
   private captureLayerPresetSnapshot(done: (snapshot: LayerPresetSnapshot) => void): void {
-    this.commandPort().requestInteractive('getState', '', (response: StellariumBridgeResponse): void => {
+    const captureSerial = (++this.presetCaptureSerial).toString()
+    this.commandPort().requestInteractive('getState', captureSerial, (response: StellariumBridgeResponse): void => {
       const raw = response as Record<string, Object>
       const actions: Record<string, boolean> = {}
       const actionIds = MARKING_LAYER_ACTION_IDS.concat(CONTENT_LAYER_ACTION_IDS)
@@ -6233,7 +6237,7 @@ export struct WindowNativeNode {
           starMagLimit: this.layerViewStore.starMagLimit
         })
       }
-      this.commandPort().requestInteractive('getSkyCultureVisualSettings', '',
+      this.commandPort().requestInteractive('getSkyCultureVisualSettings', 'capture|' + captureSerial,
         (visual: StellariumBridgeResponse): void => {
           const visualRaw = visual as Record<string, Object>
           finish(visualRaw['constellationArt3d'] === true)

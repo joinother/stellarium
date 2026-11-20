@@ -29,6 +29,8 @@ interface PersistedLayerPreset {
   customName: string
   enabled: boolean
   snapshot: LayerPresetSnapshot
+  // 仅自定义预设需要：保存当前设置后仍可判断“已修改”并还原到创建状态。
+  factory?: LayerPresetSnapshot
 }
 
 interface PersistedLayerPresetDocument {
@@ -612,13 +614,16 @@ export class LayerPresetStore {
     }
     const id = 'custom-' + Date.now().toString()
     const customName = I18n.t('preset_custom') + ' ' + (customCount + 1).toString()
+    const initial = cloneSnapshot(source.snapshot)
     const custom: LayerPresetDefinition = {
       id: id,
       kind: 'custom',
       nameKey: 'preset_custom',
       customName: customName,
       enabled: true,
-      snapshot: cloneSnapshot(source.snapshot)
+      snapshot: cloneSnapshot(initial),
+      // 自定义预设也保留“创建时”的基线：保存当前设置后仍可显示 * 并还原到初始状态。
+      factory: initial
     }
     this.presets = this.presets.concat([custom])
     this.selectedId = id
@@ -786,7 +791,8 @@ export class LayerPresetStore {
       (preset: LayerPresetDefinition): PersistedLayerPreset => {
         const item: PersistedLayerPreset = {
           id: preset.id, kind: preset.kind, nameKey: preset.nameKey, customName: preset.customName,
-          enabled: preset.enabled, snapshot: preset.snapshot
+          enabled: preset.enabled, snapshot: preset.snapshot,
+          factory: preset.kind === 'custom' ? preset.factory : undefined
         }
         return item
       })
@@ -829,13 +835,16 @@ export class LayerPresetStore {
           builtin.snapshot = snapshot
           order.push(id)
         } else if (id.startsWith('custom-')) {
+          const customFactory = normalizeSnapshot(item['factory'])
           customs.push({
             id: id,
             kind: 'custom',
             nameKey: 'preset_custom',
             customName: readString(item, 'customName', I18n.t('preset_custom')),
             enabled: enabled,
-            snapshot: snapshot
+            snapshot: snapshot,
+            // 旧版本没有 factory 字段：把读到的快照当作基线，避免升级后立即显示 *。
+            factory: customFactory !== undefined ? customFactory : cloneSnapshot(snapshot)
           })
           order.push(id)
           if (customs.length >= LAYER_PRESET_CUSTOM_LIMIT) break
