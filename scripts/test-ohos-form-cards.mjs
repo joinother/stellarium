@@ -12,6 +12,7 @@ import {
   buildMiniPhaseStrip,
   buildTimeline48hSnapshot,
   clampTimeOffsetHours,
+  clockToTodayJd,
   computeDaylightDuration,
   computeGoldenHourClock,
   computeOverflowArea,
@@ -21,6 +22,7 @@ import {
   estimateMoonPhaseAt,
   estimateSolarTermZh,
   extractInverseTextColor,
+  focusTargetForCard,
   formatCountdownZh,
   formatPlanetDisplayList,
   formatPreviewTimeBadge,
@@ -29,6 +31,8 @@ import {
   nextCyclePlanet,
   normalizeAstronomyCard,
   normalizeCardConfig,
+  offsetDaysToJd,
+  offsetHoursToJd,
   orbKeyForBody,
   parseRemindedEventIds,
   planetSymbol,
@@ -54,7 +58,7 @@ const formConfig = JSON.parse(fs.readFileSync(formConfigPath, 'utf8'))
 const forms = Array.isArray(formConfig.forms) ? formConfig.forms : []
 const expectedForms = [
   { name: 'sky_window_card', source: 'SkyWindowCard.ets', defaultDim: '2*2', panel: "panel: 'sky'", resizable: true, transparent: false },
-  { name: 'companion_arc_card', source: 'CompanionArcCard.ets', defaultDim: '2*2', panel: "panel: this.isSunMode() ? 'sky' : 'astro'", resizable: true, transparent: false },
+  { name: 'companion_arc_card', source: 'CompanionArcCard.ets', defaultDim: '2*2', panel: "panel: 'sky'", resizable: true, transparent: false },
   { name: 'solar_arc_card', source: 'SolarArcCard.ets', defaultDim: '2*4', panel: "panel: 'sky'", resizable: true, transparent: false },
   { name: 'celestial_events_card', source: 'CelestialEventsCard.ets', defaultDim: '2*4', panel: "panel: 'calendar'", resizable: true, transparent: false },
   { name: 'floating_orb_card', source: 'FloatingOrbCard.ets', defaultDim: '2*2', panel: "panel: 'sky'", resizable: false, transparent: true }
@@ -125,6 +129,7 @@ assert.ok(formAbilitySrc.includes("eventType === 'stepTimeOffset'"), 'FormAbilit
 assert.ok(formAbilitySrc.includes("eventType === 'cyclePlanet'"), 'FormAbility must handle quick planet carousel')
 assert.ok(formAbilitySrc.includes("eventType === 'toggleEventReminder'"), 'FormAbility must handle desktop reminder bell')
 assert.ok(formAbilitySrc.includes('reminderAgentManager.publishReminder'), 'FormAbility must schedule background agent reminders')
+assert.ok(formAbilitySrc.includes('reminderRouteUri('), 'FormAbility reminders must encode full deep-link route URI')
 
 const liveFormPageSrc = fs.readFileSync(path.join(root, 'harmonyos/ets-source/form/SkyLiveFormPage.ets'), 'utf8')
 assert.ok(liveFormPageSrc.includes('cycleFloatingPlanetInPlace'), 'SkyLiveFormPage must allow in-overflow planet switching for FloatingOrbCard')
@@ -340,5 +345,17 @@ const p2 = sliceUpcomingEventPage(sevenEvents, 2, 2)
 assert.deepEqual(p2.items.map((e) => e.id), ['ev-5', 'ev-6'], 'page 2 must reveal unseen events #6 and #7')
 const pSmall = sliceUpcomingEventPage(sevenEvents.slice(0, 3), 0, 2)
 assert.equal(pSmall.pageCount, 1, 'when remaining events fit on one page, pageCount must be 1 so pager hides')
+
+// Context-preserving landing route helpers (time offsets, solar milestones, companion focus)
+assert.equal(focusTargetForCard('Earth', 'Moon', 'moon'), 'Moon')
+assert.equal(focusTargetForCard('Sun', '', 'sun'), 'Sun')
+assert.equal(focusTargetForCard('Moon', 'Earth', 'earth'), 'Earth')
+assert.equal(focusTargetForCard('Titan', 'Saturn', 'saturn'), 'Saturn')
+assert.equal(offsetHoursToJd(now, 0), 0)
+assert.ok(offsetHoursToJd(now, 8) > 2460000, 'offsetHoursToJd(+8h) must produce valid future JD')
+assert.equal(offsetDaysToJd(now, 0), 0)
+assert.ok(offsetDaysToJd(now, 3) > offsetHoursToJd(now, 8), 'offsetDaysToJd(+3d) must exceed +8h JD')
+assert.ok(clockToTodayJd('16:55', now) > 2460000, 'clockToTodayJd must produce valid today JD')
+assert.equal(clockToTodayJd('—', now), 0)
 
 console.log(`HarmonyOS interactive widget contract, transparent backplate, overflow & data tests passed: ${expectedForms.length} cards, 12 3D orbs, ${overflowCases.length} overflow specs`)

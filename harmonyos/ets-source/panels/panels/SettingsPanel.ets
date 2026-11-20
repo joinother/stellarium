@@ -20,6 +20,7 @@ import { SettingsChoiceButton } from '../../common/ui/SettingsChoiceButton'
 import { LanguageRow, DeviceSection } from '../settings/DeviceAndLanguageRows'
 import { AboutSection } from '../settings/AboutSection'
 import { NotificationSection } from '../settings/NotificationSection'
+import { AstronomyReminderItem } from '../../qability/AstronomyReminderService'
 import { HapticSection } from '../settings/HapticSection'
 import { KeyboardShortcutSection } from '../settings/KeyboardShortcutSection'
 import { KeyboardShortcutStore } from '../../state/KeyboardShortcutStore'
@@ -124,6 +125,7 @@ export struct SettingsPanel {
   requestNotificationAccess: () => void = () => {}
   openAstronomyCalendar: () => void = () => {}
   refreshReminders: () => void = () => {}
+  previewReminder: (item: AstronomyReminderItem) => void = () => {}
   cancelReminder: (id: number) => void = () => {}
   @Prop hapticEnabled: boolean = false
   @Prop hapticAvailable: boolean = false
@@ -246,6 +248,7 @@ export struct SettingsPanel {
               satelliteSubscriptionStatus: this.notificationStore.satelliteSubscriptionStatus,
               onOpenCalendar: () => this.openAstronomyCalendar(),
               onRefreshReminders: () => this.refreshReminders(),
+              onPreviewReminder: (item: AstronomyReminderItem) => this.previewReminder(item),
               onCancelReminder: (id: number) => this.cancelReminder(id),
               onRequestAccess: () => { this.requestNotificationAccess() },
               onScheduleNextSolarTerm: () => { this.scheduleNextSolarTermReminder() },

@@ -2,8 +2,9 @@ import {
   computeGoldenHourClock,
   computePreviewPhaseForDay,
   computeSolarArcProgress,
-  routePlanetForCard,
-  routeTargetForCard
+  focusTargetForCard,
+  offsetDaysToJd,
+  routePlanetForCard
 } from './AstronomyCardData'
 import {
   CelestialOrbView,
@@ -20,6 +21,7 @@ struct CompanionArcCard {
   @LocalStorageProp('observerPlanet') observerPlanet: string = 'Earth'
   @LocalStorageProp('observerPlanetName') observerPlanetName: string = '地球'
   @LocalStorageProp('companionName') companionName: string = '月球'
+  @LocalStorageProp('companionEnglish') companionEnglish: string = 'Moon'
   @LocalStorageProp('companionRole') companionRole: string = 'moon'
   @LocalStorageProp('orbBody') orbBody: string = 'moon'
   @LocalStorageProp('moonPhase') moonPhase: string = '今夜月相'
@@ -117,13 +119,23 @@ struct CompanionArcCard {
   }
 
   private openDetail(): void {
+    const focusTarget = focusTargetForCard(this.observerPlanet, this.companionEnglish, this.orbBody)
+    const previewJd = this.isSunMode() ? 0 : offsetDaysToJd(Date.now(), this.selectedDayOffset)
+    const landingTitle = this.selectedDayOffset > 0 && !this.isSunMode()
+      ? (this.companionName + ' · +' + String(this.selectedDayOffset) + '日 ' + this.displayPhaseName())
+      : (this.isSunMode()
+        ? ('太阳 · ' + this.displayPhaseName() + ' ' + this.rightStatLabel())
+        : (this.companionName + ' · ' + this.displayPhaseName()))
     postCardAction(this, {
       action: 'router',
       abilityName: 'QAbility',
       params: {
-        panel: this.isSunMode() ? 'sky' : 'astro',
+        panel: 'sky',
         observerPlanet: routePlanetForCard(this.observerPlanet),
-        target: routeTargetForCard(this.observerPlanet)
+        target: focusTarget,
+        jd: previewJd,
+        landingTitle: landingTitle,
+        landingSource: 'card'
       }
     })
   }

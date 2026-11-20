@@ -56,6 +56,7 @@ export struct NotificationSection {
   onScheduleNextMeteor: () => void = () => {}
   onOpenCalendar: () => void = () => {}
   onRefreshReminders: () => void = () => {}
+  onPreviewReminder: (item: AstronomyReminderItem) => void = () => {}
   onCancelReminder: (id: number) => void = () => {}
   onClearReminders: () => void = () => {}
   onScheduleCountdown: (minutes: number) => void = () => {}
@@ -251,6 +252,7 @@ export struct NotificationSection {
                 Text(this.reminderTimeText(item)).fontSize(panelFontSize(10, this.readableUi)).fontColor(this.c.sub)
                   .maxLines(1).textOverflow({ overflow: TextOverflow.Ellipsis }).width('100%')
               }.layoutWeight(1).alignItems(HorizontalAlign.Start)
+              this.action(this.t('查看'), !this.notificationBusy, () => { this.onPreviewReminder(item) })
               this.action(this.t('取消'), !this.notificationBusy, () => { this.onCancelReminder(item.reminderId) })
             }
               .width('100%')

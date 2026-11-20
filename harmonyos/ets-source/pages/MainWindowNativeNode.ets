@@ -15,6 +15,7 @@ import { AstronomyCalendarStore } from '../state/AstronomyCalendarStore'
 import { AstronomyCalendarEvent } from '../state/AstronomyCalendarEvent'
 import { CalendarObserverContext } from '../state/AstronomyCalendarText'
 import { AstronomyCalendarPanel } from '../panels/panels/AstronomyCalendarPanel'
+import { AstronomyReminderItem } from '../qability/AstronomyReminderService'
 import { isEngineReady } from 'libentry.so'
 import { writeClipboardText } from '../qability/ClipboardService'
 import { fileIo, fileUri, picker } from '@kit.CoreFileKit'
@@ -1121,6 +1122,13 @@ export struct WindowNativeNode {
   @Watch('onCardRouteChanged')
   @StorageLink('stellariumCardRoute')
   private cardRoute: string = ''
+  @State private landingBannerVisible: boolean = false
+  @State private landingBannerTitle: string = ''
+  @State private landingBannerSource: string = ''
+  @State private landingBannerTarget: string = ''
+  @State private landingBannerHasTimeShift: boolean = false
+  @State private landingBannerEventId: string = ''
+  @State private landingBannerEventAt: string = ''
   // 作为 .cat「打开方式」被拉起时由 QAbility 写入；此处消费并导入（见 handleOpenCatalogUri）。
   @Watch('onOpenCatalogUriChanged')
   @StorageLink('stellariumOpenCatalogUri')
@@ -4168,6 +4176,81 @@ export struct WindowNativeNode {
     })
   }
 
+  // 天象卡片/通知落地上下文胶囊控制：提供「实景找星」「回到此刻」「查看日历」直达操作。
+  private showLandingBanner(
+    title: string,
+    source: string,
+    target: string,
+    hasTimeShift: boolean,
+    eventId: string,
+    eventAt: string
+  ): void {
+    const cleanTitle = title.trim()
+    if (cleanTitle.length === 0 && target.length === 0 && !hasTimeShift) {
+      this.landingBannerVisible = false
+      return
+    }
+    this.landingBannerTitle = cleanTitle.length > 0 ? cleanTitle : (target.length > 0 ? zhNameOf(target) : '星穹定位')
+    this.landingBannerSource = source
+    this.landingBannerTarget = target
+    this.landingBannerHasTimeShift = hasTimeShift
+    this.landingBannerEventId = eventId
+    this.landingBannerEventAt = eventAt
+    this.landingBannerVisible = true
+    if (this.activePanel === '') {
+      this.panelVisible = false
+    }
+  }
+
+  private dismissLandingBanner(): void {
+    this.landingBannerVisible = false
+  }
+
+  private returnToNowFromLanding(): void {
+    this.callInteractive('setTimeNow', '', () => {
+      this.landingBannerHasTimeShift = false
+      this.refreshState()
+      this.flashHint(I18n.getLanguage().startsWith('zh') ? '已回到实时星穹' : 'Returned to live sky')
+    })
+  }
+
+  private toggleFindStarFromLanding(): void {
+    if (!this.gyroStore.gyroscopeEnabled) this.syncEquatorialOffForGyro()
+    this.gyroCtl().toggleGyroscope(!this.gyroStore.gyroscopeEnabled)
+  }
+
+  private openCalendarFromLanding(): void {
+    const evId = this.landingBannerEventId
+    const evAt = this.landingBannerEventAt
+    this.landingBannerVisible = false
+    if (evId.length > 0 && evAt.length > 0) {
+      const route: Record<string, Object> = {
+        'panel': 'calendar',
+        'eventId': evId,
+        'eventAt': evAt,
+        'routeId': Date.now().toString()
+      }
+      AppStorage.setOrCreate('stellariumCardRoute', JSON.stringify(route))
+    } else {
+      this.openSubPanel('calendar')
+    }
+  }
+
+  private previewReminderLanding(item: AstronomyReminderItem): void {
+    const route: Record<string, Object> = {
+      'panel': item.panel === 'satellites' && item.kind === 'satellite-pass' ? 'satellites' : 'sky',
+      'eventId': item.eventId,
+      'kind': item.kind,
+      'target': item.target ?? '',
+      'landingTitle': item.title,
+      'landingSource': 'reminder',
+      'routeId': Date.now().toString()
+    }
+    if (item.eventAt !== undefined && item.eventAt.length > 0) route['eventAt'] = item.eventAt
+    if (item.jd !== undefined && Number.isFinite(item.jd) && item.jd > 0) route['jd'] = item.jd
+    AppStorage.setOrCreate('stellariumCardRoute', JSON.stringify(route))
+  }
+
   // 天象卡片点击路由：QAbility 写入 AppStorage('stellariumCardRoute')，此处消费并打开对应面板。
   private onCardRouteChanged(): void {
     this.consumeCardRoute()
@@ -4184,6 +4267,8 @@ export struct WindowNativeNode {
       const isSunFocusRoute = rawRoutePlanet.toLowerCase() === 'sun'
       const target = rawTarget.length > 0 ? rawTarget : (isSunFocusRoute ? 'Sun' : '')
       const routePlanet = isSunFocusRoute ? 'Earth' : rawRoutePlanet
+      const landingTitle = typeof route['landingTitle'] === 'string' ? String(route['landingTitle']).trim() : ''
+      const landingSource = typeof route['landingSource'] === 'string' ? String(route['landingSource']).trim() : ''
       if (routePlanet.length > 0) {
         // 卡片显式携带星球视角时始终切换并立即同步刷新该星球桌面卡片缓存
         this.callInteractive('setObserverPlanet', routePlanet, () => {
@@ -4195,13 +4280,15 @@ export struct WindowNativeNode {
         this.scheduleCardSnapshotSync(450)
       }
       const rawJd = route['jd'] === undefined ? NaN : Number(route['jd'])
-      const eventAtMs = new Date(String(route['eventAt'] ?? '')).getTime()
+      const eventAtIso = typeof route['eventAt'] === 'string' ? String(route['eventAt']) : ''
+      const eventAtMs = new Date(eventAtIso).getTime()
       const targetJd = Number.isFinite(rawJd) && rawJd > 0 ? rawJd
         : (Number.isFinite(eventAtMs) ? eventAtMs / 86400000 + 2440587.5 : NaN)
 
       // 扩展落地页：通知设置直达、星图直飞 / 找星（陀螺仪）、卫星过境直达目标卫星与过境时刻。
       if (panel === 'notification-settings') {
         this.pendingCalendarEvent = ''
+        if (this.dismissLandingBanner !== undefined) this.dismissLandingBanner()
         this.configTab = -1
         this.openPanelFromCli('settings')
         AppStorage.setOrCreate('stellariumCardRoute', '')
@@ -4229,10 +4316,25 @@ export struct WindowNativeNode {
             this.refreshState()
           }
         }
-        if (Number.isFinite(targetJd)) {
-          this.timeTransitionCtl().animate(targetJd, target.length > 0 ? target : panel, focusTarget)
+        const hasTimeShift = Number.isFinite(targetJd)
+        if (hasTimeShift) {
+          const transitionLabel = landingTitle.length > 0 ? landingTitle : (target.length > 0 ? target : panel)
+          this.timeTransitionCtl().animate(targetJd, transitionLabel, focusTarget)
         } else {
           focusTarget()
+        }
+        if (this.showLandingBanner !== undefined) {
+          const fallbackTitle = panel === 'satellites'
+            ? ('卫星过境 · ' + target)
+            : (landingTitle.length > 0 ? landingTitle : target)
+          this.showLandingBanner(
+            fallbackTitle,
+            landingSource.length > 0 ? landingSource : (panel === 'satellites' ? 'reminder' : 'card'),
+            target,
+            hasTimeShift,
+            eventId,
+            eventAtIso
+          )
         }
         AppStorage.setOrCreate('stellariumCardRoute', '')
         return
@@ -4348,7 +4450,7 @@ export struct WindowNativeNode {
       ? inferredPanelRouteDirection(currentPanel, panel)
       : (routeDirection < 0 ? -1 : 1)
     hilog.info(0x0000, 'StellariumArkUI', 'setPanel ' + panel)
-    const nextVisible = forceVisible ? true : (this.activePanel === panel ? !this.panelVisible : true)
+    const nextVisible = panel.length === 0 ? false : (forceVisible ? true : (this.activePanel === panel ? !this.panelVisible : true))
     this.panelDragging = false
     this.panelScrolling = false
     this.panelTouching = false
@@ -4394,6 +4496,7 @@ export struct WindowNativeNode {
       const closeDirection = this.panelRouteDirection
       this.getUIContext().animateTo({ duration: 170, curve: Curve.EaseIn, onFinish: () => {
         if (this.panelContentKey !== closeSerial) return
+        if (panel.length === 0) this.activePanel = ''
         this.panelVisible = false
         this.panelRouteOpacity = 1
         this.panelRouteOffsetX = 0
@@ -8736,6 +8839,71 @@ export struct WindowNativeNode {
         }
       }
 
+      if (this.landingBannerVisible && !this.panelVisible && !this.locationMapFullscreen) {
+        Row({ space: 6 }) {
+          Text(this.landingBannerSource === 'reminder' ? '🔔' : '✦')
+            .fontSize(12)
+            .fontColor(this.hostSlots().accent)
+          Text(this.landingBannerTitle)
+            .fontSize(12)
+            .fontWeight(FontWeight.Medium)
+            .fontColor(this.hostSlots().textStrong)
+            .maxLines(1)
+            .textOverflow({ overflow: TextOverflow.Ellipsis })
+            .constraintSize({ maxWidth: this.isExpandedLayout ? 260 : 145 })
+          if (this.landingBannerTarget.length > 0) {
+            Text(this.gyroStore.gyroscopeEnabled ? '🧭 找星中' : '🧭 找星')
+              .fontSize(11)
+              .fontWeight(FontWeight.Medium)
+              .fontColor(this.gyroStore.gyroscopeEnabled ? this.hostSlots().onAccent : this.hostSlots().textStrong)
+              .padding({ left: 9, right: 9, top: 4, bottom: 4 })
+              .backgroundColor(this.gyroStore.gyroscopeEnabled ? this.hostSlots().accent : this.hostSlots().overlayButton)
+              .borderRadius(UI_RADIUS_PILL)
+              .onClick(() => { this.toggleFindStarFromLanding() })
+          }
+          if (this.landingBannerHasTimeShift) {
+            Text('⏱ 此刻')
+              .fontSize(11)
+              .fontWeight(FontWeight.Medium)
+              .fontColor(this.hostSlots().textStrong)
+              .padding({ left: 9, right: 9, top: 4, bottom: 4 })
+              .backgroundColor(this.hostSlots().overlayButton)
+              .borderRadius(UI_RADIUS_PILL)
+              .onClick(() => { this.returnToNowFromLanding() })
+          }
+          if (this.landingBannerEventId.length > 0) {
+            Text('📅 详情')
+              .fontSize(11)
+              .fontWeight(FontWeight.Medium)
+              .fontColor(this.hostSlots().textStrong)
+              .padding({ left: 9, right: 9, top: 4, bottom: 4 })
+              .backgroundColor(this.hostSlots().overlayButton)
+              .borderRadius(UI_RADIUS_PILL)
+              .onClick(() => { this.openCalendarFromLanding() })
+          }
+          Text('✕')
+            .fontSize(12)
+            .fontColor(this.hostSlots().sub)
+            .textAlign(TextAlign.Center)
+            .width(26)
+            .height(26)
+            .borderRadius(13)
+            .onClick(() => { this.dismissLandingBanner() })
+        }
+          .alignItems(VerticalAlign.Center)
+          .height(40)
+          .padding({ left: 13, right: 8 })
+          .backgroundColor(this.hostSlots().panelGlassStrong)
+          .backdropBlur(20)
+          .border({ width: 0.7, color: this.hostSlots().border })
+          .borderRadius(UI_RADIUS_PILL)
+          .constraintSize({ maxWidth: Math.max(240, this.skyWidth - 28) })
+          .position({ x: '50%', y: (this.isExpandedLayout || this.isFoldHoverLayout) ? 94 : 92 })
+          .markAnchor({ x: '50%', y: 0 })
+          .zIndex(93)
+          .transition(TransitionEffect.OPACITY.animation({ duration: 220, curve: Curve.EaseOut }))
+      }
+
       if (this.tools.skyTextureStatusVisible) {
         Row({ space: 8 }) {
           if (!this.tools.skyTextureStatusError) {
@@ -9381,6 +9549,7 @@ export struct WindowNativeNode {
         requestNotificationAccess: () => { this.notificationCtl().requestAccess() },
         openAstronomyCalendar: () => this.openSubPanel('calendar'),
         refreshReminders: () => this.notificationCtl().refreshStatus(),
+        previewReminder: (item: AstronomyReminderItem) => this.previewReminderLanding(item),
         cancelReminder: (id: number) => this.notificationCtl().cancelReminder(id),
         hapticEnabled: this.hapticEnabled,
         hapticAvailable: this.hapticAvailable,

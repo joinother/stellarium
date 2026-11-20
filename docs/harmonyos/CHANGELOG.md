@@ -1,5 +1,25 @@
 > **身份图例**：本文件真机记录中出现的 `com.cnchensh.stellarium` 是**本机调试签名身份**（本机 DevEco 自动生成，非发布身份）；发布身份为 `com.joinother.skyinstrument`。构建脚本 `build-ohos-hap-windows.ps1 -Install` 从产物 `pack.info` 读取实际包名，仓库不写死任何签名身份（见 `docs/harmonyos/release/BUNDLE-IDENTITY-CLEANUP.md`）。
 
+## [2026-11-20] 全链路桌面卡片与通知提醒落地页升级（上下文承接、沉浸式星图落地胶囊与一键找星）
+
+- **修改文件：** `harmonyos/ets-source/form/AstronomyCardData.ts`、`harmonyos/ets-source/form/SkyWindowCard.ets`、`harmonyos/ets-source/form/CompanionArcCard.ets`、`harmonyos/ets-source/form/SolarArcCard.ets`、`harmonyos/ets-source/form/FloatingOrbCard.ets`、`harmonyos/ets-source/form/SkyLiveFormPage.ets`、`harmonyos/ets-source/form/SkyInstrumentFormAbility.ets`、`harmonyos/ets-source/qability/AstronomyReminderMetadata.ts`、`harmonyos/ets-source/qability/AstronomyReminderService.ets`、`harmonyos/ets-source/qability/QAbility.ets`、`harmonyos/ets-source/capability/TimeTransitionController.ets`、`harmonyos/ets-source/panels/settings/NotificationSection.ets`、`harmonyos/ets-source/panels/panels/SettingsPanel.ets`、`harmonyos/ets-source/pages/MainWindowNativeNode.ets`、`scripts/test-ohos-form-cards.mjs`、`docs/harmonyos/CHANGELOG.md`。
+- **问题排查与升级：**
+  1. **五款桌面卡片全部保留交互上下文直达星图落地：**
+     - **天穹之窗（`SkyWindowCard`）：** 拨动 `48h` 时间推演（`+4h / +8h`）后点击卡片，不再丢弃推演时刻，而是携带精确 `jd` 与标题平滑跳转至推演夜空；`4×4` 行星可见性列表每行独立支持点击直飞并聚焦对应行星（`木星 / 土星 / 火星 / 金星` 等）。
+     - **星历弧盘（`CompanionArcCard`）：** 在五日相位条选中未来日期（如 `+3日 满月`）后点击卡片，直接携带对应 `jd` 与伴星目标（月球/地球/土星/太阳）直达星图并锁定展示该相位。
+     - **太阳天光（`SolarArcCard`）：** 选中四段天光条（`日出 / 中天 / 黄金 / 暗夜`）后点击卡片，精确跳转至当日该天光节点时刻（日出/中天/黄金自动聚焦太阳，暗夜直接呈现满天暗夜星空）。
+     - **悬浮天体（`FloatingOrbCard`）与 API 20 破框（`SkyLiveFormPage`）：** 始终携带所点 3D 天体对应的精确 `target` 与当前推演 `jd`，点击任意悬浮天体均直飞并选中该目标。
+  2. **补全桌面提醒与系统通知的端到端深链路由：**
+     - 修复 `SkyInstrumentFormAbility.handleToggleEventReminder()` 的 `wantAgent` 缺失路由参数问题，完整编码 `reminderRouteUri()` 与 `panel / eventId / target / jd / observerPlanet / landingTitle / landingSource`；
+     - 在 `AstronomyReminderService.routeFromUri()` 补齐 `observerPlanet` 透传（异星提醒 URI-only 点击不再丢失观测星球），在 `AstronomyReminderMetadata.ts` 放行 `sky` 直达面板，并在 `QAbility.routeCardWant()` 透传 `landingTitle / landingSource`；
+     - 在通知设置页 `NotificationSection` 已注册提醒列表中新增「查看」按钮，支持一键预览任意已预约提醒的星图落地效果。
+  3. **新增沉浸式「星图落地上下文胶囊」与平板宽屏清屏修复：**
+     - 在 `MainWindowNativeNode.ets` 新增毛玻璃悬浮落地胶囊（顶部居中，零遮挡），展示来源图标（`🔔` 通知 / `✦` 卡片）与上下文标题，并按需提供一键 **`🧭 找星`**（陀螺仪实景导星）、**`⏱ 此刻`**（时间推演/未来事件一键归零回实时星穹）、**`📅 详情`**（直达日历对应事件卡）与关闭按钮；
+     - 修复 `setPanel('', true, true)` 在平板宽屏下仍把 `panelVisible` 置 `true` 导致误弹左侧兜底「详情」栏的问题，并在 `TimeTransitionController.animate()` 补齐读取模拟时间偶发失败时的直跳兜底，确保落地必达目标时刻与天体。
+- **验证与真机实测（MatePad Mini `192.168.31.234:42713`）：**
+  - 主机验证：`test-ohos-form-cards.mjs`（新增 `focusTargetForCard / offsetHoursToJd / offsetDaysToJd / clockToTodayJd` 与桌面提醒路由 URI 断言）、`test-ohos-off-earth-calendar-and-snapshot.mjs`、`test-ohos-notification-integration.mjs`（10/10 全通过）、`test-ohos-native-astronomy-calendar.mjs`、`check-ohos-ui-contract.mjs` 全通过。
+  - 真机实拍核验：触发「木星冲日 · 12月30日」通知提醒落地后，平板全屏无遮挡直达星图，顶部居中清晰呈现毛玻璃落地胶囊（`🔔 木星冲日 · 12月30日   🧭 找星   ⏱ 此刻   📅 详情   ✕`），并平滑切换至目标时刻聚焦锁定木星。
+
 ## [2026-11-20] 重构「天象预告」卡片翻页交互（消除焦点重复、升级真列表翻页与 3 个月 8 场预告）
 
 - **修改文件：** `src/StelMainView.cpp`、`harmonyos/ets-source/form/AstronomyCardData.ts`、`harmonyos/ets-source/form/CelestialEventsCard.ets`、`harmonyos/ets-source/form/SkyLiveFormPage.ets`、`scripts/test-ohos-form-cards.mjs`、`docs/harmonyos/CHANGELOG.md`。

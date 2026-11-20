@@ -362,6 +362,40 @@ export function routeTargetForCard(observerPlanet: string, explicitTarget: strin
   return observerPlanet.trim().toLowerCase() === 'sun' ? 'Sun' : ''
 }
 
+export function focusTargetForCard(observerPlanet: string, companionEnglish: string, orbBody: string): string {
+  const obs = observerPlanet.trim().toLowerCase()
+  const orb = orbBody.trim().toLowerCase()
+  if (obs === 'sun' || orb === 'sun') return 'Sun'
+  if (companionEnglish.trim().length > 0) return companionEnglish.trim()
+  if (obs === 'earth' || orb === 'moon') return 'Moon'
+  if (obs === 'moon' || orb === 'earth') return 'Earth'
+  if (obs === 'titan' || orb === 'saturn') return 'Saturn'
+  return ''
+}
+
+export function epochMsToJd(epochMs: number): number {
+  if (!Number.isFinite(epochMs) || epochMs <= 0) return 0
+  return Math.round((epochMs / 86400000.0 + 2440587.5) * 100000) / 100000
+}
+
+export function offsetHoursToJd(nowMs: number, offsetHours: number): number {
+  if (!Number.isFinite(offsetHours) || offsetHours <= 0) return 0
+  return epochMsToJd(nowMs + offsetHours * 3600000)
+}
+
+export function offsetDaysToJd(nowMs: number, dayOffset: number): number {
+  if (!Number.isFinite(dayOffset) || dayOffset <= 0) return 0
+  return epochMsToJd(nowMs + dayOffset * 86400000)
+}
+
+export function clockToTodayJd(clock: string, nowMs: number): number {
+  const mins = parseClockMinutes(clock)
+  if (mins < 0) return 0
+  const d = new Date(nowMs)
+  d.setHours(Math.floor(mins / 60), mins % 60, 0, 0)
+  return epochMsToJd(d.getTime())
+}
+
 export interface EstimatedSolarTimes {
   rise: string
   transit: string

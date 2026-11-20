@@ -125,7 +125,10 @@ export class TimeTransitionController {
         }
       }, 16) as number
     }, () => {
-      if (serial === this.serial) this.hooks.flashHint('读取当前模拟时间失败，请重试。')
+      // Fallback gracefully to direct JD jump so notification/card landings always reach target time & focus target.
+      if (serial === this.serial) {
+        this.finish(targetJd, label, onFinished)
+      }
     })
   }
 

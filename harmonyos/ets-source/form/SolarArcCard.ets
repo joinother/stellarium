@@ -1,4 +1,5 @@
 import {
+  clockToTodayJd,
   computeDaylightDuration,
   computeGoldenHourClock,
   computeSolarArcProgress,
@@ -106,13 +107,24 @@ struct SolarArcCard {
   }
 
   private openSunInSky(): void {
+    const list = this.milestones()
+    const hasMilestone = this.selectedStageIndex >= 0 && this.selectedStageIndex < list.length
+    const chosen = hasMilestone ? list[this.selectedStageIndex] : undefined
+    const targetJd = chosen !== undefined ? clockToTodayJd(chosen.clock, Date.now()) : 0
+    const focusTarget = hasMilestone && this.selectedStageIndex === 3 ? '' : 'Sun'
+    const landingTitle = chosen !== undefined
+      ? chosen.hint
+      : ('太阳 · ' + this.stageLabel() + ' ' + this.altLabel())
     postCardAction(this, {
       action: 'router',
       abilityName: 'QAbility',
       params: {
         panel: 'sky',
         observerPlanet: routePlanetForCard(this.observerPlanet),
-        target: 'Sun'
+        target: focusTarget,
+        jd: targetJd,
+        landingTitle: landingTitle,
+        landingSource: 'card'
       }
     })
   }

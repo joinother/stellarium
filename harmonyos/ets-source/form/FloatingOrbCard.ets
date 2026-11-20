@@ -1,7 +1,7 @@
 import {
+  focusTargetForCard,
   isLightTextColor,
   routePlanetForCard,
-  routeTargetForCard,
   solarStageFromAltitude
 } from './AstronomyCardData'
 import { CelestialOrbView } from './WidgetVisuals'
@@ -18,6 +18,7 @@ struct FloatingOrbCard {
   @LocalStorageProp('observerPlanet') observerPlanet: string = 'Earth'
   @LocalStorageProp('observerPlanetName') observerPlanetName: string = '地球'
   @LocalStorageProp('companionName') companionName: string = '月球'
+  @LocalStorageProp('companionEnglish') companionEnglish: string = 'Moon'
   @LocalStorageProp('orbBody') orbBody: string = 'moon'
   @LocalStorageProp('moonPhase') moonPhase: string = '今夜月相'
   @LocalStorageProp('moonIllumination') moonIllumination: string = '76'
@@ -86,7 +87,9 @@ struct FloatingOrbCard {
       params: {
         panel: 'sky',
         observerPlanet: routePlanetForCard(this.observerPlanet),
-        target: routeTargetForCard(this.observerPlanet)
+        target: focusTargetForCard(this.observerPlanet, this.companionEnglish, this.orbBody),
+        landingTitle: this.captionText(),
+        landingSource: 'card'
       }
     })
   }

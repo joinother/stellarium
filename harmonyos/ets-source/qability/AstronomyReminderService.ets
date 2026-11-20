@@ -89,6 +89,7 @@ export class AstronomyReminderService {
     if (value.jd !== undefined) route['jd'] = value.jd
     if (value.kind !== undefined) route['kind'] = value.kind
     if (value.target !== undefined) route['target'] = value.target
+    if (value.observerPlanet !== undefined && value.observerPlanet.length > 0) route['observerPlanet'] = value.observerPlanet
     return route
   }
 

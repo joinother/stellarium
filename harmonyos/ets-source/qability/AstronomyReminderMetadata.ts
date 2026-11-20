@@ -94,7 +94,7 @@ export function reminderRouteFromUri(uri: string): AstronomyRoute | undefined {
   if (separator < 0 || !/^\d+$/.test(uri.slice(prefix.length, separator)) || !validServiceId(Number(uri.slice(prefix.length, separator)))) return undefined
   try {
     const route: AstronomyRoute = JSON.parse(decodeURIComponent(uri.slice(separator + 7))) as AstronomyRoute
-    if (routeError(route) || !['calendar', 'astro', 'satellites'].includes(route.panel ?? '')) return undefined
+    if (routeError(route) || !['calendar', 'astro', 'satellites', 'sky'].includes(route.panel ?? '')) return undefined
     return route
   } catch (_) { return undefined }
 }

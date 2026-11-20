@@ -10,11 +10,13 @@ import {
   computeGoldenHourClock,
   computeSolarArcProgress,
   estimateSolarTermZh,
+  focusTargetForCard,
   formatCountdownZh,
   formatPlanetDisplayList,
   formatShortDateZh,
   isLightTextColor,
   nextCyclePlanet,
+  offsetHoursToJd,
   parseRemindedEventIds,
   parseUpcomingEvents,
   parseVisiblePlanets,
@@ -70,6 +72,7 @@ struct SkyLiveFormPage {
   @State observerPlanet: string = 'Earth'
   @State observerPlanetName: string = '地球'
   @State companionName: string = '月球'
+  @State companionEnglish: string = 'Moon'
   @State companionRole: string = 'moon'
   @State orbBody: string = 'moon'
   @State moonPhase: string = '今夜月相'
@@ -136,6 +139,7 @@ struct SkyLiveFormPage {
     this.observerPlanet = snap['observerPlanet'] ?? 'Earth'
     this.observerPlanetName = snap['observerPlanetName'] ?? '地球'
     this.companionName = snap['companionName'] ?? '月球'
+    this.companionEnglish = snap['companionEnglish'] ?? ''
     this.companionRole = snap['companionRole'] ?? 'moon'
     this.orbBody = snap['orbBody'] ?? 'moon'
     this.moonPhase = snap['moonPhase'] ?? '今夜月相'
@@ -432,9 +436,16 @@ struct SkyLiveFormPage {
   private launchAppDirect(): void {
     if (this.liveFormContext === undefined) return
     const isSolarFlow = this.formKind === 'solar_arc_card' || this.orbBody.trim().toLowerCase() === 'sun'
-    const targetPanel = this.formKind === 'celestial_events_card'
-      ? 'calendar' : (this.formKind === 'companion_arc_card' && !isSolarFlow ? 'astro' : 'sky')
-    const focusTarget = isSolarFlow ? 'Sun' : routeTargetForCard(this.observerPlanet)
+    const targetPanel = this.formKind === 'celestial_events_card' ? 'calendar' : 'sky'
+    const focusTarget = isSolarFlow
+      ? 'Sun'
+      : (this.formKind === 'celestial_events_card'
+        ? (this.heroEvent()?.target ?? routeTargetForCard(this.observerPlanet))
+        : focusTargetForCard(this.observerPlanet, this.companionEnglish, this.orbBody))
+    const targetJd = this.formKind === 'celestial_events_card'
+      ? (this.heroEvent()?.jd ?? 0)
+      : offsetHoursToJd(Date.now(), this.timeOffsetHours)
+    const eventId = this.formKind === 'celestial_events_card' ? (this.heroEvent()?.id ?? '') : ''
     try {
       this.liveFormContext.startAbilityByLiveForm({
         bundleName: 'com.joinother.skyinstrument',
@@ -442,7 +453,11 @@ struct SkyLiveFormPage {
         parameters: {
           panel: targetPanel,
           observerPlanet: routePlanetForCard(this.observerPlanet),
-          target: focusTarget
+          target: focusTarget,
+          jd: targetJd,
+          eventId: eventId,
+          landingTitle: this.showcaseHeading(),
+          landingSource: 'card'
         }
       }).catch((error: BusinessError) => {
         hilog.warn(DOMAIN, TAG, 'startAbilityByLiveForm failed: code=%{public}d msg=%{public}s', error.code, error.message)

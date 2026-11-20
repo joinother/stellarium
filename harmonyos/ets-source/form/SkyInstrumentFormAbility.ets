@@ -10,8 +10,11 @@ import {
   defaultAstronomyCard,
   extractInverseTextColor,
   nextCyclePlanet,
-  planetZhName
+  planetZhName,
+  routePlanetForCard
 } from './AstronomyCardData'
+import { AstronomyRoute } from '../qability/AstronomyNotificationPolicy'
+import { reminderRouteUri } from '../qability/AstronomyReminderMetadata'
 import {
   WidgetRemindedEntry,
   readFormConfig,
@@ -183,8 +186,37 @@ export default class SkyInstrumentFormAbility extends FormExtensionAbility {
         const badgeTitle = isOffEarth
           ? ('星象仪 · 【' + planetZhName(observerPlanet) + '】' + title)
           : ('星象仪 · ' + title)
+        const obsPlanet = routePlanetForCard(observerPlanet)
+        const eventKind = typeof params['kind'] === 'string' && String(params['kind']).trim().length > 0
+          ? String(params['kind']).trim() : 'astronomy'
+        const eventAtIso = Number.isFinite(eventAt) && eventAt > 0
+          ? new Date(Math.round(eventAt)).toISOString()
+          : triggerDate.toISOString()
+        const safeJd = Number.isFinite(jd) && jd > 0 ? jd : Math.round((eventAt / 86400000 + 2440587.5) * 10000) / 10000
+        const route: AstronomyRoute = {
+          panel: target.length > 0 ? 'sky' : 'calendar',
+          eventId: eventId,
+          kind: eventKind,
+          target: target,
+          eventAt: eventAtIso,
+          jd: safeJd,
+          observerPlanet: obsPlanet
+        }
+        const notifId = 1900000000 + (Math.floor(now / 1000) % 90000000)
+        const routeParams: Record<string, Object> = {
+          'panel': route.panel ?? 'sky',
+          'eventId': eventId,
+          'kind': eventKind,
+          'target': target,
+          'eventAt': eventAtIso,
+          'jd': safeJd,
+          'observerPlanet': obsPlanet,
+          'landingTitle': title,
+          'landingSource': 'reminder'
+        }
         const req: reminderAgentManager.ReminderRequestCalendar = {
           reminderType: reminderAgentManager.ReminderType.REMINDER_TYPE_CALENDAR,
+          notificationId: notifId,
           dateTime: {
             year: triggerDate.getFullYear(),
             month: triggerDate.getMonth() + 1,
@@ -195,12 +227,14 @@ export default class SkyInstrumentFormAbility extends FormExtensionAbility {
           },
           title: badgeTitle,
           content: isOffEarth
-            ? (planetZhName(observerPlanet) + '观测视角 · 轻触打开星图定位该天象')
-            : '天象临近 · 轻触打开星象仪查看观测时机',
+            ? (planetZhName(obsPlanet) + '观测视角 · 轻触直达星图并定位该天象')
+            : '天象临近 · 轻触直达星图并定位观测时机',
           slotType: notificationManager.SlotType.CONTENT_INFORMATION,
           wantAgent: {
             pkgName: 'com.joinother.skyinstrument',
-            abilityName: 'QAbility'
+            abilityName: 'QAbility',
+            uri: reminderRouteUri(route, notifId),
+            parameters: routeParams
           },
           actionButton: [
             { title: '知道了', type: reminderAgentManager.ActionButtonType.ACTION_BUTTON_TYPE_CLOSE }

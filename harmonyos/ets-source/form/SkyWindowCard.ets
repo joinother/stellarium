@@ -1,6 +1,8 @@
 import {
   CompactPlanetItem,
+  focusTargetForCard,
   formatPlanetDisplayList,
+  offsetHoursToJd,
   parseVisiblePlanets,
   routePlanetForCard,
   routeTargetForCard
@@ -20,6 +22,7 @@ struct SkyWindowCard {
   @LocalStorageProp('observerPlanet') observerPlanet: string = 'Earth'
   @LocalStorageProp('observerPlanetName') observerPlanetName: string = '地球'
   @LocalStorageProp('companionName') companionName: string = '月球'
+  @LocalStorageProp('companionEnglish') companionEnglish: string = 'Moon'
   @LocalStorageProp('companionRole') companionRole: string = 'moon'
   @LocalStorageProp('orbBody') orbBody: string = 'moon'
   @LocalStorageProp('moonPhase') moonPhase: string = '今夜月相'
@@ -107,15 +110,30 @@ struct SkyWindowCard {
     return this.dataStatus === '旧快照'
   }
 
-  private openSky(): void {
-    const focusTarget = routeTargetForCard(this.observerPlanet)
+  private openSky(explicitTarget: string = '', explicitLabel: string = ''): void {
+    const offH = this.numericOffsetHours()
+    const targetJd = offsetHoursToJd(Date.now(), offH)
+    const focusTarget = explicitTarget.trim().length > 0
+      ? explicitTarget.trim()
+      : routeTargetForCard(this.observerPlanet)
+    let landingTitle = this.observerPlanetName + ' · 实时天穹'
+    if (explicitLabel.trim().length > 0) {
+      landingTitle = '今夜行星 · ' + explicitLabel.trim() + (offH > 0 && this.timePreviewLabel.length > 0 ? (' (' + this.timePreviewLabel + ')') : '')
+    } else if (offH > 0 && this.timePreviewLabel.length > 0) {
+      landingTitle = this.observerPlanetName + '天穹推演 · ' + this.timePreviewLabel
+    } else if (this.observerPlanet === 'Sun') {
+      landingTitle = '太阳 · ' + this.observationSummary
+    }
     postCardAction(this, {
       action: 'router',
       abilityName: 'QAbility',
       params: {
         panel: 'sky',
         observerPlanet: routePlanetForCard(this.observerPlanet),
-        target: focusTarget
+        target: focusTarget,
+        jd: targetJd,
+        landingTitle: landingTitle,
+        landingSource: 'card'
       }
     })
   }
@@ -479,15 +497,19 @@ struct SkyWindowCard {
 
               if (this.planetRows().length > 0) {
                 ForEach(this.planetRows(), (p: CompactPlanetItem) => {
-                  PlanetVisibilityRow({
-                    itemName: p.n,
-                    itemSymbol: p.s,
-                    labelStyle: this.cardLabelStyle,
-                    visible: p.v,
-                    altitude: p.a,
-                    riseText: p.r,
-                    setText: p.t
-                  })
+                  Column() {
+                    PlanetVisibilityRow({
+                      itemName: p.n,
+                      itemSymbol: p.s,
+                      labelStyle: this.cardLabelStyle,
+                      visible: p.v,
+                      altitude: p.a,
+                      riseText: p.r,
+                      setText: p.t
+                    })
+                  }
+                  .width('100%')
+                  .onClick(() => this.openSky(p.e, p.n))
                 }, (p: CompactPlanetItem, idx: number) => p.e + '_' + String(idx))
               } else {
                 Text(this.planetNames)
