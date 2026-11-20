@@ -176,7 +176,7 @@ export default class QAbility extends UIAbility {
     }
     const jd = parameters['jd'];
     if (typeof jd === 'number' && Number.isFinite(jd) && jd > 0) route['jd'] = jd;
-    if (route['eventAt'] === undefined && typeof jd === 'number' && Number.isFinite(jd)) {
+    if (route['eventAt'] === undefined && typeof jd === 'number' && Number.isFinite(jd) && jd > 0) {
       const at = (jd - 2440587.5) * 86400000;
       if (Number.isFinite(new Date(at).getTime())) route['eventAt'] = new Date(Math.round(at)).toISOString();
     }

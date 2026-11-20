@@ -70,9 +70,22 @@ assert.equal(forms.filter((f) => f.isDefault === true).length, 1, 'must have exa
 const syncScript = fs.readFileSync(syncScriptPath, 'utf8')
 assert.ok(syncScript.includes('harmonyos/ets-source'), 'sync script must mirror ets-source tree')
 
+const baseStrings = JSON.parse(fs.readFileSync(path.join(root, 'harmonyos/resources/base/element/string.json'), 'utf8')).string
+const zhStrings = JSON.parse(fs.readFileSync(path.join(root, 'harmonyos/resources/zh_CN/element/string.json'), 'utf8')).string
+const enStrings = JSON.parse(fs.readFileSync(path.join(root, 'harmonyos/resources/en_US/element/string.json'), 'utf8')).string
+const hasStringKey = (arr, key) => Array.isArray(arr) && arr.some((item) => item.name === key && typeof item.value === 'string' && item.value.trim().length > 0)
+
 for (const expected of expectedForms) {
   const form = forms.find((f) => f.name === expected.name)
   assert.ok(form, `missing form config: ${expected.name}`)
+  assert.ok(typeof form.displayName === 'string' && form.displayName.startsWith('$string:'), `${expected.name} displayName must use $string: resource reference`)
+  assert.ok(typeof form.description === 'string' && form.description.startsWith('$string:'), `${expected.name} description must use $string: resource reference`)
+  const nameKey = form.displayName.slice('$string:'.length)
+  const descKey = form.description.slice('$string:'.length)
+  for (const [loc, list] of [['base', baseStrings], ['zh_CN', zhStrings], ['en_US', enStrings]]) {
+    assert.ok(hasStringKey(list, nameKey), `${loc} string.json missing ${nameKey}`)
+    assert.ok(hasStringKey(list, descKey), `${loc} string.json missing ${descKey}`)
+  }
   assert.equal(form.src, `./ets/form/${expected.source}`, `mismatched src for ${expected.name}`)
   assert.equal(form.defaultDimension, expected.defaultDim, `mismatched defaultDimension for ${expected.name}`)
   if (expected.resizable) {

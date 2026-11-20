@@ -451,6 +451,46 @@
     {
       "name": "i0108",
       "value": "Messier"
+    },
+    {
+      "name": "form_sky_window_name",
+      "value": "Sky Window"
+    },
+    {
+      "name": "form_sky_window_desc",
+      "value": "Live sky dome, sunrise/sunset, 48h scrub & visible planets"
+    },
+    {
+      "name": "form_companion_arc_name",
+      "value": "Celestial Arc"
+    },
+    {
+      "name": "form_companion_arc_desc",
+      "value": "Live lunar phase, Earthphase, Saturn rings & 5-day strip"
+    },
+    {
+      "name": "form_solar_arc_name",
+      "value": "Solar Arc"
+    },
+    {
+      "name": "form_solar_arc_desc",
+      "value": "3D Sun, sunrise-noon-sunset arc, golden hour & solar terms"
+    },
+    {
+      "name": "form_celestial_events_name",
+      "value": "Celestial Events"
+    },
+    {
+      "name": "form_celestial_events_desc",
+      "value": "Upcoming event countdowns, paged list & one-tap reminders"
+    },
+    {
+      "name": "form_floating_orb_name",
+      "value": "Floating Orb"
+    },
+    {
+      "name": "form_floating_orb_desc",
+      "value": "Borderless 3D Solar System orb floating over wallpaper"
     }
   ]
 }

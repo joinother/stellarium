@@ -11,6 +11,46 @@
     {
       "name": "QAbility_label",
       "value": "星象儀"
+    },
+    {
+      "name": "form_sky_window_name",
+      "value": "天穹之窗"
+    },
+    {
+      "name": "form_sky_window_desc",
+      "value": "即時天穹、日出日落、48小時推演與行星"
+    },
+    {
+      "name": "form_companion_arc_name",
+      "value": "星曆弧盤"
+    },
+    {
+      "name": "form_companion_arc_desc",
+      "value": "即時月相、月球地相、軌弧與五日相位"
+    },
+    {
+      "name": "form_solar_arc_name",
+      "value": "太陽天光"
+    },
+    {
+      "name": "form_solar_arc_desc",
+      "value": "3D太陽光球、日出日落軌弧與黃金時刻"
+    },
+    {
+      "name": "form_celestial_events_name",
+      "value": "天象預告"
+    },
+    {
+      "name": "form_celestial_events_desc",
+      "value": "多星球天象倒數、翻頁列表與一鍵提醒"
+    },
+    {
+      "name": "form_floating_orb_name",
+      "value": "懸浮天體"
+    },
+    {
+      "name": "form_floating_orb_desc",
+      "value": "無邊框懸浮於桌面的3D天體與即時月相"
     }
   ]
 }

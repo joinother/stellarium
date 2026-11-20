@@ -11,6 +11,7 @@ import {
 } from './AstronomyCardData'
 import {
   readFormConfig,
+  readFormKind,
   readFormTextColor,
   resolveCardDataForConfig,
   writeFormConfig
@@ -18,6 +19,7 @@ import {
 
 const DOMAIN: number = 0xD003
 const TAG: string = 'SkyFormEditPage'
+const ACCENT_BLUE: string = '#0A59F7'
 
 interface OptionChoice {
   value: string
@@ -47,6 +49,7 @@ struct SkyFormEditPage {
   @State themeStyle: string = 'sky'
   @State labelStyle: string = 'name'
   @State overflowMode: string = 'auto'
+  @State formKind: string = 'sky_window_card'
   @State statusTip: string = ''
 
   private formId: string = ''
@@ -61,12 +64,21 @@ struct SkyFormEditPage {
       this.editContext = shared.get<common.FormEditExtensionContext>('context')
     }
     if (this.editContext !== undefined && this.formId.length > 0) {
+      this.formKind = readFormKind(this.editContext, this.formId)
       const cfg = readFormConfig(this.editContext, this.formId)
       this.planetMode = cfg.planetMode
       this.themeStyle = cfg.themeStyle
       this.labelStyle = cfg.labelStyle
       this.overflowMode = cfg.overflowMode
     }
+  }
+
+  private showThemeSection(): boolean {
+    return this.formKind !== 'floating_orb_card'
+  }
+
+  private showPlanetLabelSection(): boolean {
+    return this.formKind === 'sky_window_card' || this.formKind === 'celestial_events_card'
   }
 
   private currentConfig(): CardInstanceConfig {
@@ -104,143 +116,142 @@ struct SkyFormEditPage {
 
     pushUpdate(this.formId)
     pushUpdate(this.previewFormId)
-    this.statusTip = '已应用：' + planetZhName(this.planetMode)
+    this.statusTip = '已应用 · ' + planetZhName(this.planetMode)
   }
 
-  private planetChipText(id: string): string {
-    if (id === 'follow') return '跟随星图'
-    return planetSymbol(id) + ' ' + planetZhName(id)
+  private planetDisplayName(id: string): string {
+    return id === 'follow' ? '跟随星图' : planetZhName(id)
+  }
+
+  private planetGlyph(id: string): string {
+    if (id === 'follow') return '✦'
+    if (id === 'Sun') return '☉'
+    return planetSymbol(id)
+  }
+
+  @Builder
+  sectionSegmentedRow(title: string, choices: OptionChoice[], selectedValue: string, onPick: (val: string) => void) {
+    Column({ space: 8 }) {
+      Text(title)
+        .fontSize(13)
+        .fontWeight(FontWeight.Medium)
+        .fontColor($r('sys.color.font_secondary'))
+        .width('100%')
+
+      Row({ space: 8 }) {
+        ForEach(choices, (choice: OptionChoice) => {
+          Row() {
+            Text(choice.label)
+              .fontSize(13)
+              .lineHeight(18)
+              .fontWeight(selectedValue === choice.value ? FontWeight.Medium : FontWeight.Regular)
+              .fontColor(selectedValue === choice.value ? '#FFFFFF' : $r('sys.color.font_primary'))
+              .maxLines(1)
+              .textOverflow({ overflow: TextOverflow.Ellipsis })
+          }
+          .layoutWeight(1)
+          .height(38)
+          .justifyContent(FlexAlign.Center)
+          .alignItems(VerticalAlign.Center)
+          .backgroundColor(selectedValue === choice.value ? ACCENT_BLUE : $r('sys.color.comp_background_tertiary'))
+          .borderRadius(12)
+          .onClick(() => {
+            onPick(choice.value)
+            this.applyConfig()
+          })
+        }, (choice: OptionChoice) => choice.value)
+      }
+      .width('100%')
+    }
+    .width('100%')
+    .padding({ left: 12, right: 12, top: 10, bottom: 12 })
+    .backgroundColor($r('sys.color.comp_background_secondary'))
+    .borderRadius(16)
   }
 
   build() {
     Scroll() {
-      Column({ space: 14 }) {
-        // Section 1: Multi-instance Planet Binding
+      Column({ space: 10 }) {
+        // Section 1: Uniform 3x3 Celestial World Grid (exact equal width & 38vp height!)
         Column({ space: 8 }) {
           Row() {
             Text('观测天体')
-              .fontSize(14)
+              .fontSize(13)
               .fontWeight(FontWeight.Medium)
-              .fontColor($r('sys.color.font_primary'))
-            Blank()
-            Text(this.statusTip.length > 0 ? this.statusTip : '支持多张卡片独立绑定')
-              .fontSize(11)
               .fontColor($r('sys.color.font_secondary'))
+            Blank()
+            Text(this.statusTip.length > 0 ? this.statusTip : '每张卡片可独立绑定')
+              .fontSize(11)
+              .fontColor(this.statusTip.length > 0 ? ACCENT_BLUE : $r('sys.color.font_tertiary'))
           }
           .width('100%')
 
-          Flex({ wrap: FlexWrap.Wrap }) {
+          Grid() {
             ForEach(SUPPORTED_EDIT_PLANETS, (planetId: string) => {
-              Text(this.planetChipText(planetId))
-                .fontSize(13)
-                .fontWeight(this.planetMode === planetId ? FontWeight.Medium : FontWeight.Regular)
-                .fontColor(this.planetMode === planetId ? '#FFFFFF' : $r('sys.color.font_primary'))
-                .padding({ left: 12, right: 12, top: 7, bottom: 7 })
-                .margin({ right: 8, bottom: 8 })
-                .backgroundColor(this.planetMode === planetId ? '#2864D8' : $r('sys.color.comp_background_tertiary'))
-                .borderRadius(18)
+              GridItem() {
+                Row({ space: 4 }) {
+                  Text(this.planetGlyph(planetId))
+                    .fontSize(13)
+                    .lineHeight(16)
+                    .fontColor(this.planetMode === planetId ? '#FFFFFF' : $r('sys.color.font_secondary'))
+                  Text(this.planetDisplayName(planetId))
+                    .fontSize(13)
+                    .lineHeight(16)
+                    .fontWeight(this.planetMode === planetId ? FontWeight.Medium : FontWeight.Regular)
+                    .fontColor(this.planetMode === planetId ? '#FFFFFF' : $r('sys.color.font_primary'))
+                    .maxLines(1)
+                    .textOverflow({ overflow: TextOverflow.Ellipsis })
+                }
+                .width('100%')
+                .height(38)
+                .justifyContent(FlexAlign.Center)
+                .alignItems(VerticalAlign.Center)
+                .padding({ left: 6, right: 6 })
+                .backgroundColor(this.planetMode === planetId ? ACCENT_BLUE : $r('sys.color.comp_background_tertiary'))
+                .borderRadius(12)
                 .onClick(() => {
                   this.planetMode = planetId
                   this.applyConfig()
                 })
+              }
             }, (planetId: string) => planetId)
           }
+          .columnsTemplate('1fr 1fr 1fr')
+          .columnsGap(8)
+          .rowsGap(8)
           .width('100%')
+          .height(130)
         }
         .width('100%')
+        .padding({ left: 12, right: 12, top: 10, bottom: 12 })
+        .backgroundColor($r('sys.color.comp_background_secondary'))
+        .borderRadius(16)
 
-        // Section 2: Sky Theme Style
-        Column({ space: 8 }) {
-          Text('视觉风格')
-            .fontSize(14)
-            .fontWeight(FontWeight.Medium)
-            .fontColor($r('sys.color.font_primary'))
-            .width('100%')
-
-          Row({ space: 8 }) {
-            ForEach(THEME_CHOICES, (choice: OptionChoice) => {
-              Text(choice.label)
-                .fontSize(13)
-                .fontWeight(this.themeStyle === choice.value ? FontWeight.Medium : FontWeight.Regular)
-                .fontColor(this.themeStyle === choice.value ? '#FFFFFF' : $r('sys.color.font_primary'))
-                .textAlign(TextAlign.Center)
-                .layoutWeight(1)
-                .padding({ top: 8, bottom: 8 })
-                .backgroundColor(this.themeStyle === choice.value ? '#2864D8' : $r('sys.color.comp_background_tertiary'))
-                .borderRadius(16)
-                .onClick(() => {
-                  this.themeStyle = choice.value
-                  this.applyConfig()
-                })
-            }, (choice: OptionChoice) => choice.value)
-          }
-          .width('100%')
+        // Section 2: Sky Theme Style (framed cards only)
+        if (this.showThemeSection()) {
+          this.sectionSegmentedRow('视觉风格', THEME_CHOICES, this.themeStyle, (val: string) => {
+            this.themeStyle = val
+          })
         }
-        .width('100%')
 
-        // Section 3: Planet Label Style (Names vs Astronomical Symbols)
-        Column({ space: 8 }) {
-          Text('行星标识样式')
-            .fontSize(14)
-            .fontWeight(FontWeight.Medium)
-            .fontColor($r('sys.color.font_primary'))
-            .width('100%')
-
-          Row({ space: 8 }) {
-            ForEach(LABEL_CHOICES, (choice: OptionChoice) => {
-              Text(choice.label)
-                .fontSize(13)
-                .fontWeight(this.labelStyle === choice.value ? FontWeight.Medium : FontWeight.Regular)
-                .fontColor(this.labelStyle === choice.value ? '#FFFFFF' : $r('sys.color.font_primary'))
-                .textAlign(TextAlign.Center)
-                .layoutWeight(1)
-                .padding({ top: 8, bottom: 8 })
-                .backgroundColor(this.labelStyle === choice.value ? '#2864D8' : $r('sys.color.comp_background_tertiary'))
-                .borderRadius(16)
-                .onClick(() => {
-                  this.labelStyle = choice.value
-                  this.applyConfig()
-                })
-            }, (choice: OptionChoice) => choice.value)
-          }
-          .width('100%')
+        // Section 3: Planet Label Style (cards with planet lists only)
+        if (this.showPlanetLabelSection()) {
+          this.sectionSegmentedRow('行星标识样式', LABEL_CHOICES, this.labelStyle, (val: string) => {
+            this.labelStyle = val
+          })
         }
-        .width('100%')
 
         // Section 4: API 20 Overflow Animation Policy
-        Column({ space: 8 }) {
-          Text('天体破框动效')
-            .fontSize(14)
-            .fontWeight(FontWeight.Medium)
-            .fontColor($r('sys.color.font_primary'))
-            .width('100%')
-
-          Row({ space: 8 }) {
-            ForEach(OVERFLOW_CHOICES, (choice: OptionChoice) => {
-              Text(choice.label)
-                .fontSize(12)
-                .fontWeight(this.overflowMode === choice.value ? FontWeight.Medium : FontWeight.Regular)
-                .fontColor(this.overflowMode === choice.value ? '#FFFFFF' : $r('sys.color.font_primary'))
-                .textAlign(TextAlign.Center)
-                .layoutWeight(1)
-                .padding({ top: 8, bottom: 8 })
-                .backgroundColor(this.overflowMode === choice.value ? '#2864D8' : $r('sys.color.comp_background_tertiary'))
-                .borderRadius(16)
-                .onClick(() => {
-                  this.overflowMode = choice.value
-                  this.applyConfig()
-                })
-            }, (choice: OptionChoice) => choice.value)
-          }
-          .width('100%')
-        }
-        .width('100%')
+        this.sectionSegmentedRow('天体破框动效', OVERFLOW_CHOICES, this.overflowMode, (val: string) => {
+          this.overflowMode = val
+        })
       }
       .width('100%')
-      .padding({ left: 18, right: 18, top: 12, bottom: 20 })
+      .padding({ left: 14, right: 14, top: 8, bottom: 16 })
     }
     .width('100%')
     .height('100%')
+    .scrollBar(BarState.Auto)
     .backgroundColor($r('sys.color.comp_background_primary'))
   }
 }

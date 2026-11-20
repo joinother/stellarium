@@ -1,5 +1,22 @@
 > **身份图例**：本文件真机记录中出现的 `com.cnchensh.stellarium` 是**本机调试签名身份**（本机 DevEco 自动生成，非发布身份）；发布身份为 `com.joinother.skyinstrument`。构建脚本 `build-ohos-hap-windows.ps1 -Install` 从产物 `pack.info` 读取实际包名，仓库不写死任何签名身份（见 `docs/harmonyos/release/BUNDLE-IDENTITY-CLEANUP.md`）。
 
+## [2026-11-20] 桌面卡片名称本地化资源修复与编辑页均匀网格重排（含 `jd = 0` 路由兜底修复）
+
+- **修改文件：** `harmonyos/resources/base/profile/form_config.json`、`harmonyos/resources/base/element/string.json`、`harmonyos/resources/zh_CN/element/string.json`、`harmonyos/resources/zh_HK/element/string.json`、`harmonyos/resources/zh_TW/element/string.json`、`harmonyos/resources/en_US/element/string.json`、`harmonyos/ets-source/form/SkyFormEditPage.ets`、`harmonyos/ets-source/qability/QAbility.ets`、`harmonyos/ets-source/pages/MainWindowNativeNode.ets`、`scripts/test-ohos-form-cards.mjs`、`docs/harmonyos/CHANGELOG.md`。
+- **问题排查与修复：**
+  1. **修复添加卡片与编辑卡片缺失中文名称 / 暴露英文内部名：**
+     - 核查鸿蒙官方 `form_config.json` 规范发现：`displayName` 与 `description` 必须使用 `$string:<key>` 资源索引，直接填写字面量会导致 `displayNameId = 0`，从而在系统「更多卡片 / 添加卡片」页标题与简介空白，且在长按「编辑」弹窗顶部回退显示原始英文名（如 `companion_arc_card`）。
+     - 已将 5 款卡片（`sky_window_card` 天穹之窗、`companion_arc_card` 星历弧盘、`solar_arc_card` 太阳天光、`celestial_events_card` 天象预告、`floating_orb_card` 悬浮天体）的 `displayName` 与 `description` 全部迁移为 `$string:form_*_name` / `$string:form_*_desc`，并在 `base`、`zh_CN`、`zh_HK`、`zh_TW`、`en_US` 全部 5 套语言资源中补齐，同时精简中文简介长度至 17–18 字以保证系统卡片选择器单行居中无孤字折行。
+  2. **重构卡片编辑页 `SkyFormEditPage.ets` 为均匀网格与分段控件：**
+     - 将原先宽窄不一、因字形高度参差不齐而错位的 `Flex` 观测天体按钮重构为严格等宽等高的 **3×3 `Grid`**（`1fr 1fr 1fr`、固定 `38vp` 行高、`lineHeight(16)`），并统一太阳图标为单色天文符号 `☉`，与 `✦ / ⊕ / ♂ / ☾ / ♄ / ♃ / ♆` 视觉完全一致；
+     - 全部设置分组采用鸿蒙原生圆角分组卡片（`comp_background_secondary`、`borderRadius(16)`）与等宽等高（`38vp`）分段按钮，`#0A59F7` 选中高亮；
+     - 新增按卡片类型显隐无关配置（通过 `readFormKind()`）：无边框「悬浮天体」隐藏无关的「视觉风格」，无行星条的「悬浮天体 / 太阳天光 / 星历弧盘」隐藏无关的「行星标识样式」。
+  3. **附带修复 `jd = 0` 卡片落地路由误报：**
+     - 修复 `QAbility.ets` 与 `MainWindowNativeNode.ets` 中未排除 `jd <= 0` 导致 `jd = 0` 被换算为公元前 4713 年并触发「没有可用的目标时刻。」提示及误显 `⏱ 此刻` 按钮的问题（改为严格判断 `jd > 0` / `targetJd > 0`）。
+- **验证与真机实测（MatePad Mini `192.168.31.234:42713`）：**
+  - 主机验证：`test-ohos-form-cards.mjs`（新增 5 款卡片 `$string:` 索引与 `base / zh_CN / en_US` 资源完备性断言）、`test-ohos-off-earth-calendar-and-snapshot.mjs`、`test-ohos-notification-integration.mjs`、`test-ohos-native-astronomy-calendar.mjs`、`check-ohos-ui-contract.mjs` 全部通过。
+  - 真机实拍核验：编辑弹窗顶部清晰显示中文标题「**星历弧盘**」，观测天体 3×3 网格九枚按钮（含单色 `☉ 太阳`）宽窄高度完全齐整，下方「视觉风格」与「天体破框动效」分段按钮均匀对齐且已自动隐藏无关的「行星标识样式」；「更多卡片」添加页所有卡片均居中展示中文名称与单行简介，无空白、无英文内部名、无孤字折行。
+
 ## [2026-11-20] 全链路桌面卡片与通知提醒落地页升级（上下文承接、沉浸式星图落地胶囊与一键找星）
 
 - **修改文件：** `harmonyos/ets-source/form/AstronomyCardData.ts`、`harmonyos/ets-source/form/SkyWindowCard.ets`、`harmonyos/ets-source/form/CompanionArcCard.ets`、`harmonyos/ets-source/form/SolarArcCard.ets`、`harmonyos/ets-source/form/FloatingOrbCard.ets`、`harmonyos/ets-source/form/SkyLiveFormPage.ets`、`harmonyos/ets-source/form/SkyInstrumentFormAbility.ets`、`harmonyos/ets-source/qability/AstronomyReminderMetadata.ts`、`harmonyos/ets-source/qability/AstronomyReminderService.ets`、`harmonyos/ets-source/qability/QAbility.ets`、`harmonyos/ets-source/capability/TimeTransitionController.ets`、`harmonyos/ets-source/panels/settings/NotificationSection.ets`、`harmonyos/ets-source/panels/panels/SettingsPanel.ets`、`harmonyos/ets-source/pages/MainWindowNativeNode.ets`、`scripts/test-ohos-form-cards.mjs`、`docs/harmonyos/CHANGELOG.md`。

@@ -2,8 +2,8 @@
   "forms": [
     {
       "name": "sky_window_card",
-      "displayName": "天穹之窗",
-      "description": "实时大气天穹、暗夜窗口、3D天体球与今夜行星可见性，支持多星球绑定与破框动效",
+      "displayName": "$string:form_sky_window_name",
+      "description": "$string:form_sky_window_desc",
       "src": "./ets/form/SkyWindowCard.ets",
       "uiSyntax": "arkts",
       "isDynamic": true,
@@ -24,8 +24,8 @@
     },
     {
       "name": "companion_arc_card",
-      "displayName": "星历弧盘",
-      "description": "实时月相、月球地相与土卫六土星环轨道弧盘，附五日相位演进条",
+      "displayName": "$string:form_companion_arc_name",
+      "description": "$string:form_companion_arc_desc",
       "src": "./ets/form/CompanionArcCard.ets",
       "uiSyntax": "arkts",
       "isDynamic": true,
@@ -45,8 +45,8 @@
     },
     {
       "name": "solar_arc_card",
-      "displayName": "太阳天光",
-      "description": "实时 3D 太阳光球、日出中天日落轨弧、黄金时刻、昼长与二十四节气，支持破框动效",
+      "displayName": "$string:form_solar_arc_name",
+      "description": "$string:form_solar_arc_desc",
       "src": "./ets/form/SolarArcCard.ets",
       "uiSyntax": "arkts",
       "isDynamic": true,
@@ -66,8 +66,8 @@
     },
     {
       "name": "celestial_events_card",
-      "displayName": "天象预告",
-      "description": "地球与太阳系异星天象倒计时、近期事件时间轴与直达星图入口",
+      "displayName": "$string:form_celestial_events_name",
+      "description": "$string:form_celestial_events_desc",
       "src": "./ets/form/CelestialEventsCard.ets",
       "uiSyntax": "arkts",
       "isDynamic": true,
@@ -87,8 +87,8 @@
     },
     {
       "name": "floating_orb_card",
-      "displayName": "悬浮天体",
-      "description": "无边框悬浮于桌面壁纸的 3D 太阳系天体与实时月相，支持自选星球与破框动效",
+      "displayName": "$string:form_floating_orb_name",
+      "description": "$string:form_floating_orb_desc",
       "src": "./ets/form/FloatingOrbCard.ets",
       "uiSyntax": "arkts",
       "isDynamic": true,

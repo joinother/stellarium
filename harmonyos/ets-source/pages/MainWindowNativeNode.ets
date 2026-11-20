@@ -4316,7 +4316,7 @@ export struct WindowNativeNode {
             this.refreshState()
           }
         }
-        const hasTimeShift = Number.isFinite(targetJd)
+        const hasTimeShift = Number.isFinite(targetJd) && targetJd > 0
         if (hasTimeShift) {
           const transitionLabel = landingTitle.length > 0 ? landingTitle : (target.length > 0 ? target : panel)
           this.timeTransitionCtl().animate(targetJd, transitionLabel, focusTarget)
