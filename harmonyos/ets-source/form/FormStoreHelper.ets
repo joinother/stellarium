@@ -6,8 +6,10 @@ import {
   applyCardConfigToSnapshot,
   applyTimeline48hToCard,
   buildFallbackCardForPlanet,
+  clampTimeOffsetHours,
   defaultAstronomyCard,
   defaultCardConfig,
+  formatPreviewTimeBadge,
   normalizeAstronomyCard,
   normalizeCardConfig
 } from './AstronomyCardData'
@@ -18,8 +20,15 @@ export const CARD_TIMELINE_KEY: string = 'timeline48hSnapshot'
 const FORM_CONFIG_PREFIX: string = 'formConfig_'
 const FORM_KIND_PREFIX: string = 'formKind_'
 const FORM_TEXT_COLOR_PREFIX: string = 'formTextColor_'
+const FORM_TIME_OFFSET_PREFIX: string = 'formOffset_'
+const REMINDED_EVENTS_KEY: string = 'widgetRemindedEvents'
 const DOMAIN: number = 0xD003
 const TAG: string = 'SkyFormStore'
+
+export interface WidgetRemindedEntry {
+  eventId: string
+  reminderId: number
+}
 
 function planetSnapshotKey(planet: string): string {
   return CARD_SNAPSHOT_KEY + '_' + planet.trim().toLowerCase()
@@ -75,6 +84,7 @@ export function removeFormMetadata(context: common.Context, formId: string): voi
     if (store.hasSync(FORM_CONFIG_PREFIX + formId)) store.deleteSync(FORM_CONFIG_PREFIX + formId)
     if (store.hasSync(FORM_KIND_PREFIX + formId)) store.deleteSync(FORM_KIND_PREFIX + formId)
     if (store.hasSync(FORM_TEXT_COLOR_PREFIX + formId)) store.deleteSync(FORM_TEXT_COLOR_PREFIX + formId)
+    if (store.hasSync(FORM_TIME_OFFSET_PREFIX + formId)) store.deleteSync(FORM_TIME_OFFSET_PREFIX + formId)
     store.flushSync()
   } catch (_) {
   }
@@ -101,6 +111,61 @@ export function readFormTextColor(context: common.Context, formId: string): stri
   } catch (_) {
     return ''
   }
+}
+
+export function readFormTimeOffset(context: common.Context, formId: string): number {
+  if (formId.length === 0) return 0
+  const store = openFreshCardStore(context)
+  if (store === undefined) return 0
+  try {
+    const raw = store.getSync(FORM_TIME_OFFSET_PREFIX + formId, '0')
+    return clampTimeOffsetHours(Number(raw))
+  } catch (_) {
+    return 0
+  }
+}
+
+export function writeFormTimeOffset(context: common.Context, formId: string, offsetHours: number): void {
+  if (formId.length === 0) return
+  const store = openFreshCardStore(context)
+  if (store === undefined) return
+  try {
+    store.putSync(FORM_TIME_OFFSET_PREFIX + formId, String(clampTimeOffsetHours(offsetHours)))
+    store.flushSync()
+  } catch (_) {
+  }
+}
+
+export function readRemindedEntries(context: common.Context): WidgetRemindedEntry[] {
+  const store = openFreshCardStore(context)
+  if (store === undefined) return []
+  try {
+    const raw = store.getSync(REMINDED_EVENTS_KEY, '[]')
+    if (typeof raw !== 'string' || raw.length === 0) return []
+    const parsed = JSON.parse(raw) as Array<WidgetRemindedEntry>
+    return Array.isArray(parsed) ? parsed : []
+  } catch (_) {
+    return []
+  }
+}
+
+export function writeRemindedEntries(context: common.Context, entries: WidgetRemindedEntry[]): void {
+  const store = openFreshCardStore(context)
+  if (store === undefined) return
+  try {
+    store.putSync(REMINDED_EVENTS_KEY, JSON.stringify(entries.slice(-30)))
+    store.flushSync()
+  } catch (_) {
+  }
+}
+
+export function readRemindedEventIds(context: common.Context): string[] {
+  const entries = readRemindedEntries(context)
+  const out: string[] = []
+  for (let i = 0; i < entries.length; i++) {
+    if (entries[i].eventId.length > 0) out.push(entries[i].eventId)
+  }
+  return out
 }
 
 export function writeFormKind(context: common.Context, formId: string, formName: string): void {
@@ -155,14 +220,23 @@ export function writePlanetSnapshot(
 export function resolveCardDataForConfig(
   context: common.Context,
   config: CardInstanceConfig,
-  now: number
+  now: number,
+  offsetHours: number = 0
 ): Record<string, string> {
+  const safeOffset = clampTimeOffsetHours(offsetHours)
+  const evalMs = now + safeOffset * 3600000
   const store = openFreshCardStore(context)
+  const remindedIds = readRemindedEventIds(context)
+
   if (store === undefined) {
     const fallback = config.planetMode !== 'follow'
-      ? buildFallbackCardForPlanet(config.planetMode, now)
+      ? buildFallbackCardForPlanet(config.planetMode, evalMs)
       : defaultAstronomyCard()
-    return applyCardConfigToSnapshot(fallback, config, now)
+    const styled = applyCardConfigToSnapshot(fallback, config, now)
+    styled['timeOffsetHours'] = String(safeOffset)
+    styled['timePreviewLabel'] = formatPreviewTimeBadge(safeOffset, evalMs)
+    styled['remindedEventIds'] = JSON.stringify(remindedIds)
+    return styled
   }
   try {
     let raw: string = ''
@@ -173,7 +247,6 @@ export function resolveCardDataForConfig(
       raw = typeof pRaw === 'string' ? pRaw : ''
       timelineRaw = typeof pTl === 'string' ? pTl : ''
       if (raw.length === 0) {
-        // Also check if latest default snapshot happens to match this planet
         const latestRaw = store.getSync(CARD_SNAPSHOT_KEY, '')
         if (typeof latestRaw === 'string' && latestRaw.length > 0) {
           const probe = normalizeAstronomyCard(latestRaw, now)
@@ -185,7 +258,11 @@ export function resolveCardDataForConfig(
         }
       }
       if (raw.length === 0) {
-        return applyCardConfigToSnapshot(buildFallbackCardForPlanet(config.planetMode, now), config, now)
+        const fb = applyCardConfigToSnapshot(buildFallbackCardForPlanet(config.planetMode, evalMs), config, now)
+        fb['timeOffsetHours'] = String(safeOffset)
+        fb['timePreviewLabel'] = formatPreviewTimeBadge(safeOffset, evalMs)
+        fb['remindedEventIds'] = JSON.stringify(remindedIds)
+        return fb
       }
     } else {
       const lRaw = store.getSync(CARD_SNAPSHOT_KEY, '')
@@ -193,24 +270,37 @@ export function resolveCardDataForConfig(
       raw = typeof lRaw === 'string' ? lRaw : ''
       timelineRaw = typeof lTl === 'string' ? lTl : ''
       if (raw.length === 0) {
-        return applyCardConfigToSnapshot(defaultAstronomyCard(), config, now)
+        const fb = applyCardConfigToSnapshot(defaultAstronomyCard(), config, now)
+        fb['timeOffsetHours'] = String(safeOffset)
+        fb['timePreviewLabel'] = formatPreviewTimeBadge(safeOffset, evalMs)
+        fb['remindedEventIds'] = JSON.stringify(remindedIds)
+        return fb
       }
     }
     const card = normalizeAstronomyCard(raw, now)
-    const liveCard = applyTimeline48hToCard(card, timelineRaw, now)
-    return applyCardConfigToSnapshot(liveCard, config, now)
+    const liveCard = applyTimeline48hToCard(card, timelineRaw, evalMs)
+    const styled = applyCardConfigToSnapshot(liveCard, config, now)
+    styled['timeOffsetHours'] = String(safeOffset)
+    styled['timePreviewLabel'] = formatPreviewTimeBadge(safeOffset, evalMs)
+    styled['remindedEventIds'] = JSON.stringify(remindedIds)
+    return styled
   } catch (error) {
     hilog.warn(DOMAIN, TAG, 'resolveCardDataForConfig failed: %{public}s', String(error))
     const fallback = config.planetMode !== 'follow'
-      ? buildFallbackCardForPlanet(config.planetMode, now)
+      ? buildFallbackCardForPlanet(config.planetMode, evalMs)
       : defaultAstronomyCard()
-    return applyCardConfigToSnapshot(fallback, config, now)
+    const styled = applyCardConfigToSnapshot(fallback, config, now)
+    styled['timeOffsetHours'] = String(safeOffset)
+    styled['timePreviewLabel'] = formatPreviewTimeBadge(safeOffset, evalMs)
+    styled['remindedEventIds'] = JSON.stringify(remindedIds)
+    return styled
   }
 }
 
 export function resolveCardDataForForm(context: common.Context, formId: string, now: number = Date.now()): Record<string, string> {
   const config = readFormConfig(context, formId)
-  const card = resolveCardDataForConfig(context, config, now)
+  const offsetHours = readFormTimeOffset(context, formId)
+  const card = resolveCardDataForConfig(context, config, now, offsetHours)
   const savedColor = readFormTextColor(context, formId)
   if (savedColor.length > 0) {
     card['textColor'] = savedColor

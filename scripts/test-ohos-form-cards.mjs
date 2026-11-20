@@ -9,17 +9,22 @@ import {
   buildFallbackCardForPlanet,
   buildMiniPhaseStrip,
   buildTimeline48hSnapshot,
+  clampTimeOffsetHours,
   computeOverflowArea,
+  computePreviewPhaseForDay,
   defaultCardConfig,
   estimateMoonPhaseAt,
   extractInverseTextColor,
   formatCountdownZh,
   formatPlanetDisplayList,
+  formatPreviewTimeBadge,
   isLightTextColor,
   moonSilhouette,
+  nextCyclePlanet,
   normalizeAstronomyCard,
   normalizeCardConfig,
   orbKeyForBody,
+  parseRemindedEventIds,
   planetSymbol,
   planetZhName
 } from '../harmonyos/ets-source/form/AstronomyCardData.ts'
@@ -102,6 +107,13 @@ assert.ok(formAbilitySrc.includes('ohos.extra.param.key.edit_form_id'), 'onAddFo
 assert.ok(formAbilitySrc.includes('HOST_BG_INVERSE_COLOR_KEY'), 'FormAbility must read HOST_BG_INVERSE_COLOR_KEY for transparent backplate text color')
 assert.ok(formAbilitySrc.includes('formProvider.requestOverflow'), 'onFormEvent must invoke formProvider.requestOverflow')
 assert.ok(formAbilitySrc.includes('formProvider.getFormRect'), 'onFormEvent must query formProvider.getFormRect')
+assert.ok(formAbilitySrc.includes("eventType === 'stepTimeOffset'"), 'FormAbility must handle 48h time-scrubbing dial')
+assert.ok(formAbilitySrc.includes("eventType === 'cyclePlanet'"), 'FormAbility must handle quick planet carousel')
+assert.ok(formAbilitySrc.includes("eventType === 'toggleEventReminder'"), 'FormAbility must handle desktop reminder bell')
+assert.ok(formAbilitySrc.includes('reminderAgentManager.publishReminder'), 'FormAbility must schedule background agent reminders')
+
+const liveFormPageSrc = fs.readFileSync(path.join(root, 'harmonyos/ets-source/form/SkyLiveFormPage.ets'), 'utf8')
+assert.ok(liveFormPageSrc.includes('cycleFloatingPlanetInPlace'), 'SkyLiveFormPage must allow in-overflow planet switching for FloatingOrbCard')
 
 const formEditSrc = fs.readFileSync(formEditAbilityPath, 'utf8')
 assert.ok(formEditSrc.includes('FormEditExtensionAbility'), 'must extend FormEditExtensionAbility')
@@ -249,4 +261,20 @@ assert.equal(extractInverseTextColor('bad-color'), '')
 assert.equal(isLightTextColor('#F5F9FF'), true)
 assert.equal(isLightTextColor('#FF181818'), false)
 
-console.log(`HarmonyOS Stage 2+3 widget contract, transparent backplate, overflow & data tests passed: ${expectedForms.length} cards, 11 3D orbs, ${overflowCases.length} overflow specs`)
+// Interactive widget helpers: planet cycle, 48h time dial, 5-day phase scrubber, reminder state
+assert.equal(nextCyclePlanet('Earth'), 'Mars')
+assert.equal(nextCyclePlanet('Mars'), 'Moon')
+assert.equal(nextCyclePlanet('Neptune'), 'Earth')
+assert.equal(clampTimeOffsetHours(-4), 0)
+assert.equal(clampTimeOffsetHours(12), 12)
+assert.equal(clampTimeOffsetHours(99), 44)
+assert.ok(formatPreviewTimeBadge(8, now + 8 * 3600000).startsWith('+8h · '))
+assert.equal(formatPreviewTimeBadge(0, now), '')
+const day3Moon = computePreviewPhaseForDay(11.0, 3, false)
+assert.ok(day3Moon.illumination > 90 && day3Moon.phaseName === '满月')
+const day3Earth = computePreviewPhaseForDay(11.0, 3, true)
+assert.equal(day3Earth.phaseName, '满地')
+assert.deepEqual(parseRemindedEventIds('["ev-1","ev-2"]'), ['ev-1', 'ev-2'])
+assert.deepEqual(parseRemindedEventIds('invalid'), [])
+
+console.log(`HarmonyOS interactive widget contract, transparent backplate, overflow & data tests passed: ${expectedForms.length} cards, 11 3D orbs, ${overflowCases.length} overflow specs`)

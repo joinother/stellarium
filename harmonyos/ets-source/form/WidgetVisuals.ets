@@ -262,11 +262,13 @@ export struct HorizonArcView {
   }
 }
 
-// Compact 5-day lunar/companion phase progression strip (for 2*4 CompanionArcCard)
+// Interactive 5-day lunar/companion phase progression strip (for 2*4 CompanionArcCard)
 @Component
 export struct MiniPhaseStripView {
   @Prop phaseAge: number = 10
   @Prop nowMs: number = 0
+  @Prop selectedIndex: number = 0
+  onSelectDay?: (index: number) => void
 
   private days(): MiniPhaseDay[] {
     return buildMiniPhaseStrip(this.phaseAge, this.nowMs > 0 ? this.nowMs : Date.now())
@@ -280,7 +282,7 @@ export struct MiniPhaseStripView {
 
   build() {
     Row({ space: 6 }) {
-      ForEach(this.days(), (day: MiniPhaseDay) => {
+      ForEach(this.days(), (day: MiniPhaseDay, index: number) => {
         Column({ space: 3 }) {
           Stack({ alignContent: Alignment.Center }) {
             Circle()
@@ -301,21 +303,28 @@ export struct MiniPhaseStripView {
               .clip(true)
             }
           }
-          .width(20)
-          .height(20)
-          .borderRadius(10)
+          .width(22)
+          .height(22)
+          .borderRadius(11)
+          .backgroundColor(this.selectedIndex === index ? '#309EC5FF' : Color.Transparent)
           .border({
-            width: day.isToday ? 1 : 0,
-            color: day.isToday ? '#99C7E0FF' : Color.Transparent
+            width: this.selectedIndex === index ? 1.2 : 0,
+            color: this.selectedIndex === index ? '#C8E4FF' : Color.Transparent
           })
 
           Text(day.label)
             .fontSize(10)
-            .fontWeight(day.isToday ? FontWeight.Medium : FontWeight.Regular)
-            .fontColor(day.isToday ? '#F2F7FF' : '#88C8DCFF')
+            .fontWeight(this.selectedIndex === index ? FontWeight.Medium : FontWeight.Regular)
+            .fontColor(this.selectedIndex === index ? '#FFFFFF' : '#88C8DCFF')
             .maxLines(1)
         }
         .alignItems(HorizontalAlign.Center)
+        .padding({ left: 3, right: 3, top: 2, bottom: 1 })
+        .onClick(() => {
+          if (this.onSelectDay !== undefined) {
+            this.onSelectDay(index)
+          }
+        })
       }, (day: MiniPhaseDay, index: number) => day.label + '_' + String(index))
     }
     .justifyContent(FlexAlign.SpaceBetween)

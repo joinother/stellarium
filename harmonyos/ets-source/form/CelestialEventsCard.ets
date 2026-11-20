@@ -3,6 +3,7 @@ import {
   formatCountdownZh,
   formatPlanetDisplayList,
   formatShortDateZh,
+  parseRemindedEventIds,
   parseUpcomingEvents
 } from './AstronomyCardData'
 import {
@@ -29,6 +30,8 @@ struct CelestialEventsCard {
   @LocalStorageProp('upcomingEventsJson') upcomingEventsJson: string = '[]'
   @LocalStorageProp('visiblePlanetsJson') visiblePlanetsJson: string = '[]'
   @LocalStorageProp('planetNames') planetNames: string = ''
+  @LocalStorageProp('remindedEventIds') remindedEventIds: string = '[]'
+  @LocalStorageProp('reminderToast') reminderToast: string = ''
   @LocalStorageProp('skyHexTop') skyHexTop: string = '#070D1D'
   @LocalStorageProp('skyHexHorizon') skyHexHorizon: string = '#152442'
   @LocalStorageProp('dataStatus') dataStatus: string = '本地快照'
@@ -37,29 +40,94 @@ struct CelestialEventsCard {
   @LocalStorageProp('cardOverflowMode') cardOverflowMode: string = 'auto'
 
   @State cardHeight: number = 160
+  @State heroIndex: number = 0
 
   private isTall(): boolean { return this.cardHeight >= 230 }
 
-  private events(): CompactEventItem[] {
-    const all = parseUpcomingEvents(this.upcomingEventsJson)
+  private allEvents(): CompactEventItem[] {
+    return parseUpcomingEvents(this.upcomingEventsJson)
+  }
+
+  private visibleEvents(): CompactEventItem[] {
+    const all = this.allEvents()
     return this.isTall() ? all.slice(0, 4) : all.slice(0, 2)
   }
 
+  private heroEvent(): CompactEventItem | undefined {
+    const all = this.allEvents()
+    if (all.length === 0) return undefined
+    const safeIdx = ((this.heroIndex % all.length) + all.length) % all.length
+    return all[safeIdx]
+  }
+
+  private heroTitle(): string {
+    const ev = this.heroEvent()
+    return ev !== undefined ? ev.title : this.nextEventTitle
+  }
+
+  private heroKind(): string {
+    const ev = this.heroEvent()
+    return ev !== undefined ? ev.kind : this.nextEventKind
+  }
+
+  private heroAtMs(): number {
+    const ev = this.heroEvent()
+    return ev !== undefined ? ev.at : Number(this.nextEventAt)
+  }
+
+  private heroCountdown(): string {
+    const ev = this.heroEvent()
+    return ev !== undefined ? formatCountdownZh(ev.at, Date.now()) : this.nextEventCountdown
+  }
+
   private accent(): string {
-    return eventAccentColor(this.nextEventKind)
+    return eventAccentColor(this.heroKind())
+  }
+
+  private isReminded(eventId: string): boolean {
+    if (eventId.length === 0) return false
+    const ids = parseRemindedEventIds(this.remindedEventIds)
+    return ids.includes(eventId)
+  }
+
+  private stepHero(delta: number): void {
+    const count = this.allEvents().length
+    if (count <= 1) return
+    animateTo({ duration: 260, curve: Curve.EaseInOut }, () => {
+      this.heroIndex = ((this.heroIndex + delta) % count + count) % count
+    })
   }
 
   private openCalendar(ev?: CompactEventItem): void {
-    const jdVal = ev !== undefined ? ev.jd : Number(this.nextEventJd)
+    const picked = ev !== undefined ? ev : this.heroEvent()
+    const jdVal = picked !== undefined ? picked.jd : Number(this.nextEventJd)
     postCardAction(this, {
       action: 'router',
       abilityName: 'QAbility',
       params: {
         panel: 'calendar',
         observerPlanet: this.observerPlanet,
-        eventId: ev !== undefined ? ev.id : '',
-        target: ev !== undefined ? ev.target : this.nextEventTarget,
+        eventId: picked !== undefined ? picked.id : '',
+        target: picked !== undefined ? picked.target : this.nextEventTarget,
         jd: Number.isFinite(jdVal) && jdVal > 0 ? jdVal : 0
+      }
+    })
+  }
+
+  private toggleReminder(ev: CompactEventItem): void {
+    postCardAction(this, {
+      action: 'message',
+      abilityName: 'SkyInstrumentFormAbility',
+      params: {
+        message: 'toggleEventReminder',
+        formName: 'celestial_events_card',
+        eventId: ev.id,
+        title: ev.title,
+        kind: ev.kind,
+        target: ev.target,
+        at: ev.at,
+        jd: ev.jd,
+        observerPlanet: this.observerPlanet
       }
     })
   }
@@ -87,7 +155,7 @@ struct CelestialEventsCard {
     Stack({ alignContent: Alignment.TopStart }) {
       StarfieldLayer({ sunAlt: -24, themeStyle: 'deep' })
 
-      // Subtle corner accent aurora matching upcoming event kind
+      // Subtle corner accent aurora matching focused event kind
       Circle()
         .width(130)
         .height(130)
@@ -103,9 +171,9 @@ struct CelestialEventsCard {
         .position({ x: '68%', y: -32 })
         .hitTestBehavior(HitTestMode.None)
 
-      Column({ space: this.isTall() ? 10 : 7 }) {
-        // Hero Next-Event Countdown Header
-        Row({ space: 10 }) {
+      Column({ space: this.isTall() ? 10 : 6 }) {
+        // Hero Next-Event Countdown Header with interactive ‹/› event pager
+        Row({ space: 8 }) {
           Column({ space: 3 }) {
             Row({ space: 6 }) {
               Text(this.observerPlanetName + ' · 天象预告')
@@ -113,15 +181,21 @@ struct CelestialEventsCard {
                 .fontWeight(FontWeight.Medium)
                 .fontColor('#B8D6F8')
                 .maxLines(1)
-              Text(eventBadgeText(this.nextEventKind))
+              Text(eventBadgeText(this.heroKind()))
                 .fontSize(10)
                 .fontWeight(FontWeight.Medium)
                 .fontColor(this.accent())
                 .padding({ left: 6, right: 6, top: 1, bottom: 1 })
                 .backgroundColor('#26FFFFFF')
                 .borderRadius(8)
+              if (this.reminderToast.length > 0) {
+                Text(this.reminderToast)
+                  .fontSize(10)
+                  .fontColor('#FFE09A')
+                  .maxLines(1)
+              }
             }
-            Text(this.nextEventTitle)
+            Text(this.heroTitle())
               .fontSize(this.isTall() ? 17 : 15)
               .fontWeight(FontWeight.Medium)
               .fontColor('#FFFFFF')
@@ -133,13 +207,33 @@ struct CelestialEventsCard {
 
           Row({ space: 6 }) {
             Column({ space: 1 }) {
-              Text(this.nextEventCountdown)
-                .fontSize(this.isTall() ? 22 : 19)
-                .fontWeight(FontWeight.Medium)
-                .fontColor(this.accent())
-                .maxLines(1)
-              if (Number(this.nextEventAt) > 0) {
-                Text(formatShortDateZh(Number(this.nextEventAt)))
+              Row({ space: 4 }) {
+                if (this.allEvents().length > 1) {
+                  Text('‹')
+                    .fontSize(13)
+                    .fontWeight(FontWeight.Medium)
+                    .fontColor('#A8C8EB')
+                    .padding({ left: 4, right: 4 })
+                    .onClick(() => this.stepHero(-1))
+                }
+                Text(this.heroCountdown())
+                  .fontSize(this.isTall() ? 21 : 18)
+                  .fontWeight(FontWeight.Medium)
+                  .fontColor(this.accent())
+                  .maxLines(1)
+                if (this.allEvents().length > 1) {
+                  Text('›')
+                    .fontSize(13)
+                    .fontWeight(FontWeight.Medium)
+                    .fontColor('#A8C8EB')
+                    .padding({ left: 4, right: 4 })
+                    .onClick(() => this.stepHero(1))
+                }
+              }
+              .alignItems(VerticalAlign.Center)
+
+              if (this.heroAtMs() > 0) {
+                Text(formatShortDateZh(this.heroAtMs()))
                   .fontSize(10)
                   .fontColor('#9ABCE0')
                   .maxLines(1)
@@ -150,7 +244,7 @@ struct CelestialEventsCard {
             Stack() {
               CelestialOrbView({
                 orbBody: this.orbBody,
-                orbSize: this.isTall() ? 52 : 38,
+                orbSize: this.isTall() ? 50 : 36,
                 showPhase: false,
                 glowIntensity: 0.75
               })
@@ -161,11 +255,11 @@ struct CelestialEventsCard {
         }
         .width('100%')
 
-        // Upcoming Timeline Rows (each independently clickable)
-        if (this.events().length > 0) {
+        // Upcoming Timeline Rows (each row routes to calendar; right bell pill toggles desktop reminder silently!)
+        if (this.visibleEvents().length > 0) {
           Column({ space: this.isTall() ? 9 : 5 }) {
-            ForEach(this.events(), (ev: CompactEventItem) => {
-              Row({ space: 8 }) {
+            ForEach(this.visibleEvents(), (ev: CompactEventItem) => {
+              Row({ space: 7 }) {
                 Circle()
                   .width(6)
                   .height(6)
@@ -181,14 +275,18 @@ struct CelestialEventsCard {
                   .fontSize(10)
                   .fontColor('#96B6DA')
                   .maxLines(1)
-                Text(formatCountdownZh(ev.at, Date.now()))
+                // One-tap silent desktop reminder toggle button
+                Text(this.isReminded(ev.id) ? '★ 已约' : '提醒')
                   .fontSize(10)
                   .fontWeight(FontWeight.Medium)
-                  .fontColor(eventAccentColor(ev.kind))
-                  .maxLines(1)
+                  .fontColor(this.isReminded(ev.id) ? '#1B1404' : '#DCEEFF')
+                  .padding({ left: 7, right: 7, top: 3, bottom: 3 })
+                  .backgroundColor(this.isReminded(ev.id) ? '#FFD166' : '#32FFFFFF')
+                  .borderRadius(9)
+                  .onClick(() => this.toggleReminder(ev))
               }
               .width('100%')
-              .padding({ left: 12, right: 12, top: this.isTall() ? 11 : 6, bottom: this.isTall() ? 11 : 6 })
+              .padding({ left: 11, right: 8, top: this.isTall() ? 10 : 5, bottom: this.isTall() ? 10 : 5 })
               .backgroundColor('#22FFFFFF')
               .borderRadius(12)
               .onClick(() => this.openCalendar(ev))
@@ -232,7 +330,7 @@ struct CelestialEventsCard {
       }
       .width('100%')
       .height('100%')
-      .padding({ left: 15, right: 14, top: 13, bottom: 12 })
+      .padding({ left: 15, right: 14, top: 12, bottom: 11 })
     }
     .width('100%')
     .height('100%')

@@ -172,6 +172,68 @@ export const SUPPORTED_EDIT_PLANETS: string[] = [
   'follow', 'Earth', 'Mars', 'Moon', 'Titan', 'Jupiter', 'Saturn', 'Neptune'
 ]
 
+export const QUICK_CYCLE_PLANETS: string[] = [
+  'Earth', 'Mars', 'Moon', 'Titan', 'Saturn', 'Jupiter', 'Neptune'
+]
+
+export function nextCyclePlanet(currentPlanet: string): string {
+  const key = currentPlanet.trim().toLowerCase()
+  let idx = -1
+  for (let i = 0; i < QUICK_CYCLE_PLANETS.length; i++) {
+    if (QUICK_CYCLE_PLANETS[i].toLowerCase() === key) {
+      idx = i
+      break
+    }
+  }
+  return QUICK_CYCLE_PLANETS[(idx + 1) % QUICK_CYCLE_PLANETS.length]
+}
+
+export function clampTimeOffsetHours(hours: number): number {
+  if (!Number.isFinite(hours)) return 0
+  const rounded = Math.round(hours)
+  if (rounded < 0) return 0
+  if (rounded > 44) return 44
+  return rounded
+}
+
+export function formatPreviewTimeBadge(offsetHours: number, targetMs: number): string {
+  if (offsetHours <= 0) return ''
+  const d = new Date(targetMs)
+  const hh = String(d.getHours()).padStart(2, '0')
+  const mm = String(d.getMinutes()).padStart(2, '0')
+  return '+' + String(offsetHours) + 'h · ' + hh + ':' + mm
+}
+
+export function computePreviewPhaseForDay(baseAge: number, dayOffset: number, earthHost: boolean): EstimatedMoonPhase {
+  const synodic = 29.530588853
+  const safeAge = Number.isFinite(baseAge) && baseAge >= 0 ? baseAge : estimateMoonPhaseAt(Date.now()).age
+  const age = (((safeAge + dayOffset) % synodic) + synodic) % synodic
+  const illum = Math.round(((1 - Math.cos((age / synodic) * 2 * Math.PI)) * 50) * 10) / 10
+  const clamped = Math.max(0, Math.min(100, illum))
+  const moonName = moonPhaseNameFromAge(age)
+  const phaseName = earthHost ? moonName.replace('月', '地') : moonName
+  return {
+    age: Math.round(age * 10) / 10,
+    illumination: clamped,
+    phaseName: phaseName
+  }
+}
+
+export function parseRemindedEventIds(raw: string): string[] {
+  if (typeof raw !== 'string' || raw.length === 0) return []
+  try {
+    const parsed = JSON.parse(raw) as Array<string>
+    if (!Array.isArray(parsed)) return []
+    const out: string[] = []
+    for (let i = 0; i < parsed.length; i++) {
+      if (typeof parsed[i] === 'string' && parsed[i].length > 0) out.push(parsed[i])
+    }
+    return out
+  } catch (_) {
+    return []
+  }
+}
+
 export function defaultCardConfig(): CardInstanceConfig {
   return {
     planetMode: 'follow',
@@ -489,6 +551,10 @@ export function defaultAstronomyCard(): Record<string, string> {
   card['cardLabelStyle'] = 'name'
   card['cardOverflowMode'] = 'auto'
   card['textColor'] = '#F5F9FF'
+  card['timeOffsetHours'] = '0'
+  card['timePreviewLabel'] = ''
+  card['remindedEventIds'] = '[]'
+  card['reminderToast'] = ''
   return card
 }
 
@@ -832,7 +898,7 @@ export function normalizeAstronomyCard(raw: string, now: number): Record<string,
   try {
     const parsed = JSON.parse(raw) as Record<string, string>
     if (parsed === null || (parsed['schemaVersion'] !== '4' && parsed['schemaVersion'] !== '3')) return fallback
-    const longKeys = ['visiblePlanetsJson', 'upcomingEventsJson']
+    const longKeys = ['visiblePlanetsJson', 'upcomingEventsJson', 'remindedEventIds']
     const keys = Object.keys(fallback)
     for (let i = 0; i < keys.length; i++) {
       const key = keys[i]

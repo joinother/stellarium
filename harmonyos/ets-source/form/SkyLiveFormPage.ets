@@ -1,7 +1,14 @@
 import { common } from '@kit.AbilityKit'
-import { formInfo, formProvider } from '@kit.FormKit'
+import { formBindingData, formInfo, formProvider } from '@kit.FormKit'
 import { BusinessError } from '@kit.BasicServicesKit'
 import { hilog } from '@kit.PerformanceAnalysisKit'
+import { nextCyclePlanet } from './AstronomyCardData'
+import {
+  readFormConfig,
+  resolveCardDataForForm,
+  writeFormConfig,
+  writeFormTimeOffset
+} from './FormStoreHelper'
 import {
   CelestialOrbView,
   StarfieldLayer,
@@ -24,25 +31,43 @@ struct SkyLiveFormPage {
   @State meteorY: number = 70
   @State meteorOpacity: number = 0.0
 
+  // Reactive world state so '↻ 换一颗星' in floating_orb_card live-morphs mid-overflow!
+  @State observerPlanet: string = 'Earth'
+  @State observerPlanetName: string = '地球'
+  @State companionName: string = '月球'
+  @State orbBody: string = 'moon'
+  @State moonPhase: string = '今夜月相'
+  @State moonIllumination: number = 72
+  @State moonAge: number = 10
+  @State observationSummary: string = '暗夜观测'
+  @State nextEventTitle: string = ''
+  @State nextEventCountdown: string = ''
+  @State nextEventKind: string = 'sky'
+  @State skyHexTop: string = '#070E22'
+  @State skyHexHorizon: string = '#172C52'
+
   private uiContext: UIContext | undefined = undefined
   private liveFormContext: common.LiveFormExtensionContext | undefined = undefined
   private formId: string = ''
   private formKind: string = 'sky_window_card'
   private formRect: formInfo.Rect = { left: 0, top: 0, width: 160, height: 160 }
   private formBorderRadius: number = 22
-  private observerPlanet: string = 'Earth'
-  private observerPlanetName: string = '地球'
-  private companionName: string = '月球'
-  private orbBody: string = 'moon'
-  private moonPhase: string = '今夜月相'
-  private moonIllumination: number = 72
-  private moonAge: number = 10
-  private observationSummary: string = '暗夜观测'
-  private nextEventTitle: string = ''
-  private nextEventCountdown: string = ''
-  private nextEventKind: string = 'sky'
-  private skyHexTop: string = '#070E22'
-  private skyHexHorizon: string = '#172C52'
+
+  private applySnapshotRecord(snap: Record<string, string>): void {
+    this.observerPlanet = snap['observerPlanet'] ?? 'Earth'
+    this.observerPlanetName = snap['observerPlanetName'] ?? '地球'
+    this.companionName = snap['companionName'] ?? '月球'
+    this.orbBody = snap['orbBody'] ?? 'moon'
+    this.moonPhase = snap['moonPhase'] ?? '今夜月相'
+    this.moonIllumination = Number(snap['moonIllumination'] ?? '72')
+    this.moonAge = Number(snap['moonAge'] ?? '10')
+    this.observationSummary = snap['observationSummary'] ?? '暗夜观测'
+    this.nextEventTitle = snap['nextEventTitle'] ?? ''
+    this.nextEventCountdown = snap['nextEventCountdown'] ?? ''
+    this.nextEventKind = snap['nextEventKind'] ?? 'sky'
+    if (/^#[0-9A-Fa-f]{6}$/.test(snap['skyHexTop'] ?? '')) this.skyHexTop = snap['skyHexTop']
+    if (/^#[0-9A-Fa-f]{6}$/.test(snap['skyHexHorizon'] ?? '')) this.skyHexHorizon = snap['skyHexHorizon']
+  }
 
   aboutToAppear(): void {
     this.uiContext = this.getUIContext()
@@ -59,19 +84,7 @@ struct SkyLiveFormPage {
     if (raw.length > 0) {
       try {
         const snap = JSON.parse(raw) as Record<string, string>
-        this.observerPlanet = snap['observerPlanet'] ?? 'Earth'
-        this.observerPlanetName = snap['observerPlanetName'] ?? '地球'
-        this.companionName = snap['companionName'] ?? '月球'
-        this.orbBody = snap['orbBody'] ?? 'moon'
-        this.moonPhase = snap['moonPhase'] ?? '今夜月相'
-        this.moonIllumination = Number(snap['moonIllumination'] ?? '72')
-        this.moonAge = Number(snap['moonAge'] ?? '10')
-        this.observationSummary = snap['observationSummary'] ?? '暗夜观测'
-        this.nextEventTitle = snap['nextEventTitle'] ?? ''
-        this.nextEventCountdown = snap['nextEventCountdown'] ?? ''
-        this.nextEventKind = snap['nextEventKind'] ?? 'sky'
-        if (/^#[0-9A-Fa-f]{6}$/.test(snap['skyHexTop'] ?? '')) this.skyHexTop = snap['skyHexTop']
-        if (/^#[0-9A-Fa-f]{6}$/.test(snap['skyHexHorizon'] ?? '')) this.skyHexHorizon = snap['skyHexHorizon']
+        this.applySnapshotRecord(snap)
       } catch (_) {
       }
     }
@@ -110,7 +123,7 @@ struct SkyLiveFormPage {
       return
     }
 
-    this.uiContext?.animateTo({ duration: 1050, curve: Curve.FastOutSlowIn }, () => {
+    this.uiContext?.animateTo({ duration: 950, curve: Curve.FastOutSlowIn }, () => {
       this.orbScale = 1.48
       this.orbLiftY = liftDistance
       this.orbTilt = -6
@@ -119,14 +132,37 @@ struct SkyLiveFormPage {
     })
 
     setTimeout(() => {
-      this.uiContext?.animateTo({ duration: 950, curve: Curve.EaseInOut }, () => {
+      this.uiContext?.animateTo({ duration: 850, curve: Curve.EaseInOut }, () => {
         this.orbScale = 1.0
         this.orbLiftY = 0
         this.orbTilt = 0
         this.haloOpacity = 0.4
         this.badgeOpacity = 0.0
       })
-    }, 1950)
+    }, 2200)
+  }
+
+  private cycleFloatingPlanetInPlace(): void {
+    if (this.liveFormContext === undefined || this.formId.length === 0) return
+    const cfg = readFormConfig(this.liveFormContext, this.formId)
+    const nextPlanet = nextCyclePlanet(this.observerPlanet)
+    cfg.planetMode = nextPlanet
+    writeFormConfig(this.liveFormContext, this.formId, cfg)
+    writeFormTimeOffset(this.liveFormContext, this.formId, 0)
+    const nextData = resolveCardDataForForm(this.liveFormContext, this.formId, Date.now())
+
+    // Morph the levitating orb smoothly right above the user's wallpaper!
+    this.uiContext?.animateTo({ duration: 280, curve: Curve.FastOutSlowIn }, () => {
+      this.applySnapshotRecord(nextData)
+      this.orbTilt = this.orbTilt === -6 ? 8 : -6
+      this.orbScale = 1.54
+    })
+
+    // Sync the resting desktop widget so the newly chosen planet persists after overflow ends
+    const binding = formBindingData.createFormBindingData(nextData)
+    formProvider.updateForm(this.formId, binding).catch((error: BusinessError) => {
+      hilog.warn(DOMAIN, TAG, 'cycleFloatingPlanet updateForm failed: code=%{public}d', error.code)
+    })
   }
 
   private launchAppDirect(): void {
@@ -173,31 +209,53 @@ struct SkyLiveFormPage {
   build() {
     Stack({ alignContent: Alignment.TopStart }) {
       // 1. Card backdrop aligned pixel-for-pixel with inactive card rect & corner radius
-      //    (For API 22 transparent backplate 'floating_orb_card', keep backdrop completely transparent!)
+      //    (For API 22 transparent backplate 'floating_orb_card', keep backdrop completely transparent
+      //     and reveal two floating glass pills: '↻ 换星' and '✦ 星图'!)
       if (this.isBorderlessFloating()) {
-        Column() {
+        Column({ space: 6 }) {
           Blank()
-          Row({ space: 6 }) {
+          Row({ space: 5 }) {
             Circle()
-              .width(6)
-              .height(6)
+              .width(5)
+              .height(5)
               .fill('#8AD4FF')
             Text(this.showcaseCaption())
-              .fontSize(11)
+              .fontSize(10)
               .fontWeight(FontWeight.Medium)
               .fontColor('#F5F9FF')
               .maxLines(1)
               .textOverflow({ overflow: TextOverflow.Ellipsis })
           }
-          .padding({ left: 10, right: 10, top: 5, bottom: 5 })
-          .backgroundColor('#AA081124')
-          .borderRadius(12)
-          .margin({ bottom: 4 })
+          .padding({ left: 9, right: 9, top: 4, bottom: 4 })
+          .backgroundColor('#A8081124')
+          .borderRadius(11)
+          .opacity(this.badgeOpacity)
+
+          Row({ space: 6 }) {
+            Text('↻ 换星')
+              .fontSize(11)
+              .fontWeight(FontWeight.Medium)
+              .fontColor('#FFFFFF')
+              .padding({ left: 10, right: 10, top: 5, bottom: 5 })
+              .backgroundColor('#C81B3A70')
+              .borderRadius(12)
+              .onClick(() => this.cycleFloatingPlanetInPlace())
+
+            Text('✦ 星图')
+              .fontSize(11)
+              .fontWeight(FontWeight.Medium)
+              .fontColor('#EAF4FF')
+              .padding({ left: 10, right: 10, top: 5, bottom: 5 })
+              .backgroundColor('#B8091226')
+              .borderRadius(12)
+              .onClick(() => this.launchAppDirect())
+          }
           .opacity(this.badgeOpacity)
         }
         .width(this.formRect.width)
         .height(this.formRect.height)
         .offset({ x: this.formRect.left, y: this.formRect.top })
+        .padding({ bottom: 4 })
         .alignItems(HorizontalAlign.Center)
         .backgroundColor(Color.Transparent)
         .onClick(() => this.launchAppDirect())

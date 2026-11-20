@@ -42,12 +42,19 @@ struct SkyWindowCard {
   @LocalStorageProp('cardThemeStyle') cardThemeStyle: string = 'sky'
   @LocalStorageProp('cardLabelStyle') cardLabelStyle: string = 'name'
   @LocalStorageProp('cardOverflowMode') cardOverflowMode: string = 'auto'
+  @LocalStorageProp('timeOffsetHours') timeOffsetHours: string = '0'
+  @LocalStorageProp('timePreviewLabel') timePreviewLabel: string = ''
 
   @State cardWidth: number = 160
   @State cardHeight: number = 160
 
   private isWide(): boolean { return this.cardWidth >= 230 }
   private isTall(): boolean { return this.cardHeight >= 230 }
+
+  private numericOffsetHours(): number {
+    const v = Number(this.timeOffsetHours)
+    return Number.isFinite(v) && v > 0 ? Math.round(v) : 0
+  }
 
   private safeHex(hex: string, fallback: string): string {
     return /^#[0-9A-Fa-f]{6}$/.test(hex) ? hex : fallback
@@ -135,6 +142,41 @@ struct SkyWindowCard {
     })
   }
 
+  private cyclePlanet(): void {
+    postCardAction(this, {
+      action: 'message',
+      abilityName: 'SkyInstrumentFormAbility',
+      params: {
+        message: 'cyclePlanet',
+        formName: 'sky_window_card',
+        currentPlanet: this.observerPlanet
+      }
+    })
+  }
+
+  private stepTime(deltaHours: number): void {
+    postCardAction(this, {
+      action: 'message',
+      abilityName: 'SkyInstrumentFormAbility',
+      params: {
+        message: 'stepTimeOffset',
+        formName: 'sky_window_card',
+        deltaHours: deltaHours
+      }
+    })
+  }
+
+  private resetTime(): void {
+    postCardAction(this, {
+      action: 'message',
+      abilityName: 'SkyInstrumentFormAbility',
+      params: {
+        message: 'resetTimeOffset',
+        formName: 'sky_window_card'
+      }
+    })
+  }
+
   build() {
     Stack({ alignContent: Alignment.TopStart }) {
       // Subtle starfield when sky is dark
@@ -180,15 +222,16 @@ struct SkyWindowCard {
                 .width(5)
                 .height(5)
                 .fill(this.isStale() ? '#FFB74D' : '#8AD4FF')
-              Text(this.observerPlanetName)
+              Text(this.observerPlanetName + ' ↻')
                 .fontSize(11)
                 .fontWeight(FontWeight.Medium)
                 .fontColor('#EBF4FF')
                 .maxLines(1)
             }
             .padding({ left: 7, right: 8, top: 3, bottom: 3 })
-            .backgroundColor('#26081224')
+            .backgroundColor('#32081224')
             .borderRadius(10)
+            .onClick(() => this.cyclePlanet())
 
             Blank()
 
@@ -258,24 +301,36 @@ struct SkyWindowCard {
                     .width(5)
                     .height(5)
                     .fill(this.isStale() ? '#FFB74D' : '#8AD4FF')
-                  Text(this.observerPlanetName + ' · 天穹之窗')
+                  Text(this.observerPlanetName + ' · 天穹之窗 ↻')
                     .fontSize(11)
                     .fontWeight(FontWeight.Medium)
                     .fontColor('#F0F7FF')
                     .maxLines(1)
                 }
                 .padding({ left: 8, right: 9, top: 3, bottom: 3 })
-                .backgroundColor('#2E071022')
+                .backgroundColor('#34071022')
                 .borderRadius(10)
+                .onClick(() => this.cyclePlanet())
 
-                if (this.isStale()) {
+                if (this.numericOffsetHours() > 0 && this.timePreviewLabel.length > 0) {
+                  Text(this.timePreviewLabel)
+                    .fontSize(10)
+                    .fontWeight(FontWeight.Medium)
+                    .fontColor('#FFE09A')
+                    .padding({ left: 6, right: 6, top: 2, bottom: 2 })
+                    .backgroundColor('#44140D04')
+                    .borderRadius(8)
+                    .onClick(() => this.resetTime())
+                } else if (this.isStale()) {
                   Text('待刷新')
                     .fontSize(10)
                     .fontColor('#FFD27F')
                 }
               }
 
-              Text(this.observationSummary)
+              Text(this.numericOffsetHours() > 0
+                ? ('太阳高度 ' + this.sunAlt + '°')
+                : this.observationSummary)
                 .fontSize(this.isTall() ? 20 : 18)
                 .fontWeight(FontWeight.Medium)
                 .fontColor('#FFFFFF')
@@ -293,19 +348,35 @@ struct SkyWindowCard {
                 .textOverflow({ overflow: TextOverflow.Ellipsis })
 
               if (!this.isTall()) {
+                // 48h interactive time-scrubbing dial on 2*4 card
                 Row({ space: 6 }) {
-                  Text('可见行星')
+                  Text('‹ -4h')
                     .fontSize(10)
-                    .fontColor('#8CC2DEFF')
-                  Text(this.planetStrip())
-                    .fontSize(11)
+                    .fontWeight(FontWeight.Medium)
+                    .fontColor(this.numericOffsetHours() > 0 ? '#EBF5FF' : '#66B0CCE8')
+                    .padding({ left: 7, right: 7, top: 3, bottom: 3 })
+                    .backgroundColor('#2C061022')
+                    .borderRadius(9)
+                    .onClick(() => this.stepTime(-4))
+
+                  Text(this.numericOffsetHours() > 0 ? '回此刻' : '48h 推演')
+                    .fontSize(10)
+                    .fontWeight(FontWeight.Medium)
+                    .fontColor(this.numericOffsetHours() > 0 ? '#FFE09A' : '#B8DAF8')
+                    .padding({ left: 7, right: 7, top: 3, bottom: 3 })
+                    .backgroundColor('#24061022')
+                    .borderRadius(9)
+                    .onClick(() => this.resetTime())
+
+                  Text('+4h ›')
+                    .fontSize(10)
                     .fontWeight(FontWeight.Medium)
                     .fontColor('#EBF5FF')
-                    .maxLines(1)
-                    .textOverflow({ overflow: TextOverflow.Ellipsis })
-                    .layoutWeight(1)
+                    .padding({ left: 7, right: 7, top: 3, bottom: 3 })
+                    .backgroundColor('#2C061022')
+                    .borderRadius(9)
+                    .onClick(() => this.stepTime(4))
                 }
-                .width('100%')
                 .margin({ top: 4 })
               }
             }
@@ -333,8 +404,45 @@ struct SkyWindowCard {
           .width('100%')
           .alignItems(VerticalAlign.Center)
 
-          // 4x4 Expanded Planet Visibility Bars + Upcoming Event Ticker
+          // 4x4 Expanded 48h Time Dial + Planet Visibility Bars + Upcoming Event Ticker
           if (this.isTall()) {
+            // Interactive 48h sky time-scrubbing strip
+            Row({ space: 6 }) {
+              Text('48h 天穹推演')
+                .fontSize(10)
+                .fontWeight(FontWeight.Medium)
+                .fontColor('#B8D8F8')
+              Blank()
+              Text('‹ -4h')
+                .fontSize(10)
+                .fontWeight(FontWeight.Medium)
+                .fontColor(this.numericOffsetHours() > 0 ? '#FFFFFF' : '#66B0CCE8')
+                .padding({ left: 8, right: 8, top: 4, bottom: 4 })
+                .backgroundColor('#2CFFFFFF')
+                .borderRadius(10)
+                .onClick(() => this.stepTime(-4))
+              Text(this.numericOffsetHours() > 0 ? '此刻' : '实时')
+                .fontSize(10)
+                .fontWeight(FontWeight.Medium)
+                .fontColor(this.numericOffsetHours() > 0 ? '#FFE09A' : '#A8D8FF')
+                .padding({ left: 8, right: 8, top: 4, bottom: 4 })
+                .backgroundColor('#20FFFFFF')
+                .borderRadius(10)
+                .onClick(() => this.resetTime())
+              Text('+4h ›')
+                .fontSize(10)
+                .fontWeight(FontWeight.Medium)
+                .fontColor('#FFFFFF')
+                .padding({ left: 8, right: 8, top: 4, bottom: 4 })
+                .backgroundColor('#2CFFFFFF')
+                .borderRadius(10)
+                .onClick(() => this.stepTime(4))
+            }
+            .width('100%')
+            .padding({ left: 11, right: 9, top: 6, bottom: 6 })
+            .backgroundColor('#28060D1E')
+            .borderRadius(12)
+
             Column({ space: 9 }) {
               Row() {
                 Text('今夜行星可见性')

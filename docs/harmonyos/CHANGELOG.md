@@ -1,5 +1,26 @@
 > **身份图例**：本文件真机记录中出现的 `com.cnchensh.stellarium` 是**本机调试签名身份**（本机 DevEco 自动生成，非发布身份）；发布身份为 `com.joinother.skyinstrument`。构建脚本 `build-ohos-hap-windows.ps1 -Install` 从产物 `pack.info` 读取实际包名，仓库不写死任何签名身份（见 `docs/harmonyos/release/BUNDLE-IDENTITY-CLEANUP.md`）。
 
+## [2026-11-20] 桌面服务卡片四项原生互动体验（时间拨片 / 快捷换星 / 五日相位预演 / 桌面一键静默提醒）
+
+- **修改文件：** `harmonyos/module.json5`、`harmonyos/ets-source/form/AstronomyCardData.ts`、`harmonyos/ets-source/form/FormStoreHelper.ets`、`harmonyos/ets-source/form/SkyInstrumentFormAbility.ets`、`harmonyos/ets-source/form/WidgetVisuals.ets`、`harmonyos/ets-source/form/SkyWindowCard.ets`、`harmonyos/ets-source/form/CompanionArcCard.ets`、`harmonyos/ets-source/form/CelestialEventsCard.ets`、`harmonyos/ets-source/form/SkyLiveFormPage.ets`、`scripts/test-ohos-form-cards.mjs`、`docs/harmonyos/CHANGELOG.md`。
+- **设计与实现：**
+  1. **天穹之窗（`sky_window_card`）48 小时时间推演拨片 + 快捷换星巡游：**
+     - 在 `FormStoreHelper` 持久化每张卡片的 `previewOffsetHours`（`0..44h`），`SkyInstrumentFormAbility.onFormEvent()` 响应 `stepTimeOffset` / `resetTimeOffset` / `cyclePlanet` 消息事件，直接基于 48h 离线星历时间片毫秒级插值刷新天穹渐变色、太阳高度与伴星照明率，零拉起 C++ 进程。
+     - 卡片新增可点星球胶囊（`↻` 一键原地轮换地球/火星/月球/土卫六/土星/木星/海王星）与 `‹ -4h` / `此刻` / `+4h ›` 微胶囊推演条及 `+8h · HH:mm` 预演角标。
+  2. **星历弧盘（`companion_arc_card`）交互式五日相位预演：**
+     - `MiniPhaseStripView` 支持逐日点击回调；点击未来任意一天后，3D 月球或月球视角 3D 地球原地通过 `animateTo` 平滑移动晨昏线阴影、更新照明率与相位名称（含地球地相名称映射），点回「今」立即恢复实时状态。
+  3. **天象预告（`celestial_events_card`）桌面一键静默预约提醒 + Hero 倒计时翻页：**
+     - 在 `module.json5` 将 `SkyInstrumentFormAbility` 纳入既有 `ohos.permission.PUBLISH_AGENT_REMINDER` 使用场景（无需新增后台常驻权限），点击每条事件右侧 `提醒` 按钮即可在卡片扩展内直接调用 `reminderAgentManager.publishReminder` / `cancelReminder` 完成静默预约或取消（自动携带异星徽标标题），按钮即时点亮为金色 `★ 已约` 并显示轻提示。
+     - 顶部 Hero 倒计时支持 `‹ / ›` 原地轮换近期 4 场天象。
+  4. **悬浮天体（`floating_orb_card`）无边框破框浮升内原地换星：**
+     - 平时保持零按钮纯粹无边框 3D 球体；轻拍触发 API 20 无边框破框浮升后，在卡片底部交互热区内浮现 `↻ 换星` 与 `✦ 星图` 半透胶囊，点击 `↻ 换星` 可在壁纸上空直接平滑变换星球并同步回写桌面静态卡。
+- **验证与真机实测（MatePad Mini `192.168.31.234:42713`）：**
+  - 主机验证：`test-ohos-form-cards.mjs`、`test-ohos-off-earth-calendar-and-snapshot.mjs`、`test-ohos-notification-integration.mjs`、`test-ohos-native-astronomy-calendar.mjs`、`check-ohos-ui-contract.mjs` 全通过。
+  - 真机交互实测与截屏核验：
+    - 「天象预告」实测：点击 Hero `›` 翻页至 `满土星（土卫六视角）5 天后`；点击行首 `提醒` 静默发布系统日历代理提醒（`hilog` 确认 `reminderId=53`，全程未跳进 App），按钮即时变为金色 `★ 已约` 并显示 `已预约提醒`。
+    - 「悬浮天体」实测：轻拍无边框 3D 土星触发无边框破框浮升并露出 `↻ 换星` / `✦ 星图`；点击 `↻ 换星` 在空中实时切换为 3D 木星（带大红斑）并在落回后持久保持。
+    - 「天穹之窗 2×4」实测：连点星球胶囊原地切至火星，连点 `+4h ›` 推演至 `+8h · 19:55`，实机截屏核验太阳高度 `-18.4°`、火卫一 `56% 照明` 与火星夜穹渐变实时更新。
+
 ## [2026-11-20] API 22 背板透明无边框卡片「悬浮天体」（阶段 3）
 
 - **修改文件：** `harmonyos/ets-source/form/FloatingOrbCard.ets`（新增）、`harmonyos/ets-source/form/AstronomyCardData.ts`、`harmonyos/ets-source/form/FormStoreHelper.ets`、`harmonyos/ets-source/form/SkyInstrumentFormAbility.ets`、`harmonyos/ets-source/form/SkyFormEditPage.ets`、`harmonyos/ets-source/form/SkyLiveFormPage.ets`、`harmonyos/resources/base/profile/form_config.json`、`scripts/test-ohos-form-cards.mjs`、`docs/harmonyos/CHANGELOG.md`。

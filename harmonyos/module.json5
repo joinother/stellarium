@@ -178,7 +178,8 @@
         "name": "ohos.permission.PUBLISH_AGENT_REMINDER",
         "usedScene": {
           "abilities": [
-            "QAbility"
+            "QAbility",
+            "SkyInstrumentFormAbility"
           ],
           "when": "inuse"
         }
