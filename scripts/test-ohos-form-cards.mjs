@@ -11,6 +11,7 @@ import {
   buildFallbackCardForPlanet,
   buildMiniPhaseStrip,
   buildTimeline48hSnapshot,
+  clampOrreryDayOffset,
   clampTimeOffsetHours,
   clockToTodayJd,
   computeDaylightDuration,
@@ -19,11 +20,13 @@ import {
   computePreviewPhaseForDay,
   computeSolarArcProgress,
   defaultCardConfig,
+  estimateHeliocentricLongitudes,
   estimateMoonPhaseAt,
   estimateSolarTermZh,
   extractInverseTextColor,
   focusTargetForCard,
   formatCountdownZh,
+  formatOrreryOffsetBadge,
   formatPlanetDisplayList,
   formatPreviewTimeBadge,
   isLightTextColor,
@@ -34,9 +37,11 @@ import {
   offsetDaysToJd,
   offsetHoursToJd,
   orbKeyForBody,
+  parseHeliocentricPlanets,
   parseRemindedEventIds,
   planetSymbol,
   planetZhName,
+  projectSolarSystemOrrery,
   routePlanetForCard,
   routeTargetForCard,
   sliceUpcomingEventPage,
@@ -61,10 +66,11 @@ const expectedForms = [
   { name: 'companion_arc_card', source: 'CompanionArcCard.ets', defaultDim: '2*2', panel: "panel: 'sky'", resizable: true, transparent: false },
   { name: 'solar_arc_card', source: 'SolarArcCard.ets', defaultDim: '2*4', panel: "panel: 'sky'", resizable: true, transparent: false },
   { name: 'celestial_events_card', source: 'CelestialEventsCard.ets', defaultDim: '2*4', panel: "panel: 'calendar'", resizable: true, transparent: false },
-  { name: 'floating_orb_card', source: 'FloatingOrbCard.ets', defaultDim: '2*2', panel: "panel: 'sky'", resizable: false, transparent: true }
+  { name: 'floating_orb_card', source: 'FloatingOrbCard.ets', defaultDim: '2*2', panel: "panel: 'sky'", resizable: false, transparent: true },
+  { name: 'solar_system_card', source: 'SolarSystemCard.ets', defaultDim: '2*4', panel: "panel: 'astro'", resizable: true, transparent: false }
 ]
 
-assert.equal(forms.length, expectedForms.length, 'must expose the 5 redesigned astronomical widget cards (4+1 transparent)')
+assert.equal(forms.length, expectedForms.length, 'must expose the 6 redesigned astronomical widget cards (5+1 transparent)')
 assert.equal(forms.filter((f) => f.isDefault === true).length, 1, 'must have exactly one default card')
 
 const syncScript = fs.readFileSync(syncScriptPath, 'utf8')
@@ -139,6 +145,8 @@ assert.ok(formAbilitySrc.includes('HOST_BG_INVERSE_COLOR_KEY'), 'FormAbility mus
 assert.ok(formAbilitySrc.includes('formProvider.requestOverflow'), 'onFormEvent must invoke formProvider.requestOverflow')
 assert.ok(formAbilitySrc.includes('formProvider.getFormRect'), 'onFormEvent must query formProvider.getFormRect')
 assert.ok(formAbilitySrc.includes("eventType === 'stepTimeOffset'"), 'FormAbility must handle 48h time-scrubbing dial')
+assert.ok(formAbilitySrc.includes("eventType === 'stepOrreryDays'"), 'FormAbility must handle Solar System orrery day scrubbing')
+assert.ok(formAbilitySrc.includes("eventType === 'toggleOrreryZoom'"), 'FormAbility must handle Solar System inner/full zoom toggle')
 assert.ok(formAbilitySrc.includes("eventType === 'cyclePlanet'"), 'FormAbility must handle quick planet carousel')
 assert.ok(formAbilitySrc.includes("eventType === 'toggleEventReminder'"), 'FormAbility must handle desktop reminder bell')
 assert.ok(formAbilitySrc.includes('reminderAgentManager.publishReminder'), 'FormAbility must schedule background agent reminders')
@@ -167,6 +175,7 @@ for (let i = 0; i < 16; i++) {
 // 4. Validate QAbility & MainWindowNativeNode card route & publisher wiring
 const qAbilitySrc = fs.readFileSync(path.join(root, 'harmonyos/ets-source/qability/QAbility.ets'), 'utf8')
 assert.ok(qAbilitySrc.includes("'observerPlanet'"), 'QAbility card route must whitelist observerPlanet')
+assert.ok(qAbilitySrc.includes("'positionMode'"), 'QAbility card route must whitelist positionMode for heliocentric deep-link')
 const mainWindowSrc = fs.readFileSync(path.join(root, 'harmonyos/ets-source/pages/MainWindowNativeNode.ets'), 'utf8')
 for (const token of ['publishAstronomyCard', 'persistAlmanacCardSnapshot']) {
   assert.ok(mainWindowSrc.includes(token), `MainWindowNativeNode missing card hook: ${token}`)
@@ -370,5 +379,28 @@ assert.equal(offsetDaysToJd(now, 0), 0)
 assert.ok(offsetDaysToJd(now, 3) > offsetHoursToJd(now, 8), 'offsetDaysToJd(+3d) must exceed +8h JD')
 assert.ok(clockToTodayJd('16:55', now) > 2460000, 'clockToTodayJd must produce valid today JD')
 assert.equal(clockToTodayJd('—', now), 0)
+
+// 3D Solar System Orrery Keplerian math & Painter's-algorithm Z-ordering tests
+const helioNow = estimateHeliocentricLongitudes(now)
+assert.equal(helioNow.length, 8, 'must compute all 8 major planets')
+const earthNow = helioNow.find((p) => p.id === 'Earth')
+assert.ok(earthNow && earthNow.distAU > 0.96 && earthNow.distAU < 1.04, 'Earth heliocentric distance must be ~1 AU')
+// Late Nov: Sun is at ~238° geocentric -> Earth is at ~58° heliocentric!
+assert.ok(earthNow.lonDeg > 40 && earthNow.lonDeg < 80, `Expected late-Nov Earth heliocentric lon ~58°, got ${earthNow.lonDeg}`)
+const helioPlus30 = parseHeliocentricPlanets('[{"id":"Earth","lon":58.2,"distAU":0.99}]', now, 30)
+const earthPlus30 = helioPlus30.find((p) => p.id === 'Earth')
+assert.ok(earthPlus30 && earthPlus30.lonDeg > 82 && earthPlus30.lonDeg < 95, `Earth +30d should advance ~30°, got ${earthPlus30?.lonDeg}`)
+assert.equal(clampOrreryDayOffset(5000), 3650)
+assert.equal(clampOrreryDayOffset(-5000), -3650)
+assert.ok(formatOrreryOffsetBadge(0, now).startsWith('此刻 · '))
+assert.ok(formatOrreryOffsetBadge(365, now + 365 * 86400000).startsWith('+1年 · '))
+
+const planFull = projectSolarSystemOrrery(helioNow, 260, 148, false, 55, 'Saturn')
+assert.equal(planFull.orbits.length, 8)
+assert.equal(planFull.backNodes.length + planFull.frontNodes.length, 8, 'every planet must be Z-sorted into back or front hemisphere')
+assert.ok(planFull.orbits[7].ry < planFull.orbits[7].rx * 0.7, '3D tilted orbit must be compressed vertically by cos(tiltDeg)')
+const planInner = projectSolarSystemOrrery(helioNow, 260, 148, true, 0, 'Mars')
+assert.equal(planInner.orbits.length, 4, 'inner-only mode must show Mercury..Mars')
+assert.ok(Math.abs(planInner.orbits[3].ry - planInner.orbits[3].rx) < 0.5, 'top-down 0° tilt must be circular')
 
 console.log(`HarmonyOS interactive widget contract, transparent backplate, overflow & data tests passed: ${expectedForms.length} cards, 12 3D orbs, ${overflowCases.length} overflow specs`)

@@ -4412,9 +4412,39 @@ export struct WindowNativeNode {
             ? '通知缺少有效事件信息，请查看天象列表。' : 'This notification has incomplete event details. Please check the event list.'
         }
       }
-      this.openPanelFromCli(panel)
-      if (panel === 'astro' && Number.isInteger(tab) && tab >= 0 && tab <= 9) {
-        setTimeout(() => { this.astroCalcCtl().selectAstroTab(tab) }, 220)
+      if (panel === 'astro') {
+        const posMode = route['positionMode'] === undefined ? NaN : Number(String(route['positionMode']))
+        const targetGroup = (tab === 0 || tab === 1 || tab === 6) ? 1 : ((tab === 3 || tab === 7 || tab === 8) ? 2 : 0)
+        if (Number.isInteger(posMode) && posMode >= 0 && posMode <= 2) {
+          this.astroStore.positionMode = posMode
+        }
+        if (Number.isInteger(tab) && tab >= 0 && tab <= 9) {
+          this.astroStore.astroTab = tab
+          this.astroStore.astroGroup = targetGroup
+        }
+        this.openPanelFromCli(panel)
+        const applyAstroRoute = (): void => {
+          if (Number.isInteger(posMode) && posMode >= 0 && posMode <= 2) {
+            this.astroStore.positionMode = posMode
+          }
+          if (Number.isInteger(tab) && tab >= 0 && tab <= 9) {
+            this.astroStore.astroTab = tab
+            this.astroStore.astroGroup = targetGroup
+            this.astroCalcCtl().selectAstroTab(tab)
+          }
+          if (posMode === 1) {
+            this.astroCalcCtl().loadHeliocentricPositions()
+          }
+        }
+        if (Number.isFinite(targetJd) && targetJd > 0) {
+          this.timeTransitionCtl().animate(targetJd, landingTitle.length > 0 ? landingTitle : '太阳系日心轨盘', () => {
+            setTimeout(applyAstroRoute, 200)
+          })
+        } else {
+          setTimeout(applyAstroRoute, 260)
+        }
+      } else {
+        this.openPanelFromCli(panel)
       }
       AppStorage.setOrCreate('stellariumCardRoute', '')
     } catch (error) {

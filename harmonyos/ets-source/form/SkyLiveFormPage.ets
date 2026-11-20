@@ -5,21 +5,26 @@ import { hilog } from '@kit.PerformanceAnalysisKit'
 import {
   CompactEventItem,
   CompactPlanetItem,
+  OrreryPlanetState,
   UpcomingEventPage,
+  clampOrreryDayOffset,
   computeDaylightDuration,
   computeGoldenHourClock,
   computeSolarArcProgress,
   estimateSolarTermZh,
   focusTargetForCard,
   formatCountdownZh,
+  formatOrreryOffsetBadge,
   formatPlanetDisplayList,
   formatShortDateZh,
   isLightTextColor,
   nextCyclePlanet,
   offsetHoursToJd,
+  parseHeliocentricPlanets,
   parseRemindedEventIds,
   parseUpcomingEvents,
   parseVisiblePlanets,
+  projectSolarSystemOrrery,
   routePlanetForCard,
   routeTargetForCard,
   sliceUpcomingEventPage,
@@ -36,6 +41,7 @@ import {
   HorizonArcView,
   MiniPhaseStripView,
   PlanetVisibilityRow,
+  SolarSystemOrreryStage,
   StarfieldLayer,
   eventAccentColor,
   eventBadgeText,
@@ -110,6 +116,9 @@ struct SkyLiveFormPage {
   @State textColor: string = '#F5F9FF'
   @State timeOffsetHours: number = 0
   @State timePreviewLabel: string = ''
+  @State heliocentricPlanetsJson: string = '[]'
+  @State orreryDayOffset: number = 0
+  @State orreryInnerOnly: boolean = false
 
   private uiContext: UIContext | undefined = undefined
   private liveFormContext: common.LiveFormExtensionContext | undefined = undefined
@@ -183,6 +192,60 @@ struct SkyLiveFormPage {
     const offH = Number(snap['timeOffsetHours'] ?? '0')
     this.timeOffsetHours = Number.isFinite(offH) && offH > 0 ? Math.round(offH) : 0
     this.timePreviewLabel = snap['timePreviewLabel'] ?? ''
+    this.heliocentricPlanetsJson = snap['heliocentricPlanetsJson'] ?? '[]'
+    this.orreryDayOffset = clampOrreryDayOffset(Number(snap['orreryDayOffset'] ?? '0'))
+    this.orreryInnerOnly = (snap['orreryInnerOnly'] ?? '0') === '1'
+  }
+
+  private orreryRestingWidth(): number {
+    if (!this.isWide() && !this.isTall()) return Math.max(122, Math.round(this.formRect.width - 18))
+    if (!this.isTall()) return Math.max(176, Math.round(this.formRect.width - 128))
+    return Math.max(250, Math.round(this.formRect.width - 22))
+  }
+
+  private orreryRestingHeight(): number {
+    if (!this.isWide() && !this.isTall()) return Math.max(76, Math.round(this.formRect.height - 62))
+    if (!this.isTall()) return Math.max(118, Math.round(this.formRect.height - 18))
+    return Math.max(150, Math.round(this.formRect.height - 122))
+  }
+
+  private orreryPeakWidth(): number {
+    return Math.round(this.orreryRestingWidth() * 1.24)
+  }
+
+  private orreryPeakHeight(): number {
+    return Math.round(this.orreryRestingHeight() * 1.24)
+  }
+
+  private orreryTiltDeg(): number {
+    if (this.isTall()) return 50
+    return this.isWide() ? 55 : 56
+  }
+
+  private orreryShowLabels(): boolean {
+    if (this.isTall()) return true
+    if (this.isWide()) return this.orreryInnerOnly
+    return false
+  }
+
+  private orreryEpochLabel(): string {
+    return formatOrreryOffsetBadge(this.orreryDayOffset, Date.now() + this.orreryDayOffset * 86400000)
+  }
+
+  private orrerySummaryText(): string {
+    const planets = parseHeliocentricPlanets(this.heliocentricPlanetsJson, Date.now(), this.orreryDayOffset)
+    return projectSolarSystemOrrery(planets, 220, 110, this.orreryInnerOnly, 55).summaryLine
+  }
+
+  private orreryFeaturedTelemetry(): OrreryPlanetState[] {
+    const all = parseHeliocentricPlanets(this.heliocentricPlanetsJson, Date.now(), this.orreryDayOffset)
+    if (this.orreryInnerOnly) return all.filter((p: OrreryPlanetState) => p.isInner).slice(0, 4)
+    const keys: string[] = ['Earth', 'Mars', 'Jupiter', 'Saturn']
+    const out: OrreryPlanetState[] = []
+    for (let i = 0; i < all.length; i++) {
+      if (keys.includes(all[i].id)) out.push(all[i])
+    }
+    return out.slice(0, 4)
   }
 
   // Exact resting orb diameter in vp (1:1 match with the inactive card!)
@@ -208,6 +271,9 @@ struct SkyLiveFormPage {
   }
 
   private startOrbScale(): number {
+    if (this.formKind === 'solar_system_card') {
+      return this.orreryRestingWidth() / Math.max(1, this.orreryPeakWidth())
+    }
     return this.restingOrbSize() / this.peakOrbSize()
   }
 
@@ -217,6 +283,21 @@ struct SkyLiveFormPage {
     const w = this.formRect.width
     const h = this.formRect.height
     const s = this.restingOrbSize()
+
+    if (this.formKind === 'solar_system_card') {
+      if (!this.isWide() && !this.isTall()) {
+        this.slotCenterX = l + w * 0.5
+        this.slotCenterY = t + h * 0.5
+      } else if (!this.isTall()) {
+        this.slotCenterX = l + 10 + (w - 136) * 0.5
+        this.slotCenterY = t + h * 0.5
+      } else {
+        this.slotCenterX = l + w * 0.5
+        this.slotCenterY = t + 46 + (h - 122) * 0.5
+      }
+      this.orbScale = this.startOrbScale()
+      return
+    }
 
     if (this.formKind === 'floating_orb_card') {
       this.slotCenterX = l + w * 0.5
@@ -326,6 +407,12 @@ struct SkyLiveFormPage {
   }
 
   private peakCenterY(): number {
+    if (this.formKind === 'solar_system_card') {
+      const halfH = this.orreryPeakHeight() * 0.5
+      const minSafeCenterY = 8 + halfH
+      const desired = this.formRect.top + Math.round(halfH * 0.42)
+      return Math.max(minSafeCenterY, desired)
+    }
     const half = this.peakOrbSize() * 0.5
     const minSafeCenterY = 8 + half
     if (this.isBorderlessFloating()) {
@@ -365,7 +452,7 @@ struct SkyLiveFormPage {
       this.orbDx = dx
       this.orbDy = dy
       this.orbScale = 1.0
-      this.orbTilt = -4
+      this.orbTilt = this.formKind === 'solar_system_card' ? 0 : -4
       this.restingContentOpacity = dimTarget
       this.badgeOpacity = 1.0
       this.controlsOffsetY = 0
@@ -435,6 +522,31 @@ struct SkyLiveFormPage {
 
   private launchAppDirect(): void {
     if (this.liveFormContext === undefined) return
+    if (this.formKind === 'solar_system_card') {
+      const targetJd = this.orreryDayOffset !== 0
+        ? Math.round(((Date.now() + this.orreryDayOffset * 86400000) / 86400000.0 + 2440587.5) * 100000) / 100000
+        : 0
+      try {
+        this.liveFormContext.startAbilityByLiveForm({
+          bundleName: 'com.joinother.skyinstrument',
+          abilityName: 'QAbility',
+          parameters: {
+            panel: 'astro',
+            tab: 0,
+            positionMode: 1,
+            observerPlanet: routePlanetForCard(this.observerPlanet),
+            jd: targetJd,
+            landingTitle: '太阳系日心轨盘 · ' + this.orreryEpochLabel(),
+            landingSource: 'card'
+          }
+        }).catch((error: BusinessError) => {
+          hilog.warn(DOMAIN, TAG, 'startAbilityByLiveForm failed: code=%{public}d msg=%{public}s', error.code, error.message)
+        })
+      } catch (error) {
+        hilog.warn(DOMAIN, TAG, 'startAbilityByLiveForm err: %{public}s', String(error))
+      }
+      return
+    }
     const isSolarFlow = this.formKind === 'solar_arc_card' || this.orbBody.trim().toLowerCase() === 'sun'
     const targetPanel = this.formKind === 'celestial_events_card' ? 'calendar' : 'sky'
     const focusTarget = isSolarFlow
@@ -599,6 +711,9 @@ struct SkyLiveFormPage {
   }
 
   private showcaseHeading(): string {
+    if (this.formKind === 'solar_system_card') {
+      return '太阳系仪 · ' + this.orreryEpochLabel()
+    }
     if (this.formKind === 'solar_arc_card' || this.orbBody.trim().toLowerCase() === 'sun') {
       return '太阳 · ' + this.solarStageLabel() + ' ' + this.solarAltLabel()
     }
@@ -612,6 +727,9 @@ struct SkyLiveFormPage {
   }
 
   private showcaseSubline(): string {
+    if (this.formKind === 'solar_system_card') {
+      return this.orrerySummaryText() + ' · 轻触进入日心轨盘'
+    }
     if (this.formKind === 'solar_arc_card' || this.orbBody.trim().toLowerCase() === 'sun') {
       return '升 ' + this.sunRise + ' · 中天 ' + this.sunTransit + ' · 落 ' + this.sunSet + ' · 昼长 ' + this.solarDaylightLabel()
     }
@@ -628,6 +746,230 @@ struct SkyLiveFormPage {
   }
 
   // ---- Pixel-matched resting card backdrops (orb replaced by measured invisible socket!) ----
+
+  @Builder
+  buildSolarSystemRestingCard() {
+    Stack({ alignContent: Alignment.TopStart }) {
+      StarfieldLayer({ sunAlt: -24, themeStyle: 'deep' })
+
+      if (!this.isWide() && !this.isTall()) {
+        Column() {
+          Row() {
+            Text('✦ 太阳系')
+              .fontSize(11)
+              .fontWeight(FontWeight.Medium)
+              .fontColor('#EAF4FF')
+              .maxLines(1)
+            Blank()
+            Text(this.orreryInnerOnly ? '内系' : '全系')
+              .fontSize(10)
+              .fontWeight(FontWeight.Medium)
+              .fontColor('#9CD4FF')
+              .height(22)
+              .padding({ left: 8, right: 8 })
+              .backgroundColor('#2E4678C4')
+              .borderRadius(11)
+          }
+          .width('100%')
+          .opacity(this.restingContentOpacity)
+
+          Stack({ alignContent: Alignment.Center }) {
+            Column()
+              .width(this.orreryRestingWidth())
+              .height(this.orreryRestingHeight())
+              .onAreaChange((_oldArea: Area, newArea: Area) => this.captureSlotArea(newArea))
+          }
+          .layoutWeight(1)
+          .width('100%')
+
+          Row({ space: 4 }) {
+            Text('‹30天')
+              .fontSize(10)
+              .fontColor('#CFE4FF')
+              .height(22)
+              .padding({ left: 6, right: 6 })
+              .backgroundColor('#22FFFFFF')
+              .borderRadius(11)
+            Text(this.orreryDayOffset === 0 ? '此刻' : (this.orreryDayOffset > 0 ? '+' + String(this.orreryDayOffset) + 'd' : String(this.orreryDayOffset) + 'd'))
+              .fontSize(10)
+              .fontWeight(FontWeight.Medium)
+              .fontColor(this.orreryDayOffset === 0 ? '#FFE29A' : '#8AD4FF')
+              .textAlign(TextAlign.Center)
+              .layoutWeight(1)
+              .height(22)
+              .backgroundColor('#1EFFFFFF')
+              .borderRadius(11)
+            Text('30天›')
+              .fontSize(10)
+              .fontColor('#CFE4FF')
+              .height(22)
+              .padding({ left: 6, right: 6 })
+              .backgroundColor('#22FFFFFF')
+              .borderRadius(11)
+          }
+          .width('100%')
+          .opacity(this.restingContentOpacity)
+        }
+        .width('100%')
+        .height('100%')
+        .padding({ left: 11, right: 11, top: 9, bottom: 9 })
+      } else if (!this.isTall()) {
+        Row({ space: 8 }) {
+          Stack({ alignContent: Alignment.Center }) {
+            Column()
+              .width(this.orreryRestingWidth())
+              .height(this.orreryRestingHeight())
+              .onAreaChange((_oldArea: Area, newArea: Area) => this.captureSlotArea(newArea))
+          }
+          .layoutWeight(1)
+          .height('100%')
+
+          Column({ space: 6 }) {
+            Row() {
+              Text('太阳系仪')
+                .fontSize(13)
+                .fontWeight(FontWeight.Medium)
+                .fontColor('#FFFFFF')
+                .maxLines(1)
+              Blank()
+              Text('↗')
+                .fontSize(12)
+                .fontColor('#9CD4FF')
+            }
+            .width('100%')
+
+            Text(this.orreryEpochLabel())
+              .fontSize(10)
+              .fontWeight(FontWeight.Medium)
+              .fontColor(this.orreryDayOffset === 0 ? '#FFE29A' : '#8AD4FF')
+              .width('100%')
+              .maxLines(1)
+
+            Row({ space: 4 }) {
+              Text(this.orreryInnerOnly ? '内太阳系' : '全太阳系')
+                .fontSize(10)
+                .fontWeight(FontWeight.Medium)
+                .fontColor('#EAF4FF')
+                .textAlign(TextAlign.Center)
+                .layoutWeight(1)
+                .height(24)
+                .backgroundColor('#344678C4')
+                .borderRadius(12)
+              Text('+1年')
+                .fontSize(10)
+                .fontWeight(FontWeight.Medium)
+                .fontColor('#CFE4FF')
+                .textAlign(TextAlign.Center)
+                .width(38)
+                .height(24)
+                .backgroundColor('#22FFFFFF')
+                .borderRadius(12)
+            }
+            .width('100%')
+
+            Blank()
+
+            Row({ space: 4 }) {
+              Text('-30d').fontSize(10).fontColor('#CFE4FF').textAlign(TextAlign.Center).layoutWeight(1).height(26).backgroundColor('#22FFFFFF').borderRadius(13)
+              Text('今').fontSize(10).fontWeight(FontWeight.Medium).fontColor('#FFE29A').textAlign(TextAlign.Center).width(26).height(26).backgroundColor('#2E4678C4').borderRadius(13)
+              Text('+30d').fontSize(10).fontColor('#CFE4FF').textAlign(TextAlign.Center).layoutWeight(1).height(26).backgroundColor('#22FFFFFF').borderRadius(13)
+            }
+            .width('100%')
+          }
+          .width(106)
+          .height('100%')
+          .padding({ top: 3, bottom: 2 })
+          .opacity(this.restingContentOpacity)
+        }
+        .width('100%')
+        .height('100%')
+        .padding({ left: 10, right: 12, top: 9, bottom: 9 })
+      } else {
+        Column({ space: 6 }) {
+          Row() {
+            Column({ space: 2 }) {
+              Text('✦ 太阳系仪 · ' + this.orreryEpochLabel())
+                .fontSize(13)
+                .fontWeight(FontWeight.Medium)
+                .fontColor('#FFFFFF')
+                .maxLines(1)
+              Text(this.orrerySummaryText())
+                .fontSize(10)
+                .fontColor('#B8D3F2')
+                .maxLines(1)
+            }
+            .layoutWeight(1)
+            .alignItems(HorizontalAlign.Start)
+
+            Text(this.orreryInnerOnly ? '切至全系' : '切至内系')
+              .fontSize(10)
+              .fontWeight(FontWeight.Medium)
+              .fontColor('#EAF4FF')
+              .height(26)
+              .padding({ left: 10, right: 10 })
+              .backgroundColor('#364678C4')
+              .borderRadius(13)
+          }
+          .width('100%')
+          .opacity(this.restingContentOpacity)
+
+          Stack({ alignContent: Alignment.Center }) {
+            Column()
+              .width(this.orreryRestingWidth())
+              .height(this.orreryRestingHeight())
+              .onAreaChange((_oldArea: Area, newArea: Area) => this.captureSlotArea(newArea))
+          }
+          .layoutWeight(1)
+          .width('100%')
+
+          Row({ space: 6 }) {
+            ForEach(this.orreryFeaturedTelemetry(), (p: OrreryPlanetState) => {
+              Column({ space: 1 }) {
+                Row({ space: 3 }) {
+                  Circle().width(5).height(5).fill(p.color)
+                  Text(p.nameZh).fontSize(10).fontWeight(FontWeight.Medium).fontColor('#EAF4FF')
+                }
+                Text(String(Math.round(p.lonDeg)) + '° · ' + p.distAU.toFixed(1) + 'AU')
+                  .fontSize(9).fontColor('#9FBAD8').maxLines(1)
+              }
+              .layoutWeight(1).padding({ top: 4, bottom: 4 }).backgroundColor('#1AFFFFFF').borderRadius(9).alignItems(HorizontalAlign.Center)
+            }, (p: OrreryPlanetState) => p.id)
+          }
+          .width('100%')
+          .opacity(this.restingContentOpacity)
+
+          Row({ space: 6 }) {
+            Text('-30天').fontSize(10).fontColor('#DCEBFF').textAlign(TextAlign.Center).layoutWeight(1).height(28).backgroundColor('#22FFFFFF').borderRadius(14)
+            Text('此刻').fontSize(10).fontWeight(FontWeight.Medium).fontColor('#FFE29A').textAlign(TextAlign.Center).layoutWeight(1).height(28).backgroundColor('#324678C4').borderRadius(14)
+            Text('+30天').fontSize(10).fontColor('#DCEBFF').textAlign(TextAlign.Center).layoutWeight(1).height(28).backgroundColor('#22FFFFFF').borderRadius(14)
+            Text('+1年').fontSize(10).fontColor('#DCEBFF').textAlign(TextAlign.Center).layoutWeight(1).height(28).backgroundColor('#22FFFFFF').borderRadius(14)
+            Text('轨盘 ↗').fontSize(10).fontWeight(FontWeight.Medium).fontColor('#8AD4FF').textAlign(TextAlign.Center).layoutWeight(1).height(28).backgroundColor('#2C1C3C6E').borderRadius(14)
+          }
+          .width('100%')
+          .opacity(this.restingContentOpacity)
+        }
+        .width('100%')
+        .height('100%')
+        .padding({ left: 13, right: 13, top: 11, bottom: 10 })
+      }
+
+      this.buildFramedShowcaseOverlay()
+    }
+    .width(this.formRect.width)
+    .height(this.formRect.height)
+    .position({ x: this.formRect.left, y: this.formRect.top })
+    .borderRadius(this.formBorderRadius)
+    .clip(true)
+    .linearGradient({
+      angle: 162,
+      colors: [
+        [this.cardThemeStyle === 'deep' ? '#04060E' : '#060C1E', 0.0],
+        [this.cardThemeStyle === 'deep' ? '#0B1120' : '#102042', 1.0]
+      ]
+    })
+    .onAreaChange((_oldArea: Area, newArea: Area) => this.captureCardArea(newArea))
+    .onClick(() => this.launchAppDirect())
+  }
 
   @Builder
   buildSolarRestingCard() {
@@ -1443,7 +1785,7 @@ struct SkyLiveFormPage {
     Column({ space: 5 }) {
       Blank()
       Row({ space: 6 }) {
-        Text(this.observerPlanetName)
+        Text(this.formKind === 'solar_system_card' ? '太阳系' : this.observerPlanetName)
           .fontSize(10)
           .fontWeight(FontWeight.Medium)
           .fontColor('#D8ECFF')
@@ -1583,6 +1925,8 @@ struct SkyLiveFormPage {
         .backgroundColor(Color.Transparent)
         .onAreaChange((_oldArea: Area, newArea: Area) => this.captureCardArea(newArea))
         .onClick(() => this.launchAppDirect())
+      } else if (this.formKind === 'solar_system_card') {
+        this.buildSolarSystemRestingCard()
       } else if (this.formKind === 'solar_arc_card') {
         this.buildSolarRestingCard()
       } else if (this.formKind === 'companion_arc_card') {
@@ -1593,34 +1937,62 @@ struct SkyLiveFormPage {
         this.buildSkyWindowRestingCard()
       }
 
-      // 2. Overflow Layer: Borderless native-resolution 3D Orb anchored at exact resting socket!
-      // Outer Stack handles pure world-space translation; inner Stack handles scale/rotate around exact orb center.
-      Stack({ alignContent: Alignment.Center }) {
+      // 2. Overflow Layer: Either soaring 3D Solar System Orrery disc OR borderless native-resolution 3D Orb!
+      if (this.formKind === 'solar_system_card') {
         Stack({ alignContent: Alignment.Center }) {
-          CelestialOrbView({
-            orbBody: this.formKind === 'solar_arc_card' ? 'sun' : this.orbBody,
-            orbSize: this.peakOrbSize(),
-            showPhase: this.shouldShowPhaseShadow(),
-            illumination: this.moonIllumination,
-            phaseAge: this.moonAge,
-            glowIntensity: 0
-          })
+          Stack({ alignContent: Alignment.Center }) {
+            SolarSystemOrreryStage({
+              stageWidth: this.orreryPeakWidth(),
+              stageHeight: this.orreryPeakHeight(),
+              heliocentricPlanetsJson: this.heliocentricPlanetsJson,
+              dayOffset: this.orreryDayOffset,
+              innerOnly: this.orreryInnerOnly,
+              tiltDeg: this.orreryTiltDeg(),
+              showLabels: this.orreryShowLabels()
+            })
+          }
+          .width(this.orreryPeakWidth())
+          .height(this.orreryPeakHeight())
+          .scale({ x: this.orbScale, y: this.orbScale })
+        }
+        .width(this.orreryPeakWidth())
+        .height(this.orreryPeakHeight())
+        .position({
+          x: this.slotCenterX - this.orreryPeakWidth() * 0.5,
+          y: this.slotCenterY - this.orreryPeakHeight() * 0.5
+        })
+        .translate({ x: this.orbDx, y: this.orbDy })
+        .backgroundColor(Color.Transparent)
+        .hitTestBehavior(HitTestMode.None)
+        .onAppear(() => this.scheduleOverflowShowcase())
+      } else {
+        Stack({ alignContent: Alignment.Center }) {
+          Stack({ alignContent: Alignment.Center }) {
+            CelestialOrbView({
+              orbBody: this.formKind === 'solar_arc_card' ? 'sun' : this.orbBody,
+              orbSize: this.peakOrbSize(),
+              showPhase: this.shouldShowPhaseShadow(),
+              illumination: this.moonIllumination,
+              phaseAge: this.moonAge,
+              glowIntensity: 0
+            })
+          }
+          .width(this.peakOrbSize())
+          .height(this.peakOrbSize())
+          .scale({ x: this.orbScale, y: this.orbScale })
+          .rotate({ angle: this.orbTilt })
         }
         .width(this.peakOrbSize())
         .height(this.peakOrbSize())
-        .scale({ x: this.orbScale, y: this.orbScale })
-        .rotate({ angle: this.orbTilt })
+        .position({
+          x: this.slotCenterX - this.peakOrbSize() * 0.5,
+          y: this.slotCenterY - this.peakOrbSize() * 0.5
+        })
+        .translate({ x: this.orbDx, y: this.orbDy })
+        .backgroundColor(Color.Transparent)
+        .hitTestBehavior(HitTestMode.None)
+        .onAppear(() => this.scheduleOverflowShowcase())
       }
-      .width(this.peakOrbSize())
-      .height(this.peakOrbSize())
-      .position({
-        x: this.slotCenterX - this.peakOrbSize() * 0.5,
-        y: this.slotCenterY - this.peakOrbSize() * 0.5
-      })
-      .translate({ x: this.orbDx, y: this.orbDy })
-      .backgroundColor(Color.Transparent)
-      .hitTestBehavior(HitTestMode.None)
-      .onAppear(() => this.scheduleOverflowShowcase())
 
       // 3. Overflow Shooting Meteor Streak (for celestial_events_card)
       if (this.formKind === 'celestial_events_card') {

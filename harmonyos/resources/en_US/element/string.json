@@ -491,6 +491,14 @@
     {
       "name": "form_floating_orb_desc",
       "value": "Borderless 3D Solar System orb floating over wallpaper"
+    },
+    {
+      "name": "form_solar_system_name",
+      "value": "Solar System"
+    },
+    {
+      "name": "form_solar_system_desc",
+      "value": "Live 3D Solar System orrery with planet orbit time-scrubbing"
     }
   ]
 }

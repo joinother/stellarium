@@ -73,6 +73,10 @@ struct SkyFormEditPage {
     }
   }
 
+  private showPlanetSection(): boolean {
+    return this.formKind !== 'solar_system_card'
+  }
+
   private showThemeSection(): boolean {
     return this.formKind !== 'floating_orb_card'
   }
@@ -116,7 +120,9 @@ struct SkyFormEditPage {
 
     pushUpdate(this.formId)
     pushUpdate(this.previewFormId)
-    this.statusTip = '已应用 · ' + planetZhName(this.planetMode)
+    this.statusTip = this.formKind === 'solar_system_card'
+      ? '已应用 · 太阳系仪'
+      : ('已应用 · ' + planetZhName(this.planetMode))
   }
 
   private planetDisplayName(id: string): string {
@@ -173,6 +179,7 @@ struct SkyFormEditPage {
     Scroll() {
       Column({ space: 10 }) {
         // Section 1: Uniform 3x3 Celestial World Grid (exact equal width & 38vp height!)
+        if (this.showPlanetSection()) {
         Column({ space: 8 }) {
           Row() {
             Text('观测天体')
@@ -226,6 +233,7 @@ struct SkyFormEditPage {
         .padding({ left: 12, right: 12, top: 10, bottom: 12 })
         .backgroundColor($r('sys.color.comp_background_secondary'))
         .borderRadius(16)
+        }
 
         // Section 2: Sky Theme Style (framed cards only)
         if (this.showThemeSection()) {

@@ -160,7 +160,7 @@ export default class QAbility extends UIAbility {
     } catch (_) { return; }
     if (nested === null || Array.isArray(nested) || typeof nested !== 'object') return;
     const parameters: Record<string, Object> = {};
-    for (const key of ['panel', 'tab', 'eventId', 'kind', 'target', 'eventAt', 'jd', 'observerPlanet', 'landingTitle', 'landingSource']) {
+    for (const key of ['panel', 'tab', 'positionMode', 'eventId', 'kind', 'target', 'eventAt', 'jd', 'observerPlanet', 'landingTitle', 'landingSource']) {
       const value = fallback?.[key] !== undefined ? fallback[key] : (outer[key] !== undefined ? outer[key] : nested[key]);
       if (value !== undefined) parameters[key] = value;
     }
@@ -171,6 +171,9 @@ export default class QAbility extends UIAbility {
     const rawTab = parameters['tab'];
     const tab = typeof rawTab === 'number' || typeof rawTab === 'string' ? Number(rawTab) : NaN;
     if (Number.isInteger(tab) && tab >= 0 && tab <= 9) route['tab'] = tab;
+    const rawPosMode = parameters['positionMode'];
+    const posMode = typeof rawPosMode === 'number' || typeof rawPosMode === 'string' ? Number(rawPosMode) : NaN;
+    if (Number.isInteger(posMode) && posMode >= 0 && posMode <= 2) route['positionMode'] = posMode;
     for (const key of ['eventId', 'kind', 'target', 'eventAt', 'observerPlanet', 'landingTitle', 'landingSource']) {
       const value = parameters[key];
       if (typeof value === 'string' && value.length <= 512) route[key] = value;

@@ -24,6 +24,9 @@ import { AstroSelectionGuide, PhenomenonRelationMark } from './AstroGuides'
 import { RtsSelectionGuide, GraphSelectionGuide } from './GraphGuides'
 import { GraphLoadingRow } from '../../common/ui/GraphLoadingRow'
 import { WutTargetCard } from './WutTargetCard'
+import { SolarSystemOrreryView } from './SolarSystemOrreryView'
+import { SolarPathDiagramView } from './SolarPathDiagramView'
+import { TargetTransitArcView } from './TargetTransitArcView'
 import { getIcon } from '../../common/ui/ShellIcons'
 import { astroGroupItems, astroTabItemsForGroup, rtsCalendarDurationLabel, graphStartOptionLabel, planetMetricLabel, planetMetricUnit, planetPairBodyName, planetPairLinearLabel, hecPointSize, hecDistanceLabel, lunarElongationBarHeight, planetTimeSeriesBarHeight, planetPairBarHeight, phenomenonCaption } from '../../common/derive/astro'
 import { planetZh, zhNameOf, zhType } from '../../common/derive/labels'
@@ -516,36 +519,12 @@ export struct AstroPanel {
                 } else if (this.store.hecPositions.length === 0) {
                   Text('当前没有可显示的日心位置。').fontSize(this.fs(11)).fontColor(this.c.sub).width('100%').padding({ left: 8 }).margin({ top: 4, bottom: 6 })
                 }
-                Stack({ alignContent: Alignment.Center }) {
-                  ForEach(HELIOCENTRIC_PLANET_ORBITS, (orbit: HeliocentricOrbit) => {
-                    Circle()
-                      .width(orbit.visualRadius * 2)
-                      .height(orbit.visualRadius * 0.86 * 2)
-                      .fill('transparent')
-                      .stroke(orbit.color)
-                      .strokeWidth(0.65)
-                      .opacity(0.48)
-                  }, (orbit: HeliocentricOrbit) => orbit.name)
-                  Circle().width(34).height(34).fill(AstroColors.solar).opacity(0.12)
-                  Circle().width(22).height(22).fill(AstroColors.solar)
-                  Text('太阳').fontSize(this.fs(10)).fontColor(AstroColors.solarText)
-                  ForEach(this.store.hecPositions, (position: HeliocentricPosition) => {
-                    Circle().width(hecPointSize(position) + 4).height(hecPointSize(position) + 4).fill(this.c.bg)
-                      .position({ x: this.host.hecPointLeft(position) - 2, y: this.host.hecPointTop(position) - 2 })
-                    Circle().width(hecPointSize(position)).height(hecPointSize(position)).fill(this.host.hecPointColor(position))
-                      .position({ x: this.host.hecPointLeft(position), y: this.host.hecPointTop(position) })
-                      .clickEffect({ level: ClickEffectLevel.LIGHT, scale: 0.97 })
-                      .onClick(() => { this.host.searchObject(position.englishName) })
-                  }, (position: HeliocentricPosition) => position.englishName)
-                }.width(292).height(292).margin({ top: 2, bottom: 7 }).backgroundColor(this.c.bg).border({ width: 1, color: this.c.border }).borderRadius(UI_RADIUS_CONTROL)
-                Flex({ direction: FlexDirection.Row, wrap: FlexWrap.Wrap }) {
-                  ForEach(HELIOCENTRIC_PLANET_ORBITS, (orbit: HeliocentricOrbit) => {
-                    Row({ space: 4 }) {
-                      Circle().width(6).height(6).fill(orbit.color)
-                      Text(orbit.name).fontSize(this.fs(10)).fontColor(this.c.sub)
-                    }.margin({ right: 9, bottom: 4 })
-                  }, (orbit: HeliocentricOrbit) => orbit.name)
-                }.width(292).margin({ bottom: 5 })
+                SolarSystemOrreryView({
+                  positions: this.store.hecPositions,
+                  timeLabel: this.store.hecTime.length > 0 ? this.host.fmtDateTime(this.store.hecTime) : '',
+                  nightMode: String(this.c.accent) === '#F00000',
+                  onFocusPlanet: (englishName: string): void => { this.host.searchObject(englishName) }
+                })
                 Row() {
                   Text('天体').fontSize(this.fs(10)).fontColor(this.c.sub).width(70)
                   Text('黄纬').fontSize(this.fs(10)).fontColor(this.c.sub).width(47)
@@ -836,6 +815,16 @@ export struct AstroPanel {
               } else if (this.store.rtsError.length > 0) {
                 Text(this.store.rtsError).fontSize(this.fs(11)).fontColor(this.c.sub).width('100%').padding({ left: 8 }).margin({ top: 6 })
               } else if (this.store.rtsData.size > 0) {
+                TargetTransitArcView({
+                  objectName: this.store.rtsData.get('name') ?? '目标天体',
+                  riseText: this.host.jdToDateStr(this.store.rtsData.get('nextRiseText') ?? '0'),
+                  transitText: this.host.jdToDateStr(this.store.rtsData.get('nextTransitText') ?? '0'),
+                  setText: this.host.jdToDateStr(this.store.rtsData.get('nextSetText') ?? '0'),
+                  nightMode: String(this.c.accent) === '#F00000',
+                  onJumpRise: (): void => { this.host.jumpToRts('nextRiseJD') },
+                  onJumpTransit: (): void => { this.host.jumpToRts('nextTransitJD') },
+                  onJumpSet: (): void => { this.host.jumpToRts('nextSetJD') }
+                })
                 InfoRow({ label: I18n.t('s0358'), value: this.store.rtsData.get('name') ?? 'N/A' })
                 Row()
                   .width('100%').height(0.5)
@@ -1651,6 +1640,16 @@ export struct AstroPanel {
               if (this.store.tonightAstro === null) {
                 Text('（正在汇总今晚的观测条件…）').fontSize(this.fs(11)).fontColor(this.c.sub).width('100%').padding({ left: 8 }).margin({ top: 6 })
               } else {
+                SolarPathDiagramView({
+                  sunRiseText: this.host.fmtDateTime(this.store.tonightAstro!.sun?.rise),
+                  sunTransitText: '',
+                  sunSetText: this.host.fmtDateTime(this.store.tonightAstro!.sun?.set),
+                  astroEndText: this.host.fmtDateTime(this.store.tonightAstro!.sun?.astroTwilightEnd),
+                  astroStartText: this.host.fmtDateTime(this.store.tonightAstro!.sun?.astroTwilightStart),
+                  daylightLabel: this.store.tonightAstro!.sun?.darkWindowHours !== undefined
+                    ? (Math.max(0, 24 - (this.store.tonightAstro!.sun?.darkWindowHours ?? 0)).toFixed(1) + 'h') : '',
+                  nightMode: String(this.c.accent) === '#F00000'
+                })
                 Text('太阳与暗夜窗口').fontSize(this.fs(11)).fontColor(this.c.sub).width('100%').padding({ left: 2 }).margin({ bottom: 2 })
                 InfoRow({ label: '日落', value: this.host.fmtDateTime(this.store.tonightAstro!.sun?.set) })
                 InfoRow({ label: '天文暮光结束', value: this.host.fmtDateTime(this.store.tonightAstro!.sun?.astroTwilightEnd) })
@@ -2294,6 +2293,15 @@ export struct AstroPanel {
                     .margin({ top: 4, bottom: 4 })
                 }
                 Text(I18n.t('s0372')).fontSize(this.fs(11)).fontColor(this.c.sub).width('100%').padding({ left: 2 }).margin({ bottom: 2 })
+                SolarPathDiagramView({
+                  sunRiseText: this.host.jdToDateStr(this.store.almanacData.get('sunRise') ?? '0'),
+                  sunTransitText: this.host.jdToDateStr(this.store.almanacData.get('sunTransit') ?? '0'),
+                  sunSetText: this.host.jdToDateStr(this.store.almanacData.get('sunSet') ?? '0'),
+                  astroEndText: this.host.jdToDateStr(this.store.almanacData.get('astronomicalSet') ?? '0'),
+                  astroStartText: this.host.jdToDateStr(this.store.almanacData.get('astronomicalRise') ?? '0'),
+                  daylightLabel: this.host.almanacHoursLabel('daylightHours'),
+                  nightMode: String(this.c.accent) === '#F00000'
+                })
                 InfoRow({ label: I18n.t('s0365'), value: this.host.jdToDateStr(this.store.almanacData.get('sunRise') ?? '0') })
                 InfoRow({ label: I18n.t('s0366'), value: this.host.jdToDateStr(this.store.almanacData.get('sunSet') ?? '0') })
                 InfoRow({ label: I18n.t('s0701'), value: this.host.jdToDateStr(this.store.almanacData.get('sunTransit') ?? '0') })

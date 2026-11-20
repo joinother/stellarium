@@ -76,6 +76,12 @@ export interface CardUpcomingEvent {
   detail?: string
 }
 
+export interface CardHeliocentricPlanet {
+  id?: string
+  lon?: number
+  distAU?: number
+}
+
 export interface CardTonightData {
   date?: string
   observer?: CardObserverData
@@ -83,6 +89,7 @@ export interface CardTonightData {
   sunCycle?: CardSunCycleData
   timeline48h?: CardTimelineSample[]
   upcomingEvents?: CardUpcomingEvent[]
+  heliocentricPlanets?: CardHeliocentricPlanet[]
   moon?: CardMoonData
   sun?: CardSunData
   planets?: CardPlanetData[]
@@ -842,6 +849,9 @@ export function defaultAstronomyCard(): Record<string, string> {
   card['timePreviewLabel'] = ''
   card['remindedEventIds'] = '[]'
   card['reminderToast'] = ''
+  card['heliocentricPlanetsJson'] = '[]'
+  card['orreryDayOffset'] = '0'
+  card['orreryInnerOnly'] = '0'
   return card
 }
 
@@ -1202,6 +1212,20 @@ export function buildAstronomyCard(tonight: CardTonightData, now: number): Recor
   }
   data['visiblePlanetsJson'] = JSON.stringify(compactPlanets)
 
+  const compactHelio: CardHeliocentricPlanet[] = []
+  const rawHelio = tonight.heliocentricPlanets ?? []
+  for (let i = 0; i < rawHelio.length && compactHelio.length < 8; i++) {
+    const hp = rawHelio[i]
+    const pid = (hp.id ?? '').trim()
+    if (pid.length === 0 || !Number.isFinite(hp.lon)) continue
+    compactHelio.push({
+      id: pid,
+      lon: Math.round((hp.lon ?? 0) * 10) / 10,
+      distAU: Number.isFinite(hp.distAU) ? Math.round((hp.distAU ?? 1) * 100) / 100 : 1
+    })
+  }
+  data['heliocentricPlanetsJson'] = JSON.stringify(compactHelio)
+
   data['planetSummary'] = planets.length > 0 ? String(visible.length) + ' 颗在地平线上' : '待计算'
   data['planetNames'] = visible.map((planet: CardPlanetData) => planet.name ?? '').filter((name: string) => name.length > 0).join(' · ') || '当前无行星在地平线上'
   data['meteorSummary'] = isOffEarth ? '仅地球适用' : (showers.length > 0 ? showers[0].name ?? '活动流星雨' : '无活动数据')
@@ -1307,7 +1331,7 @@ export function normalizeAstronomyCard(raw: string, now: number): Record<string,
   try {
     const parsed = JSON.parse(raw) as Record<string, string>
     if (parsed === null || (parsed['schemaVersion'] !== '4' && parsed['schemaVersion'] !== '3')) return fallback
-    const longKeys = ['visiblePlanetsJson', 'upcomingEventsJson', 'remindedEventIds']
+    const longKeys = ['visiblePlanetsJson', 'upcomingEventsJson', 'remindedEventIds', 'heliocentricPlanetsJson']
     const keys = Object.keys(fallback)
     for (let i = 0; i < keys.length; i++) {
       const key = keys[i]
@@ -1467,4 +1491,338 @@ export function applyTimeline48hToCard(card: Record<string, string>, timelineRaw
     card['nextEventCountdown'] = formatCountdownZh(nextAt, now)
   }
   return card
+}
+
+// ============================================================================
+// 3D Solar System Orrery (Keplerian J2000 propagation + perspective projection)
+// ============================================================================
+
+export interface OrreryPlanetState {
+  id: string
+  nameZh: string
+  orbKey: string
+  color: string
+  lonDeg: number
+  distAU: number
+  isInner: boolean
+  periodDays: number
+  baseSize: number
+}
+
+export interface OrreryOrbitRing {
+  id: string
+  nameZh: string
+  color: string
+  rx: number
+  ry: number
+  isInner: boolean
+  highlight: boolean
+}
+
+export interface OrreryProjectedNode {
+  id: string
+  nameZh: string
+  orbKey: string
+  color: string
+  lonDeg: number
+  distAU: number
+  x: number
+  y: number
+  depthZ: number
+  size: number
+  opacity: number
+  behindSun: boolean
+  isInner: boolean
+  isEarth: boolean
+  isSaturn: boolean
+}
+
+export interface OrreryRenderPlan {
+  width: number
+  height: number
+  centerX: number
+  centerY: number
+  sunSize: number
+  tiltDeg: number
+  innerOnly: boolean
+  orbits: OrreryOrbitRing[]
+  backNodes: OrreryProjectedNode[]
+  frontNodes: OrreryProjectedNode[]
+  allNodes: OrreryProjectedNode[]
+  earthX: number
+  earthY: number
+  vernalX: number
+  vernalY: number
+  summaryLine: string
+}
+
+interface KeplerPlanetDef {
+  id: string
+  nameZh: string
+  orbKey: string
+  color: string
+  l0Deg: number
+  nDegPerDay: number
+  aAU: number
+  ecc: number
+  periDeg: number
+  periodDays: number
+  isInner: boolean
+  baseSize: number
+}
+
+const KEPLER_PLANETS: KeplerPlanetDef[] = [
+  { id: 'Mercury', nameZh: '水星', orbKey: 'mercury', color: '#B8C4D4', l0Deg: 252.251, nDegPerDay: 4.09233445, aAU: 0.387, ecc: 0.2056, periDeg: 77.456, periodDays: 87.97, isInner: true, baseSize: 10 },
+  { id: 'Venus', nameZh: '金星', orbKey: 'venus', color: '#F3D58D', l0Deg: 181.980, nDegPerDay: 1.60213034, aAU: 0.723, ecc: 0.0068, periDeg: 131.533, periodDays: 224.70, isInner: true, baseSize: 13 },
+  { id: 'Earth', nameZh: '地球', orbKey: 'earth', color: '#5CB8FF', l0Deg: 100.466, nDegPerDay: 0.98560912, aAU: 1.000, ecc: 0.0167, periDeg: 102.947, periodDays: 365.25, isInner: true, baseSize: 14 },
+  { id: 'Mars', nameZh: '火星', orbKey: 'mars', color: '#EF7A56', l0Deg: 355.433, nDegPerDay: 0.52403295, aAU: 1.524, ecc: 0.0934, periDeg: 336.041, periodDays: 686.98, isInner: true, baseSize: 12 },
+  { id: 'Jupiter', nameZh: '木星', orbKey: 'jupiter', color: '#E4B382', l0Deg: 34.351, nDegPerDay: 0.08309121, aAU: 5.203, ecc: 0.0485, periDeg: 14.754, periodDays: 4332.59, isInner: false, baseSize: 19 },
+  { id: 'Saturn', nameZh: '土星', orbKey: 'saturn', color: '#EAD196', l0Deg: 50.077, nDegPerDay: 0.03345965, aAU: 9.537, ecc: 0.0555, periDeg: 92.432, periodDays: 10759.22, isInner: false, baseSize: 22 },
+  { id: 'Uranus', nameZh: '天王星', orbKey: 'uranus', color: '#7FE0EA', l0Deg: 314.055, nDegPerDay: 0.01173129, aAU: 19.191, ecc: 0.0463, periDeg: 170.964, periodDays: 30688.50, isInner: false, baseSize: 15 },
+  { id: 'Neptune', nameZh: '海王星', orbKey: 'neptune', color: '#5B8BFF', l0Deg: 304.349, nDegPerDay: 0.00598106, aAU: 30.069, ecc: 0.0090, periDeg: 44.971, periodDays: 60182.00, isInner: false, baseSize: 15 }
+]
+
+function wrapDeg360(deg: number): number {
+  const safe = Number.isFinite(deg) ? deg : 0
+  return ((safe % 360.0) + 360.0) % 360.0
+}
+
+export function clampOrreryDayOffset(days: number): number {
+  if (!Number.isFinite(days)) return 0
+  const rounded = Math.round(days)
+  if (rounded < -3650) return -3650
+  if (rounded > 3650) return 3650
+  return rounded
+}
+
+export function formatOrreryOffsetBadge(dayOffset: number, evalMs: number): string {
+  const safe = clampOrreryDayOffset(dayOffset)
+  const d = new Date(evalMs)
+  const ym = String(d.getFullYear()) + '.' + String(d.getMonth() + 1).padStart(2, '0')
+  if (safe === 0) return '此刻 · ' + ym
+  const sign = safe > 0 ? '+' : '-'
+  const abs = Math.abs(safe)
+  if (abs >= 365 && abs % 365 <= 5) {
+    return sign + String(Math.round(abs / 365)) + '年 · ' + ym
+  }
+  return sign + String(abs) + '天 · ' + ym
+}
+
+export function estimateHeliocentricLongitudes(utcMs: number): OrreryPlanetState[] {
+  const jd = utcMs / 86400000.0 + 2440587.5
+  const d = jd - 2451545.0
+  const out: OrreryPlanetState[] = []
+  for (let i = 0; i < KEPLER_PLANETS.length; i++) {
+    const p = KEPLER_PLANETS[i]
+    const meanLon = wrapDeg360(p.l0Deg + p.nDegPerDay * d)
+    const meanAnomRad = wrapDeg360(meanLon - p.periDeg) * Math.PI / 180.0
+    const eqCenterDeg = (2.0 * p.ecc * Math.sin(meanAnomRad) + 1.25 * p.ecc * p.ecc * Math.sin(2.0 * meanAnomRad)) * 180.0 / Math.PI
+    const lonDeg = Math.round(wrapDeg360(meanLon + eqCenterDeg) * 10) / 10
+    const distAU = Math.round(p.aAU * (1.0 - p.ecc * Math.cos(meanAnomRad)) * 100) / 100
+    out.push({
+      id: p.id,
+      nameZh: p.nameZh,
+      orbKey: p.orbKey,
+      color: p.color,
+      lonDeg: lonDeg,
+      distAU: distAU,
+      isInner: p.isInner,
+      periodDays: p.periodDays,
+      baseSize: p.baseSize
+    })
+  }
+  return out
+}
+
+export function parseHeliocentricPlanets(
+  rawJson: string,
+  utcMs: number,
+  dayOffset: number = 0
+): OrreryPlanetState[] {
+  const safeOffset = clampOrreryDayOffset(dayOffset)
+  const baseEst = estimateHeliocentricLongitudes(utcMs)
+  const shiftedEst = safeOffset === 0
+    ? baseEst
+    : estimateHeliocentricLongitudes(utcMs + safeOffset * 86400000)
+
+  if (typeof rawJson !== 'string' || rawJson.length < 4) {
+    return shiftedEst
+  }
+  try {
+    const parsed = JSON.parse(rawJson) as Array<CardHeliocentricPlanet>
+    if (!Array.isArray(parsed) || parsed.length === 0) return shiftedEst
+    const liveMap = new Map<string, CardHeliocentricPlanet>()
+    for (let i = 0; i < parsed.length; i++) {
+      const item = parsed[i]
+      if (item !== null && typeof item === 'object' && typeof item.id === 'string' && Number.isFinite(item.lon)) {
+        liveMap.set(item.id.trim().toLowerCase(), item)
+      }
+    }
+    if (liveMap.size === 0) return shiftedEst
+    const out: OrreryPlanetState[] = []
+    for (let i = 0; i < shiftedEst.length; i++) {
+      const target = shiftedEst[i]
+      const live = liveMap.get(target.id.toLowerCase())
+      if (live !== undefined && Number.isFinite(live.lon)) {
+        const deltaLon = safeOffset === 0 ? 0 : (target.lonDeg - baseEst[i].lonDeg)
+        const lonDeg = Math.round(wrapDeg360((live.lon ?? target.lonDeg) + deltaLon) * 10) / 10
+        const distAU = safeOffset === 0 && Number.isFinite(live.distAU) && (live.distAU ?? 0) > 0
+          ? Math.round((live.distAU ?? target.distAU) * 100) / 100
+          : target.distAU
+        out.push({
+          id: target.id,
+          nameZh: target.nameZh,
+          orbKey: target.orbKey,
+          color: target.color,
+          lonDeg: lonDeg,
+          distAU: distAU,
+          isInner: target.isInner,
+          periodDays: target.periodDays,
+          baseSize: target.baseSize
+        })
+      } else {
+        out.push(target)
+      }
+    }
+    return out
+  } catch (_) {
+    return shiftedEst
+  }
+}
+
+export function projectSolarSystemOrrery(
+  planets: OrreryPlanetState[],
+  width: number,
+  height: number,
+  innerOnly: boolean = false,
+  tiltDeg: number = 55,
+  selectedId: string = ''
+): OrreryRenderPlan {
+  const safeW = Number.isFinite(width) && width > 40 ? width : 260
+  const safeH = Number.isFinite(height) && height > 40 ? height : 150
+  const safeTilt = Math.max(0, Math.min(72, Number.isFinite(tiltDeg) ? tiltDeg : 55))
+  const tiltRad = safeTilt * Math.PI / 180.0
+  const cosTilt = Math.max(0.32, Math.cos(tiltRad))
+  const sinTilt = Math.sin(tiltRad)
+
+  const filtered = innerOnly
+    ? planets.filter((p: OrreryPlanetState) => p.isInner)
+    : planets
+  const active = filtered.length > 0 ? filtered : planets
+
+  const padX = Math.max(12, Math.round(safeW * 0.07))
+  const padY = Math.max(10, Math.round(safeH * 0.11))
+  const maxRxByW = Math.max(24, safeW * 0.5 - padX)
+  const maxRxByH = Math.max(24, (safeH * 0.5 - padY) / cosTilt)
+  const maxRx = Math.min(maxRxByW, maxRxByH)
+  const centerX = safeW * 0.5
+  const centerY = safeH * 0.5
+  const sizeScale = Math.max(0.62, Math.min(1.22, maxRx / 108.0))
+  const sunSize = Math.round(Math.max(18, Math.min(34, (innerOnly ? 28 : 24) * sizeScale)))
+
+  const fullFractions: number[] = [0.22, 0.31, 0.41, 0.51, 0.64, 0.77, 0.88, 0.98]
+  const innerFractions: number[] = [0.31, 0.52, 0.74, 0.96]
+  const fractions = innerOnly ? innerFractions : fullFractions
+
+  const orbits: OrreryOrbitRing[] = []
+  const allNodes: OrreryProjectedNode[] = []
+  let earthX = centerX
+  let earthY = centerY
+  let earthLon = 0
+  let marsLon = 0
+  let jupiterLon = 0
+
+  for (let i = 0; i < active.length; i++) {
+    const p = active[i]
+    const frac = i < fractions.length ? fractions[i] : 0.98
+    const rx = Math.round(maxRx * frac * 10) / 10
+    const ry = Math.round(rx * cosTilt * 10) / 10
+    const isSel = selectedId.length > 0 && selectedId.toLowerCase() === p.id.toLowerCase()
+    const isEarth = p.id === 'Earth'
+    const isSaturn = p.id === 'Saturn'
+
+    orbits.push({
+      id: p.id,
+      nameZh: p.nameZh,
+      color: p.color,
+      rx: rx,
+      ry: ry,
+      isInner: p.isInner,
+      highlight: isSel || isEarth
+    })
+
+    const rad = p.lonDeg * Math.PI / 180.0
+    const nx = Math.cos(rad)
+    const ny = -Math.sin(rad) // top (-Y) is farther from camera; bottom (+Y) is nearer
+    const depthZ = ny // [-1 far .. +1 near]
+    const persp = 1.0 + depthZ * (0.14 * sinTilt)
+    const px = Math.round((centerX + rx * nx) * 10) / 10
+    const py = Math.round((centerY + ry * ny) * 10) / 10
+    const rawSize = (innerOnly ? p.baseSize * 1.15 : p.baseSize) * sizeScale * persp
+    const size = Math.round(Math.max(8, Math.min(30, rawSize)) * 10) / 10
+    const opacity = Math.round(Math.max(0.76, Math.min(1.0, 0.90 + depthZ * 0.12 * sinTilt)) * 100) / 100
+
+    if (isEarth) {
+      earthX = px
+      earthY = py
+      earthLon = p.lonDeg
+    } else if (p.id === 'Mars') {
+      marsLon = p.lonDeg
+    } else if (p.id === 'Jupiter') {
+      jupiterLon = p.lonDeg
+    }
+
+    allNodes.push({
+      id: p.id,
+      nameZh: p.nameZh,
+      orbKey: p.orbKey,
+      color: p.color,
+      lonDeg: p.lonDeg,
+      distAU: p.distAU,
+      x: px,
+      y: py,
+      depthZ: depthZ,
+      size: size,
+      opacity: opacity,
+      behindSun: depthZ < 0,
+      isInner: p.isInner,
+      isEarth: isEarth,
+      isSaturn: isSaturn
+    })
+  }
+
+  allNodes.sort((a: OrreryProjectedNode, b: OrreryProjectedNode) => a.depthZ - b.depthZ)
+  const backNodes = allNodes.filter((n: OrreryProjectedNode) => n.behindSun)
+  const frontNodes = allNodes.filter((n: OrreryProjectedNode) => !n.behindSun)
+
+  const angularDiff = (a: number, b: number): number => {
+    const d = Math.abs(wrapDeg360(a - b))
+    return d > 180 ? 360 - d : d
+  }
+  let summaryLine = '地球黄经 ' + String(Math.round(earthLon)) + '° · ' + (innerOnly ? '内太阳系四星' : '八大行星实时轨盘')
+  if (!innerOnly) {
+    const earthJup = angularDiff(earthLon, jupiterLon)
+    const earthMars = angularDiff(earthLon, marsLon)
+    if (earthJup <= 18) summaryLine = '木星临近冲日 · 地球黄经 ' + String(Math.round(earthLon)) + '°'
+    else if (earthMars <= 18) summaryLine = '火星临近冲日 · 地球黄经 ' + String(Math.round(earthLon)) + '°'
+  }
+
+  return {
+    width: safeW,
+    height: safeH,
+    centerX: centerX,
+    centerY: centerY,
+    sunSize: sunSize,
+    tiltDeg: safeTilt,
+    innerOnly: innerOnly,
+    orbits: orbits,
+    backNodes: backNodes,
+    frontNodes: frontNodes,
+    allNodes: allNodes,
+    earthX: earthX,
+    earthY: earthY,
+    vernalX: Math.round((centerX + maxRx) * 10) / 10,
+    vernalY: Math.round(centerY * 10) / 10,
+    summaryLine: summaryLine
+  }
 }

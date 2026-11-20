@@ -1,7 +1,12 @@
 import {
   CompactPlanetItem,
   MiniPhaseDay,
-  buildMiniPhaseStrip
+  OrreryOrbitRing,
+  OrreryProjectedNode,
+  OrreryRenderPlan,
+  buildMiniPhaseStrip,
+  parseHeliocentricPlanets,
+  projectSolarSystemOrrery
 } from './AstronomyCardData'
 
 export function orbResource(orbBody: string): Resource {
@@ -481,4 +486,154 @@ export struct PlanetVisibilityRow {
 
 export function fallbackPlanetRows(items: CompactPlanetItem[]): CompactPlanetItem[] {
   return items.slice(0, 5)
+}
+
+// Pure-declarative 3D perspective Solar System Orrery stage shared 1:1 between SolarSystemCard & SkyLiveFormPage.
+// Uses real Ellipse tracks + Painter's-algorithm Z-ordering (far planets behind Sun corona, near planets in front).
+@Component
+export struct SolarSystemOrreryStage {
+  @Prop stageWidth: number = 220
+  @Prop stageHeight: number = 112
+  @Prop heliocentricPlanetsJson: string = '[]'
+  @Prop dayOffset: number = 0
+  @Prop innerOnly: boolean = false
+  @Prop tiltDeg: number = 56
+  @Prop showLabels: boolean = false
+  @Prop selectedId: string = ''
+
+  private renderPlan(): OrreryRenderPlan {
+    const planets = parseHeliocentricPlanets(this.heliocentricPlanetsJson, Date.now(), this.dayOffset)
+    return projectSolarSystemOrrery(planets, this.stageWidth, this.stageHeight, this.innerOnly, this.tiltDeg, this.selectedId)
+  }
+
+  private renderSizeFor(node: OrreryProjectedNode): number {
+    return node.isSaturn ? Math.round(node.size * 1.48 * 10) / 10 : node.size
+  }
+
+  build() {
+    Stack({ alignContent: Alignment.TopStart }) {
+      // Subtle ecliptic plane ambient glow behind the disc
+      Ellipse()
+        .width(this.stageWidth * 0.92)
+        .height(this.stageHeight * 0.84)
+        .fill('#164A88D6')
+        .position({ x: this.stageWidth * 0.04, y: this.stageHeight * 0.08 })
+        .hitTestBehavior(HitTestMode.None)
+
+      // 1. Perspective elliptical orbits (true Ellipse geometry!)
+      ForEach(this.renderPlan().orbits, (orbit: OrreryOrbitRing) => {
+        Ellipse()
+          .width(orbit.rx * 2)
+          .height(orbit.ry * 2)
+          .fill(Color.Transparent)
+          .stroke(orbit.highlight ? '#7CC8FF' : orbit.color)
+          .strokeWidth(orbit.highlight ? 1.1 : 0.65)
+          .opacity(orbit.highlight ? 0.62 : 0.30)
+          .position({
+            x: this.renderPlan().centerX - orbit.rx,
+            y: this.renderPlan().centerY - orbit.ry
+          })
+          .hitTestBehavior(HitTestMode.None)
+      }, (orbit: OrreryOrbitRing) => orbit.id + '_' + String(this.innerOnly) + '_' + String(Math.round(this.tiltDeg)))
+
+      // 2. Back-hemisphere planets (behind Sun corona)
+      ForEach(this.renderPlan().backNodes, (node: OrreryProjectedNode) => {
+        Stack({ alignContent: Alignment.Center }) {
+          if (node.isEarth) {
+            Circle()
+              .width(this.renderSizeFor(node) + 5)
+              .height(this.renderSizeFor(node) + 5)
+              .fill(Color.Transparent)
+              .stroke('#6BC4FF')
+              .strokeWidth(1)
+              .opacity(0.75)
+          }
+          Image(orbResource(node.orbKey))
+            .width(this.renderSizeFor(node))
+            .height(this.renderSizeFor(node))
+            .objectFit(ImageFit.Contain)
+            .draggable(false)
+        }
+        .width(this.renderSizeFor(node) + 6)
+        .height(this.renderSizeFor(node) + 6)
+        .opacity(node.opacity)
+        .position({
+          x: node.x - (this.renderSizeFor(node) + 6) * 0.5,
+          y: node.y - (this.renderSizeFor(node) + 6) * 0.5
+        })
+        .hitTestBehavior(HitTestMode.None)
+      }, (node: OrreryProjectedNode) => 'b_' + node.id + '_' + String(Math.round(node.lonDeg)))
+
+      // 3. Central Sun + multi-layer warm corona
+      Stack({ alignContent: Alignment.Center }) {
+        Circle()
+          .width(this.renderPlan().sunSize * 1.95)
+          .height(this.renderPlan().sunSize * 1.95)
+          .fill('#28FFA836')
+        Circle()
+          .width(this.renderPlan().sunSize * 1.38)
+          .height(this.renderPlan().sunSize * 1.38)
+          .fill('#48FFD066')
+        Image($r('app.media.widget_orb_sun'))
+          .width(this.renderPlan().sunSize)
+          .height(this.renderPlan().sunSize)
+          .objectFit(ImageFit.Contain)
+          .draggable(false)
+      }
+      .width(this.renderPlan().sunSize * 2)
+      .height(this.renderPlan().sunSize * 2)
+      .position({
+        x: this.renderPlan().centerX - this.renderPlan().sunSize,
+        y: this.renderPlan().centerY - this.renderPlan().sunSize
+      })
+      .hitTestBehavior(HitTestMode.None)
+
+      // 4. Front-hemisphere planets (in front of Sun corona)
+      ForEach(this.renderPlan().frontNodes, (node: OrreryProjectedNode) => {
+        Stack({ alignContent: Alignment.Center }) {
+          if (node.isEarth) {
+            Circle()
+              .width(this.renderSizeFor(node) + 5)
+              .height(this.renderSizeFor(node) + 5)
+              .fill(Color.Transparent)
+              .stroke('#7AD0FF')
+              .strokeWidth(1.1)
+              .opacity(0.88)
+          }
+          Image(orbResource(node.orbKey))
+            .width(this.renderSizeFor(node))
+            .height(this.renderSizeFor(node))
+            .objectFit(ImageFit.Contain)
+            .draggable(false)
+        }
+        .width(this.renderSizeFor(node) + 6)
+        .height(this.renderSizeFor(node) + 6)
+        .opacity(node.opacity)
+        .position({
+          x: node.x - (this.renderSizeFor(node) + 6) * 0.5,
+          y: node.y - (this.renderSizeFor(node) + 6) * 0.5
+        })
+        .hitTestBehavior(HitTestMode.None)
+      }, (node: OrreryProjectedNode) => 'f_' + node.id + '_' + String(Math.round(node.lonDeg)))
+
+      // 5. Optional crisp micro-labels on larger surfaces (4x4 or inner-system zoom)
+      if (this.showLabels) {
+        ForEach(this.renderPlan().allNodes, (node: OrreryProjectedNode) => {
+          Text(node.nameZh)
+            .fontSize(9)
+            .fontWeight(node.isEarth ? FontWeight.Medium : FontWeight.Regular)
+            .fontColor(node.isEarth ? '#8DD4FF' : '#D8E7FA')
+            .textShadow({ radius: 3, color: '#CC030712', offsetX: 0, offsetY: 1 })
+            .position({
+              x: Math.max(2, Math.min(this.stageWidth - 28, node.x - 10)),
+              y: Math.max(2, Math.min(this.stageHeight - 13, node.y + this.renderSizeFor(node) * 0.48 + 2))
+            })
+            .hitTestBehavior(HitTestMode.None)
+        }, (node: OrreryProjectedNode) => 'lbl_' + node.id + '_' + String(Math.round(node.lonDeg)))
+      }
+    }
+    .width(this.stageWidth)
+    .height(this.stageHeight)
+    .backgroundColor(Color.Transparent)
+  }
 }

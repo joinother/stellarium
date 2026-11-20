@@ -16869,6 +16869,30 @@ extern "C" __attribute__((visibility("default"))) const char* StellariumOhos_com
 			}
 			out["planets"] = planets;
 
+			// 八大行星实时日心黄经与距日距离（供桌面「太阳系仪」3D轨盘使用，零额外天体历更新开销）
+			QJsonArray heliocentricPlanets;
+			const QStringList allEightNames = QStringList()
+				<< "Mercury" << "Venus" << "Earth" << "Mars"
+				<< "Jupiter" << "Saturn" << "Uranus" << "Neptune";
+			for (const QString& pn : allEightNames)
+			{
+				PlanetP p = qSharedPointerCast<Planet>(ssys->searchByName(pn));
+				if (!p) continue;
+				const Vec3d hpos = p->getHeliocentricEclipticPos();
+				const double dist = hpos.norm();
+				if (dist <= 1e-6 || !std::isfinite(dist)) continue;
+				double hlon = 0.0;
+				double hlat = 0.0;
+				StelUtils::rectToSphe(&hlon, &hlat, hpos);
+				hlon = StelUtils::fmodpos(hlon, 2.0 * M_PI) * M_180_PI;
+				QJsonObject ho;
+				ho["id"] = pn;
+				ho["lon"] = std::round(hlon * 10.0) / 10.0;
+				ho["distAU"] = std::round(dist * 100.0) / 100.0;
+				heliocentricPlanets.append(ho);
+			}
+			out["heliocentricPlanets"] = heliocentricPlanets;
+
 			// 活跃流星雨（地球专属）
 			QJsonArray showers;
 			MeteorShowersMgr* msMgr = isEarthObserver

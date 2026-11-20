@@ -5,6 +5,7 @@ import { notificationManager } from '@kit.NotificationKit'
 import { BusinessError } from '@kit.BasicServicesKit'
 import { hilog } from '@kit.PerformanceAnalysisKit'
 import {
+  clampOrreryDayOffset,
   clampTimeOffsetHours,
   computeOverflowArea,
   defaultAstronomyCard,
@@ -18,12 +19,16 @@ import { reminderRouteUri } from '../qability/AstronomyReminderMetadata'
 import {
   WidgetRemindedEntry,
   readFormConfig,
+  readFormOrreryDays,
+  readFormOrreryInner,
   readFormTimeOffset,
   readRemindedEntries,
   removeFormMetadata,
   resolveCardDataForForm,
   writeFormConfig,
   writeFormKind,
+  writeFormOrreryDays,
+  writeFormOrreryInner,
   writeFormTextColor,
   writeFormTimeOffset,
   writeRemindedEntries
@@ -69,6 +74,7 @@ export default class SkyInstrumentFormAbility extends FormExtensionAbility {
     // Scheduled refresh returns card to live current time if user had scrubbed earlier
     if (wantParams === undefined || wantParams['keepTimeOffset'] !== true) {
       writeFormTimeOffset(this.context, formId, 0)
+      writeFormOrreryDays(this.context, formId, 0)
     }
     const data = resolveCardDataForForm(this.context, formId, Date.now())
     if (inverseColor.length > 0) {
@@ -109,6 +115,33 @@ export default class SkyInstrumentFormAbility extends FormExtensionAbility {
         writeFormTimeOffset(this.context, formId, 0)
         const data = resolveCardDataForForm(this.context, formId, Date.now())
         this.pushFormUpdate(formId, data)
+        return
+      }
+
+      if (eventType === 'stepOrreryDays') {
+        const delta = Number(parsed['deltaDays'] ?? 30)
+        const current = readFormOrreryDays(this.context, formId)
+        const next = clampOrreryDayOffset(current + (Number.isFinite(delta) ? delta : 30))
+        writeFormOrreryDays(this.context, formId, next)
+        const data = resolveCardDataForForm(this.context, formId, Date.now())
+        this.pushFormUpdate(formId, data)
+        hilog.info(DOMAIN, TAG, 'stepOrreryDays formId=%{public}s offset=%{public}dd', formId, next)
+        return
+      }
+
+      if (eventType === 'resetOrreryState') {
+        writeFormOrreryDays(this.context, formId, 0)
+        const data = resolveCardDataForForm(this.context, formId, Date.now())
+        this.pushFormUpdate(formId, data)
+        return
+      }
+
+      if (eventType === 'toggleOrreryZoom') {
+        const nextInner = !readFormOrreryInner(this.context, formId)
+        writeFormOrreryInner(this.context, formId, nextInner)
+        const data = resolveCardDataForForm(this.context, formId, Date.now())
+        this.pushFormUpdate(formId, data)
+        hilog.info(DOMAIN, TAG, 'toggleOrreryZoom formId=%{public}s innerOnly=%{public}s', formId, String(nextInner))
         return
       }
 

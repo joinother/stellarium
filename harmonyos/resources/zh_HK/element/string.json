@@ -51,6 +51,14 @@
     {
       "name": "form_floating_orb_desc",
       "value": "無邊框懸浮於桌面的3D天體與即時月相"
+    },
+    {
+      "name": "form_solar_system_name",
+      "value": "太陽系儀"
+    },
+    {
+      "name": "form_solar_system_desc",
+      "value": "3D立體太陽系八大行星即時軌盤與推演"
     }
   ]
 }

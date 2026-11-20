@@ -104,6 +104,28 @@
       "sceneAnimationParams": {
         "abilityName": "SkyInstrumentLiveFormAbility"
       }
+    },
+    {
+      "name": "solar_system_card",
+      "displayName": "$string:form_solar_system_name",
+      "description": "$string:form_solar_system_desc",
+      "src": "./ets/form/SolarSystemCard.ets",
+      "uiSyntax": "arkts",
+      "isDynamic": true,
+      "isDefault": false,
+      "updateEnabled": true,
+      "updateDuration": 2,
+      "defaultDimension": "2*4",
+      "supportDimensions": [
+        "2*2",
+        "2*4",
+        "4*4"
+      ],
+      "resizable": true,
+      "formConfigAbility": "ability://SkyInstrumentFormEditAbility",
+      "sceneAnimationParams": {
+        "abilityName": "SkyInstrumentLiveFormAbility"
+      }
     }
   ]
 }

@@ -8,6 +8,7 @@ import {
   applySolarShowcaseProjection,
   applyTimeline48hToCard,
   buildFallbackCardForPlanet,
+  clampOrreryDayOffset,
   clampTimeOffsetHours,
   defaultAstronomyCard,
   defaultCardConfig,
@@ -23,6 +24,8 @@ const FORM_CONFIG_PREFIX: string = 'formConfig_'
 const FORM_KIND_PREFIX: string = 'formKind_'
 const FORM_TEXT_COLOR_PREFIX: string = 'formTextColor_'
 const FORM_TIME_OFFSET_PREFIX: string = 'formOffset_'
+const FORM_ORRERY_DAYS_PREFIX: string = 'formOrreryDays_'
+const FORM_ORRERY_INNER_PREFIX: string = 'formOrreryInner_'
 const REMINDED_EVENTS_KEY: string = 'widgetRemindedEvents'
 const DOMAIN: number = 0xD003
 const TAG: string = 'SkyFormStore'
@@ -87,6 +90,8 @@ export function removeFormMetadata(context: common.Context, formId: string): voi
     if (store.hasSync(FORM_KIND_PREFIX + formId)) store.deleteSync(FORM_KIND_PREFIX + formId)
     if (store.hasSync(FORM_TEXT_COLOR_PREFIX + formId)) store.deleteSync(FORM_TEXT_COLOR_PREFIX + formId)
     if (store.hasSync(FORM_TIME_OFFSET_PREFIX + formId)) store.deleteSync(FORM_TIME_OFFSET_PREFIX + formId)
+    if (store.hasSync(FORM_ORRERY_DAYS_PREFIX + formId)) store.deleteSync(FORM_ORRERY_DAYS_PREFIX + formId)
+    if (store.hasSync(FORM_ORRERY_INNER_PREFIX + formId)) store.deleteSync(FORM_ORRERY_INNER_PREFIX + formId)
     store.flushSync()
   } catch (_) {
   }
@@ -133,6 +138,52 @@ export function writeFormTimeOffset(context: common.Context, formId: string, off
   if (store === undefined) return
   try {
     store.putSync(FORM_TIME_OFFSET_PREFIX + formId, String(clampTimeOffsetHours(offsetHours)))
+    store.flushSync()
+  } catch (_) {
+  }
+}
+
+export function readFormOrreryDays(context: common.Context, formId: string): number {
+  if (formId.length === 0) return 0
+  const store = openFreshCardStore(context)
+  if (store === undefined) return 0
+  try {
+    const raw = store.getSync(FORM_ORRERY_DAYS_PREFIX + formId, '0')
+    return clampOrreryDayOffset(Number(raw))
+  } catch (_) {
+    return 0
+  }
+}
+
+export function writeFormOrreryDays(context: common.Context, formId: string, days: number): void {
+  if (formId.length === 0) return
+  const store = openFreshCardStore(context)
+  if (store === undefined) return
+  try {
+    store.putSync(FORM_ORRERY_DAYS_PREFIX + formId, String(clampOrreryDayOffset(days)))
+    store.flushSync()
+  } catch (_) {
+  }
+}
+
+export function readFormOrreryInner(context: common.Context, formId: string): boolean {
+  if (formId.length === 0) return false
+  const store = openFreshCardStore(context)
+  if (store === undefined) return false
+  try {
+    const raw = store.getSync(FORM_ORRERY_INNER_PREFIX + formId, '0')
+    return String(raw) === '1'
+  } catch (_) {
+    return false
+  }
+}
+
+export function writeFormOrreryInner(context: common.Context, formId: string, innerOnly: boolean): void {
+  if (formId.length === 0) return
+  const store = openFreshCardStore(context)
+  if (store === undefined) return
+  try {
+    store.putSync(FORM_ORRERY_INNER_PREFIX + formId, innerOnly ? '1' : '0')
     store.flushSync()
   } catch (_) {
   }
@@ -318,6 +369,8 @@ export function resolveCardDataForForm(context: common.Context, formId: string, 
   const config = readFormConfig(context, formId)
   const offsetHours = readFormTimeOffset(context, formId)
   const card = resolveCardDataForConfig(context, config, now, offsetHours)
+  card['orreryDayOffset'] = String(readFormOrreryDays(context, formId))
+  card['orreryInnerOnly'] = readFormOrreryInner(context, formId) ? '1' : '0'
   const savedColor = readFormTextColor(context, formId)
   if (savedColor.length > 0) {
     card['textColor'] = savedColor

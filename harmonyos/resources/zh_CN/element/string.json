@@ -1579,6 +1579,14 @@
     {
       "name": "form_floating_orb_desc",
       "value": "无边框悬浮于桌面的3D天体与实时月相"
+    },
+    {
+      "name": "form_solar_system_name",
+      "value": "太阳系仪"
+    },
+    {
+      "name": "form_solar_system_desc",
+      "value": "3D立体太阳系八大行星实时轨盘与推演"
     }
   ]
 }
