@@ -281,45 +281,47 @@ export struct MiniPhaseStripView {
   }
 
   build() {
-    Row({ space: 6 }) {
+    Row({ space: 4 }) {
       ForEach(this.days(), (day: MiniPhaseDay, index: number) => {
         Column({ space: 3 }) {
           Stack({ alignContent: Alignment.Center }) {
             Circle()
-              .width(16)
-              .height(16)
+              .width(18)
+              .height(18)
               .fill('#E6EEFF')
             if (day.illumination < 96) {
               Stack({ alignContent: Alignment.Center }) {
                 Circle()
-                  .width(16)
-                  .height(16)
+                  .width(18)
+                  .height(18)
                   .fill('#DD0A1226')
                   .translate({ x: this.miniShadowShift(day.illumination, day.age), y: 0 })
               }
-              .width(16)
-              .height(16)
-              .borderRadius(8)
+              .width(18)
+              .height(18)
+              .borderRadius(9)
               .clip(true)
             }
           }
           .width(22)
           .height(22)
-          .borderRadius(11)
-          .backgroundColor(this.selectedIndex === index ? '#309EC5FF' : Color.Transparent)
-          .border({
-            width: this.selectedIndex === index ? 1.2 : 0,
-            color: this.selectedIndex === index ? '#C8E4FF' : Color.Transparent
-          })
 
           Text(day.label)
-            .fontSize(10)
+            .fontSize(11)
             .fontWeight(this.selectedIndex === index ? FontWeight.Medium : FontWeight.Regular)
-            .fontColor(this.selectedIndex === index ? '#FFFFFF' : '#88C8DCFF')
+            .fontColor(this.selectedIndex === index ? '#FFFFFF' : '#96C8DCFF')
             .maxLines(1)
         }
+        .layoutWeight(1)
+        .height(44)
+        .justifyContent(FlexAlign.Center)
         .alignItems(HorizontalAlign.Center)
-        .padding({ left: 3, right: 3, top: 2, bottom: 1 })
+        .backgroundColor(this.selectedIndex === index ? '#369EC5FF' : '#18FFFFFF')
+        .borderRadius(10)
+        .border({
+          width: this.selectedIndex === index ? 1 : 0,
+          color: this.selectedIndex === index ? '#B8DEFF' : Color.Transparent
+        })
         .onClick(() => {
           if (this.onSelectDay !== undefined) {
             this.onSelectDay(index)
@@ -327,7 +329,6 @@ export struct MiniPhaseStripView {
         })
       }, (day: MiniPhaseDay, index: number) => day.label + '_' + String(index))
     }
-    .justifyContent(FlexAlign.SpaceBetween)
     .width('100%')
   }
 }

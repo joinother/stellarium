@@ -451,7 +451,7 @@ export function computeOverflowArea(formWidth: number, formHeight: number): Over
   const width = Math.round(safeW * widthRatio)
   const height = Math.round(safeH * heightRatio)
   const left = -Math.round((width - safeW) / 2)
-  // Bias overflow slightly upward within the centered IJKL box so orbs rise dramatically above top edge
+  // Center vertically within the official IJKL box so top & bottom overflow margins are maximized cleanly
   const maxTopExtra = Math.floor((height - safeH) / 2)
   const top = -maxTopExtra
   return {
@@ -459,7 +459,7 @@ export function computeOverflowArea(formWidth: number, formHeight: number): Over
     top: top,
     width: width,
     height: height,
-    duration: 3200,
+    duration: 3500,
     dimensionClass: dimensionClass
   }
 }

@@ -90,24 +90,47 @@ struct SkyLiveFormPage {
     }
   }
 
+  private targetOrbScale(): number {
+    // Keep scale generous yet guaranteed inside overflow canvas without clipping orb or halo
+    if (this.isBorderlessFloating()) return 1.24
+    return 1.32
+  }
+
+  private safeOrbLiftY(): number {
+    // Overflow window top is y = 0; card top is y = formRect.top.
+    // Orb center starts at cy = formRect.top + formRect.height * 0.5 (for floating_orb, slightly higher).
+    // Ensure top of scaled orb + glow pad stays >= 12vp below y = 0 so NOTHING is ever clipped!
+    const orbSize = this.baseOrbSize()
+    const scale = this.targetOrbScale()
+    const scaledHalfWithHalo = (orbSize * 1.18 * scale) * 0.5
+    const startCenterY = this.formRect.top + this.formRect.height * 0.5
+    const desiredTopPadding = 10
+    const maxUpwardTravel = Math.max(8, startCenterY - scaledHalfWithHalo - desiredTopPadding)
+    const desiredTravel = this.isBorderlessFloating()
+      ? Math.round(this.formRect.height * 0.24)
+      : Math.round(this.formRect.height * 0.30)
+    return -Math.round(Math.min(desiredTravel, maxUpwardTravel))
+  }
+
   private runOverflowShowcase(): void {
-    // Choreographed <= 3.1s overflow animation (within HarmonyOS 3500ms hard cap):
-    // Lift the 3D celestial orb boldly past the card's top border into the overflow zone!
-    const liftDistance = -Math.round(this.formRect.height * 0.44)
+    // Choreographed <= 3.4s overflow animation (within HarmonyOS 3500ms hard cap):
+    // Guaranteed zero clipping at top edge of overflow window while breaking above card border!
+    const liftDistance = this.safeOrbLiftY()
+    const peakScale = this.targetOrbScale()
 
     if (this.formKind === 'celestial_events_card') {
-      this.meteorX = -this.formRect.width * 0.15
-      this.meteorY = this.formRect.height * 0.62
+      this.meteorX = -this.formRect.width * 0.12
+      this.meteorY = this.formRect.height * 0.58
       this.meteorOpacity = 0.0
       this.uiContext?.animateTo({ duration: 220, curve: Curve.EaseIn }, () => {
         this.meteorOpacity = 1.0
         this.badgeOpacity = 1.0
         this.haloOpacity = 1.0
       })
-      this.uiContext?.animateTo({ duration: 1250, curve: Curve.FastOutSlowIn }, () => {
-        this.meteorX = this.formRect.width * 0.92
-        this.meteorY = -Math.max(22, this.formRect.top * 0.65)
-        this.orbScale = 1.48
+      this.uiContext?.animateTo({ duration: 1200, curve: Curve.FastOutSlowIn }, () => {
+        this.meteorX = this.formRect.width * 0.88
+        this.meteorY = -Math.max(12, Math.round(this.formRect.top * 0.55))
+        this.orbScale = peakScale
         this.orbLiftY = liftDistance
         this.orbTilt = -5
       })
@@ -119,27 +142,27 @@ struct SkyLiveFormPage {
           this.orbTilt = 0
           this.haloOpacity = 0.35
         })
-      }, 2050)
+      }, 2450)
       return
     }
 
-    this.uiContext?.animateTo({ duration: 950, curve: Curve.FastOutSlowIn }, () => {
-      this.orbScale = 1.48
+    this.uiContext?.animateTo({ duration: 780, curve: Curve.FastOutSlowIn }, () => {
+      this.orbScale = peakScale
       this.orbLiftY = liftDistance
-      this.orbTilt = -6
-      this.haloOpacity = 1.0
+      this.orbTilt = -5
+      this.haloOpacity = 0.95
       this.badgeOpacity = 1.0
     })
 
     setTimeout(() => {
-      this.uiContext?.animateTo({ duration: 850, curve: Curve.EaseInOut }, () => {
+      this.uiContext?.animateTo({ duration: 700, curve: Curve.EaseInOut }, () => {
         this.orbScale = 1.0
         this.orbLiftY = 0
         this.orbTilt = 0
-        this.haloOpacity = 0.4
+        this.haloOpacity = 0.35
         this.badgeOpacity = 0.0
       })
-    }, 2200)
+    }, 2650)
   }
 
   private cycleFloatingPlanetInPlace(): void {
@@ -151,11 +174,12 @@ struct SkyLiveFormPage {
     writeFormTimeOffset(this.liveFormContext, this.formId, 0)
     const nextData = resolveCardDataForForm(this.liveFormContext, this.formId, Date.now())
 
-    // Morph the levitating orb smoothly right above the user's wallpaper!
-    this.uiContext?.animateTo({ duration: 280, curve: Curve.FastOutSlowIn }, () => {
+    // Morph the levitating orb smoothly right above the user's wallpaper (strictly within unclipped scale!)
+    this.uiContext?.animateTo({ duration: 260, curve: Curve.FastOutSlowIn }, () => {
       this.applySnapshotRecord(nextData)
-      this.orbTilt = this.orbTilt === -6 ? 8 : -6
-      this.orbScale = 1.54
+      this.orbTilt = this.orbTilt === -5 ? 6 : -5
+      this.orbScale = this.targetOrbScale()
+      this.orbLiftY = this.safeOrbLiftY()
     })
 
     // Sync the resting desktop widget so the newly chosen planet persists after overflow ends
@@ -201,16 +225,19 @@ struct SkyLiveFormPage {
   }
 
   private baseOrbSize(): number {
-    if (this.isBorderlessFloating()) return 112
+    if (this.isBorderlessFloating()) {
+      const minSide = Math.min(this.formRect.width, this.formRect.height)
+      return Math.max(88, Math.min(102, Math.round(minSide * 0.62)))
+    }
     const minSide = Math.min(this.formRect.width, this.formRect.height)
-    return Math.max(62, Math.min(96, Math.round(minSide * 0.52)))
+    return Math.max(62, Math.min(92, Math.round(minSide * 0.50)))
   }
 
   build() {
     Stack({ alignContent: Alignment.TopStart }) {
       // 1. Card backdrop aligned pixel-for-pixel with inactive card rect & corner radius
       //    (For API 22 transparent backplate 'floating_orb_card', keep backdrop completely transparent
-      //     and reveal two floating glass pills: '↻ 换星' and '✦ 星图'!)
+      //     and reveal two generous finger-friendly glass pills: '↻ 换星' and '✦ 星图'!)
       if (this.isBorderlessFloating()) {
         Column({ space: 6 }) {
           Blank()
@@ -220,36 +247,42 @@ struct SkyLiveFormPage {
               .height(5)
               .fill('#8AD4FF')
             Text(this.showcaseCaption())
-              .fontSize(10)
+              .fontSize(11)
               .fontWeight(FontWeight.Medium)
               .fontColor('#F5F9FF')
               .maxLines(1)
               .textOverflow({ overflow: TextOverflow.Ellipsis })
           }
-          .padding({ left: 9, right: 9, top: 4, bottom: 4 })
-          .backgroundColor('#A8081124')
-          .borderRadius(11)
+          .padding({ left: 10, right: 10, top: 4, bottom: 4 })
+          .backgroundColor('#AE081124')
+          .borderRadius(12)
           .opacity(this.badgeOpacity)
 
-          Row({ space: 6 }) {
+          Row({ space: 8 }) {
             Text('↻ 换星')
-              .fontSize(11)
+              .fontSize(12)
               .fontWeight(FontWeight.Medium)
               .fontColor('#FFFFFF')
-              .padding({ left: 10, right: 10, top: 5, bottom: 5 })
-              .backgroundColor('#C81B3A70')
-              .borderRadius(12)
+              .textAlign(TextAlign.Center)
+              .layoutWeight(1)
+              .height(34)
+              .backgroundColor('#D61D4282')
+              .borderRadius(17)
               .onClick(() => this.cycleFloatingPlanetInPlace())
 
             Text('✦ 星图')
-              .fontSize(11)
+              .fontSize(12)
               .fontWeight(FontWeight.Medium)
               .fontColor('#EAF4FF')
-              .padding({ left: 10, right: 10, top: 5, bottom: 5 })
-              .backgroundColor('#B8091226')
-              .borderRadius(12)
+              .textAlign(TextAlign.Center)
+              .layoutWeight(1)
+              .height(34)
+              .backgroundColor('#C409142B')
+              .borderRadius(17)
               .onClick(() => this.launchAppDirect())
           }
+          .width('100%')
+          .padding({ left: 4, right: 4 })
           .opacity(this.badgeOpacity)
         }
         .width(this.formRect.width)
@@ -302,16 +335,16 @@ struct SkyLiveFormPage {
         .onClick(() => this.launchAppDirect())
       }
 
-      // 2. Overflow Layer: 3D Celestial Orb rising ABOVE the card's top border!
+      // 2. Overflow Layer: 3D Celestial Orb rising cleanly inside the unclipped overflow zone
       Stack({ alignContent: Alignment.Center }) {
-        // Luminous corona expanding in the overflow canvas
+        // Soft atmospheric corona sized cleanly inside overflow bounds (no flat top edge clipping)
         Circle()
-          .width(this.baseOrbSize() * 1.55)
-          .height(this.baseOrbSize() * 1.55)
+          .width(this.baseOrbSize() * 1.18)
+          .height(this.baseOrbSize() * 1.18)
           .fill(Color.Transparent)
           .radialGradient({
             center: ['50%', '50%'],
-            radius: this.baseOrbSize() * 0.78,
+            radius: this.baseOrbSize() * 0.59,
             colors: [
               [orbGlowColor(this.orbBody), 0.0],
               ['#00000000', 1.0]
@@ -325,7 +358,7 @@ struct SkyLiveFormPage {
           showPhase: this.orbBody === 'moon' || this.orbBody === 'earth',
           illumination: Number.isFinite(this.moonIllumination) ? this.moonIllumination : 72,
           phaseAge: Number.isFinite(this.moonAge) ? this.moonAge : 10,
-          glowIntensity: 0.9
+          glowIntensity: 0
         })
       }
       .width(this.formRect.width)

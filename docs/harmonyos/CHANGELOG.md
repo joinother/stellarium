@@ -1,5 +1,20 @@
 > **身份图例**：本文件真机记录中出现的 `com.cnchensh.stellarium` 是**本机调试签名身份**（本机 DevEco 自动生成，非发布身份）；发布身份为 `com.joinother.skyinstrument`。构建脚本 `build-ohos-hap-windows.ps1 -Install` 从产物 `pack.info` 读取实际包名，仓库不写死任何签名身份（见 `docs/harmonyos/release/BUNDLE-IDENTITY-CLEANUP.md`）。
 
+## [2026-11-20] 桌面卡片交互按钮防误触放大与透明卡片破框防裁切优化
+
+- **修改文件：** `harmonyos/ets-source/form/SkyLiveFormPage.ets`、`harmonyos/ets-source/form/AstronomyCardData.ts`、`harmonyos/ets-source/form/SkyWindowCard.ets`、`harmonyos/ets-source/form/CelestialEventsCard.ets`、`harmonyos/ets-source/form/CompanionArcCard.ets`、`harmonyos/ets-source/form/WidgetVisuals.ets`、`docs/harmonyos/CHANGELOG.md`。
+- **问题修复与优化：**
+  1. **修复透明卡片（及各尺寸卡片）API 20 破框浮升顶部被裁切问题：**
+     - 在 `SkyLiveFormPage.ets` 新增基于真实 `formRect` 的几何安全约束 `safeOrbLiftY()` 与 `targetOrbScale()`：根据破框窗口顶边（`y = 0`）、球体半径、放大倍数（透明卡片收敛至 `1.24×`）与单层外晕半径（`1.18×`）精确反算最大安全上移距离，并关闭子组件重复外晕，确保球体与光晕在破出卡片上缘的同时 100% 完整落于破框窗口内，杜绝顶部平切与半截残影；同时将破框时长提升至官方合法上限 `3500ms`（停留至 `2650ms` 再回落），交互更从容。
+  2. **全面放大桌面卡片交互按钮触控热区，杜绝误触：**
+     - **悬浮天体破框按钮**（`SkyLiveFormPage`）：`↻ 换星` 与 `✦ 星图` 扩大为等宽 `34vp` 高玻璃胶囊按钮。
+     - **天穹之窗**（`SkyWindowCard`）：`2×4` 与 `4×4` 的 `‹ -4h` / `48h` / `+4h ›` 改为满宽等分 `32–34vp` 高分段胶囊按钮；星球切换徽标增高至 `28–30vp`。
+     - **天象预告**（`CelestialEventsCard`）：Hero 翻页 `‹ / ›` 改为 `30×30vp` 圆形半透按钮；每行 `提醒 / ★ 已约` 扩大至 `58×32vp`（`2×4` 为 `28vp`）大圆角胶囊。
+     - **星历弧盘**（`CompanionArcCard` + `WidgetVisuals`）：五日相位条升级为等宽 `44vp` 高独立卡片格，`2×2`/`2×4` 星球切换改为 `24–26vp` 独立胶囊。
+- **验证与真机实测（MatePad Mini `192.168.31.234:42713`）：**
+  - 主机验证：`test-ohos-form-cards.mjs` 与 `check-ohos-ui-contract.mjs` 全通过。
+  - 真机截屏核验：4 张卡片同屏展示（天象预告 `4×4`、悬浮天体月球视角 3D 地相、星历弧盘 `2×2` 土星、天穹之窗 `2×4` 火星），所有按钮清晰饱满、触控区充足；轻拍透明悬浮天体进入破框激活态后，3D 地球与光晕 100% 完整无顶部裁切，下方 `↻ 换星` 与 `✦ 星图` 按钮清晰好点。
+
 ## [2026-11-20] 桌面服务卡片四项原生互动体验（时间拨片 / 快捷换星 / 五日相位预演 / 桌面一键静默提醒）
 
 - **修改文件：** `harmonyos/module.json5`、`harmonyos/ets-source/form/AstronomyCardData.ts`、`harmonyos/ets-source/form/FormStoreHelper.ets`、`harmonyos/ets-source/form/SkyInstrumentFormAbility.ets`、`harmonyos/ets-source/form/WidgetVisuals.ets`、`harmonyos/ets-source/form/SkyWindowCard.ets`、`harmonyos/ets-source/form/CompanionArcCard.ets`、`harmonyos/ets-source/form/CelestialEventsCard.ets`、`harmonyos/ets-source/form/SkyLiveFormPage.ets`、`scripts/test-ohos-form-cards.mjs`、`docs/harmonyos/CHANGELOG.md`。

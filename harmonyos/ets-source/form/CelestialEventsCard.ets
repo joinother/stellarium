@@ -205,28 +205,36 @@ struct CelestialEventsCard {
           .alignItems(HorizontalAlign.Start)
           .layoutWeight(1)
 
-          Row({ space: 6 }) {
-            Column({ space: 1 }) {
-              Row({ space: 4 }) {
+          Row({ space: 8 }) {
+            Column({ space: 2 }) {
+              Row({ space: 6 }) {
                 if (this.allEvents().length > 1) {
                   Text('‹')
-                    .fontSize(13)
+                    .fontSize(16)
                     .fontWeight(FontWeight.Medium)
-                    .fontColor('#A8C8EB')
-                    .padding({ left: 4, right: 4 })
+                    .fontColor('#E4F1FF')
+                    .textAlign(TextAlign.Center)
+                    .width(30)
+                    .height(30)
+                    .backgroundColor('#2CFFFFFF')
+                    .borderRadius(15)
                     .onClick(() => this.stepHero(-1))
                 }
                 Text(this.heroCountdown())
-                  .fontSize(this.isTall() ? 21 : 18)
+                  .fontSize(this.isTall() ? 20 : 17)
                   .fontWeight(FontWeight.Medium)
                   .fontColor(this.accent())
                   .maxLines(1)
                 if (this.allEvents().length > 1) {
                   Text('›')
-                    .fontSize(13)
+                    .fontSize(16)
                     .fontWeight(FontWeight.Medium)
-                    .fontColor('#A8C8EB')
-                    .padding({ left: 4, right: 4 })
+                    .fontColor('#E4F1FF')
+                    .textAlign(TextAlign.Center)
+                    .width(30)
+                    .height(30)
+                    .backgroundColor('#2CFFFFFF')
+                    .borderRadius(15)
                     .onClick(() => this.stepHero(1))
                 }
               }
@@ -275,18 +283,21 @@ struct CelestialEventsCard {
                   .fontSize(10)
                   .fontColor('#96B6DA')
                   .maxLines(1)
-                // One-tap silent desktop reminder toggle button
+                // Ergonomic one-tap silent desktop reminder button (32vp tall, 58vp wide)
                 Text(this.isReminded(ev.id) ? '★ 已约' : '提醒')
-                  .fontSize(10)
+                  .fontSize(12)
                   .fontWeight(FontWeight.Medium)
-                  .fontColor(this.isReminded(ev.id) ? '#1B1404' : '#DCEEFF')
-                  .padding({ left: 7, right: 7, top: 3, bottom: 3 })
-                  .backgroundColor(this.isReminded(ev.id) ? '#FFD166' : '#32FFFFFF')
-                  .borderRadius(9)
+                  .fontColor(this.isReminded(ev.id) ? '#1B1404' : '#EAF4FF')
+                  .textAlign(TextAlign.Center)
+                  .constraintSize({ minWidth: 58 })
+                  .height(this.isTall() ? 32 : 28)
+                  .padding({ left: 10, right: 10 })
+                  .backgroundColor(this.isReminded(ev.id) ? '#FFD166' : '#3AFFFFFF')
+                  .borderRadius(16)
                   .onClick(() => this.toggleReminder(ev))
               }
               .width('100%')
-              .padding({ left: 11, right: 8, top: this.isTall() ? 10 : 5, bottom: this.isTall() ? 10 : 5 })
+              .padding({ left: 11, right: 7, top: this.isTall() ? 7 : 4, bottom: this.isTall() ? 7 : 4 })
               .backgroundColor('#22FFFFFF')
               .borderRadius(12)
               .onClick(() => this.openCalendar(ev))
