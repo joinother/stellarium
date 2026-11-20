@@ -659,6 +659,8 @@ void LandscapeMist::prepareResources()
 void LandscapeMist::draw(StelCore* core, bool onlyPolygon)
 {
 	if (onlyPolygon || !core->getFlagClearSky() || opacity <= .001f) return;
+	const float drawOpacity = effectiveOpacity();
+	if (drawOpacity <= .001f) return;
 	auto& gl = *QOpenGLContext::currentContext()->extraFunctions();
 	MistGLState state(gl);
 	if (!initialized) initGL();
@@ -990,7 +992,7 @@ void main() { FRAG_COLOR = texture(terrainColor, terrainUv); }
 	projector->setUnProjectUniforms(program);
 	program.setUniformValue("terrainViewport", QVector4D(viewport[0], viewport[1], viewport[2], viewport[3]));
 	program.setUniformValue("clockTime", animationTime);
-	program.setUniformValue("opacity", opacity);
+	program.setUniformValue("opacity", drawOpacity);
 	program.setUniformValue("portal", static_cast<float>(resources.portal + (1. - resources.portal) * wideField));
 	program.setUniformValue("flowAmount", static_cast<float>(resources.flow * (1. - wideField)));
 	program.setUniformValue("daylight", static_cast<float>(qBound(0.0, getBrightness(), 1.0)));
@@ -1604,9 +1606,10 @@ void LandscapeOldStyle::drawFog(StelCore*const core, const int firstFreeTexSampl
 	renderProgram->setUniformValue(shaderVars.fogCylinderHeight, height);
 	renderProgram->setUniformValue(shaderVars.vshift, vpos);
 
-	const float brightness = landFader.getInterstate()*fogFader.getInterstate()*(0.1f+0.1f*landscapeBrightness);
+	const float visibility = static_cast<float>(1.0 - landscapeTransparency);
+	const float brightness = landFader.getInterstate()*fogFader.getInterstate()*(0.1f+0.1f*landscapeBrightness)*visibility;
 	renderProgram->setUniformValue(shaderVars.brightness, brightness, brightness, brightness,
-				       (1.f-landscapeTransparency)*landFader.getInterstate());
+				       visibility*landFader.getInterstate());
 	renderProgram->setUniformValue(shaderVars.projectionMatrixInverse, prj->getProjectionMatrix().toQMatrix().inverted());
 	prj->setUnProjectUniforms(*renderProgram);
 
@@ -1816,8 +1819,9 @@ void LandscapeOldStyle::drawFogLowGL(StelCore* core, StelPainter& sPainter) cons
 	transfo->combine(Mat4d::translation(Vec3d(0.,0.,static_cast<double>(vpos))));
 	sPainter.setProjector(core->getProjection(transfo));
 	sPainter.setBlending(true, GL_ONE, GL_ONE);
-	sPainter.setColor(Vec3f(landFader.getInterstate()*fogFader.getInterstate()*(0.1f+0.1f*landscapeBrightness)),
-			  (1.f-landscapeTransparency)*landFader.getInterstate());
+	const float visibility = static_cast<float>(1.0 - landscapeTransparency);
+	sPainter.setColor(Vec3f(landFader.getInterstate()*fogFader.getInterstate()*(0.1f+0.1f*landscapeBrightness)*visibility),
+			  visibility*landFader.getInterstate());
 	fogTex->bind();
 	const double height = radius * static_cast<double>(calibrated?
 				(std::tan((fogAltAngle+fogAngleShift)*M_PI_180f) - std::tan(fogAngleShift*M_PI_180f))
@@ -2241,17 +2245,18 @@ void main(void)
 	{
 		auto& gl = *QOpenGLContext::currentContext()->functions();
 		renderProgram->bind();
+		const float visibility = static_cast<float>(1.0 - landscapeTransparency);
 		if (core->getFlagClearSky())
 		{
 			renderProgram->setUniformValue(shaderVars.brightness,
 			                               landscapeBrightness*landscapeTint[0],
 			                               landscapeBrightness*landscapeTint[1],
 			                               landscapeBrightness*landscapeTint[2],
-			                               landFader.getInterstate());
+			                               visibility*landFader.getInterstate());
 		}
 		else
 		{
-			renderProgram->setUniformValue(shaderVars.brightness, 0, 0, 0, 1);
+			renderProgram->setUniformValue(shaderVars.brightness, 0.f, 0.f, 0.f, visibility*landFader.getInterstate());
 		}
 
 		const int mainTexSampler = 0;
@@ -2272,10 +2277,10 @@ void main(void)
 		if ((mapTexFog) && (core->getSkyDrawer()->getFlagHasAtmosphere()) && core->getFlagClearSky())
 		{
 			gl.glBlendFunc(GL_ONE, GL_ONE_MINUS_SRC_COLOR);
-			const float brightness = landFader.getInterstate()*fogFader.getInterstate()*(0.1f+0.1f*landscapeBrightness);
+			const float brightness = landFader.getInterstate()*fogFader.getInterstate()*(0.1f+0.1f*landscapeBrightness)*visibility;
 
 			renderProgram->setUniformValue(shaderVars.brightness, brightness, brightness, brightness,
-						       landFader.getInterstate());
+						       visibility*landFader.getInterstate());
 			mapTexFog->bind();
 			gl.glDrawArrays(GL_TRIANGLE_STRIP, 0, 4);
 		}
@@ -2283,9 +2288,9 @@ void main(void)
 		if (mapTexIllum && lightScapeBrightness>0.0f && (illumFader.getInterstate()>0.f) && core->getFlagClearSky())
 		{
 			gl.glBlendFunc(GL_SRC_ALPHA, GL_ONE);
-			const float brightness = lightScapeBrightness*illumFader.getInterstate();
+			const float brightness = lightScapeBrightness*illumFader.getInterstate()*visibility;
 			renderProgram->setUniformValue(shaderVars.brightness, brightness, brightness, brightness,
-						       landFader.getInterstate());
+						       visibility*landFader.getInterstate());
 			mapTexIllum->bind();
 			gl.glDrawArrays(GL_TRIANGLE_STRIP, 0, 4);
 		}
@@ -2604,18 +2609,19 @@ void main(void)
 	{
 		auto& gl = *QOpenGLContext::currentContext()->functions();
 		renderProgram->bind();
+		const float visibility = static_cast<float>(1.0 - landscapeTransparency);
 		const float brightness=core->getFlagClearSky() ? landscapeBrightness : 0.0f;
 		renderProgram->setUniformValue(shaderVars.bottomCapColor,
 		                               brightness*bottomCapColor[0],
 		                               brightness*bottomCapColor[1],
 		                               brightness*bottomCapColor[2],
-		                               bottomCapColor[0] < 0 ? 0 : landFader.getInterstate());
+		                               bottomCapColor[0] < 0 ? 0.f : visibility*landFader.getInterstate());
 
                 renderProgram->setUniformValue(shaderVars.brightness,
                                                brightness*landscapeTint[0],
                                                brightness*landscapeTint[1],
                                                brightness*landscapeTint[2],
-                                               (1.f-landscapeTransparency)*landFader.getInterstate());
+                                               visibility*landFader.getInterstate());
 		const int mainTexSampler = 0;
 		mapTex->bind(mainTexSampler);
 		renderProgram->setUniformValue(shaderVars.mapTex, mainTexSampler);
@@ -2637,12 +2643,12 @@ void main(void)
 		{
 			gl.glBlendFunc(GL_ONE, GL_ONE_MINUS_SRC_COLOR);
 			const float brightness =
-				landFader.getInterstate()*fogFader.getInterstate()*(0.1f+0.1f*landscapeBrightness);
+				landFader.getInterstate()*fogFader.getInterstate()*(0.1f+0.1f*landscapeBrightness)*visibility;
 
 			renderProgram->setUniformValue(shaderVars.bottomCapColor, 0.f, 0.f, 0.f, 0.f);
 			renderProgram->setUniformValue(shaderVars.brightness,
 						       brightness, brightness, brightness,
-						       (1.f-landscapeTransparency)*landFader.getInterstate());
+						       visibility*landFader.getInterstate());
 			mapTexFog->bind();
 			renderProgram->setUniformValue(shaderVars.mapTexTop, fogTexTop);
 			renderProgram->setUniformValue(shaderVars.mapTexBottom, fogTexBottom);
@@ -2653,11 +2659,11 @@ void main(void)
 		if (mapTexIllum && (lightScapeBrightness>0.0f) && (illumFader.getInterstate()>0.0f) && core->getFlagClearSky())
 		{
 			gl.glBlendFunc(GL_SRC_ALPHA, GL_ONE);
-			const float brightness = lightScapeBrightness*illumFader.getInterstate();
+			const float brightness = lightScapeBrightness*illumFader.getInterstate()*visibility;
 			renderProgram->setUniformValue(shaderVars.bottomCapColor, 0.f, 0.f, 0.f, 0.f);
 			renderProgram->setUniformValue(shaderVars.brightness,
 						       brightness, brightness, brightness,
-						       (1.f-landscapeTransparency)*landFader.getInterstate());
+						       visibility*landFader.getInterstate());
 			mapTexIllum->bind();
 			renderProgram->setUniformValue(shaderVars.mapTexTop, illumTexTop);
 			renderProgram->setUniformValue(shaderVars.mapTexBottom, illumTexBottom);

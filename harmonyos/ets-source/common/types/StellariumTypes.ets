@@ -735,6 +735,7 @@ export interface StellariumBridgeResponse {
   luminanceAdaptation?: boolean
   realisticStarVisibility?: boolean
   vividAtmosphere?: boolean
+  zoomFadeEnvironment?: boolean
   environmentMode?: number
   starTwinkle?: boolean
   forcedStarTwinkle?: boolean

@@ -324,6 +324,7 @@ export class LayerController {
     if (setting === 'luminanceAdaptation') this.layerStore.luminanceAdaptation = value as boolean
     else if (setting === 'realisticStarVisibility') this.layerStore.realisticStarVisibility = value as boolean
     else if (setting === 'vividAtmosphere') this.layerStore.vividAtmosphere = value as boolean
+    else if (setting === 'zoomFadeEnvironment') this.layerStore.zoomFadeEnvironment = value as boolean
     else if (setting === 'starTwinkle') this.layerStore.starTwinkle = value as boolean
     else if (setting === 'forcedStarTwinkle') this.layerStore.forcedStarTwinkle = value as boolean
     else if (setting === 'bigStarHalo') this.layerStore.bigStarHalo = value as boolean

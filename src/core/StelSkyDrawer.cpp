@@ -35,6 +35,7 @@
 #include "LandscapeMgr.hpp"
 #include "Landscape.hpp"
 #include "AtmosphereVivid.hpp"
+#include "EnvironmentZoomFade.hpp"
 #include "SolarSystem.hpp"
 #include "Planet.hpp"
 
@@ -287,6 +288,11 @@ void StelSkyDrawer::update(double)
 		atmosphereVisualStrength = AtmosphereVivid::visualStrength(
 			landscape->getFlagVividAtmosphere(), core->getCurrentPlanet()->getEnglishName() == "Earth",
 			landscape->getFlagAtmosphereNoScatter(), std::asin(qBound(-1., solarDirection[2], 1.)) * 180. / M_PI);
+		if (core->getMovementMgr())
+		{
+			atmosphereVisualStrength *= EnvironmentZoomFade::environmentVisibility(
+				landscape->getFlagZoomFadeEnvironment(), core->getMovementMgr()->getCurrentFov());
+		}
 	}
 	visualExtinction = extinction;
 	visualExtinction.setExtinctionCoefficient(extinction.getExtinctionCoefficient() * atmosphereVisualStrength);

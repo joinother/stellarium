@@ -150,6 +150,7 @@ class LandscapeMgr : public StelModule
 		   WRITE setAtmosphereModel
 		   NOTIFY atmosphereModelChanged)
 	Q_PROPERTY(bool flagVividAtmosphere READ getFlagVividAtmosphere WRITE setFlagVividAtmosphere NOTIFY flagVividAtmosphereChanged)
+	Q_PROPERTY(bool flagZoomFadeEnvironment READ getFlagZoomFadeEnvironment WRITE setFlagZoomFadeEnvironment NOTIFY flagZoomFadeEnvironmentChanged)
 	Q_PROPERTY(QString atmosphereModelPath
 		   READ getAtmosphereModelPath
 		   WRITE setAtmosphereModelPath
@@ -458,7 +459,7 @@ public slots:
 	void setFlagLandscape(const bool displayed);
 	bool getMistHorizonEnabled() const { return mistHorizonEnabled; }
 	void setMistHorizonEnabled(bool enabled);
-	float getMistHorizonOpacity() const { return mistHorizon.opacity; }
+	float getMistHorizonOpacity() const { return mistHorizon.effectiveOpacity(); }
 
 	//! Get whether the landscape is currently visible. If true, objects below landscape's limiting altitude limit can be omitted.
 	bool getIsLandscapeFullyVisible() const;
@@ -556,6 +557,8 @@ public slots:
 	void setFlagAtmosphere(const bool displayed);
 	bool getFlagVividAtmosphere() const { return flagVividAtmosphere; }
 	void setFlagVividAtmosphere(bool enabled);
+	bool getFlagZoomFadeEnvironment() const { return flagZoomFadeEnvironment; }
+	void setFlagZoomFadeEnvironment(bool enabled);
 
 	QString getAtmosphereModel() const;
 	QString getAtmosphereProfile() const;
@@ -730,6 +733,7 @@ signals:
 	void atmosphereDisplayedChanged(const bool displayed);
 	void atmosphereModelChanged(const QString& model);
 	void flagVividAtmosphereChanged(bool enabled);
+	void flagZoomFadeEnvironmentChanged(bool enabled);
 	void atmosphereModelPathChanged(const QString& model);
 	void atmosphereStoppedWithErrorChanged(bool error);
 	void atmosphereStatusTextChanged(const QString& status);
@@ -860,6 +864,7 @@ private:
 	bool flagLightPollutionFromDatabase;
 	bool atmosphereNoScatter; //!< true to suppress actual blue-sky rendering but keep refraction & extinction
 	bool flagVividAtmosphere = false;
+	bool flagZoomFadeEnvironment = false;
 
 	//! control drawing of a Polygonal line, if one is defined.
 	bool flagPolyLineDisplayedOnly;

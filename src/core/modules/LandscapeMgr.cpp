@@ -22,6 +22,7 @@
 
 #include "LandscapeMgr.hpp"
 #include "AtmosphereMist.hpp"
+#include "EnvironmentZoomFade.hpp"
 #include "Landscape.hpp"
 #include "AtmospherePreetham.hpp"
 #include "AtmosphereLightweight.hpp"
@@ -31,6 +32,7 @@
 #include "StelApp.hpp"
 #include "SolarSystem.hpp"
 #include "StelCore.hpp"
+#include "StelMovementMgr.hpp"
 #include "StelLocaleMgr.hpp"
 #include "StelModuleMgr.hpp"
 #include "StelFileMgr.hpp"
@@ -445,12 +447,14 @@ void LandscapeMgr::update(double deltaTime)
 		StelApp::getInstance().getCore()->getCurrentPlanet()->getEnglishName() == "Earth";
 	const float step = static_cast<float>(qBound(0.0, deltaTime, 0.1));
 	mistHorizon.opacity += ((mistVisible ? 1.f : 0.f) - mistHorizon.opacity) * qMin(1.f, step * 5.f);
-	if (mistHorizon.opacity > 0.001f)
+	const auto core = StelApp::getInstance().getCore();
+	const double currentFov = core && core->getMovementMgr() ? core->getMovementMgr()->getCurrentFov() : 60.0;
+	mistHorizon.zoomOpacity = EnvironmentZoomFade::mistVisibility(currentFov);
+	if (mistHorizon.effectiveOpacity() > 0.001f)
 		mistHorizon.animationTime += step;
 	if(needToRecreateAtmosphere && !loadingAtmosphere)
 		createAtmosphere();
 
-	const auto core = StelApp::getInstance().getCore();
 	const auto drawer = core->getSkyDrawer();
 
 	if(loadingAtmosphere && loadingAtmosphere->isLoading())
@@ -708,7 +712,7 @@ void LandscapeMgr::draw(StelCore* core)
 	const StelModule* scenery = StelApp::getInstance().getModuleMgr().getModule("Scenery3d", true);
 	const bool sceneActive = scenery && scenery->property("enableScene").toBool();
 	atmosphere->setMistUndergroundStrength(AtmosphereMist::displayStrength(
-		core->getCurrentPlanet()->getEnglishName() == "Earth", getFlagLandscape(), sceneActive, mistHorizon.opacity));
+		core->getCurrentPlanet()->getEnglishName() == "Earth", getFlagLandscape(), sceneActive, mistHorizon.opacity) * mistHorizon.zoomOpacity);
 	if (!getFlagAtmosphereNoScatter() && core->getFlagClearSky())
 	    atmosphere->draw(core);
 
@@ -724,26 +728,30 @@ void LandscapeMgr::draw(StelCore* core)
 	}
 
 	// Draw the landscape
+	const double currentFov = core->getMovementMgr() ? core->getMovementMgr()->getCurrentFov() : 60.0;
+	const float envZoom = EnvironmentZoomFade::environmentVisibility(flagZoomFadeEnvironment, currentFov);
+	const double baseTransparency = getFlagLandscapeUseTransparency() ? landscapeTransparency : 0.0;
+	const double pushed = EnvironmentZoomFade::combinedLandscapeTransparency(baseTransparency, envZoom);
+	Landscape::setTransparency(pushed);
+	const bool drawGround = pushed < 0.999;
+	if (drawGround)
 	{
-		const double pushed = getFlagLandscapeUseTransparency() ? landscapeTransparency : 0.0;
-		Landscape::setTransparency(pushed);
+		if (oldLandscape && getFlagLandscape())
+		{
+			oldLandscape->draw(core, flagPolyLineDisplayedOnly);
+		}
+		if (getFlagLandscape())
+			landscape->draw(core, flagPolyLineDisplayedOnly);
 	}
-
-	if (oldLandscape && getFlagLandscape())
-	{
-		oldLandscape->draw(core, flagPolyLineDisplayedOnly);
-	}
-	if (getFlagLandscape())
-		landscape->draw(core, flagPolyLineDisplayedOnly);
-	if (mistHorizon.opacity > 0.001f)
+	if (mistHorizon.effectiveOpacity() > 0.001f)
 	{
 		Vec3d sunDirection = GETSTELMODULE(SolarSystem)->getSun()->getAltAzPosApparent(core);
 		sunDirection.normalize();
 		mistHorizon.sunDirection = sunDirection.toVec3f();
 		const double daylight = qBound(0.0, (sunDirection[2] + 0.1) / 0.4, 1.0);
 		mistHorizon.setBrightness(daylight * daylight * (3.0 - 2.0 * daylight));
+		mistHorizon.draw(core, flagPolyLineDisplayedOnly);
 	}
-	mistHorizon.draw(core, flagPolyLineDisplayedOnly);
 
 	// Draw the cardinal points
 	cardinalPoints->draw(core, static_cast<double>(StelApp::getInstance().getCore()->getCurrentLocation().getLatitude()));
@@ -876,6 +884,7 @@ void LandscapeMgr::init()
 
 	// SET SIMPLE PROPERTIES FIRST, before loading the landscape (Loading may already make use of them! GH#1237)
 	flagVividAtmosphere = conf->value("landscape/flag_vivid_atmosphere", false).toBool();
+	flagZoomFadeEnvironment = conf->value("landscape/flag_zoom_fade_environment", false).toBool();
 	setFlagLandscapeSetsLocation(conf->value("landscape/flag_landscape_sets_location",false).toBool());
 	setFlagLandscapeAutoSelection(conf->value("viewing/flag_landscape_autoselection", false).toBool());
 	setFlagEnvironmentAutoEnable(conf->value("viewing/flag_environment_auto_enable",true).toBool());
@@ -1790,6 +1799,15 @@ void LandscapeMgr::setFlagVividAtmosphere(bool enabled)
 		loadingAtmosphere->setFlagVividAtmosphere(enabled);
 	StelApp::immediateSave("landscape/flag_vivid_atmosphere", enabled);
 	emit flagVividAtmosphereChanged(enabled);
+}
+
+void LandscapeMgr::setFlagZoomFadeEnvironment(bool enabled)
+{
+	if (flagZoomFadeEnvironment == enabled)
+		return;
+	flagZoomFadeEnvironment = enabled;
+	StelApp::immediateSave("landscape/flag_zoom_fade_environment", enabled);
+	emit flagZoomFadeEnvironmentChanged(enabled);
 }
 
 void LandscapeMgr::setAtmosphereModel(const QString& model)

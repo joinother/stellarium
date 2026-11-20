@@ -74,6 +74,16 @@ export struct AtmosphereGroundSection {
           'On: bright skies hide faint stars, the Milky Way, and deep-sky objects. Off: keep them visible in daylight for exploring the sky.'))
           .fontSize(panelFontSize(12, this.readableUi)).fontColor(this.c.sub).width('100%')
       }.width('100%')
+      Column({ space: 2 }) {
+        LayerSwitchRow({
+          label: this.text('缩放特写自动隐去大气与地景', 'Auto-hide atmosphere & ground on zoom'),
+          isOn: this.layerStore.zoomFadeEnvironment,
+          onToggle: (enabled: boolean) => { this.onSetSkyDisplay('zoomFadeEnvironment', enabled) }
+        })
+        Text(this.text('开启后，放大进入望远镜特写视场（10° → 2°）时平滑淡出大气与实景地景，呈现纯净深空与行星视角；关闭时保留物理模拟。',
+          'On: smoothly fades atmosphere and ground in telescopic close-ups (10° → 2°). Off: preserves physical simulation.'))
+          .fontSize(panelFontSize(12, this.readableUi)).fontColor(this.c.sub).width('100%')
+      }.width('100%')
     }.width('100%').padding(12).backgroundColor(this.c.soft)
       .border({ width: 1, color: this.c.border }).borderRadius(UI_RADIUS_CONTROL)
       .margin({ top: 4, bottom: 12 })

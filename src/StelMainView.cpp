@@ -55,6 +55,7 @@
 #include "modules/HipsMgr.hpp"
 #include "modules/ToastMgr.hpp"
 #include "LandscapeMgr.hpp"
+#include "EnvironmentZoomFade.hpp"
 #include "Nebula.hpp"
 #include "NebulaMgr.hpp"
 #include "SporadicMeteorMgr.hpp"
@@ -4293,6 +4294,7 @@ QJsonObject currentStateJson()
 			(scenery && scenery->property("enableScene").toBool());
 		result["environmentMode"] = landscape->getFlagAtmosphere() ? (ground ? 2 : 3) : (ground ? 1 : 0);
 		result["vividAtmosphere"] = landscape->getFlagVividAtmosphere();
+		result["zoomFadeEnvironment"] = landscape->getFlagZoomFadeEnvironment();
 	}
 	if (SporadicMeteorMgr* mmgr = GETSTELMODULE(SporadicMeteorMgr))
 	{
@@ -11698,6 +11700,17 @@ extern "C" __attribute__((visibility("default"))) const char* StellariumOhos_com
 				}
 				landscape->setFlagVividAtmosphere(enabled);
 			}
+			else if (setting == "zoomFadeEnvironment")
+			{
+				LandscapeMgr* landscape = GETSTELMODULE(LandscapeMgr);
+				if (!landscape || (value != "0" && value != "1" && value != "true" && value != "false"))
+				{
+					result["ok"] = false;
+					result["error"] = "zoomFadeEnvironment requires a boolean and a loaded landscape manager";
+					return result;
+				}
+				landscape->setFlagZoomFadeEnvironment(enabled);
+			}
 			else if (setting == "environmentMode")
 			{
 				bool valid = false;
@@ -12736,6 +12749,11 @@ extern "C" __attribute__((visibility("default"))) const char* StellariumOhos_com
 			result["atmosphereModel"] = lmgr->getAtmosphereModel();
 			result["atmosphereProfile"] = lmgr->getAtmosphereProfile();
 			result["atmosphereAverageLuminance"] = lmgr->getAtmosphereAverageLuminance();
+			result["zoomFadeEnvironment"] = lmgr->getFlagZoomFadeEnvironment();
+			const double currentFov = core->getMovementMgr() ? core->getMovementMgr()->getCurrentFov() : 60.0;
+			result["mistZoomVisibility"] = EnvironmentZoomFade::mistVisibility(currentFov);
+			result["environmentZoomVisibility"] = EnvironmentZoomFade::environmentVisibility(
+				lmgr->getFlagZoomFadeEnvironment(), currentFov);
 			const StelSkyDrawer* drawer = core->getSkyDrawer();
 			result["atmosphereVisualStrength"] = drawer->getAtmosphereVisualStrength();
 			result["starLimitMagnitude"] = drawer->getStarLimitMagnitude();

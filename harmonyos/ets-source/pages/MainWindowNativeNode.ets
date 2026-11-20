@@ -7665,6 +7665,7 @@ export struct WindowNativeNode {
     if (result.luminanceAdaptation !== undefined) this.layerStore.luminanceAdaptation = result.luminanceAdaptation === true
     if (result.realisticStarVisibility !== undefined) this.layerStore.realisticStarVisibility = result.realisticStarVisibility === true
     if (result.vividAtmosphere !== undefined) this.layerStore.vividAtmosphere = result.vividAtmosphere === true
+    if (result.zoomFadeEnvironment !== undefined) this.layerStore.zoomFadeEnvironment = result.zoomFadeEnvironment === true
     if (result.environmentMode !== undefined) this.layerStore.environmentMode = result.environmentMode
     if (result.starTwinkle !== undefined) this.layerStore.starTwinkle = result.starTwinkle === true
     if (result.forcedStarTwinkle !== undefined) this.layerStore.forcedStarTwinkle = result.forcedStarTwinkle === true

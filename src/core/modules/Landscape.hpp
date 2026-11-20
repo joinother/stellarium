@@ -286,6 +286,8 @@ public:
 	void load(const QSettings&, const QString&) override {}
 	void draw(StelCore* core, bool onlyPolygon) override;
 	float opacity = 0.f;
+	float zoomOpacity = 1.f;
+	float effectiveOpacity() const { return opacity * zoomOpacity; }
 	float animationTime = 0.f;
 	Vec3f sunDirection = Vec3f(0.f, 0.f, -1.f);
 private:

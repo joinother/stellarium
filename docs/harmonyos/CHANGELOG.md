@@ -1,5 +1,24 @@
 > **身份图例**：本文件真机记录中出现的 `com.cnchensh.stellarium` 是**本机调试签名身份**（本机 DevEco 自动生成，非发布身份）；发布身份为 `com.joinother.skyinstrument`。构建脚本 `build-ohos-hap-windows.ps1 -Install` 从产物 `pack.info` 读取实际包名，仓库不写死任何签名身份（见 `docs/harmonyos/release/BUNDLE-IDENTITY-CLEANUP.md`）。
 
+## [2026-11-20] 高倍缩放双层环境淡出（雾山默认淡出 + 大气与实景地景可选开关）
+
+- **修改文件：** `src/core/modules/EnvironmentZoomFade.hpp`（新增）、`src/core/modules/Landscape.hpp`、`src/core/modules/Landscape.cpp`、`src/core/modules/LandscapeMgr.hpp`、`src/core/modules/LandscapeMgr.cpp`、`src/core/StelSkyDrawer.cpp`、`src/StelMainView.cpp`、`src/StelOhosCommandCatalog.hpp`、`harmonyos/ets-source/common/types/StellariumTypes.ets`、`harmonyos/ets-source/state/LayerStore.ets`、`harmonyos/ets-source/capability/LayerController.ets`、`harmonyos/ets-source/pages/MainWindowNativeNode.ets`、`harmonyos/ets-source/panels/layers/AtmosphereGroundSection.ets`、`scripts/test-environment-zoom-fade.cpp`（新增）、`scripts/test-ohos-environment-zoom-fade.mjs`（新增）、`docs/harmonyos/CHANGELOG.md`。
+- **设计与实现：**
+  1. **雾山默认高倍缩放平滑淡出（`FOV 14° → 4°`）：**
+     - 新增纯 C++ 辅助头 `EnvironmentZoomFade.hpp`，通过 `mistVisibility(fov)` 在 `FOV 14° → 4°` 之间采用 C¹ 平滑 Hermite 曲线将装饰性雾山透明度由 `1.0` 过渡到 `0.0`（同时联动 `mistUndergroundStrength` 地下遮蔽强度）。
+     - 在 `LandscapeMist` 中分离开关透明度 `opacity` 与缩放透明度 `zoomOpacity`，当合成透明度 `effectiveOpacity() <= 0.001f` 时直接跳过 `mistHorizon.draw()` 绘制与动画步进，兼顾特写画面纯净度与高倍缩放性能。
+  2. **大气与实景地景缩放淡出独立开关（`zoomFadeEnvironment`，默认关闭）：**
+     - 在 `LandscapeMgr` 新增持久化属性 `flagZoomFadeEnvironment`（配置键 `landscape/flag_zoom_fade_environment`，默认 `false`），支持 `setSkyDisplaySetting`（`zoomFadeEnvironment|1/0`）并在 `getState` 与 `getLandscapeInfo` 中回传状态及实时 `mistZoomVisibility` / `environmentZoomVisibility`。
+     - **开启时**：在望远镜特写视场（`FOV 10° → 2°`）内，`StelSkyDrawer::update()` 将 `atmosphereVisualStrength` 乘以 `environmentVisibility(true, fov)`，同步平滑淡出大气天光、人眼适应亮度（`averageLuminance → 0.001 cd/m²`）、消光与闪烁；`LandscapeMgr::draw()` 通过 `combinedLandscapeTransparency()` 合成透明并在全透明时跳过地形绘制，同时补齐 `LandscapeOldStyle` / `LandscapeFisheye` / `LandscapeSpherical` 地形雾、底盖与夜光层的透明度衰减，杜绝放大后残留雾带或色块。
+     - **关闭时**：大气与实景地景严格按原有物理模拟保留，不影响日食、日月升落与机位地景规划。
+     - 在「图层 → 天空 → 大气层和地面」卡片中新增「缩放特写自动隐去大气与地景」开关与中英文说明。
+- **验证与真机实测（MatePad Mini `192.168.31.234:42713`）：**
+  - 主机验证：`scripts/test-environment-zoom-fade.cpp`（`-Wall -Wextra -Werror`）、`test-ohos-environment-zoom-fade.mjs`、`test-ohos-mist-atmosphere.mjs`、`test-ohos-mist-horizon.mjs`、`test-ohos-vivid-atmosphere.mjs`、`test-ohos-realistic-star-visibility.mjs`、`test-ohos-planetary-atmosphere.mjs` 共 44/44 通过；`check-ohos-ui-contract.mjs` 与 `check-ohos-i18n.mjs` 全通过。
+  - 真机实测与截图核验：
+    - 雾山默认缩放淡出：`FOV 55°` `opacity = 1.00` → `FOV 9°` `opacity = 0.50` → `FOV 3°` `opacity = 0.00`（完全隐去无锯齿）。
+    - 开关关闭（`zoomFadeEnvironment = false`）时：`FOV 1.5°` 正午仍保持 `atmosphereVisualStrength = 1.0`、`avgLum = 10463 cd/m²` 与实景地景可见。
+    - 开关开启（`zoomFadeEnvironment = true`）时：正午 11:57 从 `FOV 55°`（蓝天草地，`atmoVis = 1.0`）→ `FOV 6°`（树影与天光半透过渡，`atmoVis = 0.5`）→ `FOV 1.5°`（`atmoVis = 0.0`、`avgLum = 0.001 cd/m²`，自动切换为纯净深黑繁星特写视角）；图层面板截图确认新开关排版清晰无裁切。
+
 ## [2026-11-20] 太阳系多星球与卫星本地大气光学渲染
 
 - **修改文件：** `src/core/modules/AtmospherePlanetary.hpp`（新增）、`src/core/modules/Atmosphere.hpp`、`src/core/modules/AtmosphereLightweight.hpp`、`src/core/modules/AtmosphereLightweight.cpp`、`src/core/modules/AtmospherePreetham.hpp`、`src/core/modules/AtmospherePreetham.cpp`、`src/core/modules/LandscapeMgr.hpp`、`src/core/modules/LandscapeMgr.cpp`、`src/StelMainView.cpp`、`scripts/test-planetary-atmosphere.cpp`（新增）、`scripts/test-ohos-planetary-atmosphere.mjs`（新增）、`docs/harmonyos/CHANGELOG.md`。
