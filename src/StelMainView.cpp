@@ -10231,12 +10231,13 @@ extern "C" __attribute__((visibility("default"))) const char* StellariumOhos_com
 			// comets and satellites. The AstroCalc position table is deliberately
 			// the compact major-body table, matching its labels and fixed layout.
 			QStringList planetNames = QStringList() << "Sun" << "Moon" << "Mercury" << "Venus"
-											   << "Mars" << "Jupiter" << "Saturn" << "Uranus" << "Neptune";
+											   << "Earth" << "Mars" << "Jupiter" << "Saturn" << "Uranus" << "Neptune";
+			const PlanetP observerPlanet = core->getCurrentPlanet();
 			QJsonArray items;
 			for (const QString& pn : planetNames)
 			{
 				PlanetP p = qSharedPointerCast<Planet>(ssys->searchByName(pn));
-				if (!p) continue;
+				if (!p || p == observerPlanet) continue;
 				QJsonObject obj;
 				double ra = 0.0;
 				double dec = 0.0;
@@ -10248,14 +10249,23 @@ extern "C" __attribute__((visibility("default"))) const char* StellariumOhos_com
 				obj["rightAscension"] = obj["ra"];
 				obj["declination"] = obj["dec"];
 				Vec3d altaz = p->getAltAzPosApparent(core);
-				obj["altitude"] = std::asin(altaz[2] / altaz.norm()) * 180.0 / M_PI;
-				obj["azimuth"] = std::fmod(std::atan2(altaz[1], -altaz[0]) * 180.0 / M_PI + 360.0, 360.0);
-				obj["magnitude"] = p->getVMagnitude(core);
-				obj["angularSizeArcmin"] = p->getAngularRadius(core) * 120.0;
+				const double norm = altaz.norm();
+				const double altDeg = norm > 1e-12 ? std::asin(qBound(-1.0, altaz[2] / norm, 1.0)) * 180.0 / M_PI : 0.0;
+				const double azDeg = norm > 1e-12 ? std::fmod(std::atan2(altaz[1], -altaz[0]) * 180.0 / M_PI + 360.0, 360.0) : 0.0;
+				const double mag = p->getVMagnitude(core);
+				const double angArcmin = p->getAngularRadius(core) * 120.0;
+				obj["altitude"] = std::isfinite(altDeg) ? altDeg : 0.0;
+				obj["azimuth"] = std::isfinite(azDeg) ? azDeg : 0.0;
+				obj["magnitude"] = std::isfinite(mag) ? mag : 99.0;
+				obj["angularSizeArcmin"] = std::isfinite(angArcmin) ? angArcmin : 0.0;
 				const QVariantMap info = p->getInfoMap(core);
-				if (info.contains("distance")) obj["distanceAU"] = info.value("distance").toDouble();
+				if (info.contains("distance"))
+				{
+					const double dist = info.value("distance").toDouble();
+					if (std::isfinite(dist)) obj["distanceAU"] = dist;
+				}
 				const double transitJD = p->getRTSTime(core)[1];
-				if (transitJD > 0.0)
+				if (std::isfinite(transitJD) && transitJD > 0.0)
 					obj["transit"] = StelUtils::julianDayToISO8601String(transitJD + core->getUTCOffset(transitJD) / 24.0);
 				items.append(obj);
 			}
@@ -18626,10 +18636,11 @@ extern "C" __attribute__((visibility("default"))) const char* StellariumOhos_com
 		if (commandName == "getPlanetCalc")
 		{
 			SolarSystem* ssys = GETSTELMODULE(SolarSystem);
-			QStringList planetNames = QStringList() << "Mercury" << "Venus" << "Mars" << "Jupiter"
+			QStringList planetNames = QStringList() << "Mercury" << "Venus" << "Earth" << "Mars" << "Jupiter"
 													   << "Saturn" << "Uranus" << "Neptune" << "Pluto" << "Sun" << "Moon";
+			const PlanetP observerPlanet = core->getCurrentPlanet();
 			auto formatLocal = [&](double jd) -> QString {
-				if (jd <= 0.0)
+				if (!std::isfinite(jd) || jd <= 0.0)
 					return QString();
 				return StelUtils::julianDayToISO8601String(jd + core->getUTCOffset(jd) / 24.0);
 			};
@@ -18637,7 +18648,7 @@ extern "C" __attribute__((visibility("default"))) const char* StellariumOhos_com
 			for (const QString& pn : planetNames)
 			{
 				PlanetP p = qSharedPointerCast<Planet>(ssys->searchByName(pn));
-				if (!p) continue;
+				if (!p || p == observerPlanet) continue;
 				QJsonObject po;
 				po["name"] = p->getNameI18n();
 				po["englishName"] = pn;
@@ -18647,9 +18658,13 @@ extern "C" __attribute__((visibility("default"))) const char* StellariumOhos_com
 				po["ra"] = StelUtils::radToHmsStr(ra);
 				po["dec"] = StelUtils::radToDmsStr(dec);
 				Vec3d aa = p->getAltAzPosApparent(core);
-				po["altitude"] = std::asin(aa[2] / aa.norm()) * 180.0 / M_PI;
-				po["azimuth"] = std::fmod(std::atan2(aa[1], -aa[0]) * 180.0 / M_PI + 360.0, 360.0);
-				po["magnitude"] = p->getVMagnitude(core);
+				const double aaNorm = aa.norm();
+				const double altDeg = aaNorm > 1e-12 ? std::asin(qBound(-1.0, aa[2] / aaNorm, 1.0)) * 180.0 / M_PI : 0.0;
+				const double azDeg = aaNorm > 1e-12 ? std::fmod(std::atan2(aa[1], -aa[0]) * 180.0 / M_PI + 360.0, 360.0) : 0.0;
+				const double mag = p->getVMagnitude(core);
+				po["altitude"] = std::isfinite(altDeg) ? altDeg : 0.0;
+				po["azimuth"] = std::isfinite(azDeg) ? azDeg : 0.0;
+				po["magnitude"] = std::isfinite(mag) ? mag : 99.0;
 				const Vec4d rts = p->getRTSTime(core);
 				po["rise"] = formatLocal(rts[0]);
 				po["transit"] = formatLocal(rts[1]);
@@ -18814,7 +18829,18 @@ extern "C" __attribute__((visibility("default"))) const char* StellariumOhos_com
 			const bool includePerihelionAphelion = jo.value("includePerihelionAphelion").toBool(true);
 			const bool includeElongationsQuadratures = jo.value("includeElongationsQuadratures").toBool(true);
 			const bool includeStations = jo.value("includeStations").toBool(true);
-			const double coarseStep = 0.25; // 6 hours
+			// Moon moves ~13°/day and needs 6h coarse steps; planets move <= 2°/day so 1d coarse steps
+			// capture every extremum while cutting coarse engine evaluations by 4x.
+			bool hasFastMoon = false;
+			for (const PlanetP& planet : planets)
+			{
+				if (planet && planet->getEnglishName() == QStringLiteral("Moon"))
+				{
+					hasFastMoon = true;
+					break;
+				}
+			}
+			const double coarseStep = hasFastMoon ? 0.25 : 1.0;
 
 			QList<QPair<int, int>> pairs;
 			if (customPair)
@@ -18862,41 +18888,51 @@ extern "C" __attribute__((visibility("default"))) const char* StellariumOhos_com
 				return std::acos(qBound(-1.0, firstPos.dot(secondPos), 1.0)) * 180.0 / M_PI;
 			};
 
-			auto refineMinimum = [&](PlanetP first, PlanetP second, double jd0) -> QPair<double, double> {
-				double bestJD = jd0;
-				double bestSeparation = 999.0;
-				for (int k = -36; k <= 36; ++k)
+			// Golden-section search over [jd0 - coarseStep, jd0 + coarseStep]: ~18 evaluations vs 73
+			// brute-force steps, reaching ~1.3-minute precision even for 1-day coarse steps.
+			constexpr double invPhi = 0.6180339887498949;
+			auto goldenSearch = [&](double left, double right, bool findMinimum, const std::function<double(double)>& eval) -> QPair<double, double> {
+				double c = right - (right - left) * invPhi;
+				double d = left + (right - left) * invPhi;
+				double fc = eval(c);
+				double fd = eval(d);
+				for (int iter = 0; iter < 16; ++iter)
 				{
-					const double jd = jd0 + k * (1.0 / 144.0); // 10 minutes
-					const double separation = separationDeg(first, second, jd);
-					if (separation < bestSeparation)
+					if (findMinimum ? (fc < fd) : (fc > fd))
 					{
-						bestSeparation = separation;
-						bestJD = jd;
+						right = d;
+						d = c;
+						fd = fc;
+						c = right - (right - left) * invPhi;
+						fc = eval(c);
+					}
+					else
+					{
+						left = c;
+						c = d;
+						fc = fd;
+						d = left + (right - left) * invPhi;
+						fd = eval(d);
 					}
 				}
-				return qMakePair(bestJD, bestSeparation);
+				return (findMinimum ? (fc < fd) : (fc > fd)) ? qMakePair(c, fc) : qMakePair(d, fd);
+			};
+
+			auto refineMinimum = [&](PlanetP first, PlanetP second, double jd0) -> QPair<double, double> {
+				return goldenSearch(jd0 - coarseStep, jd0 + coarseStep, true, [&](double jd) {
+					return separationDeg(first, second, jd);
+				});
 			};
 
 			auto refineMaximum = [&](PlanetP first, PlanetP second, double jd0) -> QPair<double, double> {
-				double bestJD = jd0;
-				double bestSeparation = -1.0;
-				for (int k = -36; k <= 36; ++k)
-				{
-					const double jd = jd0 + k * (1.0 / 144.0);
-					const double separation = separationDeg(first, second, jd);
-					if (separation > bestSeparation)
-					{
-						bestSeparation = separation;
-						bestJD = jd;
-					}
-				}
-				return qMakePair(bestJD, bestSeparation);
+				return goldenSearch(jd0 - coarseStep, jd0 + coarseStep, false, [&](double jd) {
+					return separationDeg(first, second, jd);
+				});
 			};
 
 			auto refineSolarCrossing = [&](PlanetP planet, double start, double end, double target) -> QPair<double, double> {
 				double startValue = separationDeg(planet, sun, start) - target;
-				for (int iteration = 0; iteration < 18; ++iteration)
+				for (int iteration = 0; iteration < 16; ++iteration)
 				{
 					const double middle = (start + end) / 2.0;
 					const double middleValue = separationDeg(planet, sun, middle) - target;
@@ -18913,19 +18949,9 @@ extern "C" __attribute__((visibility("default"))) const char* StellariumOhos_com
 			};
 
 			auto refineDistanceExtremum = [&](PlanetP planet, double jd0, bool minimum) -> QPair<double, double> {
-				double bestJD = jd0;
-				double bestDistance = minimum ? 999.0 : -1.0;
-				for (int k = -36; k <= 36; ++k)
-				{
-					const double jd = jd0 + k * (1.0 / 144.0);
-					const double distance = planet->getHeliocentricEclipticPos(jd + core->computeDeltaT(jd) / 86400.0).norm();
-					if ((minimum && distance < bestDistance) || (!minimum && distance > bestDistance))
-					{
-						bestDistance = distance;
-						bestJD = jd;
-					}
-				}
-				return qMakePair(bestJD, bestDistance);
+				return goldenSearch(jd0 - coarseStep, jd0 + coarseStep, minimum, [&](double jd) {
+					return planet->getHeliocentricEclipticPos(jd + core->computeDeltaT(jd) / 86400.0).norm();
+				});
 			};
 
 			auto refineStationaryPoint = [&](PlanetP planet, double jd0, bool maximum) -> QPair<double, double> {
@@ -18936,26 +18962,19 @@ extern "C" __attribute__((visibility("default"))) const char* StellariumOhos_com
 				double dec = 0.0;
 				StelUtils::rectToSphe(&referenceRA, &dec, centerPosition);
 				referenceRA *= 180.0 / M_PI;
-				double bestJD = jd0;
-				double bestRA = maximum ? -999.0 : 999.0;
-				for (int k = -36; k <= 36; ++k)
-				{
-					const double jd = jd0 + k * (1.0 / 144.0);
+				const QPair<double, double> best = goldenSearch(jd0 - coarseStep, jd0 + coarseStep, !maximum, [&](double jd) {
 					core->setJD(jd);
 					core->update(0);
 					Vec3d position = planet->getEquinoxEquatorialPos(core);
 					double ra = 0.0;
-					StelUtils::rectToSphe(&ra, &dec, position);
+					double localDec = 0.0;
+					StelUtils::rectToSphe(&ra, &localDec, position);
 					ra *= 180.0 / M_PI;
 					while (ra - referenceRA > 180.0) ra -= 360.0;
 					while (ra - referenceRA < -180.0) ra += 360.0;
-					if ((maximum && ra > bestRA) || (!maximum && ra < bestRA))
-					{
-						bestRA = ra;
-						bestJD = jd;
-					}
-				}
-				return qMakePair(bestJD, StelUtils::fmodpos(bestRA, 360.0));
+					return ra;
+				});
+				return qMakePair(best.first, StelUtils::fmodpos(best.second, 360.0));
 			};
 
 			auto addPhenomenon = [&](const QString& type, PlanetP first, PlanetP second, const QPair<double, double>& event,
@@ -19130,23 +19149,18 @@ extern "C" __attribute__((visibility("default"))) const char* StellariumOhos_com
 			}
 
 			core->setUseTopocentricCoordinates(false);
-			auto phaseOffset = [&](double jd, double target) -> double {
+			auto lunarElongationDeg = [&](double jd) -> double {
 				core->setJD(jd);
 				core->update(0);
-				double moonRa = 0.0;
-				double moonDec = 0.0;
-				double sunRa = 0.0;
-				double sunDec = 0.0;
-				double moonLongitude = 0.0;
-				double moonLatitude = 0.0;
-				double sunLongitude = 0.0;
-				double sunLatitude = 0.0;
-				const double obliquity = earth->getRotObliquity(core->getJDE());
-				StelUtils::rectToSphe(&moonRa, &moonDec, moon->getEquinoxEquatorialPos(core));
-				StelUtils::rectToSphe(&sunRa, &sunDec, sun->getEquinoxEquatorialPos(core));
-				StelUtils::equToEcl(moonRa, moonDec, obliquity, &moonLongitude, &moonLatitude);
-				StelUtils::equToEcl(sunRa, sunDec, obliquity, &sunLongitude, &sunLatitude);
-				return StelUtils::fmodpos((moonLongitude - sunLongitude) * M_180_PI - target, 360.0);
+				// Geocentric ecliptic longitude difference (Moon - Sun) using heliocentric positions
+				// so lunar phases stay exact even when the user's observer planet is off-Earth.
+				const Vec3d earthHelio = earth->getHeliocentricEclipticPos();
+				const Vec3d moonHelio = moon->getHeliocentricEclipticPos();
+				const Vec3d moonFromEarth = moonHelio - earthHelio;
+				const Vec3d sunFromEarth = -earthHelio;
+				const double moonLon = std::atan2(moonFromEarth[1], moonFromEarth[0]);
+				const double sunLon = std::atan2(sunFromEarth[1], sunFromEarth[0]);
+				return StelUtils::fmodpos((moonLon - sunLon) * M_180_PI, 360.0);
 			};
 
 			QList<QPair<MoonPhaseDefinition, double>> phaseEvents;
@@ -19156,33 +19170,41 @@ extern "C" __attribute__((visibility("default"))) const char* StellariumOhos_com
 				{180.0, QStringLiteral("满月")},
 				{270.0, QStringLiteral("下弦")}
 			};
+			// Single-pass 0.5-day scan checks all 4 phase targets simultaneously (~8x fewer core updates
+			// than 4 separate 0.25-day passes), followed by 16-step bisection (~0.66s accuracy).
+			const double step = 0.5;
+			double leftJD = startJD;
+			double leftElong = lunarElongationDeg(leftJD);
 			for (const MoonPhaseDefinition& phase : phases)
 			{
-				const double step = 0.25;
-				double leftJD = startJD;
-				double leftOffset = phaseOffset(leftJD, phase.elongation);
-				if (leftOffset < 0.001)
+				if (StelUtils::fmodpos(leftElong - phase.elongation, 360.0) < 0.001)
 					phaseEvents.append(qMakePair(phase, leftJD));
-				for (double rightJD = startJD + step; rightJD <= endJD + 0.0001; rightJD += step)
+			}
+			for (double rightJD = startJD + step; rightJD <= endJD + 0.0001; rightJD += step)
+			{
+				const double rightElong = lunarElongationDeg(rightJD);
+				for (const MoonPhaseDefinition& phase : phases)
 				{
-					const double rightOffset = phaseOffset(rightJD, phase.elongation);
-					if (rightOffset < leftOffset)
+					const double leftOffset = StelUtils::fmodpos(leftElong - phase.elongation, 360.0);
+					const double rightOffset = StelUtils::fmodpos(rightElong - phase.elongation, 360.0);
+					// Only trigger on genuine forward 360° -> 0° wraparound (never on small backward jitter).
+					if (leftOffset > 270.0 && rightOffset < 90.0)
 					{
 						double lower = leftJD;
 						double upper = rightJD;
-						for (int iteration = 0; iteration < 24; ++iteration)
+						for (int iteration = 0; iteration < 16; ++iteration)
 						{
 							const double middle = (lower + upper) * 0.5;
-							if (phaseOffset(middle, phase.elongation) > 180.0)
+							if (StelUtils::fmodpos(lunarElongationDeg(middle) - phase.elongation, 360.0) > 180.0)
 								lower = middle;
 							else
 								upper = middle;
 						}
 						phaseEvents.append(qMakePair(phase, (lower + upper) * 0.5));
 					}
-					leftJD = rightJD;
-					leftOffset = rightOffset;
 				}
+				leftJD = rightJD;
+				leftElong = rightElong;
 			}
 
 			std::sort(phaseEvents.begin(), phaseEvents.end(), [](const QPair<MoonPhaseDefinition, double>& first, const QPair<MoonPhaseDefinition, double>& second) {

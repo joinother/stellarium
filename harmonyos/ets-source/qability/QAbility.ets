@@ -1,4 +1,5 @@
 import AbilityConstant from '@ohos.app.ability.AbilityConstant';
+import { Configuration } from '@ohos.app.ability.Configuration';
 import QAbilityStage from '../qabilitystage/QAbilityStage';
 import UIAbility from '@ohos.app.ability.UIAbility';
 import Want from '@ohos.app.ability.Want';
@@ -1045,9 +1046,20 @@ export default class QAbility extends UIAbility {
     hilog.info(LOG_DOMAIN, LOG_TAG, '[catalog-open] received .cat open-with want');
   }
 
+  private publishSystemFontScale(rawScale: number | undefined): void {
+    const valid = typeof rawScale === 'number' && Number.isFinite(rawScale) && rawScale > 0 ? rawScale : 1.0;
+    const clamped = Math.max(0.85, Math.min(1.45, valid));
+    AppStorage.setOrCreate<number>('stellariumSystemFontScale', clamped);
+  }
+
+  onConfigurationUpdate(newConfig: Configuration): void {
+    this.publishSystemFontScale(newConfig.fontSizeScale);
+  }
+
   onCreate(want: Want, launchParam: AbilityConstant.LaunchParam) {
     this.privacyProbeStartedAt = Date.now();
     this.logPrivacyProbe('ability-create');
+    this.publishSystemFontScale(this.context.config?.fontSizeScale);
     hilog.info(LOG_DOMAIN, LOG_TAG, '[privacy-gate] ability created; Qt initialization is blocked pending consent');
     this.readEarlyNightMode();
     AppStorage.setOrCreate('stellariumStartupPreparing', false);

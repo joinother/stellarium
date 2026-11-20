@@ -5,6 +5,7 @@ import { I18n, PROJECTION_KEYS } from '../../pages/I18n'
 import { TabItem, PluginItem } from '../../pages/StellariumTypes'
 import { ConfigurationOption } from '../../pages/MainWindowModels'
 import { UI_RADIUS_CONTROL, UI_RADIUS_PILL, UI_RADIUS_PANEL } from '../../common/ui/UiTokens'
+import { panelFontSize, uiControlHeight } from '../../common/ui/UiTypography'
 import { GyroStore } from '../../state/GyroStore'
 import { OverlayStore } from '../../state/OverlayStore'
 import { DeltaTStore } from '../../state/DeltaTStore'
@@ -40,8 +41,26 @@ import { configDitheringLabel } from '../../common/derive/skycult'
 // 点"应用"才经 setNavigationMaxFov 下发生效。
 // Scroller（scriptListScroller）以普通成员传入：宿主仍持同一实例。
 
+interface FontScaleChoice {
+  mode: string
+  label: string
+}
+
+const FONT_SCALE_CHOICES: FontScaleChoice[] = [
+  { mode: 'system', label: '系统' },
+  { mode: 'standard', label: '标准' },
+  { mode: 'large', label: '偏大' },
+  { mode: 'xlarge', label: '大号' }
+]
+
 @Component
 export struct SettingsPanel {
+  @StorageProp('stellariumReadableUi') readableUi: boolean = false
+  @StorageProp('stellariumUiFontScale') uiFontScale: number = 1.0
+  @StorageProp('stellariumControlScale') controlScale: number = 1.0
+  @StorageProp('stellariumSystemFontScale') systemFontScale: number = 1.0
+  @Prop uiFontScaleMode: string = 'system'
+  setUiFontScaleMode: (mode: string) => void = () => {}
   @ObjectLink gyroStore: GyroStore
   @ObjectLink overlayStore: OverlayStore
   @ObjectLink deltaTStore: DeltaTStore
@@ -289,22 +308,27 @@ export struct SettingsPanel {
               .onClick(() => { this.confirmPrivacyRevocation() })
           } else if (this.configTab === 0) {
             Row() {
-              Column() {
-                Text('恢复默认设置').fontSize(14).fontColor(this.c.text).width('100%')
-                Text('重置引擎配置与界面偏好；收藏、观测列表等用户数据保留').fontSize(10).fontColor(this.c.sub).width('100%')
+              Column({ space: 2 }) {
+                Text('恢复默认设置')
+                  .fontSize(Math.round(panelFontSize(14, this.readableUi) * this.uiFontScale))
+                  .fontColor(this.c.text).width('100%')
+                Text('重置引擎配置与界面偏好；收藏、观测列表等用户数据保留')
+                  .fontSize(Math.round(panelFontSize(10, this.readableUi) * this.uiFontScale))
+                  .fontColor(this.c.sub).width('100%')
               }
               .layoutWeight(1)
               .alignItems(HorizontalAlign.Start)
               .padding({ left: 10, right: 8 })
               Button('重置', { type: ButtonType.Capsule })
-                .fontSize(13)
+                .fontSize(Math.round(panelFontSize(13, this.readableUi) * this.uiFontScale))
                 .fontColor(this.c.errorText)
                 .backgroundColor(this.c.errorBg)
-                .height(40)
-                .padding({ left: 24, right: 24 })
+                .constraintSize({ minHeight: uiControlHeight(38, this.readableUi, this.controlScale) })
+                .padding({ left: 20, right: 20, top: 6, bottom: 6 })
                 .margin({ right: 10 })
             }
-            .height(48)
+            .constraintSize({ minHeight: uiControlHeight(50, this.readableUi, this.controlScale) })
+            .padding({ top: 6, bottom: 6 })
             .width('100%')
             .margin({ bottom: 4 })
             .onClick(() => {
@@ -322,6 +346,53 @@ export struct SettingsPanel {
               })
             })
             LanguageRow({ selectedLanguage: this.selectedLanguage, onSelect: (code: string) => { this.setLanguage(code) } })
+            // 统一界面字体与按钮尺寸分级控制（跟随系统或手动 3 档，统筹管理按钮行高与字号）
+            Column({ space: 8 }) {
+              Row() {
+                Text('界面字体与按钮大小')
+                  .fontSize(Math.round(panelFontSize(13, this.readableUi) * this.uiFontScale))
+                  .fontWeight(FontWeight.Medium)
+                  .fontColor(this.c.text)
+                  .layoutWeight(1)
+                Text(this.uiFontScaleMode === 'system'
+                  ? ('跟随系统 · ' + Math.round(this.systemFontScale * 100).toString() + '%')
+                  : (this.uiFontScaleMode === 'standard' ? '标准 100%' : (this.uiFontScaleMode === 'large' ? '偏大 115%' : '大号 130%')))
+                  .fontSize(Math.round(panelFontSize(11, this.readableUi) * this.uiFontScale))
+                  .fontColor(this.c.accent)
+              }.width('100%')
+              Row({ space: 6 }) {
+                ForEach(FONT_SCALE_CHOICES, (opt: FontScaleChoice) => {
+                  Row() {
+                    Text(opt.label)
+                      .fontSize(Math.round(panelFontSize(12, this.readableUi) * this.uiFontScale))
+                      .maxFontScale(1.25)
+                      .maxLines(1)
+                      .textOverflow({ overflow: TextOverflow.Ellipsis })
+                      .fontWeight(this.uiFontScaleMode === opt.mode ? FontWeight.Medium : FontWeight.Regular)
+                      .fontColor(this.uiFontScaleMode === opt.mode ? this.c.onAccent : this.c.sub)
+                  }
+                  .layoutWeight(1)
+                  .constraintSize({ minHeight: uiControlHeight(34, this.readableUi, this.controlScale) })
+                  .padding({ left: 4, right: 4, top: 6, bottom: 6 })
+                  .justifyContent(FlexAlign.Center)
+                  .alignItems(VerticalAlign.Center)
+                  .backgroundColor(this.uiFontScaleMode === opt.mode ? this.c.accent : this.c.input)
+                  .borderRadius(UI_RADIUS_CONTROL)
+                  .clickEffect({ level: ClickEffectLevel.LIGHT, scale: 0.97 })
+                  .animation({ duration: 180, curve: Curve.EaseOut })
+                  .onClick(() => { this.setUiFontScaleMode(opt.mode) })
+                }, (opt: FontScaleChoice) => opt.mode)
+              }.width('100%')
+              Text('已适配系统字体缩放（上限 145%），按钮与行高随字号同步调整，避免截断或重叠。')
+                .fontSize(Math.round(panelFontSize(10, this.readableUi) * this.uiFontScale))
+                .fontColor(this.c.sub)
+                .width('100%')
+            }
+            .width('100%')
+            .padding({ left: 10, right: 10, top: 10, bottom: 10 })
+            .backgroundColor(this.c.soft)
+            .borderRadius(UI_RADIUS_CONTROL)
+            .margin({ top: 6, bottom: 6 })
             Text('行星历表').fontSize(12).fontColor(this.c.sub).width('100%').padding({ left: 8 }).margin({ top: 6, bottom: 4 })
             Text('用于行星位置计算的 JPL 数值星历。仅显示设备中已安装的文件。').fontSize(10).fontColor(this.c.sub).width('100%').padding({ left: 10, right: 10 }).margin({ bottom: 5 })
             EphemerisToggleRow({ label: 'DE430', available: this.ephemerisStore.ephemerisDe430Available, isEnabled: this.ephemerisStore.ephemerisDe430Active, onToggle: (v: boolean) => { this.setEphemerisEnabled('de430', this.ephemerisStore.ephemerisDe430Available, v) } })
@@ -349,9 +420,15 @@ export struct SettingsPanel {
                   })
               }
             }.height(34).width('100%').padding({ left: 10, right: 10 }).margin({ bottom: 4 })
-            Button(I18n.t('i0251') + '设置').fontSize(11).fontColor(this.c.text).backgroundColor(this.c.bg)
-              .borderRadius(UI_RADIUS_CONTROL).height(30).padding({ left: 12, right: 12 }).margin({ top: 6, left: 8 })
-              .onClick(() => { this.saveAppSettings(); this.flashHint('设置已保存') })
+            Row() {
+              Button(I18n.t('i0251') + '设置')
+                .fontSize(Math.round(panelFontSize(12, this.readableUi) * this.uiFontScale))
+                .fontColor(this.c.text).backgroundColor(this.c.bg)
+                .borderRadius(UI_RADIUS_CONTROL)
+                .constraintSize({ minHeight: uiControlHeight(34, this.readableUi, this.controlScale) })
+                .padding({ left: 14, right: 14, top: 6, bottom: 6 })
+                .onClick(() => { this.saveAppSettings(); this.flashHint('设置已保存') })
+            }.width('100%').padding({ left: 8, right: 8 }).margin({ top: 6 })
             Text('无线控制（HTTP REST API / 网页遥控）').fontSize(12).fontColor(this.c.sub).width('100%').padding({ left: 8 }).margin({ top: 12, bottom: 4 })
             Text('开启后，同一 Wi-Fi 下的电脑、手机或脚本可凭访问密钥通过网页或标准 Stellarium /api/* 接口控制星图（支持 Basic 认证、Bearer 令牌与 X-API-Key）。')
               .fontSize(10).fontColor(this.c.sub).width('100%').padding({ left: 10, right: 10 }).margin({ bottom: 6 })

@@ -1,5 +1,29 @@
 > **身份图例**：本文件真机记录中出现的 `com.cnchensh.stellarium` 是**本机调试签名身份**（本机 DevEco 自动生成，非发布身份）；发布身份为 `com.joinother.skyinstrument`。构建脚本 `build-ohos-hap-windows.ps1 -Install` 从产物 `pack.info` 读取实际包名，仓库不写死任何签名身份（见 `docs/harmonyos/release/BUNDLE-IDENTITY-CLEANUP.md`）。
 
+## [2026-11-20] 天文计算面板全面提速与重排、全应用华为滚动顶部渐进模糊及动态字体与按钮尺寸统筹管理
+
+- **修改文件：** `src/StelMainView.cpp`、`harmonyos/AppScope/app.json5`、`harmonyos/AppScope/resources/base/profile/configuration.json`、`harmonyos/ets-source/qability/QAbility.ets`、`harmonyos/ets-source/common/ui/UiTypography.ets`、`harmonyos/ets-source/common/ui/InfoRow.ets`、`harmonyos/ets-source/common/ui/SettingsChoiceButton.ets`、`harmonyos/ets-source/common/ui/SettingsSwitchRow.ets`、`harmonyos/ets-source/panels/shell/PanelHeader.ets`、`harmonyos/ets-source/panels/shell/DockButton.ets`、`harmonyos/ets-source/panels/astro/AstroPanel.ets`、`harmonyos/ets-source/panels/astro/WutTargetCard.ets`、`harmonyos/ets-source/panels/panels/SettingsPanel.ets`、`harmonyos/ets-source/capability/AstroCalcController.ets`、`harmonyos/ets-source/state/AstroStore.ets`、`harmonyos/ets-source/state/SettingsRepository.ets`、`harmonyos/ets-source/pages/MainWindowNativeNode.ets`、`harmonyos/resources/zh_CN/element/string.json`、`harmonyos/ets-source/resources/zh_CN/element/string.json`、`docs/harmonyos/CHANGELOG.md`。
+- **四大升级与修复：**
+  1. **天文计算引擎与切页全面提速（实测最高提速 37×）：**
+     - **C++ `getMoonPhases`（`src/StelMainView.cpp`）：** 将原先 4 遍独立 `0.25` 天循环改为单遍 `0.5` 天同步检测 4 个相位并做 16 步二分精化；同时改为基于日心坐标的地心黄经差 + 严格 `360° → 0°` 正向过零判定，根治异星观测下逆行抖动触发 240 次误算的问题（真机 30 天月相由 `11,534ms` 降至 `311ms`，精确输出 4 场月相）。
+     - **C++ `getPhenomena`（`src/StelMainView.cpp`）：** 不含月球的行星天象扫描步长优化为 `1.0` 天（4× 减少引擎步进），并将全部极值细化由 73 步穷举升级为 16 步黄金分割搜索（4× 提速且精度提升至 ~1.3 分钟）；`AstroStore` 默认预测窗口调整为 `90 天`（仍可一键切换 `30 天 ~ 2.0 年`）。
+     - **C++ `getObjectPositions` & `getPlanetCalc` 异星 `NaN` 根治：** 补入 `Earth` 并自动跳过当前观测星球自身（`p == observerPlanet`），对全部输出增加 `std::isfinite` 防护，根治站在金星/火星/月球等外星时因 `0/0 = NaN` 导致「天体位置表」与「行星实时数据」报错失败的问题。
+     - **ArkTS `AstroCalcController.ets`：** 新增按页签/上下文/参数分桶的结果缓存（回切已看页签 0ms 秒开）；切页瞬间并行预拉取数据（消除原先 270ms 动画空等）；上下文轮询节流为 4s 且加载忙时自动避让；在 Tab 5「今晚」加载完成后联动 `persistAlmanacCardSnapshot()` 同步桌面卡片快照，并将日食/凌日/今晚行星/流星雨行点击统一升级为平滑时间跳转 `jumpToJdSmooth()`。
+  2. **天文计算面板 UI 与排版深度梳理重构（`AstroPanel.ets`）：**
+     - 顶部一级分组重构为等宽 3 格鸿蒙分段控件（`观测 | 位置与数据 | 事件与历法`），二级页签统一胶囊高度；
+     - 将原先常驻占用约 125vp 的 5 行上下文黑框与独立「导出当前数据 CSV」行合并为**单行可折叠观测上下文栏 + 内联 `导出 CSV` 按钮**（默认仅占单行，点击「详情 ▾」平滑展开完整恒星时/时间方程/参数快照，太阳符号统一为单色 `☉`），瞬间释放约 110vp 首屏内容区；
+     - 修复 `天象` 筛选区「预测范围」「最大角距」莫名居中、「刷新位置」按钮居中、以及多级嵌套 `Scroll` 劫持滑动手势与 220vp 狭小列表窗的问题；补齐 `天体位置表` 表头与数据列像素级右对齐，并修复 `zh_CN` 面板标题去掉残留英文前缀 `AstroCalc：`。
+  3. **按华为官方设计规范落地全应用「上下滑动顶部渐进模糊」（`ui-design-navigation-dynamic-blur` / `bpta-spatiality-immersive`）：**
+     - 重构 `MainWindowNativeNode.ets` 的 `floatingPanel()`（平板/折叠展开）与 `compactPanel()`（手机/半折）为 `Stack({ alignContent: Alignment.Top })` 结构，滚动内容自然穿过悬浮标题栏下方；
+     - 随 `onDidScroll` 偏移在 `0 → 24vp` 区间平滑线性驱动顶部标题栏 `backdropBlur`（最高 22vp）+ 自顶向下羽化渐变背板 + 底缘极细分割线，日间/深空/红光夜视模式全适配，覆盖天文计算、设置、搜索、图层、日历、更多功能等全部面板。
+  4. **全局字体大小与按钮尺寸统筹规划管理（`arkui-support-for-aging-adaptation`）：**
+     - 在 `AppScope/app.json5` 与 `AppScope/resources/base/profile/configuration.json` 正式声明 `fontSizeScale: "followSystem"`（上限 `1.45` = 鸿蒙大 3 档），并在 `QAbility.ets` 监听 `onConfigurationUpdate` 实时同步系统字体倍率；
+     - 在 `UiTypography.ets` 扩展 `clampUiScale / uiFontSize / uiControlHeight / uiChipPaddingV` 统一令牌，同步持久化 `uiFontScaleMode`（`SettingsRepository.ets`）；
+     - 在「设置 → 主设置」新增 4 档分段控制 **「界面字体与按钮大小」**（`系统 | 标准 | 偏大 | 大号`），全应用按钮、行高、标签、面板头与天文计算面板同步联动缩放，并在 `DockButton` / `PanelHeader` / `InfoRow` / `SettingsChoiceButton` / `SettingsSwitchRow` / `WutTargetCard` 全面改用 `constraintSize({ minHeight })` + `maxFontScale`，杜绝大字号截断、重叠或省略号。
+- **验证与真机实测（MatePad Mini `192.168.31.234:42713`）：**
+  - 主机验证：`check-ohos-ui-contract.mjs`（58 锚点零回归）、`test-ohos-form-cards.mjs`、`test-ohos-off-earth-calendar-and-snapshot.mjs`、`test-ohos-notification-integration.mjs`、`test-ohos-native-astronomy-calendar.mjs` 全通过。
+  - 真机实拍与日志核验：`getMoonPhases` 30 天实测由 `11,534ms (240 误报)` 降至 `311ms (4 场精确月相)`；在金星观测点下「天体位置表」正常展示太阳、月球与地球数据且表头与数值齐整对齐；「设置」与「天文计算」上滑时顶部均呈现细腻柔和的华为渐进模糊毛玻璃；「大号 130%」下设置页 `系统 | 标准 | 偏大 | 大号` 四键与天文计算筛选区均无截断、无重叠、无省略号；「今晚」加载自动触发 `[form-update] updated=9` 刷新桌面卡片。
+
 ## [2026-11-20] 桌面卡片名称本地化资源修复与编辑页均匀网格重排（含 `jd = 0` 路由兜底修复）
 
 - **修改文件：** `harmonyos/resources/base/profile/form_config.json`、`harmonyos/resources/base/element/string.json`、`harmonyos/resources/zh_CN/element/string.json`、`harmonyos/resources/zh_HK/element/string.json`、`harmonyos/resources/zh_TW/element/string.json`、`harmonyos/resources/en_US/element/string.json`、`harmonyos/ets-source/form/SkyFormEditPage.ets`、`harmonyos/ets-source/qability/QAbility.ets`、`harmonyos/ets-source/pages/MainWindowNativeNode.ets`、`scripts/test-ohos-form-cards.mjs`、`docs/harmonyos/CHANGELOG.md`。

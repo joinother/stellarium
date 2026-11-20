@@ -43,6 +43,9 @@ export struct DockButton {
         .colorFilter(tintMatrixFor(this.isActive() ? this.c.dockActive : this.c.idleIcon))
       Text(this.label)
         .fontSize(this.labelFontSize)
+        .maxFontScale(1.2)
+        .maxLines(1)
+        .textOverflow({ overflow: TextOverflow.Ellipsis })
         .fontColor(this.isActive() ? this.c.dockActive : this.c.idleIcon)
         .margin({ top: 2 })
     }

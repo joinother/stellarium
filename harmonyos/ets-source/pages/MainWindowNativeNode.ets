@@ -121,6 +121,7 @@ import { EquationOfTimeStore } from '../state/EquationOfTimeStore'
 import { DeltaTStore } from '../state/DeltaTStore'
 import { TimeSettingsStore } from '../state/TimeSettingsStore'
 import { SettingsChoiceButton } from '../common/ui/SettingsChoiceButton'
+import { clampUiScale, uiControlHeight } from '../common/ui/UiTypography'
 import { NightModeStore } from '../state/NightModeStore'
 import { SettingsRepository, SettingsPersistencePort, UiSettings, UI_SETTINGS_STORE, UI_SETTINGS_KEY } from '../state/SettingsRepository'
 import { accentForNightMode, slotsForNightMode, stellariumTheme, AstroColors, DEFAULT_SLOTS, ThemeSlots } from '../state/StellariumTheme'
@@ -1272,6 +1273,11 @@ export struct WindowNativeNode {
   // 面板内容 Scroll 正在滚动（拖拽或惯性）。与 panelDragging 分开：抓手拖动改变
   // 面板高度，内容滚动只改 Scroll offset，但两者都会让大面积模糊每帧重算。
   @State private panelScrolling: boolean = false
+  // 华为 HarmonyOS 设计规范：面板上下滑动时顶部标题栏渐进式动态模糊进度（0=顶部通透，1=滚动 >=24vp 完整毛玻璃）。
+  @State private panelScrollBlurProgress: number = 0
+  // 统一字体与按钮尺寸档位（'system' | 'standard' | 'large' | 'xlarge'），与系统 fontSizeScale 联动。
+  @State private uiFontScaleMode: string = 'system'
+  @StorageProp('stellariumSystemFontScale') @Watch('syncUiTypographyScale') private systemFontScale: number = 1.0
   // 手指按在面板上。空闲玻璃态（5s 无操作后 opacity 0.88 / 模糊 45）在按下瞬间恢复；
   // 若让它走 320ms 动画，会和滚动启动抢 UI 线程，首帧出现约 50ms 卡顿。
   @State private panelTouching: boolean = false
@@ -1755,6 +1761,7 @@ export struct WindowNativeNode {
 
   aboutToAppear(): void {
     hilog.info(0x0000, 'StellariumArkUI', '[privacy-probe] phase=main-page-appear')
+    this.syncUiTypographyScale()
     const localStorage = this.getUIContext().getSharedLocalStorage()
     if (localStorage) {
       this.createInfo = localStorage.get<WindowNativeNodeCreateInfo>('createInfo')
@@ -3571,7 +3578,10 @@ export struct WindowNativeNode {
         publishAstroPanelState: (): void => { this.publishAstroPanelState() },
         astroPanelContextActive: (): boolean => this.applicationInForeground && this.activePanel === 'astro' && this.panelVisible,
         astroPanelOnScreen: (): boolean => this.panelVisible && this.activePanel === 'astro',
-        scrollAstroPanelToTop: (): void => { this.astroPanelScroller.scrollTo({ xOffset: 0, yOffset: 0, animation: false }) },
+        scrollAstroPanelToTop: (): void => {
+          this.astroPanelScroller.scrollTo({ xOffset: 0, yOffset: 0, animation: false })
+          this.resetPanelScroll(this.isExpandedLayout ? this.widePanelScroller : this.compactPanelScroller)
+        },
         saveAppSettings: (): void => { this.saveAppSettings() },
         animateAstroIn: (durationMs: number, onFinish: () => void, action: () => void): void => {
           this.getUIContext().animateTo({ duration: durationMs, curve: Curve.EaseIn, onFinish: onFinish }, action)
@@ -3908,9 +3918,52 @@ export struct WindowNativeNode {
       graphMode: this.astroStore.graphMode,
       eclipseMonths: this.astroStore.eclipseMonths,
       moonPhaseDays: this.astroStore.moonPhaseDays,
-      touchPickRadiusVp: this.viewSettingsStore.touchPickRadiusVp
+      touchPickRadiusVp: this.viewSettingsStore.touchPickRadiusVp,
+      uiFontScaleMode: this.uiFontScaleMode
     }
     return next
+  }
+
+  // 统筹同步全应用字号比例与按钮控件缩放倍率：
+  // - 'system' 模式下 ArkUI 原生按 configuration.json(followSystem) 缩放 fp，应用内字号倍率保持 1.0 避免双重放大，
+  //   同时把控制栏高度倍率同步为系统倍率，确保按钮/行高随系统字体一起自适应伸展不截断。
+  // - 'standard' / 'large' / 'xlarge' 在当前基础上提供清晰可控的三档实时缩放。
+  private syncUiTypographyScale(): void {
+    const sys = clampUiScale(this.systemFontScale)
+    let fontScale = 1.0
+    if (this.uiFontScaleMode === 'large') fontScale = 1.15
+    else if (this.uiFontScaleMode === 'xlarge') fontScale = 1.30
+    const controlScale = clampUiScale(Math.max(fontScale, sys * fontScale))
+    AppStorage.setOrCreate<number>('stellariumUiFontScale', fontScale)
+    AppStorage.setOrCreate<number>('stellariumControlScale', controlScale)
+  }
+
+  private setUiFontScaleMode(mode: string): void {
+    if (mode !== 'system' && mode !== 'standard' && mode !== 'large' && mode !== 'xlarge') return
+    if (this.uiFontScaleMode === mode) return
+    this.uiFontScaleMode = mode
+    this.syncUiTypographyScale()
+    this.saveAppSettings()
+    const label = mode === 'system' ? '跟随系统' : (mode === 'standard' ? '标准' : (mode === 'large' ? '偏大' : '大号'))
+    this.flashHint('界面字体与按钮已切换为：' + label)
+  }
+
+  // 按华为 HarmonyOS 标题栏动态模糊规范（0 -> 24vp 渐进）更新顶部毛玻璃背板进度。
+  private updatePanelScrollBlur(offsetY: number): void {
+    const raw = Number.isFinite(offsetY) ? clamp(offsetY / 24, 0, 1) : 0
+    if (Math.abs(raw - this.panelScrollBlurProgress) >= 0.04
+      || (raw === 0 && this.panelScrollBlurProgress !== 0)
+      || (raw === 1 && this.panelScrollBlurProgress !== 1)) {
+      this.panelScrollBlurProgress = raw
+    }
+  }
+
+  private panelTopChromeHeight(isCompact: boolean): number {
+    const hasSubtitle = this.timeStore.panelSubtitle(this.activePanel).length > 0
+    const controlScale = clampUiScale(AppStorage.get<number>('stellariumControlScale') ?? 1.0)
+    const headerH = uiControlHeight(hasSubtitle ? 54 : 44, this.isLargeDesktopCanvas(), controlScale)
+    // 顶部内边距（18/12）+ PanelHandle(30) + PanelHeader + 底部柔和留白(10)
+    return (isCompact ? 12 : 18) + 30 + headerH + 10
   }
 
   // 恢复默认设置成功后退出应用：main/restore_defaults 只在下一次启动时生效。
@@ -3979,6 +4032,8 @@ export struct WindowNativeNode {
       touchPickRadiusVp: settings.touchPickRadiusVp.toString()
     }))
     this.viewSettingsStore.touchPickRadiusVp = settings.touchPickRadiusVp
+    this.uiFontScaleMode = settings.uiFontScaleMode
+    this.syncUiTypographyScale()
     this.callInteractive('setTouchPickRadius', settings.touchPickRadiusVp.toString(), () => {})
     if (this.startupBridgeImpl !== null) {
       this.startupBridge().restoreStartupSettings()
@@ -4741,6 +4796,7 @@ export struct WindowNativeNode {
   }
 
   private resetPanelScroll(scroller: Scroller): void {
+    this.panelScrollBlurProgress = 0
     try {
       scroller.scrollTo({ xOffset: 0, yOffset: 0, animation: false })
     } catch (error) {
@@ -9007,21 +9063,7 @@ export struct WindowNativeNode {
 
   @Builder
   floatingPanel() {
-    Column() {
-      // 平板/展开布局也用顶部抓手：快捷面板自下而上展开，上拉显示更多按钮。
-      PanelHandle({ onDrag: (offsetY: number) => { this.updateExpandedPanelDrag(offsetY) }, onDragFinish: () => { this.settleExpandedPanelDrag() } })
-      PanelHeader({
-        title: panelTitleFor(this.activePanel, this.configTab, this.isExpandedLayout, this.timeStore.timePanelClockText(), this.quickPanelLocationLabel()), subtitle: this.timeStore.panelSubtitle(this.activePanel), canGoBack: this.canGoBackPanel(),
-        routeOpacity: this.panelRouteOpacity, routeOffsetX: this.panelRouteOffsetX,
-        headerActionLabel: this.panelHeaderActionLabel(),
-        headerActionIcon: this.panelHeaderActionIcon(),
-        headerActionAccent: this.activePanel === 'place',
-        titleAsButton: this.activePanel === 'quick',
-        onBack: () => { this.handlePanelBackTap() },
-        onClose: () => { this.closePanel(true); this.resetPanelIdle() },
-        onHeaderAction: () => { this.handlePanelHeaderAction() },
-        onTitleTap: () => { this.openSubPanel('place') }
-      })
+    Stack({ alignContent: Alignment.Top }) {
       Scroll(this.widePanelScroller) {
         Column() {
           Column() {
@@ -9032,28 +9074,84 @@ export struct WindowNativeNode {
             .translate({ x: this.panelRouteOffsetX, y: 0 })
         }
           .width('100%')
+          .padding({ top: this.panelTopChromeHeight(false), left: 18, right: 18, bottom: 18 })
       // Keep the route host stable. Changing its id on every navigation makes
       // ArkUI replace the node and bypass the explicit out/swap/in animation.
       .id('panel-content-' + this.i18nLang)
       }
         .width('100%')
-        .layoutWeight(1)
+        .height('100%')
         .scrollable(ScrollDirection.Vertical)
         .id('panel-scroll-' + this.i18nLang)
         .scrollBar(BarState.Off)
         .edgeEffect(EdgeEffect.Spring)
+        .onDidScroll(() => {
+          this.updatePanelScrollBlur(this.widePanelScroller.currentOffset().yOffset)
+        })
         .onScrollStart(() => { if (!this.panelScrolling) this.panelScrolling = true })
-        .onScrollStop(() => { this.panelScrolling = false })
+        .onScrollStop(() => {
+          this.panelScrolling = false
+          this.updatePanelScrollBlur(this.widePanelScroller.currentOffset().yOffset)
+        })
         .onAppear(() => { this.resetPanelScroll(this.widePanelScroller) })
+
+      // 华为 HarmonyOS 标题栏滚动渐进模糊层：内容上滑穿过标题栏下方时，柔和毛玻璃背板与极细底边随距离渐现。
+      Stack({ alignContent: Alignment.Top }) {
+        Column()
+          .width('100%')
+          .height('100%')
+          .backdropBlur(this.panelScrollBlurProgress > 0.02 ? Math.round(this.panelScrollBlurProgress * 22) : 0)
+          .linearGradient({
+            direction: GradientDirection.Bottom,
+            colors: [
+              [this.hostSlots().panelGlassStrong, 0.0],
+              [this.hostSlots().panelGlassStrong, 0.78],
+              [Color.Transparent, 1.0]
+            ]
+          })
+          .opacity(this.panelScrollBlurProgress)
+          .hitTestBehavior(HitTestMode.None)
+
+        Column() {
+          // 平板/展开布局也用顶部抓手：快捷面板自下而上展开，上拉显示更多按钮。
+          PanelHandle({ onDrag: (offsetY: number) => { this.updateExpandedPanelDrag(offsetY) }, onDragFinish: () => { this.settleExpandedPanelDrag() } })
+          PanelHeader({
+            title: panelTitleFor(this.activePanel, this.configTab, this.isExpandedLayout, this.timeStore.timePanelClockText(), this.quickPanelLocationLabel()), subtitle: this.timeStore.panelSubtitle(this.activePanel), canGoBack: this.canGoBackPanel(),
+            routeOpacity: this.panelRouteOpacity, routeOffsetX: this.panelRouteOffsetX,
+            headerActionLabel: this.panelHeaderActionLabel(),
+            headerActionIcon: this.panelHeaderActionIcon(),
+            headerActionAccent: this.activePanel === 'place',
+            titleAsButton: this.activePanel === 'quick',
+            compactMargin: true,
+            onBack: () => { this.handlePanelBackTap() },
+            onClose: () => { this.closePanel(true); this.resetPanelIdle() },
+            onHeaderAction: () => { this.handlePanelHeaderAction() },
+            onTitleTap: () => { this.openSubPanel('place') }
+          })
+          Blank()
+          Row()
+            .width('100%')
+            .height(0.5)
+            .backgroundColor(this.hostSlots().border)
+            .opacity(this.panelScrollBlurProgress * 0.65)
+            .hitTestBehavior(HitTestMode.None)
+        }
+          .width('100%')
+          .height('100%')
+          .padding({ top: 18, left: 18, right: 18, bottom: 0 })
+      }
+        .width('100%')
+        .height(this.panelTopChromeHeight(false))
+        .zIndex(12)
     }
       .width(this.panelWidth)
       .height(this.activePanel === 'quick' ? this.quickPanelContentHeight() : this.expandedPanelHeight())
       .constraintSize({ maxHeight: this.activePanel === 'quick' ? this.quickPanelContentHeight() : this.expandedPanelHeight() })
-      .padding({ top: 18, left: 18, right: 18, bottom: 18 })
       .backgroundColor(this.panelIdleGlass ? this.hostSlots().panelGlass : this.hostSlots().panelGlassStrong)
       .backdropBlur(this.panelChromeBusy() ? 0 : 30)
       .border({ width: 0.5, color: this.hostSlots().border })
       .borderRadius(UI_RADIUS_SHEET)
+      .clip(true)
       .shadow({ radius: this.panelChromeBusy() ? 0 : 34, color: this.hostSlots().shadowSoft, offsetX: 0, offsetY: 18 })
       .onTouch((event: TouchEvent) => { this.notePanelTouch(event) })
       .scale({ x: this.panelIdleOpacity < 1 ? 0.97 : 1.0, y: this.panelIdleOpacity < 1 ? 0.97 : 1.0 })
@@ -9070,20 +9168,7 @@ export struct WindowNativeNode {
 
   @Builder
   compactPanel() {
-    Column() {
-      PanelHandle({ onDrag: (offsetY: number) => { this.updateCompactPanelDrag(offsetY) }, onDragFinish: () => { this.settleCompactPanelDrag() } })
-      PanelHeader({
-        title: panelTitleFor(this.activePanel, this.configTab, this.isExpandedLayout, this.timeStore.timePanelClockText(), this.quickPanelLocationLabel()), subtitle: this.timeStore.panelSubtitle(this.activePanel), canGoBack: this.canGoBackPanel(),
-        routeOpacity: this.panelRouteOpacity, routeOffsetX: this.panelRouteOffsetX,
-        headerActionLabel: this.panelHeaderActionLabel(),
-        headerActionIcon: this.panelHeaderActionIcon(),
-        headerActionAccent: this.activePanel === 'place',
-        titleAsButton: this.activePanel === 'quick',
-        onBack: () => { this.handlePanelBackTap() },
-        onClose: () => { this.closePanel(true); this.resetPanelIdle() },
-        onHeaderAction: () => { this.handlePanelHeaderAction() },
-        onTitleTap: () => { this.openSubPanel('place') }
-      })
+    Stack({ alignContent: Alignment.Top }) {
       Scroll(this.compactPanelScroller) {
         Column() {
           Column() {
@@ -9094,25 +9179,89 @@ export struct WindowNativeNode {
             .translate({ x: this.panelRouteOffsetX, y: 0 })
         }
           .width('100%')
-          .padding({ bottom: this.activePanel === 'quick' ? 0 : 34 })
+          .padding({
+            top: this.panelTopChromeHeight(true),
+            left: this.compactPanelHorizontalPadding(),
+            right: this.compactPanelHorizontalPadding(),
+            bottom: this.activePanel === 'quick' ? 16 : 50
+          })
           .id('panel-content-' + this.i18nLang)
       }
         .width('100%')
-        .layoutWeight(1)
+        .height('100%')
         .id('panel-scroll-' + this.i18nLang)
         .scrollBar(BarState.Off)
         .edgeEffect(EdgeEffect.Spring)
+        .onDidScroll(() => {
+          this.updatePanelScrollBlur(this.compactPanelScroller.currentOffset().yOffset)
+        })
         .onScrollStart(() => { if (!this.panelScrolling) this.panelScrolling = true })
-        .onScrollStop(() => { this.panelScrolling = false })
+        .onScrollStop(() => {
+          this.panelScrolling = false
+          this.updatePanelScrollBlur(this.compactPanelScroller.currentOffset().yOffset)
+        })
         .onAppear(() => { this.resetPanelScroll(this.compactPanelScroller) })
+
+      // 紧凑态（手机/半折）同步启用华为标题栏渐进式动态模糊。
+      Stack({ alignContent: Alignment.Top }) {
+        Column()
+          .width('100%')
+          .height('100%')
+          .backdropBlur(this.panelScrollBlurProgress > 0.02 ? Math.round(this.panelScrollBlurProgress * 22) : 0)
+          .linearGradient({
+            direction: GradientDirection.Bottom,
+            colors: [
+              [this.hostSlots().panelGlassStrong, 0.0],
+              [this.hostSlots().panelGlassStrong, 0.78],
+              [Color.Transparent, 1.0]
+            ]
+          })
+          .opacity(this.panelScrollBlurProgress)
+          .hitTestBehavior(HitTestMode.None)
+
+        Column() {
+          PanelHandle({ onDrag: (offsetY: number) => { this.updateCompactPanelDrag(offsetY) }, onDragFinish: () => { this.settleCompactPanelDrag() } })
+          PanelHeader({
+            title: panelTitleFor(this.activePanel, this.configTab, this.isExpandedLayout, this.timeStore.timePanelClockText(), this.quickPanelLocationLabel()), subtitle: this.timeStore.panelSubtitle(this.activePanel), canGoBack: this.canGoBackPanel(),
+            routeOpacity: this.panelRouteOpacity, routeOffsetX: this.panelRouteOffsetX,
+            headerActionLabel: this.panelHeaderActionLabel(),
+            headerActionIcon: this.panelHeaderActionIcon(),
+            headerActionAccent: this.activePanel === 'place',
+            titleAsButton: this.activePanel === 'quick',
+            compactMargin: true,
+            onBack: () => { this.handlePanelBackTap() },
+            onClose: () => { this.closePanel(true); this.resetPanelIdle() },
+            onHeaderAction: () => { this.handlePanelHeaderAction() },
+            onTitleTap: () => { this.openSubPanel('place') }
+          })
+          Blank()
+          Row()
+            .width('100%')
+            .height(0.5)
+            .backgroundColor(this.hostSlots().border)
+            .opacity(this.panelScrollBlurProgress * 0.65)
+            .hitTestBehavior(HitTestMode.None)
+        }
+          .width('100%')
+          .height('100%')
+          .padding({
+            top: 12,
+            left: this.compactPanelHorizontalPadding(),
+            right: this.compactPanelHorizontalPadding(),
+            bottom: 0
+          })
+      }
+        .width('100%')
+        .height(this.panelTopChromeHeight(true))
+        .zIndex(12)
     }
       .width(this.isFoldHoverLayout ? '64%' : '94%')
       .height(this.compactPanelHeight())
-      .padding({ top: 12, left: this.compactPanelHorizontalPadding(), right: this.compactPanelHorizontalPadding(), bottom: 16 })
       .backgroundColor(this.panelIdleGlass ? this.hostSlots().panelGlass : this.hostSlots().panelGlassStrong)
       .backdropBlur(this.panelChromeBusy() ? 0 : 30)
       .border({ width: 0.5, color: this.hostSlots().border })
       .borderRadius(UI_RADIUS_SHEET)
+      .clip(true)
       .shadow({ radius: this.panelChromeBusy() ? 0 : 30, color: this.hostSlots().shadowSoft, offsetX: 0, offsetY: 14 })
       .margin({ bottom: 10 })
       .hitTestBehavior(HitTestMode.Default)
@@ -9454,6 +9603,8 @@ export struct WindowNativeNode {
       })
     } else if (this.activePanel === 'settings') {
       SettingsPanel({
+        uiFontScaleMode: this.uiFontScaleMode,
+        setUiFontScaleMode: (mode: string) => { this.setUiFontScaleMode(mode) },
         gyroStore: this.gyroStore,
         overlayStore: this.overlayStore,
         deltaTStore: this.deltaTStore,
@@ -9677,6 +9828,7 @@ export struct WindowNativeNode {
           jdToDateStr: (jd: string) => this.jdToDateStr(jd),
           jumpToAlmanacSeason: (event: SeasonEvent) => { this.astroCalcCtl().jumpToAlmanacSeason(event) },
           jumpToEphemerisRow: (row: EphemerisRow) => { this.astroCalcCtl().jumpToEphemerisRow(row) },
+          jumpToJdSmooth: (jd: number, label: string) => { this.astroCalcCtl().jumpToJdSmooth(jd, label) },
           jumpToMoonPhase: (item: MoonPhaseItem) => { this.astroCalcCtl().jumpToMoonPhase(item) },
           jumpToObservabilityDay: (day: ObservabilityDay) => { this.astroCalcCtl().jumpToObservabilityDay(day) },
           jumpToPhenomenon: (item: PhenomenonItem) => { this.astroCalcCtl().jumpToPhenomenon(item) },
@@ -9708,6 +9860,10 @@ export struct WindowNativeNode {
           lunarElongationLineTop: () => this.astroStore.lunarElongationLineTop(),
           lunarElongationNowLabel: () => this.astroStore.lunarElongationNowLabel(),
           markRtsCalendarForRegeneration: () => { this.astroCalcCtl().markRtsCalendarForRegeneration() },
+          onScrollY: (offsetY: number) => {
+            const outer = (this.isExpandedLayout ? this.widePanelScroller : this.compactPanelScroller).currentOffset().yOffset
+            this.updatePanelScrollBlur(Math.max(outer, offsetY))
+          },
           openAstroTargetPicker: () => { this.astroCalcCtl().openAstroTargetPicker() },
           openEphemerisTargetPicker: () => { this.astroCalcCtl().openEphemerisTargetPicker() },
           openGraphTargetPicker: () => { this.astroCalcCtl().openGraphTargetPicker() },

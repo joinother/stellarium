@@ -164,7 +164,7 @@ export class AstroStore {
   phenomenaLoading: boolean = false
   phenomenaPrimary: string = 'all'
   phenomenaTarget: string = 'all'
-  phenomenaDays: number = 400
+  phenomenaDays: number = 90
   phenomenaStartOffsetMonths: number = 0
   phenomenaMaxSeparation: number = 4
   phenomenaIncludeOppositions: boolean = true

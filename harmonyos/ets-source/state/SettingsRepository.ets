@@ -32,6 +32,7 @@ export interface UiSettings {
   eclipseMonths: number
   moonPhaseDays: number
   touchPickRadiusVp: number
+  uiFontScaleMode: string
 }
 
 export function defaultUiSettings(): UiSettings {
@@ -56,7 +57,8 @@ export function defaultUiSettings(): UiSettings {
     graphMode: 0,
     eclipseMonths: 36,
     moonPhaseDays: 30,
-    touchPickRadiusVp: 66
+    touchPickRadiusVp: 66,
+    uiFontScaleMode: 'system'
   }
 }
 
@@ -138,6 +140,10 @@ export function migrateUiSettings(raw: string): UiSettings {
   out.eclipseMonths = numOf(obj['eclipseMonths'], defaults.eclipseMonths)
   out.moonPhaseDays = numOf(obj['moonPhaseDays'], defaults.moonPhaseDays)
   out.touchPickRadiusVp = clampInt(numOf(obj['touchPickRadiusVp'], defaults.touchPickRadiusVp), 24, 96, defaults.touchPickRadiusVp)
+  const rawFontMode = strOf(obj['uiFontScaleMode'], defaults.uiFontScaleMode)
+  out.uiFontScaleMode = (rawFontMode === 'system' || rawFontMode === 'standard' || rawFontMode === 'large' || rawFontMode === 'xlarge')
+    ? rawFontMode
+    : defaults.uiFontScaleMode
   return out
 }
 

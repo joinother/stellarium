@@ -1,5 +1,5 @@
 import { curves, Theme } from '@kit.ArkUI'
-import { panelFontSize } from '../../common/ui/UiTypography'
+import { panelFontSize, uiControlHeight } from '../../common/ui/UiTypography'
 import { UI_RADIUS_PILL } from '../../common/ui/UiTokens'
 import { getIcon } from '../../common/ui/ShellIcons'
 import { tintMatrixFor } from '../../common/ui/IconTint'
@@ -22,6 +22,8 @@ import { DEFAULT_SLOTS, ThemeSlots, slotsFromTheme } from '../../state/Stellariu
 @Component
 export struct PanelHeader {
   @StorageProp('stellariumReadableUi') readableUi: boolean = false
+  @StorageProp('stellariumUiFontScale') uiFontScale: number = 1.0
+  @StorageProp('stellariumControlScale') controlScale: number = 1.0
   @Prop title: ResourceStr
   @Prop subtitle: string
   @Prop canGoBack: boolean
@@ -34,6 +36,7 @@ export struct PanelHeader {
   // Accent styling for primary actions (the location panel's Auto-locate).
   @Prop headerActionAccent: boolean = false
   @Prop titleAsButton: boolean = false
+  @Prop compactMargin: boolean = false
   @State c: ThemeSlots = DEFAULT_SLOTS
   onBack: () => void = () => {}
   onClose: () => void = () => {}
@@ -97,23 +100,28 @@ export struct PanelHeader {
         } else {
           Text(this.title)
             .fontSize(panelFontSize(18, this.readableUi))
+            .maxFontScale(1.35)
             .fontWeight(FontWeight.Medium)
             .fontColor(this.c.text)
+            .maxLines(1)
+            .textOverflow({ overflow: TextOverflow.Ellipsis })
         }
         if (this.subtitle.length > 0) {
           Text(this.subtitle)
-            .fontSize(14)
+            .fontSize(Math.round(13 * this.uiFontScale))
+            .maxFontScale(1.3)
             .fontColor(this.c.sub)
             .maxLines(1)
             .textOverflow({ overflow: TextOverflow.Ellipsis })
-            .margin({ top: 4 })
+            .margin({ top: 3 })
         }
       }
-        .height(this.subtitle.length > 0 ? 56 : 44)
+        .constraintSize({ minHeight: uiControlHeight(this.subtitle.length > 0 ? 54 : 44, this.readableUi, this.controlScale) })
+        .layoutWeight(1)
+        .alignItems(HorizontalAlign.Start)
         .justifyContent(FlexAlign.Center)
         .opacity(this.routeOpacity)
         .translate({ x: this.routeOffsetX, y: 0 })
-      Blank()
       if (this.headerActionLabel.length > 0) {
         // 单一 Button + 条件子节点：``panel-header-action`` 锚点只出现一次（契约按出现次数校验）。
         Button() {
@@ -122,14 +130,16 @@ export struct PanelHeader {
             Image(getIcon(this.headerActionIcon, false)).width(18).height(18).supportSvg2(true)
               .colorFilter(tintMatrixFor(this.headerActionAccent ? this.c.onAccent : this.c.text))
            } else {
-             Text(this.headerActionLabel).fontSize(11)
+             Text(this.headerActionLabel)
+               .fontSize(Math.round(12 * this.uiFontScale))
+               .maxFontScale(1.25)
+               .maxLines(1)
                .fontColor(this.headerActionAccent ? this.c.onAccent : this.c.text)
           }
         }
           .id('panel-header-action')
-          .constraintSize({ minWidth: 36 })
-          .height(36)
-          .padding(this.headerActionIcon.length > 0 ? 0 : { left: 10, right: 10 })
+          .constraintSize({ minWidth: 36, minHeight: uiControlHeight(36, this.readableUi, this.controlScale) })
+          .padding(this.headerActionIcon.length > 0 ? 0 : { left: 12, right: 12, top: 6, bottom: 6 })
           .backgroundColor(this.headerActionAccent ? this.c.accent : this.c.input)
           .borderRadius(UI_RADIUS_PILL)
           .zIndex(10)
@@ -137,7 +147,7 @@ export struct PanelHeader {
           .accessibilityText(this.headerActionLabel)
           .stateStyles({ pressed: { .opacity(0.62) } })
           .onClick(() => { this.onHeaderAction() })
-          .margin({ right: 8 })
+          .margin({ left: 8, right: 8 })
       }
       Button() {
         Image($r('app.media.ic_close'))
@@ -155,12 +165,12 @@ export struct PanelHeader {
       .zIndex(10)
       .clickEffect({ level: ClickEffectLevel.LIGHT })
       .onClick(() => { this.onClose() })
-      .margin({ right: 6 })
+      .margin({ left: this.headerActionLabel.length > 0 ? 0 : 8, right: 2 })
     }
       .width('100%')
-      .height(this.subtitle.length > 0 ? 56 : 44)
+      .constraintSize({ minHeight: uiControlHeight(this.subtitle.length > 0 ? 54 : 44, this.readableUi, this.controlScale) })
       .alignItems(VerticalAlign.Center)
-      .margin({ bottom: 14 })
+      .margin({ bottom: this.compactMargin ? 0 : 12 })
       .zIndex(4)
       .animation({ duration: 180, curve: curves.springMotion(0.42, 0.86) })
   }

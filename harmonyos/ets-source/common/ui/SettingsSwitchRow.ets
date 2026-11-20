@@ -1,5 +1,5 @@
 import { Theme } from '@kit.ArkUI'
-import { panelFontSize } from './UiTypography'
+import { panelFontSize, uiChipPaddingV, uiControlHeight } from './UiTypography'
 import { UI_RADIUS_CONTROL, UI_OPTION_ANIMATION_MS } from './UiTokens'
 import { DEFAULT_SLOTS, ThemeSlots, slotsFromTheme } from '../../state/StellariumTheme'
 
@@ -10,6 +10,8 @@ import { DEFAULT_SLOTS, ThemeSlots, slotsFromTheme } from '../../state/Stellariu
 @Component
 export struct SettingsSwitchRow {
   @StorageProp('stellariumReadableUi') readableUi: boolean = false
+  @StorageProp('stellariumUiFontScale') uiFontScale: number = 1.0
+  @StorageProp('stellariumControlScale') controlScale: number = 1.0
   @Prop label: string
   @Prop isOn: boolean
   @Prop canToggle: boolean
@@ -21,12 +23,24 @@ export struct SettingsSwitchRow {
   }
 
   build() {
-    Row() {
-      Text(this.label).fontSize(panelFontSize(11, this.readableUi)).fontColor(this.c.text).layoutWeight(1)
+    Row({ space: 8 }) {
+      Text(this.label)
+        .fontSize(Math.round(panelFontSize(11, this.readableUi) * this.uiFontScale))
+        .fontColor(this.c.text)
+        .layoutWeight(1)
+        .maxLines(2)
+        .textOverflow({ overflow: TextOverflow.Ellipsis })
       Toggle({ type: ToggleType.Switch, isOn: this.isOn }).width(42).height(24)
         .enabled(this.canToggle)
         .onChange((value: boolean) => { this.onToggle(value) })
-    }.width('100%').padding({ left: 10, right: 8, top: this.readableUi ? 8 : 5, bottom: this.readableUi ? 8 : 5 })
+    }.width('100%')
+      .constraintSize({ minHeight: uiControlHeight(38, this.readableUi, this.controlScale) })
+      .padding({
+        left: 10,
+        right: 8,
+        top: uiChipPaddingV(this.readableUi ? 8 : 6, this.controlScale),
+        bottom: uiChipPaddingV(this.readableUi ? 8 : 6, this.controlScale)
+      })
       .backgroundColor(this.isOn ? this.c.bg : Color.Transparent).border({ width: 1, color: this.c.border })
       .animation({ duration: UI_OPTION_ANIMATION_MS, curve: Curve.EaseOut })
       .borderRadius(UI_RADIUS_CONTROL).margin({ bottom: 5 })

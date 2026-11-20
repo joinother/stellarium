@@ -83,6 +83,8 @@ export class AstroCalcController {
   private moonPhaseLoadingDays: number = 0
   private astroContextRequestSequence: number = 0
   private astroContextRequestPending: boolean = false
+  // 按页签与参数/上下文桶缓存结果，切回已算过的页签时 0ms 秒开，避免重复全量计算。
+  private tabResultCacheKeys: Map<number, string> = new Map()
 
   constructor(
     port: CommandPort,
@@ -329,7 +331,7 @@ export class AstroCalcController {
     this.selectAstroTab(currentTab !== undefined ? currentTab.id : tabs[0].id)
   }
 
-  // 子标签切换（两段 animateTo 时序保留；动画本体归宿主）。
+  // 子标签切换：立即并行预加载目标页签（命中缓存 0ms 秒开），同时播放流畅淡入淡出。
   selectAstroTab(tab: number): void {
     if (!Number.isInteger(tab) || tab < 0 || tab > 9 || tab === this.astroRequestedTab) return
     if (tab === this.astroStore.astroTab && this.astroRequestedTab < 0) return
@@ -338,7 +340,9 @@ export class AstroCalcController {
     const transitionId = ++this.astroTransitionId
     this.astroRequestedTab = tab
     this.hooks.publishAstroPanelState()
-    this.hooks.animateAstroIn(100, (): void => {
+    // 立即发起数据检查/预加载，与切页动画并行，消除 270ms 空等。
+    this.loadAstroTab(tab, false)
+    this.hooks.animateAstroIn(80, (): void => {
       if (transitionId !== this.astroTransitionId) return
       if (!this.hooks.astroPanelOnScreen()) {
         this.astroRequestedTab = -1
@@ -351,13 +355,12 @@ export class AstroCalcController {
       this.astroStore.astroGroup = astroGroupForTab(tab)
       this.hooks.scrollAstroPanelToTop()
       this.astroStore.astroContentOffsetX = direction * 10
-      this.hooks.animateAstroOut(170, (): void => {
+      this.hooks.animateAstroOut(140, (): void => {
         if (transitionId !== this.astroTransitionId) return
         this.astroRequestedTab = -1
         this.hooks.publishAstroPanelState()
         if (!this.hooks.astroPanelOnScreen()) return
         this.hooks.saveAppSettings()
-        this.loadAstroTab(tab)
       }, (): void => {
         this.astroStore.astroContentOpacity = 1
         this.astroStore.astroContentOffsetX = 0
@@ -366,6 +369,12 @@ export class AstroCalcController {
       this.astroStore.astroContentOpacity = 0
       this.astroStore.astroContentOffsetX = (0 - direction) * 8
     })
+  }
+
+  // 通用平滑时刻跳转（供日月食/行星凌日/今晚天体中天等事件行统一使用）。
+  jumpToJdSmooth(jd: number, label: string): void {
+    if (!Number.isFinite(jd) || jd <= 0) return
+    this.hooks.animateTimeToJd(jd, label, () => { this.hooks.refreshState() })
   }
 
   // 按当前标签分派到对应目标选择器。
@@ -405,7 +414,26 @@ export class AstroCalcController {
     this.cancelAstroCalcContext()
   }
 
-  // 按面板可见性启停 1s 上下文轮询（定时器自持）。
+  // 任意重计算进行中时暂停周期上下文轮询，避免争抢单线程桥通道与触发无谓整页重绘。
+  private isAnyAstroLoading(): boolean {
+    return this.astroStore.planetPositionsLoading
+      || this.astroStore.hecPositionsLoading
+      || this.astroStore.celestialPositionsLoading
+      || this.astroStore.ephemerisLoading
+      || this.astroStore.rtsLoading
+      || this.astroStore.rtsCalendarLoading
+      || this.astroStore.phenomenaLoading
+      || this.astroStore.graphLoading
+      || this.astroStore.planetCalcLoading
+      || this.astroStore.planetPairDistanceLoading
+      || this.astroStore.eclipseLoading
+      || this.astroStore.planetaryTransitLoading
+      || this.astroStore.almanacLoading
+      || this.astroStore.moonPhaseLoading
+      || this.wutStore.wutLoading
+  }
+
+  // 按面板可见性启停 4s 上下文轮询（定时器自持，加载忙时自动避让）。
   syncAstroCalcContextTimer(): void {
     if (!this.shouldRefreshAstroCalcContext()) {
       this.stopAstroCalcContextTimer()
@@ -413,7 +441,11 @@ export class AstroCalcController {
     }
     if (this.astroContextTimer !== 0) return
     this.loadAstroCalcContext()
-    this.astroContextTimer = setInterval(() => { this.loadAstroCalcContext() }, 1000)
+    this.astroContextTimer = setInterval(() => {
+      if (!this.isAnyAstroLoading()) {
+        this.loadAstroCalcContext()
+      }
+    }, 4000)
   }
 
   // 行星位置刷新（请求序号防止旧回包覆盖）。
@@ -1162,7 +1194,7 @@ export class AstroCalcController {
     }, 0, 100, 300)
   }
 
-  // 今晚观测：先取今晚事件（首段），再联动 Wut 目标加载。
+  // 今晚观测：先取今晚事件（首段）并同步桌面卡片快照，再联动 Wut 目标加载。
   loadTonightAstro(): void {
     const port = this.port
     if (port === null) {
@@ -1170,7 +1202,10 @@ export class AstroCalcController {
     }
     if (this.astroStore.tonightAstro === null) {
       port.requestInteractive('getTonightEvents', '', (r: StellariumBridgeResponse) => {
-        if (r.ok === true && r.tonight !== undefined) this.astroStore.tonightAstro = r.tonight as TonightEvents
+        if (r.ok === true && r.tonight !== undefined) {
+          this.astroStore.tonightAstro = r.tonight as TonightEvents
+          this.hooks.persistAlmanacCardSnapshot()
+        }
       })
     }
     this.wutStore.loadWutTargets()
@@ -1387,10 +1422,76 @@ export class AstroCalcController {
     ++this.astroContextRequestSequence
   }
 
-  // 标签页分发：按当前子标签 / 模式触发对应加载器。
-  loadAstroTab(id: number): void {
+  // 构建页签缓存键：覆盖观测地、模拟时刻（按小时分桶）、选中天体与页签核心参数。
+  private buildTabCacheKey(id: number): string {
+    const ctx = this.astroStore.astroContext
+    const loc = ctx !== undefined ? (ctx.observerLocation ?? '') : ''
+    const jdVal = ctx !== undefined && ctx.jd !== undefined ? ctx.jd : 0
+    const jdBucket = Number.isFinite(jdVal) && jdVal > 0 ? Math.floor(jdVal * 24).toString() : '0'
+    const sel = this.hooks.selectedObjectName()
+    const base = `${id}|${loc}|${jdBucket}|${sel}`
+    if (id === 0) {
+      return `${base}|${this.astroStore.positionMode}|${this.astroStore.celestialPositionCategory}|${this.astroStore.celestialPositionMagnitude}|${this.astroStore.celestialPositionHorizontal}`
+    }
+    if (id === 1) {
+      return `${base}|${this.astroStore.ephemerisMode}|${this.astroStore.ephemerisDays}|${this.astroStore.ephemerisStepHours}|${this.astroStore.ephemerisStartOffsetDays}|${this.astroStore.ephemerisPrimary}|${this.astroStore.ephemerisSecondary}`
+    }
+    if (id === 3) {
+      return `${base}|${this.astroStore.phenomenaPrimary}|${this.astroStore.phenomenaTarget}|${this.astroStore.phenomenaDays}|${this.astroStore.phenomenaStartOffsetMonths}|${this.astroStore.phenomenaMaxSeparation}|${this.astroStore.phenomenaIncludeOppositions}|${this.astroStore.phenomenaIncludePerihelionAphelion}|${this.astroStore.phenomenaIncludeElongationsQuadratures}|${this.astroStore.phenomenaIncludeStations}`
+    }
+    if (id === 4) {
+      return `${base}|${this.astroStore.graphMode}|${this.astroStore.graphStartOffsetDays}|${this.astroStore.altAzHours}|${this.astroStore.observabilityDays}|${this.astroStore.lunarElongationDays}|${this.astroStore.planetTimeSeriesDays}`
+    }
+    if (id === 5) {
+      return `${base}|${this.wutStore.wutCategory}|${this.wutStore.wutPeriod}|${this.wutStore.wutMinAltitude}|${this.wutStore.wutMaxMagnitude}|${this.wutStore.wutDirection}`
+    }
+    if (id === 6) {
+      return `${base}|${this.astroStore.planetCalcMode}|${this.astroStore.planetPairFirst}|${this.astroStore.planetPairSecond}|${this.astroStore.planetPairDays}|${this.astroStore.planetPairStepDays}`
+    }
+    if (id === 7) {
+      return `${base}|${this.astroStore.eclipseMode}|${this.astroStore.eclipseMonths}|${this.astroStore.eclipseStartOffsetDays}|${this.astroStore.planetaryTransitYears}`
+    }
+    if (id === 9) {
+      return `${base}|${this.astroStore.moonPhaseDays}`
+    }
+    return base
+  }
+
+  private hasTabData(id: number): boolean {
+    if (id === 0) {
+      if (this.astroStore.positionMode === 0) return this.astroStore.planetPositions.length > 0
+      if (this.astroStore.positionMode === 1) return this.astroStore.hecPositions.length > 0
+      return this.astroStore.celestialPositions.length > 0
+    }
+    if (id === 1) return this.astroStore.ephemerisData.length > 0
+    if (id === 2) return this.astroStore.rtsData.size > 0
+    if (id === 3) return this.astroStore.phenomenaData.length > 0 || this.astroStore.phenomenaHint.length > 0
+    if (id === 4) {
+      if (this.astroStore.graphMode === 2) return this.astroStore.annualElevationData.length > 0
+      if (this.astroStore.graphMode === 3) return this.astroStore.observabilityData.length > 0
+      if (this.astroStore.graphMode === 4) return this.astroStore.lunarElongationData.length > 0
+      if (this.astroStore.graphMode === 5) return this.astroStore.planetTimeSeriesData.length > 0
+      return this.astroStore.altAzCurve.length > 0
+    }
+    if (id === 5) return this.astroStore.tonightAstro !== null && this.wutStore.wutHasResult
+    if (id === 6) return this.astroStore.planetCalcMode === 1 ? this.astroStore.planetPairDistanceData.length > 0 : this.astroStore.planetCalcData.length > 0
+    if (id === 7) return this.astroStore.eclipseMode === 0 ? this.astroStore.eclipseData.length > 0 : this.astroStore.planetaryTransitLoaded
+    if (id === 8) return this.astroStore.almanacData.size > 0
+    if (id === 9) return this.astroStore.moonPhaseData.length > 0
+    return false
+  }
+
+  // 标签页分发：优先命中同上下文/参数缓存（0ms 秒开），否则按当前子标签与模式触发加载。
+  loadAstroTab(id: number, force: boolean = false): void {
     this.astroStore.updateAstroCalcSnapshot()
-    this.loadAstroCalcContext()
+    if (this.astroStore.astroContext === undefined) {
+      this.loadAstroCalcContext()
+    }
+    const cacheKey = this.buildTabCacheKey(id)
+    if (!force && this.tabResultCacheKeys.get(id) === cacheKey && this.hasTabData(id)) {
+      return
+    }
+    this.tabResultCacheKeys.set(id, cacheKey)
     if (id === 0) {
       if (this.astroStore.positionMode === 0) {
         this.loadPlanetPositions()

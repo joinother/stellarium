@@ -1,5 +1,5 @@
 import { Theme } from '@kit.ArkUI'
-import { panelFontSize } from './UiTypography'
+import { panelFontSize, uiControlHeight } from './UiTypography'
 import { DEFAULT_SLOTS, ThemeSlots, slotsFromTheme } from '../../state/StellariumTheme'
 
 // 详情/设置面板的「标签 : 值」两列行（原宿主参数化 `@Builder infoRow(label, value)`）。
@@ -10,6 +10,8 @@ import { DEFAULT_SLOTS, ThemeSlots, slotsFromTheme } from '../../state/Stellariu
 @Component
 export struct InfoRow {
   @StorageProp('stellariumReadableUi') readableUi: boolean = false
+  @StorageProp('stellariumUiFontScale') uiFontScale: number = 1.0
+  @StorageProp('stellariumControlScale') controlScale: number = 1.0
   @Prop label: ResourceStr
   @Prop value: ResourceStr
   @State c: ThemeSlots = DEFAULT_SLOTS
@@ -19,23 +21,25 @@ export struct InfoRow {
   }
 
   build() {
-    Row() {
+    Row({ space: 8 }) {
       Text(this.label)
-        .fontSize(panelFontSize(11, this.readableUi))
+        .fontSize(Math.round(panelFontSize(11, this.readableUi) * this.uiFontScale))
         .fontColor(this.c.sub)
-        .width(64)
+        .constraintSize({ minWidth: 72, maxWidth: '52%' })
+        .maxLines(2)
+        .textOverflow({ overflow: TextOverflow.Ellipsis })
         .textAlign(TextAlign.Start)
       Text(this.value)
-        .fontSize(panelFontSize(13, this.readableUi))
+        .fontSize(Math.round(panelFontSize(13, this.readableUi) * this.uiFontScale))
         .fontColor(this.c.text)
         .layoutWeight(1)
         .maxLines(2)
         .textOverflow({ overflow: TextOverflow.Ellipsis })
         .textAlign(TextAlign.End)
     }
-      .constraintSize({ minHeight: this.readableUi ? 30 : 24 })
+      .constraintSize({ minHeight: uiControlHeight(26, this.readableUi, this.controlScale) })
       .width('100%')
-      .padding({ left: 8, right: 8 })
+      .padding({ left: 8, right: 8, top: 4, bottom: 4 })
       .backgroundColor(Color.Transparent)
       .margin({ bottom: 2 })
   }
