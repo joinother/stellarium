@@ -344,7 +344,7 @@ struct SkyWindowCard {
 
               Text(this.observerPlanet === 'Earth'
                 ? ('天文暗夜 ' + this.darkStart + ' – ' + this.darkEnd)
-                : (this.companionName + ' · ' + this.moonPhase))
+                : (this.moonPhase.startsWith(this.companionName) ? this.moonPhase : (this.companionName + ' · ' + this.moonPhase)))
                 .fontSize(11)
                 .fontWeight(FontWeight.Regular)
                 .fontColor('#CCE4F7FF')

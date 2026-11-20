@@ -155,16 +155,17 @@ struct CelestialEventsCard {
     Stack({ alignContent: Alignment.TopStart }) {
       StarfieldLayer({ sunAlt: -24, themeStyle: 'deep' })
 
-      // Subtle corner accent aurora matching focused event kind
-      Circle()
+      // Subtle corner accent aurora matching focused event kind (clipped circularly — zero square edge)
+      Column()
         .width(130)
         .height(130)
-        .fill(Color.Transparent)
+        .borderRadius(65)
+        .clip(true)
         .radialGradient({
           center: ['50%', '50%'],
           radius: 65,
           colors: [
-            ['#33' + this.accent().slice(1), 0.0],
+            ['#2C' + this.accent().slice(1), 0.0],
             ['#00000000', 1.0]
           ]
         })

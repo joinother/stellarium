@@ -94,21 +94,23 @@ struct FloatingOrbCard {
       Stack({ alignContent: Alignment.Center }) {
         CelestialOrbView({
           orbBody: this.orbBody,
-          orbSize: 118,
+          orbSize: 110,
           showPhase: this.showPhaseShadow(),
           illumination: this.numericIllum(),
           phaseAge: this.numericAge(),
           glowIntensity: 0.9
         })
       }
-      .width(120)
-      .height(120)
+      .width(112)
+      .height(112)
       .backgroundColor(Color.Transparent)
       .onClick(() => this.triggerOverflowOrOpen())
 
       // Single crisp adaptive-color floating telemetry caption (follows HOST_BG_INVERSE_COLOR_KEY)
       Text(this.captionText())
         .fontSize(11)
+        .lineHeight(15)
+        .height(16)
         .fontWeight(FontWeight.Medium)
         .fontColor(this.safeTextColor())
         .textShadow({ radius: 5, color: this.contrastShadowColor(), offsetX: 0, offsetY: 1 })

@@ -1,5 +1,22 @@
 > **身份图例**：本文件真机记录中出现的 `com.cnchensh.stellarium` 是**本机调试签名身份**（本机 DevEco 自动生成，非发布身份）；发布身份为 `com.joinother.skyinstrument`。构建脚本 `build-ohos-hap-windows.ps1 -Install` 从产物 `pack.info` 读取实际包名，仓库不写死任何签名身份（见 `docs/harmonyos/release/BUNDLE-IDENTITY-CLEANUP.md`）。
 
+## [2026-11-20] 桌面卡片 3D 球面相位、Canvas 升落弧线、零方框破框与无缝衔接重构
+
+- **修改文件：** `scripts/build-ohos-widget-orbs.py`、`harmonyos/resources/base/media/widget_orb_*.png`、`harmonyos/resources/base/media/widget_phase_00..15.png`（新增 16 张 3D 球面相位遮罩）、`harmonyos/ets-source/form/WidgetVisuals.ets`、`harmonyos/ets-source/form/FloatingOrbCard.ets`、`harmonyos/ets-source/form/SkyWindowCard.ets`、`harmonyos/ets-source/form/CelestialEventsCard.ets`、`harmonyos/ets-source/form/AstronomyCardData.ts`、`harmonyos/ets-source/form/SkyInstrumentFormAbility.ets`、`harmonyos/ets-source/form/SkyLiveFormPage.ets`、`scripts/test-ohos-form-cards.mjs`、`docs/harmonyos/CHANGELOG.md`。
+- **问题修复与视觉升级：**
+  1. **真实 3D 球面朗伯相位遮罩（替换旧版圆盘错位剪裁）：**
+     - 在 `scripts/build-ohos-widget-orbs.py` 生成 16 档精确 3D 球面光线追踪相位阴影 PNG（`widget_phase_00..15.png`，含平滑晨昏半影带与自然地球反照微光），同时为 11 张 `widget_orb_*.png` 烘焙 C1 连续衰减的大气边缘光晕（在画布边缘前完全归零，无任何矩形截断边）。
+     - `WidgetVisuals.ets` 的 `CelestialOrbView` 与 `MiniPhaseStripView` 全面切换至 `phaseMaskResource(illumination, phaseAge)` 像素对齐叠层，彻底解决残月、残地边缘生硬不自然的问题；移除 `Circle().radialGradient()` 引起的方形淡框伪影，`CelestialEventsCard` 角落极光同步改为圆形裁切（`.borderRadius(65).clip(true)`）。
+  2. **仪器级 `Canvas` 地平升落轨道弧线（替换旧版廉价平顶虚线框）：**
+     - 重写 `HorizonArcView` 为 `Canvas`（`CanvasRenderingContext2D`）平滑正弦天顶穹弧：弧下柔和渐变填充、渐变地平基线、已走过的高亮实线轨 + 未走完的细虚线轨、两端升落锚点，以及数学锁定在 `(ptX(prog), ptY(prog))` 的零像素偏差发光天体点；缺省升落时刻时整洁降级为 `地平线 / 仰角 +XX°` 刻度。
+  3. **四款卡片 API 20 破框进出衔接无缝化 + `2×4` 破框边界修正：**
+     - 修正 `AstronomyCardData.ts` 的 `computeOverflowArea()` 中 `2×4`/`1×2`/`6×4` 官方宽高比例（`2×4` 修正为宽 `1.22×` ≤ 125%、高 `1.46×` ≤ 150%，彻底解决 `2×4` 卡片触发破框报 `code=16501000` 无法破框的问题）。
+     - 在 `SkyInstrumentFormAbility.ets` 启用 `useDefaultAnimation: false`，消除系统默认淡入淡出造成的双影重影；同步在 `SkyLiveFormPage.ets` 为全部 4 张卡片（`floating_orb_card`、`companion_arc_card`、`sky_window_card`、`celestial_events_card`）1:1 还原静息态卡片底图与精确天体插槽（以 `formRect.left/top + (slotGlobal - cardGlobal)` 亚像素校准，免疫坐标偏移）。
+     - 天体球以峰值原生分辨率渲染并按 `startScale → 1.0 → startScale` 从各自静息位平滑飞出破顶、卡片内容柔化压暗景深展示，随后在 `2050ms → 2690ms` 完整滑回原位并将静息卡片恢复至 `1.0` 不透明度，静置至 `3020ms` 后调用 `cancelOverflow` 无感交回桌面静态卡；同时修复 `SkyWindowCard` / `SkyLiveFormPage` 伴星文案重复前缀（如 `土卫六 · 土卫六`）。
+- **验证与真机实测（MatePad Mini `192.168.31.234:42713`）：**
+  - 主机验证：`test-ohos-form-cards.mjs`（含 16 张相位遮罩与修正后的 5 档破框边界）、`test-ohos-off-earth-calendar-and-snapshot.mjs`、`test-ohos-notification-integration.mjs`、`test-ohos-native-astronomy-calendar.mjs`、`check-ohos-ui-contract.mjs` 全通过。
+  - 真机 4×6 逐帧胶片条实拍与像素差值（MAE）核验：4 张卡片同页（天象预告 `2×4`、悬浮天体 `2×2`、星历弧盘 `2×2`、天穹之窗 `2×4`）全部成功触发无裁切、无方框、无重影破框；激活态回落完成瞬间（`t ≈ 3.1s`）与静息原图 MAE 仅 `0.61–1.22 / 255`（`sky 0.61`、`arc 0.99`、`float 1.22`），交回静态卡后 `0.00 / 255`，进出衔接丝滑自然。
+
 ## [2026-11-20] 桌面卡片交互按钮防误触放大与透明卡片破框防裁切优化
 
 - **修改文件：** `harmonyos/ets-source/form/SkyLiveFormPage.ets`、`harmonyos/ets-source/form/AstronomyCardData.ts`、`harmonyos/ets-source/form/SkyWindowCard.ets`、`harmonyos/ets-source/form/CelestialEventsCard.ets`、`harmonyos/ets-source/form/CompanionArcCard.ets`、`harmonyos/ets-source/form/WidgetVisuals.ets`、`docs/harmonyos/CHANGELOG.md`。

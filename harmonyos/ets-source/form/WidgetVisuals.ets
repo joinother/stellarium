@@ -19,6 +19,39 @@ export function orbResource(orbBody: string): Resource {
   return $r('app.media.widget_orb_moon')
 }
 
+// Map (illumination 0..100, synodic age 0..29.53) to one of 16 ray-traced 3D spherical phase masks.
+// Index 0 = New (0%), 4 = First Quarter (50% waxing), 8 = Full (100%), 12 = Last Quarter (50% waning).
+export function phaseMaskIndex(illumination: number, phaseAge: number): number {
+  const clamped = Math.max(0, Math.min(100, Number.isFinite(illumination) ? illumination : 100))
+  const cosPhi = 1.0 - (clamped / 50.0) // +1 at 0% (new), 0 at 50%, -1 at 100% (full)
+  const angleRad = Math.acos(Math.max(-1.0, Math.min(1.0, cosPhi))) // [0, pi]
+  const synodic = 29.530588853
+  const normAge = (((Number.isFinite(phaseAge) ? phaseAge : 10) % synodic) + synodic) % synodic
+  const waxing = normAge <= synodic * 0.5
+  const fullAngle = waxing ? angleRad : (2.0 * Math.PI - angleRad)
+  return Math.round((fullAngle / (2.0 * Math.PI)) * 16.0) % 16
+}
+
+export function phaseMaskResource(illumination: number, phaseAge: number): Resource {
+  const idx = phaseMaskIndex(illumination, phaseAge)
+  if (idx === 0) return $r('app.media.widget_phase_00')
+  if (idx === 1) return $r('app.media.widget_phase_01')
+  if (idx === 2) return $r('app.media.widget_phase_02')
+  if (idx === 3) return $r('app.media.widget_phase_03')
+  if (idx === 4) return $r('app.media.widget_phase_04')
+  if (idx === 5) return $r('app.media.widget_phase_05')
+  if (idx === 6) return $r('app.media.widget_phase_06')
+  if (idx === 7) return $r('app.media.widget_phase_07')
+  if (idx === 8) return $r('app.media.widget_phase_08')
+  if (idx === 9) return $r('app.media.widget_phase_09')
+  if (idx === 10) return $r('app.media.widget_phase_10')
+  if (idx === 11) return $r('app.media.widget_phase_11')
+  if (idx === 12) return $r('app.media.widget_phase_12')
+  if (idx === 13) return $r('app.media.widget_phase_13')
+  if (idx === 14) return $r('app.media.widget_phase_14')
+  return $r('app.media.widget_phase_15')
+}
+
 export function orbGlowColor(orbBody: string): string {
   const key = orbBody.trim().toLowerCase()
   if (key === 'earth') return '#6650A8FF'
@@ -52,8 +85,8 @@ export function eventBadgeText(kind: string): string {
   return '天象'
 }
 
-// High-craft 3D textured celestial globe with optional dynamic phase terminator shadow
-// (real earthshine transparency so lunar maria / planetary oceans remain faintly visible).
+// High-craft 3D textured celestial globe with true 3D ray-traced spherical phase shading
+// (smooth twilight terminator + natural earthshine; zero rectangular radialGradient boxes!).
 @Component
 export struct CelestialOrbView {
   @Prop orbBody: string = 'moon'
@@ -67,69 +100,33 @@ export struct CelestialOrbView {
     return this.orbBody.trim().toLowerCase() === 'saturn'
   }
 
-  private diskDiameter(): number {
-    // Textures are rendered at radius_ratio = 0.43 (diameter = 0.86 of PNG box)
-    return Math.round(this.orbSize * 0.86)
-  }
-
-  private shadowShiftX(): number {
-    const frac = Math.max(0, Math.min(100, this.illumination)) / 100
-    const d = this.diskDiameter()
-    const waxing = this.phaseAge <= 14.765
-    // At 0% illum: shadow centered (0); at 50%: shifted by 0.5*d; at 100%: shifted completely off disk
-    const shift = frac * d * 1.04
-    return waxing ? -shift : shift
-  }
-
-  private shouldRenderShadow(): boolean {
+  private shouldOverlayPhase(): boolean {
     if (!this.showPhase || this.isRinged()) return false
     if (!Number.isFinite(this.illumination) || this.illumination < 0) return false
-    return this.illumination < 96
+    return phaseMaskIndex(this.illumination, this.phaseAge) !== 8
   }
 
   build() {
     Stack({ alignContent: Alignment.Center }) {
-      // Soft atmospheric outer glow
-      if (this.glowIntensity > 0) {
-        Circle()
-          .width(this.orbSize * 1.24)
-          .height(this.orbSize * 1.24)
-          .fill(Color.Transparent)
-          .radialGradient({
-            center: ['50%', '50%'],
-            radius: this.orbSize * 0.62,
-            colors: [
-              [orbGlowColor(this.orbBody), 0.0],
-              ['#00000000', 1.0]
-            ]
-          })
-          .opacity(this.glowIntensity)
-      }
-
-      // Real orthographically-rendered 3D planet / moon texture
+      // Real orthographically-rendered 3D planet / moon texture (with baked C1-tapered atmospheric rim)
       Image(orbResource(this.orbBody))
         .width(this.orbSize)
         .height(this.orbSize)
         .objectFit(ImageFit.Contain)
         .draggable(false)
 
-      // Dynamic phase terminator shadow clipped tightly to the sphere disk
-      if (this.shouldRenderShadow()) {
-        Stack({ alignContent: Alignment.Center }) {
-          Circle()
-            .width(this.diskDiameter() * 1.04)
-            .height(this.diskDiameter() * 1.04)
-            .fill('#C8050A18')
-            .translate({ x: this.shadowShiftX(), y: 0 })
-        }
-        .width(this.diskDiameter())
-        .height(this.diskDiameter())
-        .borderRadius(this.diskDiameter() / 2)
-        .clip(true)
+      // True 3D Lambertian spherical phase mask pixel-aligned over the globe
+      if (this.shouldOverlayPhase()) {
+        Image(phaseMaskResource(this.illumination, this.phaseAge))
+          .width(this.orbSize)
+          .height(this.orbSize)
+          .objectFit(ImageFit.Contain)
+          .draggable(false)
       }
     }
     .width(this.orbSize)
     .height(this.orbSize)
+    .backgroundColor(Color.Transparent)
   }
 }
 
@@ -166,91 +163,173 @@ export struct StarfieldLayer {
   }
 }
 
-// Luminous semi-circular horizon & companion altitude arc (100% vp-native, DPI-independent)
+// Instrument-grade Canvas astronomical horizon arc:
+// Smooth sine dome, translucent gradient fill under the horizon curve, active solid track + remaining dashed track,
+// and the luminous celestial body mathematically locked ON the exact pixel of the curve (0.00px misalignment!).
 @Component
 export struct HorizonArcView {
   @Prop arcWidth: number = 128
-  @Prop arcHeight: number = 42
-  @Prop altitudeDeg: number = 32
+  @Prop arcHeight: number = 34
+  @Prop @Watch('redraw') altitudeDeg: number = 32
   @Prop riseText: string = '—'
   @Prop setText: string = '—'
-  @Prop accentColor: string = '#9EC5FF'
+  @Prop @Watch('redraw') accentColor: string = '#9EC5FF'
 
-  private dotProgress(): number {
-    // Map altitude (-20..90 deg) onto arc progress (0.08..0.92), peaking near 0.5
-    const clamped = Math.max(-15, Math.min(90, this.altitudeDeg))
-    if (clamped <= 0) return 0.12
-    return 0.16 + (clamped / 90) * 0.34
+  private canvasSettings: RenderingContextSettings = new RenderingContextSettings(true)
+  private ctx: CanvasRenderingContext2D = new CanvasRenderingContext2D(this.canvasSettings)
+  private canvasReady: boolean = false
+
+  private hasRiseSetTimes(): boolean {
+    const r = this.riseText.trim()
+    const s = this.setText.trim()
+    return (r.length > 0 && r !== '—') || (s.length > 0 && s !== '—')
   }
 
-  private arcDiameterX(): number {
-    return this.arcWidth * 0.84
+  private leftFooter(): string {
+    if (this.hasRiseSetTimes()) return '升 ' + this.riseText
+    return '地平线'
   }
 
-  private arcRadiusY(): number {
-    return this.arcHeight - 10
+  private rightFooter(): string {
+    if (this.hasRiseSetTimes()) return '落 ' + this.setText
+    if (this.altitudeDeg >= 0) return '仰角 +' + String(Math.round(this.altitudeDeg)) + '°'
+    return '地平线下'
   }
 
-  private dotX(): number {
-    const theta = Math.PI * (1 - this.dotProgress())
-    const rx = this.arcDiameterX() * 0.5
-    return this.arcWidth * 0.5 + rx * Math.cos(theta) - 4
+  private arcProgress(): number {
+    // Map altitude (-15..90 deg) cleanly onto sine curve [0.06 .. 0.50] (ascending)
+    const alt = Number.isFinite(this.altitudeDeg) ? this.altitudeDeg : 0
+    if (alt <= 0) return 0.06
+    const norm = Math.min(1.0, alt / 78.0)
+    return 0.12 + norm * 0.38
   }
 
-  private dotY(): number {
-    const theta = Math.PI * (1 - this.dotProgress())
-    const ry = this.arcRadiusY()
-    const baseY = this.arcHeight - 5
-    return baseY - ry * Math.sin(theta) - 4
+  private redraw(): void {
+    if (!this.canvasReady) return
+    const w = this.ctx.width > 0 ? this.ctx.width : this.arcWidth
+    const h = this.ctx.height > 0 ? this.ctx.height : this.arcHeight
+    this.ctx.clearRect(0, 0, w, h)
+
+    const padX = 10
+    const spanX = Math.max(20, w - padX * 2)
+    const horizonY = h - 6
+    const ampY = Math.max(10, horizonY - 7)
+    const steps = 40
+    const prog = this.arcProgress()
+    const accent = /^#[0-9A-Fa-f]{6}$/.test(this.accentColor) ? this.accentColor : '#9EC5FF'
+
+    const ptX = (t: number): number => padX + spanX * t
+    const ptY = (t: number): number => horizonY - ampY * Math.sin(Math.PI * t)
+
+    // 1. Soft translucent gradient dome fill under the horizon curve
+    this.ctx.save()
+    this.ctx.beginPath()
+    this.ctx.moveTo(ptX(0), horizonY)
+    for (let i = 0; i <= steps; i++) {
+      const t = i / steps
+      this.ctx.lineTo(ptX(t), ptY(t))
+    }
+    this.ctx.lineTo(ptX(1), horizonY)
+    this.ctx.closePath()
+    const fillGrad = this.ctx.createLinearGradient(0, horizonY - ampY, 0, horizonY)
+    fillGrad.addColorStop(0.0, '#36' + accent.slice(1))
+    fillGrad.addColorStop(1.0, '#04' + accent.slice(1))
+    this.ctx.fillStyle = fillGrad
+    this.ctx.fill()
+    this.ctx.restore()
+
+    // 2. Hairline horizon baseline with gentle fade at edges
+    this.ctx.save()
+    const baseGrad = this.ctx.createLinearGradient(0, horizonY, w, horizonY)
+    baseGrad.addColorStop(0.0, '#00FFFFFF')
+    baseGrad.addColorStop(0.12, '#48FFFFFF')
+    baseGrad.addColorStop(0.88, '#48FFFFFF')
+    baseGrad.addColorStop(1.0, '#00FFFFFF')
+    this.ctx.strokeStyle = baseGrad
+    this.ctx.lineWidth = 1
+    this.ctx.beginPath()
+    this.ctx.moveTo(2, horizonY)
+    this.ctx.lineTo(w - 2, horizonY)
+    this.ctx.stroke()
+    this.ctx.restore()
+
+    // 3. Remaining orbital arc (dashed, subtle) from prog -> 1.0
+    this.ctx.save()
+    this.ctx.strokeStyle = '#55FFFFFF'
+    this.ctx.lineWidth = 1.2
+    this.ctx.setLineDash([3, 3])
+    this.ctx.beginPath()
+    for (let i = 0; i <= steps; i++) {
+      const t = prog + (1.0 - prog) * (i / steps)
+      if (i === 0) this.ctx.moveTo(ptX(t), ptY(t))
+      else this.ctx.lineTo(ptX(t), ptY(t))
+    }
+    this.ctx.stroke()
+    this.ctx.restore()
+
+    // 4. Traversed luminous solid arc from 0 -> prog
+    if (this.altitudeDeg > 0) {
+      this.ctx.save()
+      this.ctx.strokeStyle = accent
+      this.ctx.lineWidth = 2.0
+      this.ctx.lineCap = 'round'
+      this.ctx.beginPath()
+      const activeSteps = Math.max(8, Math.round(steps * prog))
+      for (let i = 0; i <= activeSteps; i++) {
+        const t = prog * (i / activeSteps)
+        if (i === 0) this.ctx.moveTo(ptX(t), ptY(t))
+        else this.ctx.lineTo(ptX(t), ptY(t))
+      }
+      this.ctx.stroke()
+      this.ctx.restore()
+    }
+
+    // 5. Small crisp rise/set anchor ticks on the horizon
+    this.ctx.save()
+    this.ctx.fillStyle = '#70FFFFFF'
+    this.ctx.beginPath()
+    this.ctx.arc(ptX(0), horizonY, 2, 0, Math.PI * 2)
+    this.ctx.arc(ptX(1), horizonY, 2, 0, Math.PI * 2)
+    this.ctx.fill()
+    this.ctx.restore()
+
+    // 6. Celestial body dot mathematically locked ON (ptX(prog), ptY(prog))!
+    const bx = ptX(prog)
+    const by = this.altitudeDeg > 0 ? ptY(prog) : horizonY + 2
+    this.ctx.save()
+    const glow = this.ctx.createRadialGradient(bx, by, 1, bx, by, 8)
+    glow.addColorStop(0.0, this.altitudeDeg > 0 ? '#EE' + accent.slice(1) : '#8899B0CC')
+    glow.addColorStop(1.0, '#00000000')
+    this.ctx.fillStyle = glow
+    this.ctx.beginPath()
+    this.ctx.arc(bx, by, 8, 0, Math.PI * 2)
+    this.ctx.fill()
+
+    this.ctx.fillStyle = this.altitudeDeg > 0 ? '#FFFFFF' : '#99B4CCE0'
+    this.ctx.beginPath()
+    this.ctx.arc(bx, by, 3.2, 0, Math.PI * 2)
+    this.ctx.fill()
+    this.ctx.restore()
   }
 
   build() {
-    Column({ space: 3 }) {
-      Stack({ alignContent: Alignment.TopStart }) {
-        // Upper semi-elliptical dashed orbital arc (100% vp units, clipped cleanly at horizon)
-        Stack({ alignContent: Alignment.Top }) {
-          Column()
-            .width(this.arcDiameterX())
-            .height(this.arcRadiusY() * 2)
-            .borderRadius(this.arcDiameterX() * 0.5)
-            .border({
-              width: 1.4,
-              color: this.accentColor,
-              style: BorderStyle.Dashed
-            })
-            .opacity(0.55)
-        }
+    Column({ space: 2 }) {
+      Canvas(this.ctx)
         .width(this.arcWidth)
-        .height(this.arcHeight - 5)
-        .clip(true)
-        .position({ x: 0, y: 0 })
-
-        // Horizon baseline
-        Rect()
-          .width(this.arcWidth)
-          .height(1)
-          .fill('#42FFFFFF')
-          .position({ x: 0, y: this.arcHeight - 5 })
-
-        // Current body marker dot on the orbital arc
-        Circle()
-          .width(8)
-          .height(8)
-          .fill(this.altitudeDeg > 0 ? this.accentColor : '#8899B0C8')
-          .shadow({ radius: 6, color: this.accentColor, offsetX: 0, offsetY: 0 })
-          .position({ x: this.dotX(), y: this.dotY() })
-      }
-      .width(this.arcWidth)
-      .height(this.arcHeight)
+        .height(this.arcHeight)
+        .onReady(() => {
+          this.canvasReady = true
+          this.redraw()
+        })
 
       Row() {
-        Text('升 ' + this.riseText)
+        Text(this.leftFooter())
           .fontSize(10)
           .fontWeight(FontWeight.Regular)
           .fontColor('#B8D0E8FF')
           .maxLines(1)
         Blank()
-        Text('落 ' + this.setText)
+        Text(this.rightFooter())
           .fontSize(10)
           .fontWeight(FontWeight.Regular)
           .fontColor('#B8D0E8FF')
@@ -262,7 +341,7 @@ export struct HorizonArcView {
   }
 }
 
-// Interactive 5-day lunar/companion phase progression strip (for 2*4 CompanionArcCard)
+// Interactive 5-day lunar/companion phase progression strip using real 3D miniature moons & phase masks
 @Component
 export struct MiniPhaseStripView {
   @Prop phaseAge: number = 10
@@ -274,33 +353,22 @@ export struct MiniPhaseStripView {
     return buildMiniPhaseStrip(this.phaseAge, this.nowMs > 0 ? this.nowMs : Date.now())
   }
 
-  private miniShadowShift(illum: number, age: number): number {
-    const frac = Math.max(0, Math.min(100, illum)) / 100
-    const waxing = age <= 14.765
-    return (waxing ? -1 : 1) * frac * 17
-  }
-
   build() {
     Row({ space: 4 }) {
       ForEach(this.days(), (day: MiniPhaseDay, index: number) => {
         Column({ space: 3 }) {
           Stack({ alignContent: Alignment.Center }) {
-            Circle()
-              .width(18)
-              .height(18)
-              .fill('#E6EEFF')
-            if (day.illumination < 96) {
-              Stack({ alignContent: Alignment.Center }) {
-                Circle()
-                  .width(18)
-                  .height(18)
-                  .fill('#DD0A1226')
-                  .translate({ x: this.miniShadowShift(day.illumination, day.age), y: 0 })
-              }
-              .width(18)
-              .height(18)
-              .borderRadius(9)
-              .clip(true)
+            Image($r('app.media.widget_orb_moon'))
+              .width(22)
+              .height(22)
+              .objectFit(ImageFit.Contain)
+              .draggable(false)
+            if (phaseMaskIndex(day.illumination, day.age) !== 8) {
+              Image(phaseMaskResource(day.illumination, day.age))
+                .width(22)
+                .height(22)
+                .objectFit(ImageFit.Contain)
+                .draggable(false)
             }
           }
           .width(22)

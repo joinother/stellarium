@@ -421,8 +421,8 @@ export function formatPlanetDisplayList(rawJson: string, fallbackNames: string, 
 }
 
 // Compute a HarmonyOS API 20 compliant centered overflow rect from formProvider.getFormRect().
-// Official max ratios centered on card rect:
-//   1*2 -> 200% x 150%, 2*2 -> 150% x 150%, 2*4 -> 150% x 125%,
+// Official max ratios centered on card rect (width x height — each side expands by at most +1 grid cell):
+//   1*2 -> 150% x 200%, 2*2 -> 150% x 150%, 2*4 -> 125% x 150%,
 //   4*4 -> 125% x 125%, 6*4 -> 125% x 110%. Duration <= 3500ms.
 export function computeOverflowArea(formWidth: number, formHeight: number): OverflowAreaSpec {
   const safeW = Number.isFinite(formWidth) && formWidth > 20 ? formWidth : 160
@@ -432,16 +432,16 @@ export function computeOverflowArea(formWidth: number, formHeight: number): Over
   let heightRatio = 1.46
   let dimensionClass = '2x2'
   if (aspect >= 1.75 && safeH < 120) {
-    widthRatio = 1.80
-    heightRatio = 1.42
+    widthRatio = 1.44
+    heightRatio = 1.80
     dimensionClass = '1x2'
   } else if (aspect >= 1.35) {
-    widthRatio = 1.42
-    heightRatio = 1.22
+    widthRatio = 1.22
+    heightRatio = 1.46
     dimensionClass = '2x4'
   } else if (aspect <= 0.78) {
-    widthRatio = 1.08
-    heightRatio = 1.22
+    widthRatio = 1.22
+    heightRatio = 1.08
     dimensionClass = '6x4'
   } else if (safeW >= 260 && safeH >= 260) {
     widthRatio = 1.22

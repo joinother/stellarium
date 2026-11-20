@@ -230,11 +230,14 @@ def render_sphere(
                     out_g /= out_a
                     out_b /= out_a
             elif rim_strength > 0.0:
-                # Soft outer atmospheric halo outside limb
+                # Soft outer atmospheric halo outside limb, smoothly tapered to 0 well before canvas edge (no square box!)
                 dist_out = math.sqrt(r2) - 1.0
-                if dist_out < 0.14:
-                    halo = math.exp(-dist_out * 28.0) * rim_strength * 0.42
-                    if halo > 0.01:
+                max_halo_dist = 0.12
+                if 0.0 < dist_out < max_halo_dist:
+                    t_edge = 1.0 - (dist_out / max_halo_dist)
+                    taper = t_edge * t_edge * (3.0 - 2.0 * t_edge)  # C1 smoothstep to exact 0
+                    halo = math.exp(-dist_out * 30.0) * taper * rim_strength * 0.42
+                    if halo > 0.005:
                         inv_h = 1.0 - halo
                         out_r = rim_rgb[0] * halo + out_r * out_a * inv_h
                         out_g = rim_rgb[1] * halo + out_g * out_a * inv_h
@@ -271,21 +274,83 @@ def render_sphere(
     print(f"generated {out_path.name} ({out_path.stat().st_size // 1024} KB)")
 
 
+def render_phase_masks(size: int = 192, radius_ratio: float = 0.43):
+    """
+    Generate 16 ray-traced 3D spherical phase shadow masks (widget_phase_00..15.png).
+    Phase index i in 0..15 corresponds to synodic phase angle phi = i / 16 * 2*pi:
+      0 = New (0% lit), 4 = First Quarter (50% right-lit),
+      8 = Full (100% lit), 12 = Last Quarter (50% left-lit).
+    Uses true 3D spherical normal dot sun vector (N·L) with soft twilight penumbra
+    and subtle translucent earthshine (~84% max shadow alpha) so lunar maria & Earth
+    oceans stay softly legible on the nightside instead of a harsh flat cutout.
+    """
+    ss = 2
+    W = size * ss
+    H = size * ss
+    cx = W * 0.5
+    cy = H * 0.5
+    R = W * radius_ratio
+
+    OUT_DIR.mkdir(parents=True, exist_ok=True)
+    for idx in range(16):
+        # phi = 0 -> New (sun behind sphere, L = (0, 0, -1))
+        # phi = pi/2 -> First quarter (right limb lit, L = (+1, 0, 0))
+        # phi = pi -> Full (front lit, L = (0, 0, +1))
+        # phi = 3*pi/2 -> Last quarter (left limb lit, L = (-1, 0, 0))
+        phi = (idx / 16.0) * 2.0 * math.pi
+        lx = math.sin(phi)
+        ly = -0.06  # subtle realistic ecliptic tilt
+        lz = -math.cos(phi)
+        llen = math.sqrt(lx * lx + ly * ly + lz * lz)
+        lx, ly, lz = lx / llen, ly / llen, lz / llen
+
+        img = Image.new("RGBA", (W, H), (0, 0, 0, 0))
+        px = img.load()
+        for y in range(H):
+            dy = (y - cy) / R
+            for x in range(W):
+                dx = (x - cx) / R
+                r2 = dx * dx + dy * dy
+                if r2 > 1.008:
+                    continue
+                nz = math.sqrt(max(0.0, 1.0 - min(1.0, r2)))
+                ndotl = dx * lx + dy * ly + nz * lz
+                # Smooth 3D twilight terminator across [-0.14, +0.26]
+                lit = clamp((ndotl + 0.14) / 0.40, 0.0, 1.0)
+                lit = lit * lit * (3.0 - 2.0 * lit)  # C1 smoothstep penumbra
+                # Soft limb shading near the day-night transition; subtle nightside earthshine
+                shadow = (1.0 - lit) * 0.86
+                if shadow < 0.004:
+                    continue
+                # Anti-alias cleanly against sphere outer rim
+                edge_dist = 1.0 - math.sqrt(r2)
+                sphere_a = clamp((edge_dist + 0.004) * R * 1.15, 0.0, 1.0)
+                alpha = clamp(shadow * sphere_a, 0.0, 1.0)
+                if alpha > 0.004:
+                    # Deep space indigo-slate shadow tone (much richer than flat black)
+                    px[x, y] = (5, 9, 20, int(alpha * 255.0))
+
+        final_img = img.resize((size, size), Image.Resampling.LANCZOS)
+        out_path = OUT_DIR / f"widget_phase_{idx:02d}.png"
+        final_img.save(out_path, optimize=True)
+    print("generated 16 3D spherical phase masks (widget_phase_00..15.png)")
+
+
 def main():
-    # Moon: front-lit full lunar disk (dynamic phase terminator is overlaid in ArkUI!)
+    # Moon: front-lit full lunar disk (3D spherical phase mask is overlaid in ArkUI!)
     render_sphere(
         "moon.png", "widget_orb_moon.png",
         lon_offset_deg=0.0, tilt_deg=-8.0,
         rim_rgb=(215, 224, 245), rim_strength=0.14,
-        limb_darkening=0.22, light_dir=(0.15, -0.10, 0.98), ambient=0.72, gamma=0.95,
+        limb_darkening=0.20, light_dir=(0.0, 0.0, 1.0), ambient=0.76, gamma=0.95,
     )
-    # Earth: Asia-Pacific/Eurasia view with clouds & Rayleigh blue atmospheric rim
+    # Earth: Asia-Pacific/Eurasia view with clouds & Rayleigh blue atmospheric rim (front-lit so 3D phase mask works cleanly!)
     render_sphere(
         "earthmap.png", "widget_orb_earth.png",
         clouds_name="earth-clouds.png",
         lon_offset_deg=110.0, tilt_deg=-14.0,
-        rim_rgb=(105, 185, 255), rim_strength=0.72,
-        limb_darkening=0.28, light_dir=(0.35, -0.22, 0.91), ambient=0.35, gamma=0.92,
+        rim_rgb=(105, 185, 255), rim_strength=0.68,
+        limb_darkening=0.22, light_dir=(0.08, -0.05, 0.99), ambient=0.72, gamma=0.92,
     )
     # Mars: Syrtis Major / Valles Marineris hemisphere with dusty peach-amber limb
     render_sphere(
@@ -372,6 +437,24 @@ def main():
     preview_dir.mkdir(parents=True, exist_ok=True)
     sheet.save(preview_dir / "widget_orbs_contact_sheet.png")
     print("saved preview sheet:", preview_dir / "widget_orbs_contact_sheet.png")
+
+
+    render_phase_masks(size=192, radius_ratio=0.43)
+
+    # Build a phase contact sheet for Moon & Earth across 8 phases to visually inspect realism
+    preview_dir = Path("/Users/jiexuanyang/.gemini/antigravity/brain/3fe92827-0a51-4183-8652-d2b423eac3b1/scratch")
+    preview_dir.mkdir(parents=True, exist_ok=True)
+    moon_im = Image.open(OUT_DIR / "widget_orb_moon.png").convert("RGBA")
+    earth_im = Image.open(OUT_DIR / "widget_orb_earth.png").convert("RGBA")
+    phase_sheet = Image.new("RGB", (8 * 140, 2 * 140), (12, 22, 40))
+    for i in range(8):
+        mask = Image.open(OUT_DIR / f"widget_phase_{i * 2:02d}.png").convert("RGBA")
+        m_comp = Image.alpha_composite(moon_im, mask).resize((124, 124), Image.Resampling.LANCZOS)
+        e_comp = Image.alpha_composite(earth_im, mask).resize((124, 124), Image.Resampling.LANCZOS)
+        phase_sheet.paste(m_comp, (i * 140 + 8, 8), m_comp)
+        phase_sheet.paste(e_comp, (i * 140 + 8, 148), e_comp)
+    phase_sheet.save(preview_dir / "widget_phases_preview.png")
+    print("saved phase preview sheet:", preview_dir / "widget_phases_preview.png")
 
 
 if __name__ == "__main__":

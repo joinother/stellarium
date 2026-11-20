@@ -240,13 +240,16 @@ export default class SkyInstrumentFormAbility extends FormExtensionAbility {
           height: spec.height
         },
         duration: spec.duration,
-        useDefaultAnimation: true
+        // Disable system cross-fade so pixel-matched active/inactive UI transitions with zero double-image ghosting.
+        useDefaultAnimation: false
       })
-      hilog.info(DOMAIN, TAG, 'requestOverflow started: formId=%{public}s dim=%{public}s', formId, spec.dimensionClass)
+      hilog.info(DOMAIN, TAG, 'requestOverflow started: formId=%{public}s dim=%{public}s rect=%{public}s area=%{public}s',
+        formId, spec.dimensionClass, JSON.stringify(rect), JSON.stringify(spec))
     } catch (error) {
       const err = error as BusinessError
       // Error 801 means the device does not support scene-animation overflow; fail silently and keep static card intact.
-      hilog.info(DOMAIN, TAG, 'requestOverflow fallback: code=%{public}d msg=%{public}s', err?.code ?? -1, err?.message ?? String(error))
+      hilog.info(DOMAIN, TAG, 'requestOverflow fallback: formId=%{public}s code=%{public}d msg=%{public}s',
+        formId, err?.code ?? -1, err?.message ?? String(error))
     }
   }
 

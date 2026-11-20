@@ -127,6 +127,10 @@ for (const orb of ['moon', 'earth', 'mars', 'saturn', 'jupiter', 'titan', 'venus
   const orbFile = path.join(mediaDir, `widget_orb_${orb}.png`)
   assert.ok(fs.existsSync(orbFile) && fs.statSync(orbFile).size > 4096, `missing or empty 3D orb texture: widget_orb_${orb}.png`)
 }
+for (let i = 0; i < 16; i++) {
+  const maskFile = path.join(mediaDir, `widget_phase_${String(i).padStart(2, '0')}.png`)
+  assert.ok(fs.existsSync(maskFile) && fs.statSync(maskFile).size > 100, `missing 3D phase mask: ${maskFile}`)
+}
 
 // 4. Validate QAbility & MainWindowNativeNode card route & publisher wiring
 const qAbilitySrc = fs.readFileSync(path.join(root, 'harmonyos/ets-source/qability/QAbility.ets'), 'utf8')
@@ -214,13 +218,13 @@ assert.equal(liveMars.dataStatus, '48h 离线星历')
 assert.equal(liveMars.sunAlt, '4.0')
 assert.equal(liveMars.companionAlt, '30.0')
 
-// API 20 Overflow Rect Compliance across every official Form Kit size
+// API 20 Overflow Rect Compliance across every official Form Kit size (width x height max ratios)
 const overflowCases = [
   { w: 158, h: 158, maxWRatio: 1.50, maxHRatio: 1.50, label: '2*2' },
-  { w: 332, h: 158, maxWRatio: 1.50, maxHRatio: 1.25, label: '2*4' },
+  { w: 332, h: 158, maxWRatio: 1.25, maxHRatio: 1.50, label: '2*4' },
   { w: 332, h: 332, maxWRatio: 1.25, maxHRatio: 1.25, label: '4*4' },
-  { w: 158, h: 74, maxWRatio: 2.00, maxHRatio: 1.50, label: '1*2' },
-  { w: 332, h: 498, maxWRatio: 1.10, maxHRatio: 1.25, label: '6*4' }
+  { w: 158, h: 74, maxWRatio: 1.50, maxHRatio: 2.00, label: '1*2' },
+  { w: 332, h: 498, maxWRatio: 1.25, maxHRatio: 1.10, label: '6*4' }
 ]
 for (const c of overflowCases) {
   const area = computeOverflowArea(c.w, c.h)
