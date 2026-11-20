@@ -1,5 +1,21 @@
 > **身份图例**：本文件真机记录中出现的 `com.cnchensh.stellarium` 是**本机调试签名身份**（本机 DevEco 自动生成，非发布身份）；发布身份为 `com.joinother.skyinstrument`。构建脚本 `build-ohos-hap-windows.ps1 -Install` 从产物 `pack.info` 读取实际包名，仓库不写死任何签名身份（见 `docs/harmonyos/release/BUNDLE-IDENTITY-CLEANUP.md`）。
 
+## [2026-11-20] 重构「天象预告」卡片翻页交互（消除焦点重复、升级真列表翻页与 3 个月 8 场预告）
+
+- **修改文件：** `src/StelMainView.cpp`、`harmonyos/ets-source/form/AstronomyCardData.ts`、`harmonyos/ets-source/form/CelestialEventsCard.ets`、`harmonyos/ets-source/form/SkyLiveFormPage.ets`、`scripts/test-ohos-form-cards.mjs`、`docs/harmonyos/CHANGELOG.md`。
+- **问题修复与交互优化：**
+  1. **消除顶部焦点与下方第 1 行重复展示：**
+     - 旧版「天象预告」卡片顶部焦点显示第 1 场天象，下方列表第 1 行又重复显示同一场天象，且 `‹ / ›` 仅在顶部原地切换已展示的天象、列表纹丝不动。
+     - 重构后顶部焦点固定聚焦**最近第 1 场天象**并直接内置 `提醒 / ★ 已约` 快捷按钮；下方列表改为从**第 2 场起**展示严格不重复的后续天象。
+  2. **升级为真正翻动后续天象列表的 `‹ 1/N ›` 分页器：**
+     - C++ `getTonightEvents`（`src/StelMainView.cpp`）将天象采集范围从 2 个月 4 场扩展至**未来 3 个月最多 8 场**，`AstronomyCardData.ts` 新增 `sliceUpcomingEventPage()` 纯函数并同步将 `upcomingEventsJson` 序列化上限提升至 `2600` 字符。
+     - `CelestialEventsCard.ets` 仅在剩余天象超过单页容量（`2×4` 每页 2 条、`4×4` 每页 4 条）时才显示 `后续天象 · 共 N 场   ‹ 1/M ›`，一页能放完时自动隐藏翻页按钮；轻触 `‹ / ›` 真正翻出后续未展示的天象（如跨月天象）并支持逐条一键静默提醒。
+  3. **补齐快捷换星与 1:1 破框镜像：**
+     - 左上角 `星球 · 天象 ↻` 胶囊补齐快捷换星能力，并在 `SkyLiveFormPage.ets` 的 `buildEventsRestingCard()` 同步 1:1 镜像，保持 API 20 破框无缝衔接。
+- **验证与真机实测（MatePad Mini `192.168.31.234:42713`）：**
+  - 主机验证：`test-ohos-form-cards.mjs`（新增 `sliceUpcomingEventPage` 无重复、翻页与单页隐藏断言）、`test-ohos-off-earth-calendar-and-snapshot.mjs`、`test-ohos-notification-integration.mjs`、`test-ohos-native-astronomy-calendar.mjs`、`check-ohos-ui-contract.mjs` 全通过。
+  - 真机实拍：金星视角顶部焦点展示 `水星西大距 · 5天后 · ★ 已约`，下方 `后续天象 · 共 3 场 ‹ 1/2 ›` 第 1 页显示 `火星冲日`（12月21日）与 `木星冲日`（12月30日），点 `›` 翻至 `2/2` 真实展开跨月新天象 `地球合天王星`（1月9日），全程零重复、零无效按钮。
+
 ## [2026-11-20] 桌面卡片全面接入太阳体系（3D 太阳光球、独立「太阳天光」卡、日出中天日落轨弧与黄金时刻）
 
 - **修改文件：** `scripts/build-ohos-widget-orbs.py`、`harmonyos/resources/base/media/widget_orb_sun.png`（新增 3D 太阳光球）、`harmonyos/resources/base/profile/form_config.json`、`harmonyos/ets-source/form/SolarArcCard.ets`（新增第 5 款桌面卡片「太阳天光」）、`harmonyos/ets-source/form/AstronomyCardData.ts`、`harmonyos/ets-source/form/FormStoreHelper.ets`、`harmonyos/ets-source/form/WidgetVisuals.ets`、`harmonyos/ets-source/form/SkyWindowCard.ets`、`harmonyos/ets-source/form/CompanionArcCard.ets`、`harmonyos/ets-source/form/FloatingOrbCard.ets`、`harmonyos/ets-source/form/SkyLiveFormPage.ets`、`harmonyos/ets-source/pages/MainWindowNativeNode.ets`、`scripts/test-ohos-form-cards.mjs`、`docs/harmonyos/CHANGELOG.md`。

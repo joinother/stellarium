@@ -5,6 +5,7 @@ import { hilog } from '@kit.PerformanceAnalysisKit'
 import {
   CompactEventItem,
   CompactPlanetItem,
+  UpcomingEventPage,
   computeDaylightDuration,
   computeGoldenHourClock,
   computeSolarArcProgress,
@@ -19,6 +20,7 @@ import {
   parseVisiblePlanets,
   routePlanetForCard,
   routeTargetForCard,
+  sliceUpcomingEventPage,
   solarStageFromAltitude
 } from './AstronomyCardData'
 import {
@@ -184,7 +186,7 @@ struct SkyLiveFormPage {
     if (this.formKind === 'floating_orb_card') return 110
     if (this.formKind === 'solar_arc_card') return this.isWide() ? 86 : 66
     if (this.formKind === 'companion_arc_card') return this.isWide() ? 86 : 64
-    if (this.formKind === 'celestial_events_card') return this.isTall() ? 50 : 36
+    if (this.formKind === 'celestial_events_card') return this.isTall() ? 46 : 34
     // sky_window_card
     if (!this.isWide() && !this.isTall()) return 56
     return this.isTall() ? 82 : 72
@@ -521,14 +523,16 @@ struct SkyLiveFormPage {
     return parseUpcomingEvents(this.upcomingEventsJson)
   }
 
+  private eventsPage(): UpcomingEventPage {
+    return sliceUpcomingEventPage(this.allEvents(), 0, this.isTall() ? 4 : 2)
+  }
+
   private visibleEvents(): CompactEventItem[] {
-    const all = this.allEvents()
-    return this.isTall() ? all.slice(0, 4) : all.slice(0, 2)
+    return this.eventsPage().items
   }
 
   private heroEvent(): CompactEventItem | undefined {
-    const all = this.allEvents()
-    return all.length > 0 ? all[0] : undefined
+    return this.eventsPage().hero
   }
 
   private heroTitle(): string {
@@ -1257,25 +1261,29 @@ struct SkyLiveFormPage {
         .position({ x: '68%', y: -32 })
         .hitTestBehavior(HitTestMode.None)
 
-      Column({ space: this.isTall() ? 10 : 6 }) {
+      Column({ space: this.isTall() ? 8 : 4 }) {
         Row({ space: 8 }) {
-          Column({ space: 3 }) {
+          Column({ space: 2 }) {
             Row({ space: 6 }) {
-              Text(this.observerPlanetName + ' · 天象预告')
+              Text(this.observerPlanetName + ' · 天象 ↻')
                 .fontSize(10)
                 .fontWeight(FontWeight.Medium)
-                .fontColor('#B8D6F8')
+                .fontColor('#D4E8FF')
+                .height(22)
+                .padding({ left: 8, right: 8 })
+                .backgroundColor('#28FFFFFF')
+                .borderRadius(11)
                 .maxLines(1)
               Text(eventBadgeText(this.heroKind()))
                 .fontSize(10)
                 .fontWeight(FontWeight.Medium)
                 .fontColor(eventAccentColor(this.heroKind()))
-                .padding({ left: 6, right: 6, top: 1, bottom: 1 })
-                .backgroundColor('#26FFFFFF')
+                .padding({ left: 6, right: 6, top: 2, bottom: 2 })
+                .backgroundColor('#22FFFFFF')
                 .borderRadius(8)
             }
             Text(this.heroTitle())
-              .fontSize(this.isTall() ? 17 : 15)
+              .fontSize(this.isTall() ? 16 : 14)
               .fontWeight(FontWeight.Medium)
               .fontColor('#FFFFFF')
               .maxLines(1)
@@ -1284,35 +1292,36 @@ struct SkyLiveFormPage {
           .alignItems(HorizontalAlign.Start)
           .layoutWeight(1)
 
-          Row({ space: 8 }) {
-            Column({ space: 2 }) {
-              Row({ space: 6 }) {
-                if (this.allEvents().length > 1) {
-                  Text('‹').fontSize(16).fontWeight(FontWeight.Medium).fontColor('#E4F1FF')
-                    .textAlign(TextAlign.Center).width(30).height(30).backgroundColor('#2CFFFFFF').borderRadius(15)
-                }
-                Text(this.heroCountdown())
-                  .fontSize(this.isTall() ? 20 : 17)
-                  .fontWeight(FontWeight.Medium)
-                  .fontColor(eventAccentColor(this.heroKind()))
-                  .maxLines(1)
-                if (this.allEvents().length > 1) {
-                  Text('›').fontSize(16).fontWeight(FontWeight.Medium).fontColor('#E4F1FF')
-                    .textAlign(TextAlign.Center).width(30).height(30).backgroundColor('#2CFFFFFF').borderRadius(15)
-                }
-              }
-              .alignItems(VerticalAlign.Center)
-
+          Row({ space: 7 }) {
+            Column({ space: 1 }) {
+              Text(this.heroCountdown())
+                .fontSize(this.isTall() ? 18 : 15)
+                .fontWeight(FontWeight.Medium)
+                .fontColor(eventAccentColor(this.heroKind()))
+                .maxLines(1)
               if (this.heroAtMs() > 0) {
                 Text(formatShortDateZh(this.heroAtMs())).fontSize(10).fontColor('#9ABCE0').maxLines(1)
               }
             }
             .alignItems(HorizontalAlign.End)
 
+            if (this.heroEvent() !== undefined) {
+              Text(this.isReminded(this.heroEvent()!.id) ? '★ 已约' : '提醒')
+                .fontSize(11)
+                .fontWeight(FontWeight.Medium)
+                .fontColor(this.isReminded(this.heroEvent()!.id) ? '#1B1404' : '#EAF4FF')
+                .textAlign(TextAlign.Center)
+                .constraintSize({ minWidth: 52 })
+                .height(28)
+                .padding({ left: 9, right: 9 })
+                .backgroundColor(this.isReminded(this.heroEvent()!.id) ? '#FFD166' : '#3AFFFFFF')
+                .borderRadius(14)
+            }
+
             // Exact top-right orb socket placeholder
             Column()
-              .width(this.isTall() ? 50 : 36)
-              .height(this.isTall() ? 50 : 36)
+              .width(this.isTall() ? 46 : 34)
+              .height(this.isTall() ? 46 : 34)
               .onAreaChange((_oldArea: Area, newArea: Area) => this.captureSlotArea(newArea))
           }
           .alignItems(VerticalAlign.Center)
@@ -1320,32 +1329,51 @@ struct SkyLiveFormPage {
         .width('100%')
 
         if (this.visibleEvents().length > 0) {
-          Column({ space: this.isTall() ? 9 : 5 }) {
+          if (this.eventsPage().pageCount > 1) {
+            Row({ space: 6 }) {
+              Text('后续天象 · 共 ' + String(this.allEvents().length - 1) + ' 场')
+                .fontSize(10)
+                .fontColor('#8FB4DA')
+                .maxLines(1)
+              Blank()
+              Row({ space: 5 }) {
+                Text('‹').fontSize(14).fontWeight(FontWeight.Medium).fontColor('#E4F1FF')
+                  .textAlign(TextAlign.Center).width(26).height(22).backgroundColor('#2CFFFFFF').borderRadius(11)
+                Text('1/' + String(this.eventsPage().pageCount)).fontSize(10).fontWeight(FontWeight.Medium).fontColor('#C6E0FA')
+                Text('›').fontSize(14).fontWeight(FontWeight.Medium).fontColor('#E4F1FF')
+                  .textAlign(TextAlign.Center).width(26).height(22).backgroundColor('#2CFFFFFF').borderRadius(11)
+              }
+              .alignItems(VerticalAlign.Center)
+            }
+            .width('100%')
+          }
+
+          Column({ space: this.isTall() ? 8 : 4 }) {
             ForEach(this.visibleEvents(), (ev: CompactEventItem) => {
               Row({ space: 7 }) {
                 Circle().width(6).height(6).fill(eventAccentColor(ev.kind))
                 Text(ev.title)
-                  .fontSize(this.isTall() ? 13 : 12)
+                  .fontSize(this.isTall() ? 13 : 11)
                   .fontColor('#EEF5FF')
                   .maxLines(1)
                   .textOverflow({ overflow: TextOverflow.Ellipsis })
                   .layoutWeight(1)
                 Text(formatShortDateZh(ev.at)).fontSize(10).fontColor('#96B6DA').maxLines(1)
                 Text(this.isReminded(ev.id) ? '★ 已约' : '提醒')
-                  .fontSize(12)
+                  .fontSize(11)
                   .fontWeight(FontWeight.Medium)
                   .fontColor(this.isReminded(ev.id) ? '#1B1404' : '#EAF4FF')
                   .textAlign(TextAlign.Center)
-                  .constraintSize({ minWidth: 58 })
-                  .height(this.isTall() ? 32 : 28)
-                  .padding({ left: 10, right: 10 })
+                  .constraintSize({ minWidth: 52 })
+                  .height(this.isTall() ? 30 : 25)
+                  .padding({ left: 9, right: 9 })
                   .backgroundColor(this.isReminded(ev.id) ? '#FFD166' : '#3AFFFFFF')
-                  .borderRadius(16)
+                  .borderRadius(14)
               }
               .width('100%')
-              .padding({ left: 11, right: 7, top: this.isTall() ? 7 : 4, bottom: this.isTall() ? 7 : 4 })
+              .padding({ left: 10, right: 6, top: this.isTall() ? 6 : 3, bottom: this.isTall() ? 6 : 3 })
               .backgroundColor('#22FFFFFF')
-              .borderRadius(12)
+              .borderRadius(11)
             }, (ev: CompactEventItem, idx: number) => ev.id + '_' + String(idx))
           }
           .width('100%')
@@ -1365,14 +1393,14 @@ struct SkyLiveFormPage {
               .layoutWeight(1)
           }
           .width('100%')
-          .padding({ left: 12, right: 12, top: 9, bottom: 9 })
+          .padding({ left: 12, right: 12, top: 8, bottom: 8 })
           .backgroundColor('#1EFFFFFF')
           .borderRadius(12)
         }
       }
       .width('100%')
       .height('100%')
-      .padding({ left: 15, right: 14, top: 12, bottom: 11 })
+      .padding({ left: 14, right: 13, top: 10, bottom: 9 })
       .opacity(this.restingContentOpacity)
 
       this.buildFramedShowcaseOverlay()

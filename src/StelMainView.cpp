@@ -16907,13 +16907,13 @@ extern "C" __attribute__((visibility("default"))) const char* StellariumOhos_com
 			}
 			out["satellites"] = satObj;
 
-			// 未来 4 场天象预告（当前观测星球视角，跨本月与次月，供「天象预告」与「天穹之窗」卡片倒计时）
+			// 未来最多 8 场天象预告（当前观测星球视角，跨未来 3 个月，供「天象预告」翻页列表与「天穹之窗」倒计时）
 			QJsonArray upcomingEvents;
 			{
 				const double localJD = nowJD + core->getUTCOffset(nowJD) / 24.0;
 				const QDate baseDate = QDate::fromJulianDay(static_cast<qint64>(std::floor(localJD + 0.5)));
 				QList<QJsonObject> candidates;
-				for (int mOff = 0; mOff <= 1; ++mOff)
+				for (int mOff = 0; mOff <= 2; ++mOff)
 				{
 					const QDate md = baseDate.addMonths(mOff);
 					QJsonObject req;
@@ -16950,7 +16950,7 @@ extern "C" __attribute__((visibility("default"))) const char* StellariumOhos_com
 					if (!id.isEmpty() && seenIds.contains(id)) continue;
 					if (!id.isEmpty()) seenIds.insert(id);
 					upcomingEvents.append(ev);
-					if (upcomingEvents.size() >= 4) break;
+					if (upcomingEvents.size() >= 8) break;
 				}
 			}
 			out["upcomingEvents"] = upcomingEvents;

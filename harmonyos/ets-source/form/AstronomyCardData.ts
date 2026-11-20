@@ -131,6 +131,38 @@ export interface CompactEventItem {
   jd: number
 }
 
+export interface UpcomingEventPage {
+  hero: CompactEventItem | undefined
+  items: CompactEventItem[]
+  pageIndex: number
+  pageCount: number
+}
+
+export function sliceUpcomingEventPage(
+  events: CompactEventItem[],
+  requestedPage: number,
+  pageSize: number
+): UpcomingEventPage {
+  if (events.length === 0) {
+    return { hero: undefined, items: [], pageIndex: 0, pageCount: 1 }
+  }
+  const hero = events[0]
+  const rest = events.slice(1)
+  const safeSize = Math.max(1, Math.floor(pageSize))
+  if (rest.length === 0) {
+    return { hero: hero, items: [], pageIndex: 0, pageCount: 1 }
+  }
+  const pageCount = Math.max(1, Math.ceil(rest.length / safeSize))
+  const safePage = ((Math.floor(requestedPage) % pageCount) + pageCount) % pageCount
+  const start = safePage * safeSize
+  return {
+    hero: hero,
+    items: rest.slice(start, start + safeSize),
+    pageIndex: safePage,
+    pageCount: pageCount
+  }
+}
+
 export interface MiniPhaseDay {
   label: string
   illumination: number
@@ -1177,10 +1209,10 @@ export function buildAstronomyCard(tonight: CardTonightData, now: number): Recor
     data['skyHexHorizon'] = firstSample.skyHexHorizon || data['skyHexHorizon']
   }
 
-  // Upcoming astronomical events for CelestialEventsCard & SkyWindowCard ticker
+  // Upcoming astronomical events for CelestialEventsCard (up to 8 across 3 months for real list pagination)
   const compactEvents: CompactEventItem[] = []
   const rawEvents = tonight.upcomingEvents ?? []
-  for (let i = 0; i < rawEvents.length && compactEvents.length < 4; i++) {
+  for (let i = 0; i < rawEvents.length && compactEvents.length < 8; i++) {
     const ev = rawEvents[i]
     const title = (ev.title ?? '').trim()
     if (title.length === 0) continue
@@ -1247,7 +1279,7 @@ export function normalizeAstronomyCard(raw: string, now: number): Record<string,
       const key = keys[i]
       const val = parsed[key]
       if (typeof val === 'string') {
-        const limit = longKeys.includes(key) ? 1600 : 200
+        const limit = longKeys.includes(key) ? 2600 : 200
         fallback[key] = val.slice(0, limit)
       }
     }

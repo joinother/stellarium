@@ -35,6 +35,7 @@ import {
   planetZhName,
   routePlanetForCard,
   routeTargetForCard,
+  sliceUpcomingEventPage,
   solarStageFromAltitude
 } from '../harmonyos/ets-source/form/AstronomyCardData.ts'
 
@@ -324,5 +325,20 @@ const jup4h = applyAnalyticalTimePreview(buildFallbackCardForPlanet('Jupiter', n
 const jup8h = applyAnalyticalTimePreview(buildFallbackCardForPlanet('Jupiter', now + 8 * 3600000), 'Jupiter', now + 8 * 3600000, 8)
 assert.notEqual(jup4h.sunAlt, jup8h.sunAlt, 'Jupiter +4h and +8h analytical sunAlt must advance with solar rotation')
 assert.ok(JSON.parse(jup4h.visiblePlanetsJson).length >= 2, 'Jupiter preset must provide fallback visible planets')
+
+// Upcoming event pagination: Hero must NEVER duplicate into subsequent list; pager only appears when remaining > pageSize
+const sevenEvents = Array.from({ length: 7 }, (_, i) => ({
+  id: `ev-${i}`, title: `天象 ${i + 1}`, kind: 'planet', target: 'Mars', at: now + (i + 1) * 86400000, jd: 2461370 + i
+}))
+const p0 = sliceUpcomingEventPage(sevenEvents, 0, 2)
+assert.equal(p0.hero?.id, 'ev-0')
+assert.deepEqual(p0.items.map((e) => e.id), ['ev-1', 'ev-2'], 'page 0 must start from event #2 without duplicating Hero')
+assert.equal(p0.pageCount, 3)
+const p1 = sliceUpcomingEventPage(sevenEvents, 1, 2)
+assert.deepEqual(p1.items.map((e) => e.id), ['ev-3', 'ev-4'], 'page 1 must reveal unseen events #4 and #5')
+const p2 = sliceUpcomingEventPage(sevenEvents, 2, 2)
+assert.deepEqual(p2.items.map((e) => e.id), ['ev-5', 'ev-6'], 'page 2 must reveal unseen events #6 and #7')
+const pSmall = sliceUpcomingEventPage(sevenEvents.slice(0, 3), 0, 2)
+assert.equal(pSmall.pageCount, 1, 'when remaining events fit on one page, pageCount must be 1 so pager hides')
 
 console.log(`HarmonyOS interactive widget contract, transparent backplate, overflow & data tests passed: ${expectedForms.length} cards, 12 3D orbs, ${overflowCases.length} overflow specs`)
