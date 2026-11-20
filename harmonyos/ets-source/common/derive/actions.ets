@@ -25,8 +25,8 @@ export function moreActions(): ShellAction[] {
     { label: I18n.t('dock_place'), icon: 'location', panel: 'place', section: I18n.t('more_section_workspace') },
     { label: I18n.t('more_sky_data'), icon: 'satellite', panel: 'dataHub', section: I18n.t('more_section_data') },
     { label: I18n.t('more_automation'), icon: 'script', panel: 'automationHub', section: I18n.t('more_section_automation') },
-    { label: I18n.t('panel_tools_data'), icon: 'tools', panel: 'tools', section: I18n.t('more_section_system') },
     { label: I18n.t('dock_settings'), icon: 'settings', panel: 'settings', section: I18n.t('more_section_system') },
+    { label: I18n.t('panel_tools_data'), icon: 'tools', panel: 'tools', section: I18n.t('more_section_system') },
     { icon: 'help', label: I18n.t('c_help'), panel: 'help', section: I18n.t('more_section_system') }
   ]
   // Development panel entry is always last and disappears from release builds.

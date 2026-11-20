@@ -1,5 +1,19 @@
 > **身份图例**：本文件真机记录中出现的 `com.cnchensh.stellarium` 是**本机调试签名身份**（本机 DevEco 自动生成，非发布身份）；发布身份为 `com.joinother.skyinstrument`。构建脚本 `build-ohos-hap-windows.ps1 -Install` 从产物 `pack.info` 读取实际包名，仓库不写死任何签名身份（见 `docs/harmonyos/release/BUNDLE-IDENTITY-CLEANUP.md`）。
 
+## [2026-11-20] 面板底部留白收口、时间轮竖向滚动与设置单滚动修复
+
+- **修改文件：** `harmonyos/ets-source/pages/MainWindowNativeNode.ets`、`harmonyos/ets-source/panels/panels/TimePanel.ets`、`harmonyos/ets-source/panels/panels/MorePanel.ets`、`harmonyos/ets-source/panels/panels/SettingsPanel.ets`、`harmonyos/ets-source/panels/time/TimeWheelCanvas.ets`、`harmonyos/ets-source/panels/time/TimeWheelScrubber.ets`、`harmonyos/ets-source/state/TimeWheelController.ets`、`harmonyos/ets-source/common/derive/actions.ets`、`harmonyos/ets-source/common/derive/labels.ets`、`scripts/test-ohos-compact-panel-geometry.mjs`、`scripts/test-ohos-time-panel.mjs`、`scripts/test-ohos-location-panel.mjs`、`scripts/test-ohos-settings-choice-motion.mjs`、`docs/harmonyos/CHANGELOG.md`。
+- **核心改动：**
+  1. **时间面板底部收口：** 紧凑/平板高度不再用固定的 `30 + header + 14` 常量叠加，改为实际 `panelTopChromeHeight()` + 实测时间轮/速度块高度 + 8vp（平板 18vp）底部留白。此前手算比实际 chrome 多出约 20vp，会把下一行快捷 chips 的顶部露在面板底边。
+  2. **「更多功能」按内容收口：** `MorePanel` 通过 `onAreaChange` 上报实测内容高度，紧凑态以 `chrome + 内容` 收口且不超过 0.9 吸附高度；未测得高度时保留原 0.9 兜底。面板底部滚动留白按类型收紧（时间 20vp、快捷 16vp、其余 50vp），更多面板打开时按内容收口、滚到末尾保留 50vp 尾部。
+  3. **时间轮竖向滚动手势：** 时间轮只处理横向拖动。竖向滑动不暂停时间、不改时间，直接交给面板 Scroll；轮盘 Canvas/容器均不参与命中测试，宿主按 `onWheelRect` 上报的窗口矩形做坐标路由，横向确认后才开启触感。修复手指落在时间轮上向下翻看时面板不动、或轻微 x 抖动误改时间的问题。
+  4. **滚动模糊状态更新：** `updatePanelScrollBlur` 合并到下一轮事件循环，避免 `onDidScroll` 在 build/布局阶段直接写 `@State` 触发 “State variable changed during render” 并中断本帧命中测试（表现为面板上滑时星图仍跟着拖动）。
+  5. **设置全部标签单滚动：** 设置面板不再持有内嵌 `Scroll(this.contentScroller)`，所有标签共用宿主面板 Scroll；根高度改为 `auto`、内容区 `layoutWeight(0)`，切换标签时宿主把当前面板滚回顶部。移除只有面板跳转的「工具」标签，工具与数据统一从更多面板进入；切到「关于」时顶部标题栏显示「关于」。
+  6. **更多功能入口顺序：** 「系统」分组中「设置」与「工具与数据」交换位置，设置在上。
+- **验证与真机实测（`192.168.3.95:36717`，`com.joinother.skyinstrument`）：**
+  - 主机验证：面板/时间/设置/预设 69 项、观测环境回归 100 项自动化测试全部通过；`check-ohos-ui-contract.mjs`（37 面板 / 60 锚点）、`check-ohos-i18n.mjs`、`check-ohos-command-catalog.mjs`（431 命令）通过。
+  - 真机核验：时间面板内容在轮盘区域上滑可正常滚动且 JD 不变；轮盘横向拖动仍可改时间；设置主标签、管理扩展、关于均通过宿主面板整体滚动（标签栏随内容移出）；关于标题栏显示「关于」；工具标签已移除；更多面板顺序为「设置 → 工具与数据」，打开时无底部空白、滚到末尾保留 50vp 尾部；滚动时无 “FIX THIS APPLICATION ERROR”。
+
 ## [2026-11-20] 插件体系整改阶段 1：全新鸿蒙风格「插件中心」、补齐三大 Hub 缺失入口与修复全量插件落地路由
 
 - **修改文件：** `harmonyos/ets-source/panels/settings/PluginCenterSection.ets`（新增）、`harmonyos/ets-source/panels/panels/SettingsPanel.ets`、`harmonyos/ets-source/common/derive/labels.ets`、`harmonyos/ets-source/common/derive/actions.ets`、`harmonyos/ets-source/capability/PluginFeatureController.ets`、`harmonyos/ets-source/pages/MainWindowNativeNode.ets`、`docs/harmonyos/CHANGELOG.md`。

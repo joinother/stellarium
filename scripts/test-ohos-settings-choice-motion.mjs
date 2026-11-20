@@ -52,8 +52,9 @@ test('all four settings groups read current state rather than a captured selecti
 test('choice buttons have an explicit normal type and shared control radius', () => {
   assert.match(buttonSource, /Button\(\{ type: ButtonType.Normal \}\)/);
   assert.match(buttonSource, /borderRadius\(UI_RADIUS_CONTROL\)/);
-  assert.doesNotMatch(buttonSource, /UI_RADIUS_PILL|maxLines|minFontSize/);
-  assert.match(buttonSource, /minHeight: 40, maxWidth: '100%'/);
+  assert.doesNotMatch(buttonSource, /UI_RADIUS_PILL|minFontSize/);
+  assert.match(buttonSource, /\.maxLines\(2\)/);
+  assert.match(buttonSource, /minHeight: uiControlHeight\(40, this\.readableUi, this\.controlScale\), maxWidth: '100%'/);
 });
 
 test('selection animation follows the background, but does not animate button layout', () => {
@@ -74,5 +75,5 @@ test('CLI and touch share time response animations and semantic settings routes'
   const route = method('private openPanelFromCli(');
   assert.match(route, /settingsInformation/);
   assert.match(route, /settingsTime/);
-  assert.match(route, /this\.layerCtl\(\)\.selectConfigTab\(panel === 'settingsInformation' \? 1 : \(panel === 'settingsTime' \? 3 : -1\)\)/);
+  assert.match(route, /this\.layerCtl\(\)\.selectConfigTab\(panel === 'settingsInformation' \? 1\s*[\s\S]{0,120}panel === 'settingsTime' \? 3 : -1\)\)/);
 });

@@ -1277,6 +1277,8 @@ export struct WindowNativeNode {
   @State private panelScrolling: boolean = false
   // 华为 HarmonyOS 设计规范：面板上下滑动时顶部标题栏渐进式动态模糊进度（0=顶部通透，1=滚动 >=24vp 完整毛玻璃）。
   @State private panelScrollBlurProgress: number = 0
+  private panelScrollBlurUpdatePending: boolean = false
+  private pendingPanelScrollBlurOffsetY: number = 0
   // 统一字体与按钮尺寸档位（'system' | 'standard' | 'large' | 'xlarge'），与系统 fontSizeScale 联动。
   @State private uiFontScaleMode: string = 'system'
   @StorageProp('stellariumSystemFontScale') @Watch('syncUiTypographyScale') private systemFontScale: number = 1.0
@@ -1289,6 +1291,8 @@ export struct WindowNativeNode {
   @State private expandedPanelDragOffsetY: number = 0
   // 时间面板“时间轮 + 倒带/实时”两块的自然高度（vp），用于平板紧凑高度。
   @State private timeSpeedBlockHeight: number = 0
+  // 「更多功能」列表的实测高度（vp）：紧凑态按内容收口，避免末行到 Dock 之间留白。
+  @State private morePanelContentHeight: number = 0
   private lastInfoWinCloseMs: number = 0
   private dismissedObjectName: string = ''
   @State private panelContentKey: number = 0
@@ -1458,7 +1462,6 @@ export struct WindowNativeNode {
   private panelRouteDirection: number = 1
   private widePanelScroller: Scroller = new Scroller()
   private compactPanelScroller: Scroller = new Scroller()
-  private scriptListScroller: Scroller = new Scroller()
   @State private bookmarkStore: BookmarkStore = new BookmarkStore()
   @State private telescopeStore: TelescopeStore = new TelescopeStore()
   @State private overlayStore: OverlayStore = new OverlayStore()
@@ -1602,6 +1605,18 @@ export struct WindowNativeNode {
   // 时间轮交互控制器（普通类，非可观测）：拖动/惯性/轨道重基准/引擎推送。
   // 跨域依赖以回调注入：引擎推送、暂停速度、UTC 偏移。
   private timeWheelController: TimeWheelController | undefined = undefined
+  // 时间轮触感只在横向拖动确认后开启；竖向翻看面板不应触发。
+  private timeWheelHapticStarted: boolean = false
+  // 时间轮在窗口中的矩形（vp）与面板级触摸路由状态。轮盘自身不接触摸，
+  // 由面板 onTouch 在命中矩形内识别横向拖动，竖向手势继续交给面板 Scroll。
+  private timeWheelRectX: number = 0
+  private timeWheelRectY: number = 0
+  private timeWheelRectW: number = 0
+  private timeWheelRectH: number = 0
+  private timeWheelTouchPending: boolean = false
+  private timeWheelTouchDragging: boolean = false
+  private timeWheelTouchStartX: number = 0
+  private timeWheelTouchStartY: number = 0
   // Time-wheel haptics use the system clock-timer preset, rate-limited by
   // HapticFeedback and by the wheel's speed-adaptive tick cadence.
   private timeWheelHapticEnabled: boolean = true
@@ -4095,13 +4110,23 @@ export struct WindowNativeNode {
   }
 
   // 按华为 HarmonyOS 标题栏动态模糊规范（0 -> 24vp 渐进）更新顶部毛玻璃背板进度。
+  // onDidScroll 可能在 build/布局阶段触发；此时直接写 @State 会报
+  // "State variable changed during render" 并中断本帧命中测试，表现为面板上滑时
+  // 星图仍跟着拖动。合并到下一轮事件循环再更新，避免在渲染中改状态。
   private updatePanelScrollBlur(offsetY: number): void {
-    const raw = Number.isFinite(offsetY) ? clamp(offsetY / 24, 0, 1) : 0
-    if (Math.abs(raw - this.panelScrollBlurProgress) >= 0.04
-      || (raw === 0 && this.panelScrollBlurProgress !== 0)
-      || (raw === 1 && this.panelScrollBlurProgress !== 1)) {
-      this.panelScrollBlurProgress = raw
-    }
+    this.pendingPanelScrollBlurOffsetY = offsetY
+    if (this.panelScrollBlurUpdatePending) return
+    this.panelScrollBlurUpdatePending = true
+    setTimeout(() => {
+      this.panelScrollBlurUpdatePending = false
+      const pending = this.pendingPanelScrollBlurOffsetY
+      const raw = Number.isFinite(pending) ? clamp(pending / 24, 0, 1) : 0
+      if (Math.abs(raw - this.panelScrollBlurProgress) >= 0.04
+        || (raw === 0 && this.panelScrollBlurProgress !== 0)
+        || (raw === 1 && this.panelScrollBlurProgress !== 1)) {
+        this.panelScrollBlurProgress = raw
+      }
+    }, 0)
   }
 
   private panelTopChromeHeight(isCompact: boolean): number {
@@ -4696,6 +4721,8 @@ export struct WindowNativeNode {
     this.panelDragging = false
     this.panelScrolling = false
     this.panelTouching = false
+    this.timeWheelTouchPending = false
+    this.timeWheelTouchDragging = false
     // 时间面板首帧必须已经是当前模拟时间：用缓存的 JD 预填时间轮与手动时间，
     // 不要等面板动画后的 125ms 轮询（否则会先闪一下旧日期/空刻度）。
     if (panel === 'time' && nextVisible) this.prepareTimePanel()
@@ -4982,8 +5009,14 @@ export struct WindowNativeNode {
     }, 16)
   }
 
+  // 设置页所有标签共用宿主面板 Scroll；切换标签时回到顶部。
+  private resetActivePanelScroll(): void {
+    this.resetPanelScroll(this.isExpandedLayout ? this.widePanelScroller : this.compactPanelScroller)
+  }
+
   private resetPanelScroll(scroller: Scroller): void {
     this.panelScrollBlurProgress = 0
+    this.pendingPanelScrollBlurOffsetY = 0
     try {
       scroller.scrollTo({ xOffset: 0, yOffset: 0, animation: false })
     } catch (error) {
@@ -5201,6 +5234,65 @@ export struct WindowNativeNode {
     } else if (event.type === TouchType.Up || event.type === TouchType.Cancel) {
       this.panelTouching = false
       this.resetPanelIdle()
+    }
+  }
+
+  // 时间轮横向拖动的时间面板级路由。轮盘 Canvas 设成 HitTestMode.None，
+  // 不拦截触摸；这里在面板的被动 onTouch 中按轮盘矩形识别横向意图：
+  // 横向 → 时间轮拖动；竖向 → 不消费，面板 Scroll 正常翻看。
+  private handleTimeWheelTouch(event: TouchEvent): void {
+    if (!this.panelVisible || this.activePanel !== 'time' ||
+      this.timeWheelRectW <= 0 || this.timeWheelRectH <= 0) {
+      return
+    }
+    const points = event.touches.length > 0 ? event.touches : event.changedTouches
+    if (points.length === 0) return
+    const point = points[0]
+    const x = point.windowX
+    const y = point.windowY
+    if (event.type === TouchType.Down) {
+      const inside = x >= this.timeWheelRectX && x <= this.timeWheelRectX + this.timeWheelRectW &&
+        y >= this.timeWheelRectY && y <= this.timeWheelRectY + this.timeWheelRectH
+      this.timeWheelTouchPending = inside
+      this.timeWheelTouchDragging = false
+      if (inside) {
+        this.timeWheelTouchStartX = x
+        this.timeWheelTouchStartY = y
+      }
+      return
+    }
+    if (event.type === TouchType.Move) {
+      if (this.timeWheelTouchDragging) {
+        this.wheel().updatePan(x)
+        return
+      }
+      if (!this.timeWheelTouchPending) return
+      const dx = x - this.timeWheelTouchStartX
+      const dy = y - this.timeWheelTouchStartY
+      if (Math.abs(dx) < 6 && Math.abs(dy) < 6) return
+      if (Math.abs(dx) <= Math.abs(dy) * 1.2) {
+        // 竖向翻看：退出时间轮路由，交给面板 Scroll。
+        this.timeWheelTouchPending = false
+        return
+      }
+      this.timeWheelTouchPending = false
+      this.timeWheelTouchDragging = true
+      this.wheel().beginPan(this.timeWheelTouchStartX, this.timeWheelTouchStartY)
+      this.wheel().updatePan(x)
+      if (this.timeWheelHapticEnabled && !this.timeWheelHapticStarted) {
+        this.timeWheelHapticStarted = true
+        this.haptics().beginRuler(0)
+      }
+      return
+    }
+    if (event.type === TouchType.Up || event.type === TouchType.Cancel) {
+      const wasDragging = this.timeWheelTouchDragging
+      this.timeWheelTouchPending = false
+      this.timeWheelTouchDragging = false
+      if (!wasDragging) return
+      this.wheel().endPan(event.type === TouchType.Cancel)
+      if (event.type === TouchType.Cancel && this.timeWheelHapticEnabled) this.haptics().endRuler()
+      this.timeWheelHapticStarted = false
     }
   }
 
@@ -6069,19 +6161,35 @@ export struct WindowNativeNode {
     if (this.activePanel === 'time') {
       // 与平板共用同一套时间面板高度：只展开到“时间轮 + 倒带/停止/实时”一行；
       // 日出/中天/日落及以下内容留在面板内 Scroll，不再用 0.6/0.9 的通用吸附高度。
-      return this.timePanelSpeedHeight(usable, 12 + 16)
+      return this.timePanelSpeedHeight(usable, true)
     }
     const minH = Math.min(usable, 280)
+    if (this.activePanel === 'more' && this.morePanelContentHeight > 0) {
+      // 内容实测前沿用 0.9 吸附高度；实测后按内容收口，末行直接贴齐面板
+      // 底边，不再保留固定高度差或额外底部留白。
+      const fitted = this.panelTopChromeHeight(true) + this.morePanelContentHeight
+      return clamp(Math.min(fitted, usable * this.compactPanelSnapRatio), minH, usable)
+    }
     return clamp(usable * this.compactPanelSnapRatio - this.compactPanelDragOffsetY, minH, usable)
   }
 
-  // 时间面板（手机紧凑 / 平板展开）共用的展开高度：顶部留白 + 抓手 + 标题栏 +
-  // 标题下间距 + 时间轮/速度栏内容高度。块高度未测得时按可用高度的 0.6 兜底。
-  private timePanelSpeedHeight(usable: number, verticalPadding: number): number {
+  // 紧凑面板滚动内容的底部留白：快捷/时间只留少量呼吸空间；
+  // 「更多功能」高度仍按内容收口，50vp 只作为滚到末尾时的尾部空间，打开时不会露出空白。
+  private compactPanelBottomPadding(): number {
+    if (this.activePanel === 'quick') return 16
+    if (this.activePanel === 'time') return 20
+    return 50
+  }
+
+  // 时间面板（手机紧凑 / 平板展开）共用的展开高度：实际顶部 chrome + 时间轮/速度栏
+  // 内容高度 + 少量底部留白。块高度未测得时按可用高度的 0.6 兜底。
+  // 不能再叠加固定标题栏常量：控制缩放/副标题会改变 header 高度，手算会多出
+  // 约 20vp，把下一行快捷 chips 的顶部露在面板底边。
+  private timePanelSpeedHeight(usable: number, isCompact: boolean): number {
     const block = this.timeSpeedBlockHeight
     if (block <= 0) return Math.min(usable * 0.6, usable)
-    const header = this.timeStore.panelSubtitle(this.activePanel).length > 0 ? 56 : 44
-    return Math.min(verticalPadding + 30 + header + 14 + block, usable)
+    const bottomInset = isCompact ? 8 : 18
+    return Math.min(this.panelTopChromeHeight(isCompact) + block + bottomInset, usable)
   }
 
   // 抓手拖动或面板内容滚动时，整块 backdropBlur 每帧都要重算滤镜缓存；
@@ -6490,7 +6598,7 @@ export struct WindowNativeNode {
       return Math.min(this.quickPanelContentHeight(), usable)
     }
     if (this.activePanel === 'time') {
-      return this.timePanelSpeedHeight(usable, 18 + 18)
+      return this.timePanelSpeedHeight(usable, false)
     }
     return usable
   }
@@ -9464,7 +9572,10 @@ export struct WindowNativeNode {
       .borderRadius(UI_RADIUS_SHEET)
       .clip(true)
       .shadow({ radius: this.panelChromeBusy() ? 0 : 34, color: this.hostSlots().shadowSoft, offsetX: 0, offsetY: 18 })
-      .onTouch((event: TouchEvent) => { this.notePanelTouch(event) })
+      .onTouch((event: TouchEvent) => {
+        this.notePanelTouch(event)
+        this.handleTimeWheelTouch(event)
+      })
       .scale({ x: this.panelIdleOpacity < 1 ? 0.97 : 1.0, y: this.panelIdleOpacity < 1 ? 0.97 : 1.0 })
       .opacity(this.panelIdleOpacity * this.panelPresentationOpacity)
       .translate({ y: this.panelPresentationOffsetY })
@@ -9494,7 +9605,7 @@ export struct WindowNativeNode {
             top: this.panelTopChromeHeight(true),
             left: this.compactPanelHorizontalPadding(),
             right: this.compactPanelHorizontalPadding(),
-            bottom: this.activePanel === 'quick' ? 16 : 50
+            bottom: this.compactPanelBottomPadding()
           })
           .id('panel-content-' + this.i18nLang)
       }
@@ -9576,7 +9687,10 @@ export struct WindowNativeNode {
       .shadow({ radius: this.panelChromeBusy() ? 0 : 30, color: this.hostSlots().shadowSoft, offsetX: 0, offsetY: 14 })
       .margin({ bottom: 10 })
       .hitTestBehavior(HitTestMode.Default)
-      .onTouch((event: TouchEvent) => { this.notePanelTouch(event) })
+      .onTouch((event: TouchEvent) => {
+        this.notePanelTouch(event)
+        this.handleTimeWheelTouch(event)
+      })
       .alignSelf(ItemAlign.Center)
       .scale({ x: this.panelIdleOpacity < 1 ? 0.98 : 1.0, y: this.panelIdleOpacity < 1 ? 0.98 : 1.0 })
       .opacity(this.panelIdleOpacity * this.panelPresentationOpacity)
@@ -9591,7 +9705,10 @@ export struct WindowNativeNode {
         actions: moreActions(),
         languageRevision: this.languageStore.languageRevision,
         startsSection: (item: ShellAction, index: number) => this.moreActionStartsSection(item, index),
-        onOpenPanel: (panel: string) => { this.openSubPanel(panel) }
+        onOpenPanel: (panel: string) => { this.openSubPanel(panel) },
+        onContentHeight: (height: number) => {
+          if (Math.abs(height - this.morePanelContentHeight) > 0.5) this.morePanelContentHeight = height
+        }
       })
     } else if (DEV_TOOLS_ENABLED && this.activePanel === 'devTools') {
       DevToolsPanel({
@@ -9681,12 +9798,11 @@ export struct WindowNativeNode {
         manualHour: this.timeStore.manualHour,
         manualMinute: this.timeStore.manualMinute,
         onSelectUnit: (unit: string) => { this.wheel().selectUnit(unit) },
-        onWheelTouch: (event: TouchEvent) => {
-          if (this.timeWheelHapticEnabled && event.type === TouchType.Down) this.haptics().beginRuler(0)
-          this.wheel().handleTouch(event)
-          // Keep the ruler active after Up so inertia detents can still tick;
-          // the next Down starts a fresh ruler gesture, and Cancel ends it.
-          if (this.timeWheelHapticEnabled && event.type === TouchType.Cancel) this.haptics().endRuler()
+        onWheelRect: (x: number, y: number, width: number, height: number) => {
+          this.timeWheelRectX = x
+          this.timeWheelRectY = y
+          this.timeWheelRectW = width
+          this.timeWheelRectH = height
         },
         onChip: (id: string) => { this.timeCtl().handleChip(id) },
         onEquationToggle: (setting: string, enabled: boolean) => { this.ocularCtl().setEquationOfTime(setting, enabled) },
@@ -9935,7 +10051,6 @@ export struct WindowNativeNode {
         notificationStore: this.notificationStore,
         keyboardShortcutStore: this.keyboardShortcutStore,
         toolsStore: this.tools,
-        scroller: this.scriptListScroller,
         remoteControlEnabled: this.remoteControlEnabled,
         remoteControlStatus: this.remoteControlStatus,
         remoteControlPort: this.remoteControlPort,
@@ -9989,6 +10104,7 @@ export struct WindowNativeNode {
         scriptSourceLine: (filename: string) => { return this.scriptStore.scriptSourceLine(filename) },
         hasSelectedObject: () => { return this.objectDetailStore.hasSelectedObject() },
         selectConfigTab: (tabId: number) => { this.switchConfigTab(tabId) },
+        onRequestScrollTop: () => { this.resetActivePanelScroll() },
         setLanguage: (lang: string) => { this.setLanguage(lang) },
         setEphemerisEnabled: (key: string, available: boolean, enabled: boolean) => { this.ephemerisStore.setEphemerisEnabled(key, available, enabled) },
         setDistanceUnit: (useMetric: boolean) => { this.viewSettingsStore.setDistanceUnit(useMetric) },
@@ -10063,7 +10179,6 @@ export struct WindowNativeNode {
         triggerAction: (actionId: string) => { this.triggerAction(actionId) },
         moveToSelectedObject: () => { this.moveToSelectedObject() },
         onOpenLayersSky: () => { this.viewTab = 0; this.openSubPanel('layers') },
-        onOpenTools: () => { this.openSubPanel('tools') },
         openExternalUrl: (url: string) => { this.openExternalUrl(url) }
       })
     } else if (this.activePanel === 'calendar') {

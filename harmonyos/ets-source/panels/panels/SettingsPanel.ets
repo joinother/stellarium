@@ -5,7 +5,7 @@ import { I18n, PROJECTION_KEYS } from '../../pages/I18n'
 import { DEFAULT_HAPTIC_INTENSITY } from '../../capability/HapticFeedback'
 import { TabItem, PluginItem } from '../../pages/StellariumTypes'
 import { ConfigurationOption } from '../../pages/MainWindowModels'
-import { UI_RADIUS_CONTROL, UI_RADIUS_PILL, UI_RADIUS_PANEL } from '../../common/ui/UiTokens'
+import { UI_RADIUS_CONTROL } from '../../common/ui/UiTokens'
 import { panelFontSize, uiControlHeight } from '../../common/ui/UiTypography'
 import { GyroStore } from '../../state/GyroStore'
 import { OverlayStore } from '../../state/OverlayStore'
@@ -30,7 +30,7 @@ import { KeyboardShortcutItem } from '../../common/types/StellariumTypes'
 import { TimeSettingsSection } from '../settings/TimeSettingsSection'
 import { PluginCenterSection } from '../settings/PluginCenterSection'
 import { DeltaTSettingsBlock } from '../time/DeltaTSettingsBlock'
-import { sensZh, scriptZh, scriptDesc, pluginZh, pluginDesc, resourceText, pluginFeatureRoute } from '../../common/derive/labels'
+import { sensZh, scriptZh, scriptDesc } from '../../common/derive/labels'
 import { configDitheringLabel } from '../../common/derive/skycult'
 
 // 「设置」面板，对应 activePanel === 'settings'：设备与隐私 / 主设置 / 信息 / 天空 /
@@ -41,7 +41,7 @@ import { configDitheringLabel } from '../../common/derive/skycult'
 // 标签/文案纯函数多数直连 common/derive/labels，宿主私有助手与全部动作经回调注入。
 // 最大视场用本地草稿 maxFovDraft（aboutToAppear 与 store 同步）：拖动只改草稿，
 // 点"应用"才经 setNavigationMaxFov 下发生效。
-// Scroller（scriptListScroller）以普通成员传入：宿主仍持同一实例。
+// 所有标签共用宿主面板 Scroll；切换标签只请求宿主把当前面板滚回顶部。
 
 interface FontScaleChoice {
   mode: string
@@ -91,7 +91,6 @@ export struct SettingsPanel {
   @Prop @Watch('onConfigTabChanged') configTab: number
   @Prop configTabContentOpacity: number
   @Prop configTabContentOffsetX: number
-  private contentScroller: Scroller = new Scroller()
   @Prop i18nLang: string
   @Prop selectedLanguage: string
   @Prop isExpandedLayout: boolean
@@ -108,7 +107,6 @@ export struct SettingsPanel {
   @Prop scriptList: string[]
   @Prop fovText: string
   @State private c: ThemeSlots = DEFAULT_SLOTS
-  scroller: Scroller = new Scroller()
   // 最大视场用本地草稿 maxFovDraft（aboutToAppear 与 store 同步）：拖动只改草稿，
   // 点"应用"才经 setNavigationMaxFov 下发生效。
   @State private maxFovDraft: number = 180
@@ -121,6 +119,8 @@ export struct SettingsPanel {
   scriptSourceLine: (filename: string) => string = () => ''
   hasSelectedObject: () => boolean = () => false
   selectConfigTab: (tabId: number) => void = () => {}
+  // 设置页不再持有内嵌 Scroll，切换标签时由宿主把当前面板滚回顶部。
+  onRequestScrollTop: () => void = () => {}
   setLanguage: (lang: string) => void = () => {}
   setEphemerisEnabled: (key: string, available: boolean, enabled: boolean) => void = () => {}
   setDistanceUnit: (useMetric: boolean) => void = () => {}
@@ -188,7 +188,6 @@ export struct SettingsPanel {
   triggerAction: (actionId: string) => void = () => {}
   moveToSelectedObject: () => void = () => {}
   onOpenLayersSky: () => void = () => {}
-  onOpenTools: () => void = () => {}
   openExternalUrl: (url: string) => void = () => {}
 
   aboutToAppear(): void {
@@ -199,10 +198,9 @@ export struct SettingsPanel {
 
   private onRemoteStatusChanged(): void {}
 
-  // 切换设置页时回到顶部；脚本/扩展列表也一并复位。
+  // 切换设置页时回到顶部；所有标签共用宿主面板 Scroll。
   private onConfigTabChanged(): void {
-    this.contentScroller.scrollTo({ xOffset: 0, yOffset: 0, animation: false })
-    this.scroller.scrollTo({ xOffset: 0, yOffset: 0, animation: false })
+    this.onRequestScrollTop()
   }
 
   // 脚本页：头部固定，列表占满面板剩余高度并自行滚动。
@@ -224,8 +222,7 @@ export struct SettingsPanel {
           Text(I18n.format('script_starting_named', [scriptZh(this.scriptLaunchingName)])).fontSize(10).fontColor(this.c.sub)
         }.width('100%').padding({ left: 8, right: 8, bottom: 4 })
       }
-      Scroll(this.scroller) {
-        Column({ space: 2 }) {
+      Column({ space: 2 }) {
           ForEach(this.scriptList, (s: string) => {
             Column({ space: 0 }) {
               Row() {
@@ -257,109 +254,13 @@ export struct SettingsPanel {
               .hitTestBehavior(HitTestMode.Default)
             .onClick(() => { this.playScriptByName(s) })
           }, (s: string, index: number) => s)
-        }
-          .width('100%')
       }
         .width('100%')
-        .layoutWeight(1)
-        .scrollable(ScrollDirection.Vertical)
-        .scrollBar(BarState.Auto)
-        .edgeEffect(EdgeEffect.Spring)
-        .hitTestBehavior(HitTestMode.Default)
     }
     .width('100%')
-    .height('100%')
     .padding({ bottom: 16 })
   }
 
-  // 扩展管理页：头部固定，列表占满剩余高度并自行滚动。
-  @Builder
-  pluginTabContent() {
-    Column({ space: 0 }) {
-      Row() {
-        Column({ space: 3 }) {
-          Text(I18n.t('i0124')).fontSize(13).fontWeight(FontWeight.Medium).fontColor(this.c.text).width('100%')
-          Text(I18n.t('plugin_management_hint')).fontSize(10).fontColor(this.c.sub).width('100%').maxLines(3)
-        }.layoutWeight(1).alignItems(HorizontalAlign.Start)
-        Button(I18n.t('act_refresh')).fontSize(10).fontColor(this.c.text).backgroundColor(this.c.bg)
-          .borderRadius(UI_RADIUS_CONTROL).height(28).padding({ left: 10, right: 10 })
-          .onClick(() => { this.loadPluginList() })
-      }.width('100%').padding({ left: 8, right: 8, top: 4, bottom: 8 })
-      if (this.pluginStore.pluginListLoading && this.pluginStore.pluginList.length === 0) {
-        Row({ space: 8 }) {
-          LoadingProgress().width(18).height(18).color(this.c.accent)
-          Text(I18n.t('msg_loading')).fontSize(11).fontColor(this.c.sub)
-        }.width('100%').justifyContent(FlexAlign.Center).margin({ top: 10 })
-      }
-      Scroll() {
-        Column({ space: 6 }) {
-          ForEach(this.pluginStore.pluginList, (pl: PluginItem) => {
-            Column({ space: 5 }) {
-              Row() {
-                Text(pluginZh(pl.name)).fontSize(12).fontColor(this.c.text)
-                  .fontWeight(FontWeight.Medium).layoutWeight(1)
-                Text(pl.loaded ? I18n.t('plugin_runtime_loaded') : I18n.t('plugin_runtime_unloaded'))
-                  .fontSize(10).fontColor(pl.loaded ? this.c.success : this.c.sub)
-                  .padding({ left: 7, right: 7, top: 3, bottom: 3 })
-                  .backgroundColor(pl.loaded ? this.c.accentSoft : this.c.bg)
-                  .borderRadius(UI_RADIUS_PILL)
-              }
-              .height(28)
-              if (resourceText(pl.description, pluginDesc(pl.name)).length > 0) {
-                Text(resourceText(pl.description, pluginDesc(pl.name)))
-                  .fontSize(10).fontColor(this.c.sub).width('100%')
-                  .maxLines(2).textOverflow({ overflow: TextOverflow.Ellipsis })
-              }
-              Text(I18n.t('resource_author') + ': ' + resourceText(pl.authors, I18n.t('resource_not_provided')) + ' · ' + I18n.t('resource_license') + ': ' + resourceText(pl.license, I18n.t('resource_not_provided')))
-                .fontSize(10).fontColor(this.c.sub).width('100%').maxLines(2).textOverflow({ overflow: TextOverflow.Ellipsis })
-              if (this.pluginMetaLine(pl).length > 0) {
-                Text(this.pluginMetaLine(pl))
-                  .fontSize(10).fontColor(this.c.tertiary).width('100%').maxLines(2).textOverflow({ overflow: TextOverflow.Ellipsis })
-              }
-              Row({ space: 8 }) {
-                Text(I18n.t('plugin_all_loaded_policy')).fontSize(10).fontColor(this.c.sub).width('100%').maxLines(2)
-              }.width('100%').height(24)
-              Text(this.pluginFeatureDestination(pl.id)).fontSize(10).fontColor(this.c.sub).width('100%')
-                .maxLines(2).textOverflow({ overflow: TextOverflow.Ellipsis })
-              if (this.pluginFeatureIsActionable(pl.id)) {
-                Button() {
-                  Text(this.pluginFeatureActionLabel(pl.id))
-                    .fontSize(11)
-                    .fontColor(this.c.onAccent)
-                    .maxLines(1)
-                    .textOverflow({ overflow: TextOverflow.Ellipsis })
-                }
-                  .id('plugin-feature-' + pl.id)
-                  .backgroundColor(this.c.accent)
-                  .borderRadius(UI_RADIUS_CONTROL).height(30).width('100%')
-                  .padding({ left: 10, right: 10 })
-                  .hitTestBehavior(HitTestMode.Block)
-                  .zIndex(2)
-                  .onClick(() => { this.openPluginFeature(pl.id) })
-              } else {
-                Text(pluginFeatureRoute(pl.id).kind === 'offline' || pluginFeatureRoute(pl.id).kind === 'network'
-                  ? pluginFeatureRoute(pl.id).kind === 'network'
-                    ? I18n.t('plugin_network_disabled')
-                    : I18n.t('plugin_offline_disabled')
-                  : I18n.t('plugin_background_only'))
-                  .fontSize(10).fontColor(this.c.sub).width('100%').maxLines(2)
-              }
-            }
-            .width('100%').padding({ left: 10, right: 10, top: 8, bottom: 8 })
-            .backgroundColor(this.c.bg)
-            .borderRadius(UI_RADIUS_PANEL)
-          }, (pl: PluginItem) => pl.id)
-        }
-      }
-      .width('100%')
-      .layoutWeight(1)
-      .scrollBar(BarState.Auto).scrollBarWidth(4).scrollBarColor(this.c.scrollbar)
-      .edgeEffect(EdgeEffect.Spring)
-    }
-    .width('100%')
-    .height('100%')
-    .padding({ bottom: 16 })
-  }
 
   build() {
 
@@ -377,8 +278,6 @@ export struct SettingsPanel {
             { label: I18n.t('c0005'), id: 5 },
             { label: I18n.t('more_plugins_manage'), id: 6 },
             { label: I18n.t('settings_view_navigation'), id: 7 },
-            // 工具页放到倒数第二个标签，最后一个是“关于”。
-            { label: I18n.t('c0004'), id: 4 },
             { label: I18n.t('c_about'), id: 8 },
           ] as TabItem[], (tab: TabItem) => {
             Text(tab.label)
@@ -400,11 +299,8 @@ export struct SettingsPanel {
         Column({ space: 0 }) {
           if (this.configTab === 5) {
             this.scriptTabContent()
-          } else if (this.configTab === 6) {
-            this.pluginTabContent()
           } else {
-            Scroll(this.contentScroller) {
-              Column({ space: 0 }) {
+            Column({ space: 0 }) {
                 if (this.configTab === -1) {
             Text(I18n.t('i0060'))
               .fontSize(11).fontColor(this.c.sub).width('100%')
@@ -816,69 +712,6 @@ export struct SettingsPanel {
               onSelect: (key: string) => { this.setStartupTimeSetting('deltaT', key) },
               onSaveCustom: (text: string) => { this.setStartupTimeSetting('deltaCustom', text) }
             })
-          } else if (this.configTab === 4) {
-            Text(I18n.t('tools_data_hint')).fontSize(11).fontColor(this.c.sub).width('100%').padding({ left: 8, right: 8 }).margin({ top: 4, bottom: 8 })
-            Button(I18n.t('panel_tools_data')).fontSize(12).fontColor(this.c.onAccent).backgroundColor(this.c.accent)
-              .borderRadius(UI_RADIUS_CONTROL).height(34).width('100%').onClick(() => { this.onOpenTools() })
-            Text(I18n.t('tools_single_entry_hint')).fontSize(10).fontColor(this.c.sub).width('100%').padding({ left: 8, right: 8 }).margin({ top: 8 })
-          } else if (this.configTab === 5) {
-            Row() {
-              Text(I18n.t('i0122')).fontSize(12).fontColor(this.c.sub).width(72)
-              Button(I18n.t('i0252')).fontSize(11).fontColor(this.c.text).backgroundColor(this.c.bg)
-                .borderRadius(UI_RADIUS_CONTROL).height(28).padding({ left: 10, right: 10 })
-                .onClick(() => { this.triggerAction('actionStop_Script') })
-            }.height(34).width('100%').padding({ left: 10, right: 10 }).margin({ bottom: 4 })
-            Row() {
-              Text(I18n.t('i0123')).fontSize(11).fontColor(this.c.sub).width('100%').margin({ top: 4 })
-            }.height(18).width('100%')
-            if (this.scriptLaunching) {
-              Row({ space: 6 }) {
-                LoadingProgress().width(16).height(16).color(this.c.accent)
-                Text(I18n.format('script_starting_named', [scriptZh(this.scriptLaunchingName)])).fontSize(10).fontColor(this.c.sub)
-              }.width('100%').padding({ left: 8, right: 8, bottom: 4 })
-            }
-            Scroll(this.scroller) {
-              Column({ space: 2 }) {
-                ForEach(this.scriptList, (s: string) => {
-                  Column({ space: 0 }) {
-                    Row() {
-                      Text(scriptZh(s)).fontSize(11).fontColor(this.c.text)
-                        .fontWeight(FontWeight.Medium).layoutWeight(1)
-                      Text('▶').fontSize(10).fontColor(this.c.iconSecondary)
-                    }
-                    .height(28).width('100%').padding({ left: 10, right: 10 })
-                    if (scriptDesc(s)) {
-                      Text(scriptDesc(s))
-                        .fontSize(10).fontColor(this.c.sub).width('100%')
-                        .maxLines(1).textOverflow({ overflow: TextOverflow.Ellipsis })
-                        .padding({ left: 10, right: 10, bottom: 3 })
-                    }
-                    if (this.scriptMetaLine(s).length > 0) {
-                      Text(this.scriptMetaLine(s))
-                        .fontSize(10).fontColor(this.c.tertiary).width('100%').maxLines(1).textOverflow({ overflow: TextOverflow.Ellipsis })
-                        .padding({ left: 10, right: 10, bottom: 3 })
-                    }
-                    if (this.scriptSourceLine(s).length > 0) {
-                      Text(this.scriptSourceLine(s)).fontSize(10).fontColor(this.c.tertiary).width('100%').maxLines(1)
-                        .textOverflow({ overflow: TextOverflow.Ellipsis }).padding({ left: 10, right: 10, bottom: 3 })
-                    }
-                  }
-                  .width('100%')
-                  .backgroundColor(this.c.bg)
-                  .borderRadius(UI_RADIUS_CONTROL)
-                  .opacity(this.scriptLaunching && this.scriptLaunchingName !== s ? 0.55 : 1)
-                    .hitTestBehavior(HitTestMode.Default)
-                  .onClick(() => { this.playScriptByName(s) })
-                }, (s: string, index: number) => s)
-              }
-                .width('100%')
-            }
-              .width('100%')
-              .height(this.isExpandedLayout ? 330 : 300)
-              .scrollable(ScrollDirection.Vertical)
-              .scrollBar(BarState.Auto)
-              .edgeEffect(EdgeEffect.Spring)
-              .hitTestBehavior(HitTestMode.Default)
           } else if (this.configTab === 6) {
             PluginCenterSection({
               pluginStore: this.pluginStore,
@@ -969,16 +802,13 @@ export struct SettingsPanel {
             })
           }
               }.width('100%').padding({ bottom: 24 })
-            }
-            .width('100%').layoutWeight(1).scrollable(ScrollDirection.Vertical)
-            .scrollBar(BarState.Auto).edgeEffect(EdgeEffect.Spring).align(Alignment.TopStart)
           }
         }
           .width('100%')
-          .layoutWeight(1)
+          .layoutWeight(0)
           .opacity(this.configTabContentOpacity)
           .translate({ x: this.configTabContentOffsetX, y: 0 })
           .id('config-content-' + this.i18nLang)
-      }.width('100%').height('100%')
+      }.width('100%').height('auto')
   }
 }

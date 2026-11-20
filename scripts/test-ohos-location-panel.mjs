@@ -61,8 +61,8 @@ test('panel dragging and scrolling disable the expensive backdrop blur and shado
   assert.match(host, /if \(!this\.panelDragging\) this\.panelDragging = true/);
   assert.match(host, /onFinish: \(\) => \{ this\.panelDragging = false \}/);
   assert.match(host, /\.onScrollStart\(\(\) => \{ if \(!this\.panelScrolling\) this\.panelScrolling = true \}\)/);
-  assert.match(host, /\.onScrollStop\(\(\) => \{ this\.panelScrolling = false \}\)/);
-  assert.match(host, /this\.panelScrolling = false\s*\n\s*this\.panelTouching = false\s*\n\s*\/\/ 时间面板首帧/);
+  assert.match(host, /\.onScrollStop\(\(\) => \{\s*this\.panelScrolling = false\s*\n\s*this\.updatePanelScrollBlur\(/);
+  assert.match(host, /this\.panelScrolling = false\s*\n\s*this\.panelTouching = false\s*\n\s*this\.timeWheelTouchPending = false\s*\n\s*this\.timeWheelTouchDragging = false\s*\n\s*\/\/ 时间面板首帧/);
 });
 
 test('location search folding avoids ICU-backed locale lowercasing', () => {

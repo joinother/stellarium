@@ -18,6 +18,8 @@ export struct MorePanel {
   @State private c: ThemeSlots = DEFAULT_SLOTS
   startsSection: (item: ShellAction, index: number) => boolean = () => false
   onOpenPanel: (panel: string) => void = () => {}
+  // 宿主用实测内容高度收紧紧凑态面板，避免固定 0.9 高度在末行下方留下空白。
+  onContentHeight: (height: number) => void = () => {}
 
   onWillApplyTheme(theme: Theme): void { this.c = slotsFromTheme(theme) }
 
@@ -85,6 +87,9 @@ export struct MorePanel {
       }, (item: ShellAction) => item.icon + '/' + item.panel + '/' + this.languageRevision.toString())
     }
       .width('100%')
-      .padding({ bottom: 12 })
+      .onAreaChange((_oldArea: Area, newArea: Area) => {
+        const height = Number(newArea.height)
+        if (height > 1) this.onContentHeight(height)
+      })
   }
 }
