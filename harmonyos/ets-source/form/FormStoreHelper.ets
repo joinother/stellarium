@@ -8,6 +8,7 @@ import {
   applySolarShowcaseProjection,
   applyTimeline48hToCard,
   buildFallbackCardForPlanet,
+  clampCalendarMonthOffset,
   clampOrreryDayOffset,
   clampTimeOffsetHours,
   defaultAstronomyCard,
@@ -27,6 +28,7 @@ const FORM_TIME_OFFSET_PREFIX: string = 'formOffset_'
 const FORM_ORRERY_DAYS_PREFIX: string = 'formOrreryDays_'
 const FORM_ORRERY_INNER_PREFIX: string = 'formOrreryInner_'
 const FORM_SAT_PASS_IDX_PREFIX: string = 'formSatPassIdx_'
+const FORM_CALENDAR_MONTH_OFFSET_PREFIX: string = 'formCalMonthOffset_'
 const REMINDED_EVENTS_KEY: string = 'widgetRemindedEvents'
 const DOMAIN: number = 0xD003
 const TAG: string = 'SkyFormStore'
@@ -94,6 +96,7 @@ export function removeFormMetadata(context: common.Context, formId: string): voi
     if (store.hasSync(FORM_ORRERY_DAYS_PREFIX + formId)) store.deleteSync(FORM_ORRERY_DAYS_PREFIX + formId)
     if (store.hasSync(FORM_ORRERY_INNER_PREFIX + formId)) store.deleteSync(FORM_ORRERY_INNER_PREFIX + formId)
     if (store.hasSync(FORM_SAT_PASS_IDX_PREFIX + formId)) store.deleteSync(FORM_SAT_PASS_IDX_PREFIX + formId)
+    if (store.hasSync(FORM_CALENDAR_MONTH_OFFSET_PREFIX + formId)) store.deleteSync(FORM_CALENDAR_MONTH_OFFSET_PREFIX + formId)
     store.flushSync()
   } catch (_) {
   }
@@ -392,6 +395,29 @@ export function resolveCardDataForConfig(
   }
 }
 
+export function readFormCalendarMonthOffset(context: common.Context, formId: string): number {
+  if (formId.length === 0) return 0
+  const store = openFreshCardStore(context)
+  if (store === undefined) return 0
+  try {
+    const raw = store.getSync(FORM_CALENDAR_MONTH_OFFSET_PREFIX + formId, '0')
+    return clampCalendarMonthOffset(Number(raw))
+  } catch (_) {
+    return 0
+  }
+}
+
+export function writeFormCalendarMonthOffset(context: common.Context, formId: string, monthOffset: number): void {
+  if (formId.length === 0) return
+  const store = openFreshCardStore(context)
+  if (store === undefined) return
+  try {
+    store.putSync(FORM_CALENDAR_MONTH_OFFSET_PREFIX + formId, String(clampCalendarMonthOffset(monthOffset)))
+    store.flushSync()
+  } catch (_) {
+  }
+}
+
 export function resolveCardDataForForm(context: common.Context, formId: string, now: number = Date.now()): Record<string, string> {
   const config = readFormConfig(context, formId)
   const offsetHours = readFormTimeOffset(context, formId)
@@ -399,6 +425,7 @@ export function resolveCardDataForForm(context: common.Context, formId: string, 
   card['orreryDayOffset'] = String(readFormOrreryDays(context, formId))
   card['orreryInnerOnly'] = readFormOrreryInner(context, formId) ? '1' : '0'
   card['satPassIndex'] = String(readFormSatPassIndex(context, formId))
+  card['calendarMonthOffset'] = String(readFormCalendarMonthOffset(context, formId))
   const savedColor = readFormTextColor(context, formId)
   if (savedColor.length > 0) {
     card['textColor'] = savedColor

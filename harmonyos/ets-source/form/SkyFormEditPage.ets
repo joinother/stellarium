@@ -125,7 +125,9 @@ struct SkyFormEditPage {
       ? '已应用 · 太阳系仪'
       : (this.formKind === 'satellite_pass_card'
         ? '已应用 · 卫星过境'
-        : ('已应用 · ' + planetZhName(this.planetMode)))
+        : (this.formKind === 'astronomy_calendar_card'
+          ? ('已应用 · 天文月历 · ' + planetZhName(this.planetMode))
+          : ('已应用 · ' + planetZhName(this.planetMode))))
   }
 
   private planetDisplayName(id: string): string {

@@ -67,6 +67,14 @@
     {
       "name": "form_satellite_pass_desc",
       "value": "空間站與亮衛星即時過境軌跡及一鍵提醒"
+    },
+    {
+      "name": "form_astronomy_calendar_name",
+      "value": "天文月曆"
+    },
+    {
+      "name": "form_astronomy_calendar_desc",
+      "value": "月曆視圖一覽每日月相、流星雨極大與行星天象，支援翻月並點按直達天象日曆"
     }
   ]
 }

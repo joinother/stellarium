@@ -1938,3 +1938,326 @@ export function computePlanetViewingInsight(planets: OrreryPlanetState[], select
   }
   return sideZh + '（距角 ' + String(elongDeg) + '° · ' + distText + '）'
 }
+
+// ===========================================================================
+// Monthly Astronomy Calendar Widget (天文月历桌面小组件 · 纯离线月相/流星雨/节气/天象日历)
+// ===========================================================================
+
+export interface CalendarGridCell {
+  key: string
+  day: number // 0 = padding cell
+  weekday: number // 0=Sun..6=Sat
+  isToday: boolean
+  jd: number
+  moonAge: number
+  moonIllumination: number
+  phaseMilestone: string // '' | '朔' | '上弦' | '望' | '下弦'
+  eventKind: string // '' | 'eclipse' | 'meteor' | 'planet' | 'moon' | 'solar' | 'satellite'
+  eventShortLabel: string
+  eventTitle: string
+  eventTarget: string
+  eventId: string
+  eventCount: number
+}
+
+export interface CalendarMonthHighlight {
+  key: string
+  day: number
+  dateLabel: string
+  title: string
+  kind: string
+  jd: number
+  target: string
+  eventId: string
+}
+
+export interface CalendarMonthGridPlan {
+  year: number
+  month: number // 1..12
+  monthOffset: number
+  monthTitleZh: string
+  daysInMonth: number
+  firstWeekday: number
+  rowCount: number // 5 or 6
+  isCurrentMonth: boolean
+  todayDay: number
+  solarTermLabel: string
+  cells: CalendarGridCell[] // 35 or 42 cells
+  weekCells: CalendarGridCell[] // 7 cells around today (or 1st week for non-current month)
+  highlights: CalendarMonthHighlight[]
+}
+
+interface AnnualSkyMilestone {
+  month: number
+  day: number
+  kind: string
+  shortLabel: string
+  title: string
+  target: string
+}
+
+const ANNUAL_SKY_MILESTONES: AnnualSkyMilestone[] = [
+  { month: 1, day: 3, kind: 'meteor', shortLabel: '象限仪', title: '象限仪座流星雨极大', target: 'Moon' },
+  { month: 3, day: 20, kind: 'solar', shortLabel: '春分', title: '春分 · 昼夜平分', target: 'Sun' },
+  { month: 4, day: 22, kind: 'meteor', shortLabel: '天琴座', title: '天琴座流星雨极大', target: 'Moon' },
+  { month: 5, day: 6, kind: 'meteor', shortLabel: '宝瓶η', title: '宝瓶座η流星雨极大', target: 'Moon' },
+  { month: 6, day: 21, kind: 'solar', shortLabel: '夏至', title: '夏至 · 太阳直射北回归线', target: 'Sun' },
+  { month: 7, day: 30, kind: 'meteor', shortLabel: '宝瓶δ', title: '宝瓶座δ南流星雨极大', target: 'Moon' },
+  { month: 8, day: 12, kind: 'meteor', shortLabel: '英仙座', title: '英仙座流星雨极大', target: 'Moon' },
+  { month: 9, day: 22, kind: 'solar', shortLabel: '秋分', title: '秋分 · 昼夜平分', target: 'Sun' },
+  { month: 10, day: 8, kind: 'meteor', shortLabel: '天龙座', title: '天龙座流星雨极大', target: 'Moon' },
+  { month: 10, day: 21, kind: 'meteor', shortLabel: '猎户座', title: '猎户座流星雨极大', target: 'Moon' },
+  { month: 11, day: 17, kind: 'meteor', shortLabel: '狮子座', title: '狮子座流星雨极大', target: 'Moon' },
+  { month: 12, day: 14, kind: 'meteor', shortLabel: '双子座', title: '双子座流星雨极大', target: 'Moon' },
+  { month: 12, day: 21, kind: 'solar', shortLabel: '冬至', title: '冬至 · 北半球最长夜', target: 'Sun' },
+  { month: 12, day: 22, kind: 'meteor', shortLabel: '小熊座', title: '小熊座流星雨极大', target: 'Moon' }
+]
+
+export function clampCalendarMonthOffset(months: number): number {
+  if (!Number.isFinite(months)) return 0
+  return Math.max(-12, Math.min(12, Math.trunc(months)))
+}
+
+function calendarEventPriority(kind: string): number {
+  const k = kind.toLowerCase()
+  if (k.includes('eclipse')) return 0
+  if (k.includes('meteor')) return 1
+  if (k.includes('planet')) return 2
+  if (k.includes('solar')) return 3
+  if (k.includes('moon') || k.includes('phase')) return 4
+  if (k.includes('sat')) return 5
+  return 6
+}
+
+function normalizeCalendarKind(kind: string): string {
+  const k = kind.toLowerCase()
+  if (k.includes('eclipse')) return 'eclipse'
+  if (k.includes('meteor')) return 'meteor'
+  if (k.includes('planet')) return 'planet'
+  if (k.includes('solar')) return 'solar'
+  if (k.includes('sat')) return 'satellite'
+  if (k.includes('moon') || k.includes('phase')) return 'moon'
+  return 'sky'
+}
+
+export function buildAstronomyMonthGrid(
+  nowMs: number,
+  monthOffset: number = 0,
+  upcomingEventsJson: string = '[]',
+  observerPlanet: string = 'Earth'
+): CalendarMonthGridPlan {
+  const safeOffset = clampCalendarMonthOffset(monthOffset)
+  const nowDate = new Date(nowMs)
+  const baseYear = nowDate.getFullYear()
+  const baseMonthIdx = nowDate.getMonth() // 0..11
+  const todayDayNum = nowDate.getDate()
+
+  const targetFirst = new Date(baseYear, baseMonthIdx + safeOffset, 1, 12, 0, 0)
+  const year = targetFirst.getFullYear()
+  const monthIdx = targetFirst.getMonth()
+  const month = monthIdx + 1
+  const daysInMonth = new Date(year, monthIdx + 1, 0, 12, 0, 0).getDate()
+  const firstWeekday = new Date(year, monthIdx, 1, 12, 0, 0).getDay() // 0=Sun..6=Sat
+  const isCurrentMonth = year === baseYear && monthIdx === baseMonthIdx
+  const todayDay = isCurrentMonth ? todayDayNum : 0
+  const rowCount = firstWeekday + daysInMonth <= 35 ? 5 : 6
+  const totalSlots = rowCount * 7
+  const isEarth = observerPlanet.trim().length === 0 || observerPlanet.trim().toLowerCase() === 'earth'
+
+  // Pre-compute lunar ages across day 0..daysInMonth+1 so we locate exact 4 quarter crossings
+  const ages: number[] = []
+  const illums: number[] = []
+  for (let d = 0; d <= daysInMonth + 1; d++) {
+    const ms = new Date(year, monthIdx, d, 12, 0, 0).getTime()
+    const ph = estimateMoonPhaseAt(ms)
+    ages.push(ph.age)
+    illums.push(ph.illumination)
+  }
+
+  const phaseMilestoneByDay: Map<number, string> = new Map()
+  if (isEarth) {
+    const synodic = 29.530588853
+    for (let d = 1; d <= daysInMonth; d++) {
+      const prev = ages[d - 1]
+      const curr = ages[d]
+      // New Moon crossing (wrap across 29.53 -> 0)
+      if (prev > 25 && curr < 4) {
+        const prevDist = synodic - prev
+        const pickDay = curr <= prevDist ? d : (d - 1)
+        if (pickDay >= 1 && pickDay <= daysInMonth && !phaseMilestoneByDay.has(pickDay)) {
+          phaseMilestoneByDay.set(pickDay, '朔')
+        }
+      }
+      const quarters: Array<[number, string]> = [
+        [synodic * 0.25, '上弦'],
+        [synodic * 0.50, '望'],
+        [synodic * 0.75, '下弦']
+      ]
+      for (const q of quarters) {
+        const targetAge = q[0]
+        const label = q[1]
+        if (prev < targetAge && curr >= targetAge) {
+          const pickDay = (curr - targetAge) <= (targetAge - prev) ? d : (d - 1)
+          if (pickDay >= 1 && pickDay <= daysInMonth && !phaseMilestoneByDay.has(pickDay)) {
+            phaseMilestoneByDay.set(pickDay, label)
+          }
+        }
+      }
+    }
+  }
+
+  // Merge app-synced upcomingEvents + annual offline meteor/solstice milestones for this month
+  const dayPrimaryEvent: Map<number, CalendarMonthHighlight> = new Map()
+  const dayEventCounts: Map<number, number> = new Map()
+  const allHighlights: CalendarMonthHighlight[] = []
+  const seenHighlightKeys: Set<string> = new Set()
+
+  const registerDayEvent = (
+    day: number,
+    kind: string,
+    title: string,
+    shortLabel: string,
+    jd: number,
+    target: string,
+    eventId: string
+  ): void => {
+    if (day < 1 || day > daysInMonth) return
+    const normKind = normalizeCalendarKind(kind)
+    const dedupeKey = String(day) + '|' + normKind + '|' + title
+    if (seenHighlightKeys.has(dedupeKey)) return
+    seenHighlightKeys.add(dedupeKey)
+    dayEventCounts.set(day, (dayEventCounts.get(day) ?? 0) + 1)
+    const entry: CalendarMonthHighlight = {
+      key: String(year) + '-' + String(month) + '-' + String(day) + '-' + normKind + '-' + String(allHighlights.length),
+      day: day,
+      dateLabel: String(month) + '/' + String(day),
+      title: title,
+      kind: normKind,
+      jd: jd,
+      target: target,
+      eventId: eventId
+    }
+    allHighlights.push(entry)
+    const existing = dayPrimaryEvent.get(day)
+    if (existing === undefined || calendarEventPriority(normKind) < calendarEventPriority(existing.kind)) {
+      dayPrimaryEvent.set(day, {
+        key: entry.key,
+        day: day,
+        dateLabel: shortLabel,
+        title: title,
+        kind: normKind,
+        jd: jd,
+        target: target,
+        eventId: eventId
+      })
+    }
+  }
+
+  // 1) App-synced events (eclipses, planetary oppositions, supermoons, meteor peaks, etc.)
+  const synced = parseUpcomingEvents(upcomingEventsJson)
+  for (const ev of synced) {
+    if (ev.at <= 0) continue
+    const d = new Date(ev.at)
+    if (d.getFullYear() !== year || d.getMonth() !== monthIdx) continue
+    const day = d.getDate()
+    const shortLbl = ev.title.length > 4 ? ev.title.slice(0, 3) : ev.title
+    registerDayEvent(day, ev.kind, ev.title, shortLbl, ev.jd > 0 ? ev.jd : epochMsToJd(ev.at), ev.target, ev.id)
+  }
+
+  // 2) Built-in annual meteor showers & equinoxes/solstices (Earth observer)
+  if (isEarth) {
+    for (const m of ANNUAL_SKY_MILESTONES) {
+      if (m.month !== month) continue
+      const ms = new Date(year, monthIdx, m.day, 20, 0, 0).getTime()
+      registerDayEvent(m.day, m.kind, m.title, m.shortLabel, epochMsToJd(ms), m.target, '')
+    }
+    // 3) Full Moon & New Moon highlights
+    phaseMilestoneByDay.forEach((label: string, day: number) => {
+      if (label === '望' || label === '朔') {
+        const ms = new Date(year, monthIdx, day, 20, 0, 0).getTime()
+        const fullTitle = label === '望' ? '满月（望）' : '新月（朔 · 暗夜观星佳）'
+        registerDayEvent(day, 'moon', fullTitle, label, epochMsToJd(ms), 'Moon', '')
+      }
+    })
+  }
+
+  const cells: CalendarGridCell[] = []
+  for (let slot = 0; slot < totalSlots; slot++) {
+    const weekday = slot % 7
+    const day = slot - firstWeekday + 1
+    if (day < 1 || day > daysInMonth) {
+      cells.push({
+        key: String(year) + '-' + String(month) + '-pad-' + String(slot),
+        day: 0,
+        weekday: weekday,
+        isToday: false,
+        jd: 0,
+        moonAge: 0,
+        moonIllumination: 0,
+        phaseMilestone: '',
+        eventKind: '',
+        eventShortLabel: '',
+        eventTitle: '',
+        eventTarget: '',
+        eventId: '',
+        eventCount: 0
+      })
+      continue
+    }
+    const dayEveningMs = new Date(year, monthIdx, day, 20, 0, 0).getTime()
+    const primary = dayPrimaryEvent.get(day)
+    const phaseLabel = phaseMilestoneByDay.get(day) ?? ''
+    cells.push({
+      key: String(year) + '-' + String(month) + '-d-' + String(day),
+      day: day,
+      weekday: weekday,
+      isToday: isCurrentMonth && day === todayDay,
+      jd: primary !== undefined && primary.jd > 0 ? primary.jd : epochMsToJd(dayEveningMs),
+      moonAge: ages[day],
+      moonIllumination: illums[day],
+      phaseMilestone: phaseLabel,
+      eventKind: primary !== undefined ? primary.kind : '',
+      eventShortLabel: primary !== undefined ? primary.dateLabel : phaseLabel,
+      eventTitle: primary !== undefined ? primary.title : '',
+      eventTarget: primary !== undefined ? primary.target : (phaseLabel.length > 0 ? 'Moon' : ''),
+      eventId: primary !== undefined ? primary.eventId : '',
+      eventCount: dayEventCounts.get(day) ?? 0
+    })
+  }
+
+  // Pick 7-day week strip for 2*4 compact mode
+  const anchorDay = isCurrentMonth ? todayDay : 1
+  const anchorSlot = Math.max(0, Math.min(totalSlots - 1, firstWeekday + anchorDay - 1))
+  const weekRowStart = Math.floor(anchorSlot / 7) * 7
+  const weekCells = cells.slice(weekRowStart, weekRowStart + 7)
+
+  // Sort highlights: upcoming days in current month first, then priority
+  allHighlights.sort((a: CalendarMonthHighlight, b: CalendarMonthHighlight) => {
+    if (isCurrentMonth) {
+      const aPast = a.day < todayDay ? 1 : 0
+      const bPast = b.day < todayDay ? 1 : 0
+      if (aPast !== bPast) return aPast - bPast
+    }
+    if (a.day !== b.day) return a.day - b.day
+    return calendarEventPriority(a.kind) - calendarEventPriority(b.kind)
+  })
+
+  const midMonthMs = new Date(year, monthIdx, isCurrentMonth ? todayDay : 15, 12, 0, 0).getTime()
+  const solarTermLabel = isEarth ? estimateSolarTermZh(midMonthMs) : ''
+
+  return {
+    year: year,
+    month: month,
+    monthOffset: safeOffset,
+    monthTitleZh: String(year) + '年' + String(month) + '月',
+    daysInMonth: daysInMonth,
+    firstWeekday: firstWeekday,
+    rowCount: rowCount,
+    isCurrentMonth: isCurrentMonth,
+    todayDay: todayDay,
+    solarTermLabel: solarTermLabel,
+    cells: cells,
+    weekCells: weekCells,
+    highlights: allHighlights.slice(0, 6)
+  }
+}

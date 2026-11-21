@@ -507,6 +507,14 @@
     {
       "name": "form_satellite_pass_desc",
       "value": "ISS, Tiangong & bright satellite flyover arcs with 1-tap alerts"
+    },
+    {
+      "name": "form_astronomy_calendar_name",
+      "value": "Astronomy Calendar"
+    },
+    {
+      "name": "form_astronomy_calendar_desc",
+      "value": "Monthly grid of daily Moon phases, meteor shower peaks, and sky events with one-tap jump to the calendar"
     }
   ]
 }

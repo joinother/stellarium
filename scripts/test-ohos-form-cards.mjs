@@ -8,9 +8,11 @@ import {
   applySolarShowcaseProjection,
   applyTimeline48hToCard,
   buildAstronomyCard,
+  buildAstronomyMonthGrid,
   buildFallbackCardForPlanet,
   buildMiniPhaseStrip,
   buildTimeline48hSnapshot,
+  clampCalendarMonthOffset,
   clampOrreryDayOffset,
   clampTimeOffsetHours,
   clockToTodayJd,
@@ -79,10 +81,11 @@ const expectedForms = [
   { name: 'celestial_events_card', source: 'CelestialEventsCard.ets', defaultDim: '2*4', panel: "panel: 'calendar'", resizable: true, transparent: false },
   { name: 'floating_orb_card', source: 'FloatingOrbCard.ets', defaultDim: '2*2', panel: "panel: 'sky'", resizable: false, transparent: true },
   { name: 'solar_system_card', source: 'SolarSystemCard.ets', defaultDim: '2*4', panel: "panel: 'astro'", resizable: true, transparent: false },
-  { name: 'satellite_pass_card', source: 'SatellitePassCard.ets', defaultDim: '2*4', panel: "panel: 'satellites'", resizable: true, transparent: false }
+  { name: 'satellite_pass_card', source: 'SatellitePassCard.ets', defaultDim: '2*4', panel: "panel: 'satellites'", resizable: true, transparent: false },
+  { name: 'astronomy_calendar_card', source: 'AstronomyCalendarCard.ets', defaultDim: '4*4', panel: "panel: 'calendar'", resizable: true, transparent: false }
 ]
 
-assert.equal(forms.length, expectedForms.length, 'must expose the 7 redesigned astronomical widget cards (6+1 transparent)')
+assert.equal(forms.length, expectedForms.length, 'must expose the 8 redesigned astronomical widget cards (7+1 transparent)')
 assert.equal(forms.filter((f) => f.isDefault === true).length, 1, 'must have exactly one default card')
 
 const syncScript = fs.readFileSync(syncScriptPath, 'utf8')
@@ -446,5 +449,46 @@ assert.equal(formatPreviewDayCaptionZh(0, now), '今日实况')
 assert.ok(formatPreviewDayCaptionZh(1, now).startsWith('预演 明日 (+1天)'))
 assert.ok(computePlanetViewingInsight(helioNow, 'Earth').includes('逆时针绕日'))
 assert.ok(computePlanetViewingInsight(helioNow, 'Jupiter').length > 4)
+
+// Monthly Astronomy Calendar widget (astronomy_calendar_card) tests
+assert.ok(formAbilitySrc.includes("eventType === 'stepCalendarMonth'"), 'FormAbility must handle stepCalendarMonth')
+assert.ok(formAbilitySrc.includes("eventType === 'resetCalendarMonth'"), 'FormAbility must handle resetCalendarMonth')
+assert.equal(clampCalendarMonthOffset(25), 12)
+assert.equal(clampCalendarMonthOffset(-25), -12)
+assert.equal(clampCalendarMonthOffset(0), 0)
+
+const nov2026Ms = new Date(2026, 10, 21, 12, 0, 0).getTime()
+const syncedMock = JSON.stringify([
+  { id: 'ev-jup-opp', kind: 'planet', title: '木星合月', at: new Date(2026, 10, 27, 20, 0, 0).getTime(), jd: 2461372.0, target: 'Jupiter' }
+])
+const novGrid = buildAstronomyMonthGrid(nov2026Ms, 0, syncedMock, 'Earth')
+assert.equal(novGrid.year, 2026)
+assert.equal(novGrid.month, 11)
+assert.equal(novGrid.monthTitleZh, '2026年11月')
+assert.equal(novGrid.daysInMonth, 30)
+assert.equal(novGrid.isCurrentMonth, true)
+assert.equal(novGrid.todayDay, 21)
+assert.equal(novGrid.cells.length, novGrid.rowCount * 7)
+assert.equal(novGrid.weekCells.length, 7)
+const todayCell = novGrid.cells.find((c) => c.day === 21)
+assert.ok(todayCell && todayCell.isToday === true, 'today must be highlighted')
+const leonidsCell = novGrid.cells.find((c) => c.day === 17)
+assert.ok(leonidsCell && leonidsCell.eventKind === 'meteor', 'Nov 17 must mark Leonids meteor peak')
+const syncedCell = novGrid.cells.find((c) => c.day === 27)
+assert.ok(syncedCell && syncedCell.eventKind === 'planet' && syncedCell.eventTitle === '木星合月', 'app-synced event must merge into calendar day cell')
+const fullMoonCell = novGrid.cells.find((c) => c.phaseMilestone === '望')
+const newMoonCell = novGrid.cells.find((c) => c.phaseMilestone === '朔')
+assert.ok(fullMoonCell && newMoonCell, 'month grid must compute New Moon (朔) and Full Moon (望) days offline')
+assert.ok(novGrid.highlights.length >= 2, 'month highlights strip must surface upcoming sky events')
+
+const decGrid = buildAstronomyMonthGrid(nov2026Ms, 1, '[]', 'Earth')
+assert.equal(decGrid.year, 2026)
+assert.equal(decGrid.month, 12)
+assert.equal(decGrid.isCurrentMonth, false)
+assert.equal(decGrid.todayDay, 0)
+const geminidsCell = decGrid.cells.find((c) => c.day === 14)
+assert.ok(geminidsCell && geminidsCell.eventKind === 'meteor', 'Dec 14 must mark Geminids meteor peak')
+const solsticeCell = decGrid.cells.find((c) => c.day === 21)
+assert.ok(solsticeCell && solsticeCell.eventKind === 'solar', 'Dec 21 must mark Winter Solstice')
 
 console.log(`HarmonyOS interactive widget contract, transparent backplate, overflow & data tests passed: ${expectedForms.length} cards, 12 3D orbs, 6 spacecraft icons, ${overflowCases.length} overflow specs`)

@@ -657,16 +657,17 @@ struct SkyLiveFormPage {
       return
     }
     const isSolarFlow = this.formKind === 'solar_arc_card' || this.orbBody.trim().toLowerCase() === 'sun'
-    const targetPanel = this.formKind === 'celestial_events_card' ? 'calendar' : 'sky'
+    const isCalendarCard = this.formKind === 'celestial_events_card' || this.formKind === 'astronomy_calendar_card'
+    const targetPanel = isCalendarCard ? 'calendar' : 'sky'
     const focusTarget = isSolarFlow
       ? 'Sun'
-      : (this.formKind === 'celestial_events_card'
+      : (isCalendarCard
         ? (this.heroEvent()?.target ?? routeTargetForCard(this.observerPlanet))
         : focusTargetForCard(this.observerPlanet, this.companionEnglish, this.orbBody))
-    const targetJd = this.formKind === 'celestial_events_card'
+    const targetJd = isCalendarCard
       ? (this.heroEvent()?.jd ?? 0)
       : offsetHoursToJd(Date.now(), this.timeOffsetHours)
-    const eventId = this.formKind === 'celestial_events_card' ? (this.heroEvent()?.id ?? '') : ''
+    const eventId = isCalendarCard ? (this.heroEvent()?.id ?? '') : ''
     try {
       this.liveFormContext.startAbilityByLiveForm({
         bundleName: 'com.joinother.skyinstrument',
@@ -2231,7 +2232,7 @@ struct SkyLiveFormPage {
         this.buildSolarRestingCard()
       } else if (this.formKind === 'companion_arc_card') {
         this.buildCompanionRestingCard()
-      } else if (this.formKind === 'celestial_events_card') {
+      } else if (this.formKind === 'celestial_events_card' || this.formKind === 'astronomy_calendar_card') {
         this.buildEventsRestingCard()
       } else {
         this.buildSkyWindowRestingCard()

@@ -148,6 +148,27 @@
       "sceneAnimationParams": {
         "abilityName": "SkyInstrumentLiveFormAbility"
       }
+    },
+    {
+      "name": "astronomy_calendar_card",
+      "displayName": "$string:form_astronomy_calendar_name",
+      "description": "$string:form_astronomy_calendar_desc",
+      "src": "./ets/form/AstronomyCalendarCard.ets",
+      "uiSyntax": "arkts",
+      "isDynamic": true,
+      "isDefault": false,
+      "updateEnabled": true,
+      "updateDuration": 2,
+      "defaultDimension": "4*4",
+      "supportDimensions": [
+        "2*4",
+        "4*4"
+      ],
+      "resizable": true,
+      "formConfigAbility": "ability://SkyInstrumentFormEditAbility",
+      "sceneAnimationParams": {
+        "abilityName": "SkyInstrumentLiveFormAbility"
+      }
     }
   ]
 }

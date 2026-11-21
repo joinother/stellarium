@@ -5,6 +5,7 @@ import { notificationManager } from '@kit.NotificationKit'
 import { BusinessError } from '@kit.BasicServicesKit'
 import { hilog } from '@kit.PerformanceAnalysisKit'
 import {
+  clampCalendarMonthOffset,
   clampOrreryDayOffset,
   clampTimeOffsetHours,
   computeOverflowArea,
@@ -18,6 +19,7 @@ import { AstronomyRoute } from '../qability/AstronomyNotificationPolicy'
 import { reminderRouteUri } from '../qability/AstronomyReminderMetadata'
 import {
   WidgetRemindedEntry,
+  readFormCalendarMonthOffset,
   readFormConfig,
   readFormOrreryDays,
   readFormOrreryInner,
@@ -26,6 +28,7 @@ import {
   readRemindedEntries,
   removeFormMetadata,
   resolveCardDataForForm,
+  writeFormCalendarMonthOffset,
   writeFormConfig,
   writeFormKind,
   writeFormOrreryDays,
@@ -77,6 +80,7 @@ export default class SkyInstrumentFormAbility extends FormExtensionAbility {
     if (wantParams === undefined || wantParams['keepTimeOffset'] !== true) {
       writeFormTimeOffset(this.context, formId, 0)
       writeFormOrreryDays(this.context, formId, 0)
+      writeFormCalendarMonthOffset(this.context, formId, 0)
     }
     const data = resolveCardDataForForm(this.context, formId, Date.now())
     if (inverseColor.length > 0) {
@@ -157,6 +161,24 @@ export default class SkyInstrumentFormAbility extends FormExtensionAbility {
         const data = resolveCardDataForForm(this.context, formId, Date.now())
         this.pushFormUpdate(formId, data)
         hilog.info(DOMAIN, TAG, 'stepSatPassIndex formId=%{public}s idx=%{public}d/%{public}d', formId, next, count)
+        return
+      }
+
+      if (eventType === 'stepCalendarMonth') {
+        const delta = Number(parsed['deltaMonths'] ?? 1)
+        const current = readFormCalendarMonthOffset(this.context, formId)
+        const next = clampCalendarMonthOffset(current + (Number.isFinite(delta) ? Math.trunc(delta) : 1))
+        writeFormCalendarMonthOffset(this.context, formId, next)
+        const data = resolveCardDataForForm(this.context, formId, Date.now())
+        this.pushFormUpdate(formId, data)
+        hilog.info(DOMAIN, TAG, 'stepCalendarMonth formId=%{public}s offset=%{public}d', formId, next)
+        return
+      }
+
+      if (eventType === 'resetCalendarMonth') {
+        writeFormCalendarMonthOffset(this.context, formId, 0)
+        const data = resolveCardDataForForm(this.context, formId, Date.now())
+        this.pushFormUpdate(formId, data)
         return
       }
 
