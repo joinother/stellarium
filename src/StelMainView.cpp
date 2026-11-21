@@ -9448,8 +9448,9 @@ extern "C" __attribute__((visibility("default"))) const char* StellariumOhos_com
 					// Satellites have sub-arcsecond angular radius; keep a comfortable sky FOV
 					// so both the satellite marker and its expanding orbit arc stay clearly visible.
 					movementMgr->moveToObject(selectedObj, movementMgr->getAutoMoveDuration(), StelMovementMgr::ZoomNone);
-					if (movementMgr->getCurrentFov() < 28.0)
-						movementMgr->zoomTo(44.0, 0.35f);
+					const double curFov = movementMgr->getCurrentFov();
+					if (curFov < 28.0 || curFov > 72.0)
+						movementMgr->zoomTo(48.0, 0.45f);
 				}
 				else
 				{

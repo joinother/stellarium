@@ -476,6 +476,7 @@ export interface StellariumBridgeResponse {
   latitude?: number
   longitude?: number
   altitude?: number
+  aboveHorizon?: boolean
   url?: string
   apiInfoUrl?: string
   lanIp?: string

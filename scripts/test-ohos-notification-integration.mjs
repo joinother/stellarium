@@ -298,7 +298,19 @@ test('notification landing routes dispatch notification-settings, satellite pass
   assert.equal(calls[2][2], 'ISS (ZARYA)');
   assert.deepEqual(calls[3], ['call', 'searchObject', 'object|Satellite|25544']);
   assert.deepEqual(calls[4], ['applySelected', 'object|Satellite|25544']);
-  assert.deepEqual(calls[5], ['refreshState']);
+  assert.deepEqual(calls[5], ['call', 'moveToSelected', '']);
+  assert.deepEqual(calls[6], ['refreshState']);
+  calls.splice(0);
+
+  // Feed-style pass:<norad>:<obs>:<sec> eventId also resolves to object|Satellite|<norad> and centers camera
+  host.cardRoute = JSON.stringify({
+    panel: 'satellites', kind: 'satellite-pass', eventId: 'pass:20580:default:1795303634',
+    target: 'HST', eventAt: new Date(passAt).toISOString()
+  });
+  host.consumeCardRoute();
+  assert.deepEqual(calls[3], ['call', 'searchObject', 'object|Satellite|20580']);
+  assert.deepEqual(calls[5], ['call', 'moveToSelected', '']);
+  assert.deepEqual(calls[6], ['refreshState']);
   calls.splice(0);
 
   host.cardRoute = JSON.stringify({ panel: 'sky', kind: 'find', target: 'Moon' });

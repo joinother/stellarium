@@ -4484,7 +4484,8 @@ export struct WindowNativeNode {
     })
   }
 
-  // 天象卡片/通知落地上下文胶囊控制：提供「实景找星」「回到此刻」「查看日历」直达操作。
+  // 通知/卡片时间跃迁预览条：仅在落地切换了仿真时刻时轻量展示「预报预览 · HH:mm」与「回到此刻」按钮，
+  // 避免与底部 ObjectSelectionPill（自带天体名称与详情入口）及右上角陀螺仪开关重复。
   private showLandingBanner(
     title: string,
     source: string,
@@ -4494,20 +4495,37 @@ export struct WindowNativeNode {
     eventAt: string
   ): void {
     const cleanTitle = title.trim()
-    if (cleanTitle.length === 0 && target.length === 0 && !hasTimeShift) {
-      this.landingBannerVisible = false
-      return
-    }
     this.landingBannerTitle = cleanTitle.length > 0 ? cleanTitle : (target.length > 0 ? zhNameOf(target) : '星穹定位')
     this.landingBannerSource = source
     this.landingBannerTarget = target
     this.landingBannerHasTimeShift = hasTimeShift
     this.landingBannerEventId = eventId
     this.landingBannerEventAt = eventAt
-    this.landingBannerVisible = true
+    this.landingBannerVisible = hasTimeShift
     if (this.activePanel === '') {
       this.panelVisible = false
     }
+  }
+
+  private landingTimePreviewLabel(): string {
+    const zh = I18n.getLanguage().startsWith('zh')
+    const ms = Date.parse(this.landingBannerEventAt)
+    if (!Number.isFinite(ms)) {
+      return zh ? '预报时刻预览' : 'Pass Preview'
+    }
+    const d = new Date(ms)
+    const now = new Date()
+    const hh = d.getHours().toString().padStart(2, '0')
+    const mm = d.getMinutes().toString().padStart(2, '0')
+    const sameDay = d.getFullYear() === now.getFullYear() &&
+      d.getMonth() === now.getMonth() &&
+      d.getDate() === now.getDate()
+    if (sameDay) {
+      return (zh ? '预报预览 · ' : 'Preview · ') + hh + ':' + mm
+    }
+    const mo = (d.getMonth() + 1).toString().padStart(2, '0')
+    const da = d.getDate().toString().padStart(2, '0')
+    return (zh ? '预报预览 · ' : 'Preview · ') + mo + '-' + da + ' ' + hh + ':' + mm
   }
 
   private dismissLandingBanner(): void {
@@ -4517,6 +4535,7 @@ export struct WindowNativeNode {
   private returnToNowFromLanding(): void {
     this.callInteractive('setTimeNow', '', () => {
       this.landingBannerHasTimeShift = false
+      this.landingBannerVisible = false
       this.refreshState()
       this.flashHint(I18n.getLanguage().startsWith('zh') ? '已回到实时星穹' : 'Returned to live sky')
     })
@@ -4531,7 +4550,7 @@ export struct WindowNativeNode {
     const evId = this.landingBannerEventId
     const evAt = this.landingBannerEventAt
     this.landingBannerVisible = false
-    if (evId.startsWith('satellite-pass-')) {
+    if (evId.startsWith('satellite-pass-') || evId.startsWith('pass:')) {
       this.openSubPanel('satellites')
       return
     }
@@ -4610,18 +4629,43 @@ export struct WindowNativeNode {
         this.pendingCalendarEvent = ''
         this.setPanel('', true, true)
         const eventId = typeof route['eventId'] === 'string' ? String(route['eventId']).trim() : ''
-        const satMatch = /^satellite-pass-(\d+)-/.exec(eventId)
+        const satMatch = /^(?:satellite-pass-|pass:)(\d+)(?:[-:]|$)/.exec(eventId)
         const satId = satMatch ? satMatch[1] : (/^\d+$/.test(target) ? target : '')
         const searchArg = (panel === 'satellites' && satId.length > 0) ? `object|Satellite|${satId}` : target
         if (panel === 'satellites') {
           this.satelliteCtl().setSatelliteFlag('hints', true)
+          if (this.satelliteStore !== undefined && !this.satelliteStore.satOrbitLines) {
+            this.satelliteCtl().setSatelliteFlag('orbitLines', true)
+          }
         }
         const focusTarget = (): void => {
           if (searchArg.length > 0) {
             this.callInteractive('searchObject', searchArg, (response: StellariumBridgeResponse) => {
               this.applySelectedObject(response)
-              if (kind === 'find') this.gyroCtl().toggleGyroscope(true)
-              this.refreshState()
+              // 若着陆横幅标题仍是纯 NORAD 编号（如桌面卡片路由 target=20580），回填本地化卫星名。
+              if (panel === 'satellites' && landingTitle.length === 0 && typeof response.name === 'string' && response.name.trim().length > 0) {
+                this.landingBannerTitle = '卫星过境 · ' + response.name.trim()
+              }
+              if (kind === 'find') {
+                this.gyroCtl().toggleGyroscope(true)
+                this.refreshState()
+              } else {
+                const gyroActive = this.gyroStore !== undefined && this.gyroStore.gyroscopeEnabled === true
+                if (!gyroActive && response.found !== false) {
+                  // 通知/卡片落地主动把目标平滑居中聚焦到画面中心；不调用 setTracking(1)，
+                  // 以保留鸿蒙版默认的「固定星体」（s_viewLock）在居中动画结束后自动锁定卫星位置。
+                  this.callInteractive('moveToSelected', '', () => {
+                    if (panel === 'satellites' && response.aboveHorizon === false && this.flashHint !== undefined) {
+                      this.flashHint(I18n.getLanguage().startsWith('zh')
+                        ? '该卫星当前位于地平线以下，可点击下方详情预演下次过境'
+                        : 'Satellite is currently below the horizon; open details to preview its next pass')
+                    }
+                    this.refreshState()
+                  })
+                } else {
+                  this.refreshState()
+                }
+              }
             })
           } else {
             if (kind === 'find') this.gyroCtl().toggleGyroscope(true)
@@ -9711,69 +9755,52 @@ export struct WindowNativeNode {
         }
       }
 
-      if (this.landingBannerVisible && !this.panelVisible && !this.locationMapFullscreen) {
-        Row({ space: 6 }) {
-          Text(this.landingBannerSource === 'reminder' ? '🔔' : '✦')
-            .fontSize(12)
-            .fontColor(this.hostSlots().accent)
-          Text(this.landingBannerTitle)
+      if (this.landingBannerVisible && this.landingBannerHasTimeShift && !this.panelVisible && !this.locationMapFullscreen) {
+        Row({ space: 8 }) {
+          Row()
+            .width(6)
+            .height(6)
+            .borderRadius(3)
+            .backgroundColor(this.hostSlots().accent)
+          Text(this.landingTimePreviewLabel())
             .fontSize(12)
             .fontWeight(FontWeight.Medium)
             .fontColor(this.hostSlots().textStrong)
             .maxLines(1)
             .textOverflow({ overflow: TextOverflow.Ellipsis })
-            .constraintSize({ maxWidth: this.isExpandedLayout ? 260 : 145 })
-          if (this.landingBannerTarget.length > 0) {
-            Text(this.gyroStore.gyroscopeEnabled ? '🧭 找星中' : '🧭 找星')
-              .fontSize(11)
-              .fontWeight(FontWeight.Medium)
-              .fontColor(this.gyroStore.gyroscopeEnabled ? this.hostSlots().onAccent : this.hostSlots().textStrong)
-              .padding({ left: 9, right: 9, top: 4, bottom: 4 })
-              .backgroundColor(this.gyroStore.gyroscopeEnabled ? this.hostSlots().accent : this.hostSlots().overlayButton)
-              .borderRadius(UI_RADIUS_PILL)
-              .onClick(() => { this.toggleFindStarFromLanding() })
-          }
-          if (this.landingBannerHasTimeShift) {
-            Text('⏱ 此刻')
-              .fontSize(11)
-              .fontWeight(FontWeight.Medium)
-              .fontColor(this.hostSlots().textStrong)
-              .padding({ left: 9, right: 9, top: 4, bottom: 4 })
-              .backgroundColor(this.hostSlots().overlayButton)
-              .borderRadius(UI_RADIUS_PILL)
-              .onClick(() => { this.returnToNowFromLanding() })
-          }
-          if (this.landingBannerEventId.length > 0) {
-            Text('📅 详情')
-              .fontSize(11)
-              .fontWeight(FontWeight.Medium)
-              .fontColor(this.hostSlots().textStrong)
-              .padding({ left: 9, right: 9, top: 4, bottom: 4 })
-              .backgroundColor(this.hostSlots().overlayButton)
-              .borderRadius(UI_RADIUS_PILL)
-              .onClick(() => { this.openCalendarFromLanding() })
-          }
+          Text(I18n.getLanguage().startsWith('zh') ? '回到此刻' : 'Live')
+            .fontSize(11)
+            .fontWeight(FontWeight.Medium)
+            .fontColor(this.hostSlots().accent)
+            .padding({ left: 10, right: 10, top: 4, bottom: 4 })
+            .backgroundColor(this.hostSlots().soft)
+            .borderRadius(UI_RADIUS_PILL)
+            .clickEffect({ level: ClickEffectLevel.LIGHT })
+            .onClick(() => { this.returnToNowFromLanding() })
           Text('✕')
             .fontSize(12)
             .fontColor(this.hostSlots().sub)
             .textAlign(TextAlign.Center)
-            .width(26)
-            .height(26)
-            .borderRadius(13)
+            .width(24)
+            .height(24)
+            .borderRadius(12)
+            .clickEffect({ level: ClickEffectLevel.LIGHT })
             .onClick(() => { this.dismissLandingBanner() })
         }
           .alignItems(VerticalAlign.Center)
-          .height(40)
-          .padding({ left: 13, right: 8 })
+          .height(36)
+          .padding({ left: 12, right: 8 })
           .backgroundColor(this.hostSlots().panelGlassStrong)
           .backdropBlur(20)
           .border({ width: 0.7, color: this.hostSlots().border })
           .borderRadius(UI_RADIUS_PILL)
-          .constraintSize({ maxWidth: Math.max(240, this.skyWidth - 28) })
-          .position({ x: '50%', y: (this.isExpandedLayout || this.isFoldHoverLayout) ? 94 : 92 })
+          .position({
+            x: '50%',
+            y: (this.isExpandedLayout || this.isFoldHoverLayout) ? 54 : Math.max(120, this.dockTop() - 48)
+          })
           .markAnchor({ x: '50%', y: 0 })
           .zIndex(93)
-          .transition(TransitionEffect.OPACITY.animation({ duration: 220, curve: Curve.EaseOut }))
+          .transition(TransitionEffect.OPACITY.animation({ duration: 200, curve: Curve.EaseOut }))
       }
 
       if (this.tools.skyTextureStatusVisible) {
