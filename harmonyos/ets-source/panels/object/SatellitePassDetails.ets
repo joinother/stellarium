@@ -12,7 +12,34 @@ import { DEFAULT_SLOTS, ThemeSlots, slotsFromTheme } from '../../state/Stellariu
 
 function satellitePassTime(value: string | undefined): string {
   if (value === undefined || value.length === 0) return '--'
-  return value.replace('T', ' ').replace(/\.000Z$/, ' UTC').replace(/Z$/, ' UTC')
+  const cleaned = value.replace('T', ' ').replace(/\.000Z$/, '').replace(/Z$/, '')
+  // Compact YYYY-MM-DD HH:mm:ss -> MM-DD HH:mm:ss for readable timeline display
+  if (cleaned.length >= 19 && cleaned[4] === '-' && cleaned[7] === '-') {
+    return cleaned.substring(5, 19)
+  }
+  return cleaned
+}
+
+function satelliteCompassDirection(deg: number | undefined): string {
+  if (typeof deg !== 'number' || !Number.isFinite(deg)) return '--'
+  const norm = ((deg % 360) + 360) % 360
+  const dirs: string[] = ['北', '东北', '东', '东南', '南', '西南', '西', '西北']
+  const idx = Math.floor((norm + 22.5) / 45) % 8
+  return dirs[idx] + ' ' + Math.round(norm).toString() + '°'
+}
+
+function satelliteDurationText(sec: number | undefined): string {
+  if (typeof sec !== 'number' || !Number.isFinite(sec) || sec <= 0) return ''
+  const total = Math.round(sec)
+  const mins = Math.floor(total / 60)
+  const rem = total % 60
+  if (mins <= 0) return rem.toString() + '秒'
+  return mins.toString() + '分' + (rem > 0 ? rem.toString().padStart(2, '0') + '秒' : '')
+}
+
+function satellitePassHasJumpTarget(pass: SatellitePass): boolean {
+  return (typeof pass.peakJD === 'number' && Number.isFinite(pass.peakJD) && pass.peakJD > 0) ||
+    (typeof pass.startJD === 'number' && Number.isFinite(pass.startJD) && pass.startJD > 0)
 }
 
 function satellitePassVisibility(pass: SatellitePass): string {
@@ -64,41 +91,52 @@ export struct SatellitePassCard {
   @Prop pass: SatellitePass
   @Prop tablet: boolean
   @State private c: ThemeSlots = DEFAULT_SLOTS
+  onJumpToPass: (pass: SatellitePass) => void = () => {}
 
   onWillApplyTheme(theme: Theme) { this.c = slotsFromTheme(theme) }
 
   build() {
     Column({ space: 5 }) {
-      Row() {
+      Row({ space: 6 }) {
         Text(satellitePassVisibility(this.pass)).fontSize(this.tablet ? 11 : 10).fontWeight(FontWeight.Medium)
           .fontColor(this.pass.visible === true || this.pass.peakVisible === true
             ? this.c.success
             : this.c.warning)
-        Text(this.pass.ongoing === true ? ' · ' + I18n.t('satellite_pass_peak') : '')
+        Text(this.pass.ongoing === true ? '· 正在过境' : (satelliteDurationText(this.pass.durationSeconds).length > 0 ? '· ' + satelliteDurationText(this.pass.durationSeconds) : ''))
           .fontSize(10).fontColor(this.c.tertiary).layoutWeight(1)
-        Text(typeof this.pass.maxMagnitude === 'number' && Number.isFinite(this.pass.maxMagnitude) ? 'm ' + this.pass.maxMagnitude.toFixed(1) : '')
+        Text(typeof this.pass.maxMagnitude === 'number' && Number.isFinite(this.pass.maxMagnitude) && this.pass.maxMagnitude < 90
+          ? '星等 ' + this.pass.maxMagnitude.toFixed(1)
+          : '')
           .fontSize(10).fontColor(this.c.detailSub)
       }.width('100%')
       Column({ space: 1 }) {
-        SatellitePassTimelineRow({ label: I18n.t('satellite_pass_appearance'), time: this.pass.start ?? this.pass.appearance ?? '', tablet: this.tablet })
-        SatellitePassTimelineRow({ label: I18n.t('satellite_pass_peak'), time: this.pass.peak ?? '', tablet: this.tablet })
-        SatellitePassTimelineRow({ label: I18n.t('satellite_pass_disappearance'), time: this.pass.end ?? this.pass.disappearance ?? '', tablet: this.tablet })
+        SatellitePassTimelineRow({ label: I18n.t('satellite_pass_appearance') + ' · ' + satelliteCompassDirection(this.pass.startAzimuth), time: this.pass.start ?? this.pass.appearance ?? '', tablet: this.tablet })
+        SatellitePassTimelineRow({ label: I18n.t('satellite_pass_peak') + ' · 仰角 ' + satellitePassAltitude(this.pass.maxAltitude), time: this.pass.peak ?? '', tablet: this.tablet })
+        SatellitePassTimelineRow({ label: I18n.t('satellite_pass_disappearance') + ' · ' + satelliteCompassDirection(this.pass.endAzimuth), time: this.pass.end ?? this.pass.disappearance ?? '', tablet: this.tablet })
       }.width('100%')
-      Row({ space: 10 }) {
+      Row({ space: 8 }) {
         Column({ space: 1 }) {
           Text(I18n.t('satellite_pass_max_altitude')).fontSize(10).fontColor(this.c.tertiary)
           Text(satellitePassAltitude(this.pass.maxAltitude)).fontSize(this.tablet ? 12 : 11).fontColor(this.c.fourth)
         }.layoutWeight(1)
         Column({ space: 1 }) {
-          Text(I18n.t('satellite_pass_peak')).fontSize(10).fontColor(this.c.tertiary)
-          Text(satellitePassAngle(this.pass.peakAzimuth)).fontSize(this.tablet ? 12 : 11).fontColor(this.c.fourth)
-        }.layoutWeight(1)
-        Column({ space: 1 }) {
-          Text(I18n.t('satellite_pass_visibility')).fontSize(10).fontColor(this.c.tertiary)
-          Text(satellitePassVisibility(this.pass)).fontSize(this.tablet ? 11 : 10).fontColor(this.c.fourth)
+          Text('过境方位').fontSize(10).fontColor(this.c.tertiary)
+          Text(satelliteCompassDirection(this.pass.peakAzimuth)).fontSize(this.tablet ? 12 : 11).fontColor(this.c.fourth)
             .maxLines(1).textOverflow({ overflow: TextOverflow.Ellipsis })
         }.layoutWeight(1)
-      }.width('100%')
+        if (satellitePassHasJumpTarget(this.pass)) {
+          Button('预演过境')
+            .fontSize(10.5)
+            .fontWeight(FontWeight.Medium)
+            .fontColor(this.c.accent)
+            .backgroundColor(this.c.softStrong)
+            .border({ width: 0.5, color: this.c.border })
+            .borderRadius(UI_RADIUS_CONTROL)
+            .height(28)
+            .padding({ left: 10, right: 10 })
+            .onClick(() => { this.onJumpToPass(this.pass) })
+        }
+      }.width('100%').alignItems(VerticalAlign.Center)
     }
       .width('100%').padding({ left: 10, right: 10, top: 9, bottom: 9 })
       .backgroundColor(this.c.soft)
@@ -115,6 +153,7 @@ export struct SatellitePassDetails {
   @Prop tleEpoch: string
   @State private c: ThemeSlots = DEFAULT_SLOTS
   onLoad: () => void = () => {}
+  onJumpToPass: (pass: SatellitePass) => void = () => {}
 
   onWillApplyTheme(theme: Theme) { this.c = slotsFromTheme(theme) }
 
@@ -156,8 +195,8 @@ export struct SatellitePassDetails {
         } else {
           Column({ space: 6 }) {
             Text(I18n.t('satellite_next_pass')).fontSize(10).fontColor(this.c.tertiary).width('100%')
-            ForEach(this.store.selectedSatellitePasses.slice(0, 3), (pass: SatellitePass) => {
-              SatellitePassCard({ pass: pass, tablet: this.tablet })
+            ForEach(this.store.selectedSatellitePasses.slice(0, 5), (pass: SatellitePass) => {
+              SatellitePassCard({ pass: pass, tablet: this.tablet, onJumpToPass: (target: SatellitePass) => { this.onJumpToPass(target) } })
             }, (pass: SatellitePass, index: number) => 'satellite-pass-' + index.toString() + '-' + satellitePassTime(pass.start))
           }.width('100%')
             .transition(TransitionEffect.OPACITY.animation({ duration: 220, curve: Curve.EaseOut })

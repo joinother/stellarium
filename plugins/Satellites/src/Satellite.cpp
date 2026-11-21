@@ -24,6 +24,7 @@
 #include "StelCore.hpp"
 #include "StelLocaleMgr.hpp"
 #include "StelModuleMgr.hpp"
+#include "StelMovementMgr.hpp"
 #include "StelObject.hpp"
 #include "StelPainter.hpp"
 #include "StelProjector.hpp"
@@ -705,8 +706,12 @@ QVariantMap Satellite::getInfoMap(const StelCore *core) const
 	map.insert("orbit-valid", initialized && orbitValid);
 	map.insert("inclination", pSatWrapper->getOrbitalInclination());
 	map.insert("period", pSatWrapper->getOrbitalPeriod());
+	map.insert("eccentricity", eccentricity);
 	map.insert("perigee-altitude", perigee);
 	map.insert("apogee-altitude", apogee);
+	const double speedKmS = velocity.norm();
+	if (std::isfinite(speedKmS) && speedKmS > 0.0)
+		map.insert("orbital-speed", speedKmS);
 	map.insert("operational-status", getOperationalStatus());
 	if (!orbitValid) return map;
 	if (initialized && orbitValid && std::isfinite(range) && range > 0.0)
@@ -1540,7 +1545,7 @@ void Satellite::update(const StelCore *core, const double JD, bool updateOrbit)
 		visibility = pSatWrapper->getVisibilityPredict();
 		hasUpdatedOnce = true;
 
-		// Record bounded local-horizon motion sample for fast time-scrubbing ribbons.
+		// Record tight local-horizon motion history for razor-sharp fast-time satellite streaks.
 		// Never connects across horizon crossings, large calendar teleports, or time reversals.
 		if (elAzPosition[2] < -0.025)
 		{
@@ -1557,25 +1562,26 @@ void Satellite::update(const StelCore *core, const double JD, bool updateOrbit)
 				motionTrailLastJD = JD;
 				motionTrailDir = 0;
 			}
-			else if (std::fabs(dJD) > (0.35 / 86400.0))
+			else if (std::fabs(dJD) > (0.12 / 86400.0))
 			{
 				const int dir = (dJD > 0.0) ? 1 : -1;
 				const double cosAng = motionTrail.last().altAzUnit.dot(elAzPosition);
-				if ((motionTrailDir != 0 && dir != motionTrailDir) || cosAng < 0.70)
+				if ((motionTrailDir != 0 && dir != motionTrailDir) || cosAng < 0.72)
 				{
 					motionTrail.clear();
 					motionTrail.append({ elAzPosition, JD, visibility });
 					motionTrailLastJD = JD;
 					motionTrailDir = dir;
 				}
-				else if (cosAng < 0.9999994)
+				else if (cosAng < 0.9999998)
 				{
 					motionTrail.append({ elAzPosition, JD, visibility });
 					motionTrailLastJD = JD;
 					motionTrailDir = dir;
-					// Keep bounded short window (~6 min simulated time, max 12 samples)
-					const double maxSpanDays = 0.0042;
-					while (motionTrail.size() > 12 ||
+					// Keep tight instantaneous window (~39 s simulated time, max 6 samples)
+					// so fast-time streaks remain razor-sharp needles rather than broad historical bands.
+					const double maxSpanDays = 0.00045;
+					while (motionTrail.size() > 6 ||
 					       (motionTrail.size() > 2 && std::fabs(JD - motionTrail.first().jd) > maxSpanDays))
 					{
 						motionTrail.removeFirst();
@@ -1691,6 +1697,7 @@ void Satellite::recalculateOrbitLines(void)
 {
 	orbitPoints.clear();
 	visibilityPoints.clear();
+	lastOrbitStepSeconds = 0.0;
 }
 
 void Satellite::updateOrbitLines()
@@ -1705,7 +1712,8 @@ QVariantMap Satellite::getOrbitLineStatus() const
 		{"selectedPreview", orbitPreview}, {"requested", shouldDisplayOrbit()},
 		{"orbitValid", isOrbitValid()}, {"displayed", displayed},
 		{"pointCount", orbitPoints.size()}, {"drawCount", orbitDrawCount},
-		{"lastDrawJD", orbitLastDrawJD}};
+		{"lastDrawJD", orbitLastDrawJD}, {"expandProgress", orbitExpandProgress},
+		{"stepSeconds", orbitStepSeconds}};
 }
 
 SatFlags Satellite::getFlags() const
@@ -2084,57 +2092,359 @@ void Satellite::draw(StelCore* core, StelPainter& painter)
 
 void Satellite::drawOrbit(StelCore *core, StelPainter& painter)
 {
-	int size = orbitPoints.size();
-	const float ppx = static_cast<float>(painter.getProjector()->getDevicePixelsPerPixel());
+	const int size = orbitPoints.size();
+	if (size < 2 || visibilityPoints.size() < size)
+		return;
 
-	if (size>0)
+	const bool isPreview = orbitPreview && !orbitDisplayed;
+	const float rawT = orbitDisplayed ? 1.0f : qBound(0.f, orbitExpandProgress, 1.f);
+	const float invT = 1.0f - rawT;
+	const float revealT = orbitDisplayed ? 1.0f : (1.0f - invT * invT * invT);
+	if (revealT <= 0.004f)
+		return;
+
+	const StelProjectorP prj = painter.getProjector();
+	const double fovDeg = qBound(0.5, core->getMovementMgr()->getCurrentFov(), 179.0);
+	const int vpH = prj ? prj->getViewportHeight() : 1080;
+	const double radPerPx = (fovDeg * M_PI / 180.0) / qMax(360.0, static_cast<double>(vpH));
+	const double screenScale = qBound(1.0, static_cast<double>(StelApp::getInstance().getScreenScale()), 3.5);
+	const double thicknessMul = qBound(1.0, static_cast<double>(orbitLineThickness), 4.0);
+	const double baseCoreW = qBound(0.00009, (isPreview ? 1.05 : 0.82) * screenScale * thicknessMul * radPerPx, 0.0042);
+
+	QVector<Vec3d> j2kPts(size);
+	QVector<double> cumArc(size, 0.0);
+	QVector<double> altSin(size, 0.0);
+	for (int i = 0; i < size; ++i)
 	{
-		Vec3d position;
-		Vec3f drawColor;
-		Vec4d op;
-		QVector<Vec3d> vertexArray;
-		QVector<Vec4f> colorArray;
-		vertexArray.resize(size);
-		colorArray.resize(size);
-
-		//Rest of points
-		for (int i=0; i<size; i++)
+		const Vec4d& op = orbitPoints[i];
+		Vec3d azVec(op[0], op[1], op[2]);
+		const double azN = azVec.norm();
+		altSin[i] = (azN > 1e-9) ? (op[2] / azN) : 0.0;
+		Vec3d pos = core->altAzToJ2000(azVec, StelCore::RefractionOff);
+		const double pn = pos.norm();
+		j2kPts[i] = (pn > 1e-10) ? (pos / pn) : XYZ;
+		if (i > 0)
 		{
-			op = orbitPoints[i];
-			position = core->altAzToJ2000(Vec3d(op[0],op[1],op[2]), StelCore::RefractionOff);
-			position.normalize();
-			vertexArray[i] = position;
+			const double dot = qBound(-1.0, j2kPts[i - 1].dot(j2kPts[i]), 1.0);
+			cumArc[i] = cumArc[i - 1] + std::acos(dot);
+		}
+	}
 
-			drawColor = (visibilityPoints[i] == gSatWrapper::VISIBLE) ? orbitColor : invisibleSatelliteColor;
-			if (flagVFAltitude)
+	QVector<Vec3d> sideVecs(size);
+	Vec3d lastSide(1., 0., 0.);
+	for (int i = 0; i < size; ++i)
+	{
+		const int ip = qMax(0, i - 1);
+		const int in = qMin(size - 1, i + 1);
+		Vec3d tan = j2kPts[in] - j2kPts[ip];
+		Vec3d side = j2kPts[i] ^ tan;
+		const double sn = side.norm();
+		if (sn > 1e-10) { side /= sn; lastSide = side; }
+		else { side = lastSide; }
+		sideVecs[i] = side;
+	}
+
+	const int centerIdx = size / 2;
+	const float halfSpanIdx = qMax(1.0f, static_cast<float>(size - 1) * 0.5f);
+	const float revealSpanIdx = qMax(1.0f, revealT * halfSpanIdx);
+	const double dashPeriodRad = qBound(0.0055, 16.0 * screenScale * radPerPx, 0.036);
+
+	// Blend sunlit color with custom orbitColor when a satellite specifies an explicit non-neutral tint.
+	const Vec3f sunlitBase(0.56f, 0.88f, 1.0f);
+	const float orbitChroma = qMax(qAbs(orbitColor[0] - orbitColor[1]), qMax(qAbs(orbitColor[1] - orbitColor[2]), qAbs(orbitColor[0] - orbitColor[2])));
+	const Vec3f sunlitCol = (orbitChroma > 0.12f)
+		? (sunlitBase * 0.65f + orbitColor * 0.35f)
+		: sunlitBase;
+	const Vec3f penumbraCol(1.0f, 0.78f, 0.42f);
+	const Vec3f shadowCol(0.52f, 0.74f, 0.96f);
+
+	QVector<Vec3f> nodeRgb(size);
+	QVector<float> nodeAlpha(size, 0.f);
+	QVector<double> nodeWidth(size, baseCoreW);
+	QVector<bool> nodeEclipsed(size, false);
+
+	for (int i = 0; i < size; ++i)
+	{
+		const float distIdx = std::fabs(static_cast<float>(i) - static_cast<float>(centerIdx));
+		if (distIdx > revealSpanIdx)
+		{
+			nodeAlpha[i] = 0.f;
+			continue;
+		}
+		const Vec4d& op = orbitPoints[i];
+		if (flagVFAltitude && (op[3] < minVFAltitude || op[3] > maxVFAltitude))
+		{
+			nodeAlpha[i] = 0.f;
+			continue;
+		}
+		const gSatWrapper::Visibility vis = visibilityPoints[i];
+		const bool eclipsed = (vis != gSatWrapper::VISIBLE && vis != gSatWrapper::PENUMBRAL);
+		nodeEclipsed[i] = eclipsed;
+		if (hideInvisibleSatellitesFlag && vis != gSatWrapper::VISIBLE)
+		{
+			nodeAlpha[i] = 0.f;
+			continue;
+		}
+
+		const bool isFuture = (i >= centerIdx);
+		const float segFade = calculateOrbitSegmentIntensity(i);
+		const float frontierFade = (revealT < 0.995f && distIdx > revealSpanIdx - 3.5f)
+			? qBound(0.f, (revealSpanIdx - distIdx) / 3.5f, 1.f)
+			: 1.f;
+		const float fracFromCenter = qBound(0.f, distIdx / halfSpanIdx, 1.f);
+		const float dirAlpha = isFuture
+			? (0.94f - 0.16f * fracFromCenter)
+			: (0.46f * (1.0f - 0.52f * fracFromCenter));
+		const double dirWidth = isFuture ? 1.0 : 0.76;
+		const float horizonMul = (altSin[i] >= -0.005) ? 1.0f : 0.34f;
+
+		Vec3f rgb = sunlitCol;
+		float visMul = 1.0f;
+		if (vis == gSatWrapper::PENUMBRAL)
+		{
+			rgb = penumbraCol;
+			visMul = 0.86f;
+		}
+		else if (eclipsed)
+		{
+			rgb = shadowCol;
+			visMul = 0.68f;
+		}
+
+		nodeRgb[i] = rgb;
+		nodeAlpha[i] = qBound(0.f, hintBrightness * segFade * frontierFade * dirAlpha * visMul * horizonMul, 0.96f);
+		nodeWidth[i] = baseCoreW * dirWidth * (eclipsed ? 0.88 : 1.0);
+	}
+
+	orbitRibbonVerts.clear();
+	orbitRibbonColors.clear();
+	orbitRibbonVerts.reserve(size * 24 + 256);
+	orbitRibbonColors.reserve(size * 24 + 256);
+
+	auto pushQuad = [&](const Vec3d& a0, const Vec3d& a1, const Vec3d& b0, const Vec3d& b1,
+		const Vec4f& ca0, const Vec4f& ca1, const Vec4f& cb0, const Vec4f& cb1) {
+		orbitRibbonVerts.append(a0); orbitRibbonColors.append(ca0);
+		orbitRibbonVerts.append(a1); orbitRibbonColors.append(ca1);
+		orbitRibbonVerts.append(b1); orbitRibbonColors.append(cb1);
+
+		orbitRibbonVerts.append(a0); orbitRibbonColors.append(ca0);
+		orbitRibbonVerts.append(b1); orbitRibbonColors.append(cb1);
+		orbitRibbonVerts.append(b0); orbitRibbonColors.append(cb0);
+	};
+
+	for (int i = 0; i < size - 1; ++i)
+	{
+		if (nodeAlpha[i] < 0.004f && nodeAlpha[i + 1] < 0.004f)
+			continue;
+		const double segDot = j2kPts[i].dot(j2kPts[i + 1]);
+		if (segDot < 0.5)
+			continue;
+
+		const double segArc = cumArc[i + 1] - cumArc[i];
+		const bool segEclipsed = nodeEclipsed[i] && nodeEclipsed[i + 1];
+		// Subdivide eclipsed chords along arc length so dashes stay crisp at every FOV
+		const int subSteps = segEclipsed
+			? qBound(1, static_cast<int>(std::ceil(segArc / qMax(0.0005, dashPeriodRad * 0.25))), 12)
+			: 1;
+
+		const float boost0 = (i >= centerIdx && visibilityPoints[i] == gSatWrapper::VISIBLE) ? 0.24f : 0.f;
+		const float boost1 = (i + 1 >= centerIdx && visibilityPoints[i + 1] == gSatWrapper::VISIBLE) ? 0.24f : 0.f;
+		const Vec3f coreRgb0(
+			nodeRgb[i][0] + (1.f - nodeRgb[i][0]) * boost0,
+			nodeRgb[i][1] + (1.f - nodeRgb[i][1]) * boost0,
+			nodeRgb[i][2] + (1.f - nodeRgb[i][2]) * boost0);
+		const Vec3f coreRgb1(
+			nodeRgb[i + 1][0] + (1.f - nodeRgb[i + 1][0]) * boost1,
+			nodeRgb[i + 1][1] + (1.f - nodeRgb[i + 1][1]) * boost1,
+			nodeRgb[i + 1][2] + (1.f - nodeRgb[i + 1][2]) * boost1);
+
+		for (int s = 0; s < subSteps; ++s)
+		{
+			const double f0 = static_cast<double>(s) / static_cast<double>(subSteps);
+			const double f1 = static_cast<double>(s + 1) / static_cast<double>(subSteps);
+			const double arcMid = cumArc[i] + segArc * (0.5 * (f0 + f1));
+			float dashMul = 1.0f;
+			if (segEclipsed)
 			{
-				// visual filter is activated!
-				// is satellite located in valid range of altitudes?
-				if (minVFAltitude<=op[3] && op[3]<=maxVFAltitude)
-					colorArray[i] = Vec4f(drawColor, hintBrightness * calculateOrbitSegmentIntensity(i));
-				else
-					colorArray[i] = Vec4f(0.f,0.f,0.f,0.f); // hide invisible part of orbit
+				const double cyc = std::fmod(arcMid / dashPeriodRad, 1.0);
+				if (cyc > 0.56)
+					continue;
+				dashMul = (cyc > 0.48) ? static_cast<float>((0.56 - cyc) / 0.08) : 1.0f;
 			}
-			else
+
+			Vec3d p0 = j2kPts[i] * (1.0 - f0) + j2kPts[i + 1] * f0;
+			Vec3d p1 = j2kPts[i] * (1.0 - f1) + j2kPts[i + 1] * f1;
+			const double p0n = p0.norm(); if (p0n > 1e-10) p0 /= p0n;
+			const double p1n = p1.norm(); if (p1n > 1e-10) p1 /= p1n;
+
+			Vec3d s0 = sideVecs[i] * (1.0 - f0) + sideVecs[i + 1] * f0;
+			Vec3d s1 = sideVecs[i] * (1.0 - f1) + sideVecs[i + 1] * f1;
+			const double s0n = s0.norm(); if (s0n > 1e-10) s0 /= s0n;
+			const double s1n = s1.norm(); if (s1n > 1e-10) s1 /= s1n;
+
+			const double cW0 = nodeWidth[i] * (1.0 - f0) + nodeWidth[i + 1] * f0;
+			const double cW1 = nodeWidth[i] * (1.0 - f1) + nodeWidth[i + 1] * f1;
+			const double oW0 = cW0 * 2.15;
+			const double oW1 = cW1 * 2.15;
+
+			const float a0 = (nodeAlpha[i] * static_cast<float>(1.0 - f0) + nodeAlpha[i + 1] * static_cast<float>(f0)) * dashMul;
+			const float a1 = (nodeAlpha[i] * static_cast<float>(1.0 - f1) + nodeAlpha[i + 1] * static_cast<float>(f1)) * dashMul;
+			const Vec3f rgb0 = nodeRgb[i] * static_cast<float>(1.0 - f0) + nodeRgb[i + 1] * static_cast<float>(f0);
+			const Vec3f rgb1 = nodeRgb[i] * static_cast<float>(1.0 - f1) + nodeRgb[i + 1] * static_cast<float>(f1);
+			const Vec3f cRgb0 = coreRgb0 * static_cast<float>(1.0 - f0) + coreRgb1 * static_cast<float>(f0);
+			const Vec3f cRgb1 = coreRgb0 * static_cast<float>(1.0 - f1) + coreRgb1 * static_cast<float>(f1);
+
+			const Vec4f edge0(rgb0[0], rgb0[1], rgb0[2], 0.f);
+			const Vec4f edge1(rgb1[0], rgb1[1], rgb1[2], 0.f);
+			const Vec4f core0(cRgb0[0], cRgb0[1], cRgb0[2], a0);
+			const Vec4f core1(cRgb1[0], cRgb1[1], cRgb1[2], a1);
+
+			pushQuad(p0 - s0 * oW0, p0 - s0 * cW0, p1 - s1 * oW1, p1 - s1 * cW1, edge0, core0, edge1, core1);
+			pushQuad(p0 - s0 * cW0, p0 + s0 * cW0, p1 - s1 * cW1, p1 + s1 * cW1, core0, core0, core1, core1);
+			pushQuad(p0 + s0 * cW0, p0 + s0 * oW0, p1 + s1 * cW1, p1 + s1 * oW1, core0, edge0, core1, edge1);
+		}
+	}
+
+	// Selected-satellite orbital landmarks: direction chevron, minute ticks, shadow transitions & culmination apex
+	if (orbitPreview && revealT > 0.35f)
+	{
+		const float landmarkEnv = qBound(0.f, (revealT - 0.35f) / 0.45f, 1.f) * hintBrightness;
+		auto emitStroke = [&](const Vec3d& a, const Vec3d& b, double halfW, const Vec4f& col) {
+			Vec3d dir = b - a;
+			Vec3d mid = a + b;
+			Vec3d side = mid ^ dir;
+			const double sn = side.norm();
+			if (sn <= 1e-10) return;
+			side /= sn;
+			const Vec4f edgeCol(col[0], col[1], col[2], 0.f);
+			const double outW = halfW * 1.9;
+			pushQuad(a - side * outW, a - side * halfW, b - side * outW, b - side * halfW, edgeCol, col, edgeCol, col);
+			pushQuad(a - side * halfW, a + side * halfW, b - side * halfW, b + side * halfW, col, col, col, col);
+			pushQuad(a + side * halfW, a + side * outW, b + side * halfW, b + side * outW, col, edgeCol, col, edgeCol);
+		};
+		auto emitDiamond = [&](const Vec3d& center, const Vec3d& tanUnit, const Vec3d& sideUnit, double r, const Vec4f& col) {
+			const Vec3d pN = center + tanUnit * r;
+			const Vec3d pS = center - tanUnit * r;
+			const Vec3d pE = center + sideUnit * r;
+			const Vec3d pW = center - sideUnit * r;
+			const Vec4f outer(col[0], col[1], col[2], col[3] * 0.25f);
+			orbitRibbonVerts.append(center); orbitRibbonColors.append(col);
+			orbitRibbonVerts.append(pN); orbitRibbonColors.append(outer);
+			orbitRibbonVerts.append(pE); orbitRibbonColors.append(outer);
+
+			orbitRibbonVerts.append(center); orbitRibbonColors.append(col);
+			orbitRibbonVerts.append(pE); orbitRibbonColors.append(outer);
+			orbitRibbonVerts.append(pS); orbitRibbonColors.append(outer);
+
+			orbitRibbonVerts.append(center); orbitRibbonColors.append(col);
+			orbitRibbonVerts.append(pS); orbitRibbonColors.append(outer);
+			orbitRibbonVerts.append(pW); orbitRibbonColors.append(outer);
+
+			orbitRibbonVerts.append(center); orbitRibbonColors.append(col);
+			orbitRibbonVerts.append(pW); orbitRibbonColors.append(outer);
+			orbitRibbonVerts.append(pN); orbitRibbonColors.append(outer);
+		};
+
+		// 1. Forward motion chevron ahead of the satellite
+		const double chevronTargetArc = qBound(0.014, 28.0 * screenScale * radPerPx, 0.055);
+		int chevIdx = -1;
+		for (int i = centerIdx + 1; i < size - 1; ++i)
+		{
+			if (static_cast<float>(i - centerIdx) > revealSpanIdx - 2.0f)
+				break;
+			if (cumArc[i] - cumArc[centerIdx] >= chevronTargetArc && altSin[i] >= 0.0)
 			{
-				if (hideInvisibleSatellitesFlag && visibilityPoints[i] != gSatWrapper::VISIBLE)
-					colorArray[i] = Vec4f(0.f,0.f,0.f,0.f); // hide invisible part of orbit
-				else
-					colorArray[i] = Vec4f(drawColor, hintBrightness * calculateOrbitSegmentIntensity(i));
+				chevIdx = i;
+				break;
+			}
+		}
+		if (chevIdx > centerIdx && chevIdx < size - 1)
+		{
+			Vec3d fwd = j2kPts[chevIdx + 1] - j2kPts[chevIdx - 1];
+			const double fn = fwd.norm();
+			if (fn > 1e-10)
+			{
+				fwd /= fn;
+				const double armLen = qBound(0.0014, 6.5 * screenScale * radPerPx, 0.022);
+				const Vec3d tip = j2kPts[chevIdx] + fwd * (armLen * 0.45);
+				const Vec3d wingL = tip - fwd * armLen - sideVecs[chevIdx] * (armLen * 0.68);
+				const Vec3d wingR = tip - fwd * armLen + sideVecs[chevIdx] * (armLen * 0.68);
+				const Vec4f chevCol(0.84f, 0.96f, 1.0f, 0.92f * landmarkEnv);
+				emitStroke(wingL, tip, baseCoreW * 0.95, chevCol);
+				emitStroke(wingR, tip, baseCoreW * 0.95, chevCol);
 			}
 		}
 
-		painter.enableClientStates(true, false, false);
-		if (orbitLineThickness>1 || ppx>1.f)
-			painter.setLineWidth(orbitLineThickness*ppx);
+		// 2. Subtle time ticks along the future above-horizon arc (every 60s for LEO, 600s for MEO/GSO)
+		const double tickIntervalSec = (orbitStepSeconds <= 12.0) ? 60.0 : 600.0;
+		const int tickStride = qMax(4, static_cast<int>(std::lround(tickIntervalSec / qMax(1.0, orbitStepSeconds))));
+		const double tickHalfLen = qBound(0.0006, 3.2 * screenScale * radPerPx, 0.011);
+		for (int i = centerIdx + tickStride; i < size - 2; i += tickStride)
+		{
+			if (static_cast<float>(i - centerIdx) > revealSpanIdx - 2.0f)
+				break;
+			if (altSin[i] < 0.02 || nodeAlpha[i] < 0.12f)
+				continue;
+			const Vec3d a = j2kPts[i] - sideVecs[i] * tickHalfLen;
+			const Vec3d b = j2kPts[i] + sideVecs[i] * tickHalfLen;
+			const Vec4f tickCol(nodeRgb[i][0], nodeRgb[i][1], nodeRgb[i][2], qMin(0.85f, nodeAlpha[i] * 0.95f) * landmarkEnv);
+			emitStroke(a, b, baseCoreW * 0.62, tickCol);
+		}
 
-		painter.drawPath(vertexArray, colorArray); // (does client state switching as needed internally)
+		// 3. Earth-shadow entry/exit marker & pass culmination (apex) diamond
+		int apexIdx = -1;
+		double bestAltSin = 0.14; // > ~8 deg altitude
+		for (int i = 1; i < size - 1; ++i)
+		{
+			const float distIdx = std::fabs(static_cast<float>(i) - static_cast<float>(centerIdx));
+			if (distIdx > revealSpanIdx - 1.5f)
+				continue;
+			if (altSin[i] > bestAltSin)
+			{
+				bestAltSin = altSin[i];
+				apexIdx = i;
+			}
+			// Sunlit <-> Eclipsed transition above horizon
+			const bool curSun = (visibilityPoints[i] == gSatWrapper::VISIBLE);
+			const bool prvSun = (visibilityPoints[i - 1] == gSatWrapper::VISIBLE);
+			const bool curShd = (visibilityPoints[i] == gSatWrapper::RADAR_NIGHT || visibilityPoints[i] == gSatWrapper::ANNULAR);
+			const bool prvShd = (visibilityPoints[i - 1] == gSatWrapper::RADAR_NIGHT || visibilityPoints[i - 1] == gSatWrapper::ANNULAR);
+			if (altSin[i] >= 0.02 && ((curSun && prvShd) || (prvSun && curShd)))
+			{
+				Vec3d tan = j2kPts[i + 1] - j2kPts[i - 1];
+				const double tn = tan.norm();
+				if (tn > 1e-10)
+				{
+					tan /= tn;
+					const double r = qBound(0.0010, 4.4 * screenScale * radPerPx, 0.016);
+					emitDiamond(j2kPts[i], tan, sideVecs[i], r, Vec4f(1.0f, 0.82f, 0.44f, 0.95f * landmarkEnv));
+				}
+			}
+		}
+		if (apexIdx > 1 && apexIdx < size - 2 && qAbs(apexIdx - centerIdx) >= 3)
+		{
+			Vec3d tan = j2kPts[apexIdx + 1] - j2kPts[apexIdx - 1];
+			const double tn = tan.norm();
+			if (tn > 1e-10)
+			{
+				tan /= tn;
+				const double r = qBound(0.0011, 4.8 * screenScale * radPerPx, 0.017);
+				emitDiamond(j2kPts[apexIdx], tan, sideVecs[apexIdx], r, Vec4f(0.86f, 0.96f, 1.0f, 0.92f * landmarkEnv));
+			}
+		}
+	}
+
+	if (!orbitRibbonVerts.isEmpty())
+	{
+		painter.setBlending(true, GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+		painter.enableClientStates(true, false, true);
+		painter.setVertexPointer(3, GL_DOUBLE, orbitRibbonVerts.constData());
+		painter.setColorPointer(4, GL_FLOAT, orbitRibbonColors.constData());
+		painter.drawFromArray(StelPainter::Triangles, orbitRibbonVerts.size(), 0, true);
+		painter.setBlending(false);
+		painter.enableClientStates(false);
 		++orbitDrawCount;
 		orbitLastDrawJD = core->getJD();
-
-		painter.enableClientStates(false);
-		if (orbitLineThickness>1 || ppx>1.f)
-			painter.setLineWidth(1);
 	}
 }
 
@@ -2160,8 +2470,29 @@ void Satellite::computeOrbitPoints()
 		pSatWrapper->setEpoch(epochTime);
 		return false;
 	};
-	gTimeSpan computeInterval(0, 0, 0, orbitLineSegmentDuration);
-	gTimeSpan orbitSpan(0, 0, 0, orbitLineSegments*orbitLineSegmentDuration/2);
+	// Adaptive per-satellite sampling step: keeps LEO passes silky-smooth (~6s chords over ±9 min)
+	// while scaling proportionally for MEO/HEO/GSO so high-altitude satellites also reveal a full arc.
+	const double orbitalPeriodMin = pSatWrapper ? pSatWrapper->getOrbitalPeriod() : 95.0;
+	int effectiveSegSec = qMax(2, orbitLineSegmentDuration);
+	if (orbitPreview)
+	{
+		if (orbitalPeriodMin > 900.0)
+			effectiveSegSec = qBound(30, static_cast<int>(std::lround(orbitalPeriodMin * 60.0 * 0.18 / qMax(1, orbitLineSegments))), 90);
+		else if (orbitalPeriodMin > 150.0)
+			effectiveSegSec = qBound(15, static_cast<int>(std::lround(orbitalPeriodMin * 60.0 * 0.25 / qMax(1, orbitLineSegments))), 60);
+		else if (effectiveSegSec <= 5)
+			effectiveSegSec = 6;
+	}
+	if (lastOrbitStepSeconds > 0.0 && std::fabs(lastOrbitStepSeconds - static_cast<double>(effectiveSegSec)) > 0.5)
+	{
+		orbitPoints.clear();
+		visibilityPoints.clear();
+	}
+	orbitStepSeconds = static_cast<double>(effectiveSegSec);
+	lastOrbitStepSeconds = orbitStepSeconds;
+
+	gTimeSpan computeInterval(0, 0, 0, effectiveSegSec);
+	gTimeSpan orbitSpan(0, 0, 0, orbitLineSegments * effectiveSegSec / 2);
 	gTime epochTm;
 	gTime epoch(epochTime);
 	gTime lastEpochComp(lastEpochCompForOrbit);	
@@ -2186,7 +2517,7 @@ void Satellite::computeOrbitPoints()
 	{
 		// compute next orbit point when clock runs forward
 		gTimeSpan diffTime = epoch - lastEpochComp;
-		diffSlots          = static_cast<int>(diffTime.getDblSeconds()/orbitLineSegmentDuration);
+		diffSlots          = static_cast<int>(diffTime.getDblSeconds()/effectiveSegSec);
 
 		if (diffSlots > 0)
 		{
@@ -2220,7 +2551,7 @@ void Satellite::computeOrbitPoints()
 	{
 		// compute next orbit point when clock runs backward
 		gTimeSpan diffTime = lastEpochComp - epoch;
-		diffSlots          = static_cast<int>(diffTime.getDblSeconds()/orbitLineSegmentDuration);
+		diffSlots          = static_cast<int>(diffTime.getDblSeconds()/effectiveSegSec);
 
 		if (diffSlots > 0)
 		{

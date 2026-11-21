@@ -343,6 +343,9 @@ export interface SatellitePass {
   startUtc?: string
   peakUtc?: string
   endUtc?: string
+  startJD?: number
+  peakJD?: number
+  endJD?: number
   startAzimuth?: number
   peakAzimuth?: number
   endAzimuth?: number

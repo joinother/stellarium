@@ -7239,6 +7239,9 @@ export struct WindowNativeNode {
         this.objectDetailStore.selectedSatellitePasses = []
         this.objectDetailStore.selectedSatellitePassesLoaded = false
         this.objectDetailStore.selectedSatellitePassesRequested = false
+        if (this.objectDetailStore.selectedObjectIsArtificialSatellite()) {
+          this.objectDetailStore.loadSelectedSatellitePasses()
+        }
         // Sensor tracking owns the camera. A gyro-mode search selects the
         // target and opens its card, but never starts a safe-area fly-to.
         if (!this.gyroStore.gyroscopeEnabled && !this.sessionToolStore.isObserverPlanetSelection(incomingName)) {
@@ -7933,7 +7936,7 @@ export struct WindowNativeNode {
 
   private requestSatellitePasses(expectedName: string): void {
     if (this.objectDetailStore.selectedName !== expectedName || this.objectDetailStore.selectedSatellitePassesLoaded) return
-    const payload = JSON.stringify({ hours: 12, limit: 3, minElevation: 10, visibleOnly: false })
+    const payload = JSON.stringify({ hours: 48, limit: 5, minElevation: 10, visibleOnly: false })
     this.callInteractive('getSatellitePasses', payload, (r) => {
       if (this.objectDetailStore.selectedName !== expectedName) return
       if (r.ok === true) {
@@ -7947,6 +7950,28 @@ export struct WindowNativeNode {
         this.objectDetailStore.selectedSatellitePasses = []
         this.objectDetailStore.selectedSatellitePassesLoaded = true
       }
+    })
+  }
+
+  private jumpToSatellitePass(pass: SatellitePass): void {
+    const startJD = typeof pass.startJD === 'number' && Number.isFinite(pass.startJD) ? pass.startJD : 0
+    const peakJD = typeof pass.peakJD === 'number' && Number.isFinite(pass.peakJD) ? pass.peakJD : 0
+    let targetJD = 0
+    if (startJD > 0 && peakJD > startJD) {
+      // Land ~25% into the rising pass arc so the satellite is cleanly above horizon and climbing
+      targetJD = startJD + (peakJD - startJD) * 0.25
+    } else if (peakJD > 0) {
+      targetJD = peakJD
+    } else if (startJD > 0) {
+      targetJD = startJD
+    }
+    if (targetJD <= 0) return
+    if (!this.satelliteStore.satOrbitLines) {
+      this.satelliteCtl().setSatelliteFlag('orbitLines', true)
+    }
+    this.callNativeWhenReady('setJD', targetJD.toString(), () => {
+      this.refreshDockClock()
+      this.moveToSelectedObject()
     })
   }
 
@@ -9096,6 +9121,7 @@ export struct WindowNativeNode {
                 onDismiss: () => { this.dismissObjectInspector() },
                 onSelectTab: (index: number) => { this.selectObjectDetailTab(index) },
                 onLoadPasses: () => { this.objectDetailStore.loadSelectedSatellitePasses() },
+                onJumpToPass: (pass: SatellitePass) => { this.jumpToSatellitePass(pass) },
                 onMediaOpen: () => { this.objectInspectorMediaCtl().openObjectInspectorMediaPreview() },
                 onMediaRetry: () => { this.objectInspectorMediaCtl().retryObjectInspectorMedia() },
                 onModelExpand: () => { this.objectModelRendererCtl().setObjectInspectorModelImmersive(true) },
@@ -9218,6 +9244,7 @@ export struct WindowNativeNode {
                 onDismiss: () => { this.dismissObjectInspector() },
                 onSelectTab: (index: number) => { this.selectObjectDetailTab(index) },
                 onLoadPasses: () => { this.objectDetailStore.loadSelectedSatellitePasses() },
+                onJumpToPass: (pass: SatellitePass) => { this.jumpToSatellitePass(pass) },
                 onMediaOpen: () => { this.objectInspectorMediaCtl().openObjectInspectorMediaPreview() },
                 onMediaRetry: () => { this.objectInspectorMediaCtl().retryObjectInspectorMedia() },
                 onModelExpand: () => { this.objectModelRendererCtl().setObjectInspectorModelImmersive(true) },
@@ -9358,6 +9385,7 @@ export struct WindowNativeNode {
                 onDismiss: () => { this.dismissObjectInspector() },
                 onSelectTab: (index: number) => { this.selectObjectDetailTab(index) },
                 onLoadPasses: () => { this.objectDetailStore.loadSelectedSatellitePasses() },
+                onJumpToPass: (pass: SatellitePass) => { this.jumpToSatellitePass(pass) },
                 onMediaOpen: () => { this.objectInspectorMediaCtl().openObjectInspectorMediaPreview() },
                 onMediaRetry: () => { this.objectInspectorMediaCtl().retryObjectInspectorMedia() },
                 onModelExpand: () => { this.objectModelRendererCtl().setObjectInspectorModelImmersive(true) },

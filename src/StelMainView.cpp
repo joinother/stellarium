@@ -4350,11 +4350,48 @@ QJsonObject selectedObjectJson(StelCore* core = nullptr, bool includeDetails = f
 				appendDegreePair(QStringLiteral("subpoint"), QStringLiteral("satellite"), QStringLiteral("subpoint-lat"), QStringLiteral("subpoint-long"));
 				appendNumber(QStringLiteral("inclination"), QStringLiteral("satellite"), QStringLiteral("inclination"), 2, QStringLiteral("°"));
 				appendPositiveNumber(QStringLiteral("orbitalPeriod"), QStringLiteral("satellite"), QStringLiteral("period"), 2, QStringLiteral(" 分"));
+				appendNumber(QStringLiteral("eccentricity"), QStringLiteral("satellite"), QStringLiteral("eccentricity"), 5);
+				appendPositiveNumber(QStringLiteral("orbitalSpeed"), QStringLiteral("satellite"), QStringLiteral("orbital-speed"), 2, QStringLiteral(" km/s"));
 				appendPositiveNumber(QStringLiteral("perigeeAltitude"), QStringLiteral("satellite"), QStringLiteral("perigee-altitude"), 0, QStringLiteral(" km"));
 				appendPositiveNumber(QStringLiteral("apogeeAltitude"), QStringLiteral("satellite"), QStringLiteral("apogee-altitude"), 0, QStringLiteral(" km"));
 				appendPositiveNumber(QStringLiteral("sunReflectionAngle"), QStringLiteral("satellite"), QStringLiteral("sun-reflection-angle"), 2, QStringLiteral("°"));
 				appendText(QStringLiteral("operationalStatus"), QStringLiteral("satellite"), QStringLiteral("operational-status"));
 				appendLocalizedText(QStringLiteral("visibility"), QStringLiteral("satellite"), QStringLiteral("visibility"));
+				if (m.contains(QStringLiteral("tle-age-days")))
+				{
+					const double ageDays = std::abs(m.value(QStringLiteral("tle-age-days")).toDouble());
+					if (std::isfinite(ageDays))
+					{
+						const QString ageLabel = (ageDays < 1.0)
+							? QStringLiteral("< 1 天（精准）")
+							: (ageDays <= static_cast<double>(Satellite::getTleEpochAge())
+								? QStringLiteral("%1 天前").arg(QString::number(ageDays, 'f', 1))
+								: QStringLiteral("%1 天前（建议刷新）").arg(QString::number(ageDays, 'f', 0)));
+						appendField(QStringLiteral("tleAge"), QStringLiteral("satellite"), ageLabel);
+					}
+				}
+				if (m.contains(QStringLiteral("comm")))
+				{
+					const QVariantList commList = m.value(QStringLiteral("comm")).toList();
+					QStringList formattedComms;
+					for (int ci = 0; ci < commList.size() && formattedComms.size() < 3; ++ci)
+					{
+						const QVariantMap cm = commList.at(ci).toMap();
+						const double freq = cm.value(QStringLiteral("frequency")).toDouble();
+						if (!std::isfinite(freq) || freq <= 0.0)
+							continue;
+						const QString mod = cm.value(QStringLiteral("modulation")).toString().trimmed();
+						const QString desc = cm.value(QStringLiteral("description")).toString().trimmed();
+						QString entry = QStringLiteral("%1 MHz").arg(QString::number(freq, 'f', 3));
+						if (!mod.isEmpty())
+							entry += QStringLiteral(" ") + mod;
+						if (!desc.isEmpty())
+							entry += QStringLiteral("（%1）").arg(desc);
+						formattedComms.append(entry);
+					}
+					if (!formattedComms.isEmpty())
+						appendField(QStringLiteral("radioComms"), QStringLiteral("satellite"), formattedComms.join(QStringLiteral(" · ")));
+				}
 			}
 
 			appendText(QStringLiteral("hostStarName"), QStringLiteral("plugin"), QStringLiteral("starProperName"));

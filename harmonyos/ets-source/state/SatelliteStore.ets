@@ -22,7 +22,7 @@ export class SatelliteStore {
   satGroups: string[] = []
   activeSatGroup: string = ''
   satLabels: boolean = false
-  satOrbitLines: boolean = false
+  satOrbitLines: boolean = true
   satHints: boolean = false
   satIconicMode: boolean = false
   satHideInvisible: boolean = false

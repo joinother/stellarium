@@ -107,6 +107,8 @@ function detailFieldLabel(key: string): string {
     case 'sunReflectionAngle': return '太阳反射角'
     case 'operationalStatus': return '运行状态'
     case 'visibility': return '可见状态'
+    case 'tleAge': return '历元时效'
+    case 'radioComms': return '无线电频段'
     case 'hostStarName': return '主恒星名称'
     case 'hostStarAliases': return '主恒星别名'
     case 'hostSpectralType': return '主恒星光谱型'

@@ -255,6 +255,7 @@ public:
 	QString getCatalogNumberString() const {return id;}
 	bool isOrbitValid() const { return initialized && orbitValid; }
 	bool shouldDisplayOrbit() const { return orbitDisplayed || orbitPreview; }
+	float getOrbitExpandProgress() const { return orbitExpandProgress; }
 	QVariantMap getOrbitLineStatus() const;
 	void updateOrbitLines();
 	//! Returns the (COSPAR) International Designator.
@@ -525,11 +526,16 @@ private:
 	Vec3f    orbitColor;
 	double    lastEpochCompForOrbit; //measured in Julian Days
 	double    epochTime;  //measured in Julian Days
+	double    orbitStepSeconds = 5.0; // actual sample step (seconds) for current orbitPoints
+	double    lastOrbitStepSeconds = 0.0;
+	float     orbitExpandProgress = 0.f; // 0..1 outward expansion/fade for selected orbit arc
 	QList<Vec4d> orbitPoints; //orbit points represented by ElAzPos vectors and altitudes
 	QList<gSatWrapper::Visibility> visibilityPoints; //orbit visibility points
+	QVector<Vec3d> orbitRibbonVerts;
+	QVector<Vec4f> orbitRibbonColors;
 	QMap<gSatWrapper::Visibility, QString> visibilityDescription;
 
-	// Bounded recent AltAz motion trail for fast time-scrubbing ribbons
+	// Bounded recent AltAz motion trail for razor-sharp fast-time satellite streaks
 	struct SatMotionSample
 	{
 		Vec3d altAzUnit;

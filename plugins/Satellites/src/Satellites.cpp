@@ -1377,10 +1377,17 @@ void Satellites::restoreDefaultSettings()
 	conf->setValue("transit_satellite_color", "0.0,0.0,0.0");
 	conf->setValue("hint_font_size", 10);
 	conf->setValue("update_frequency_hours", 72);
+#ifdef Q_OS_OHOS
+	conf->setValue("orbit_line_flag", true);
+	conf->setValue("orbit_line_segments", 180);
+	conf->setValue("orbit_fade_segments", 6);
+	conf->setValue("orbit_segment_duration", 6);
+#else
 	conf->setValue("orbit_line_flag", false);
 	conf->setValue("orbit_line_segments", 90);
 	conf->setValue("orbit_fade_segments", 5);
 	conf->setValue("orbit_segment_duration", 20);
+#endif
 	conf->setValue("valid_epoch_age", 30);
 	conf->setValue("iconic_mode_enabled", false);
 	conf->setValue("hide_invisible_satellites", false);
@@ -1587,10 +1594,17 @@ void Satellites::loadSettings()
 	labelFontSize = conf->value("hint_font_size", 10).toInt();
 
 	// orbit drawing params
+#ifdef Q_OS_OHOS
+	Satellite::orbitLinesFlag = conf->value("orbit_line_flag", true).toBool();
+	Satellite::orbitLineSegments = conf->value("orbit_line_segments", 180).toInt();
+	Satellite::orbitLineFadeSegments = conf->value("orbit_fade_segments", 6).toInt();
+	Satellite::orbitLineSegmentDuration = conf->value("orbit_segment_duration", 6).toInt();
+#else
 	Satellite::orbitLinesFlag = conf->value("orbit_line_flag", false).toBool();
 	Satellite::orbitLineSegments = conf->value("orbit_line_segments", 180).toInt();
 	Satellite::orbitLineFadeSegments = conf->value("orbit_fade_segments", 5).toInt();
 	Satellite::orbitLineSegmentDuration = conf->value("orbit_segment_duration", 5).toInt();
+#endif
 	Satellite::orbitLineThickness = conf->value("orbit_line_thickness", 1).toInt();
 	setInvisibleSatelliteColor(Vec3f(conf->value("invisible_satellite_color", "0.2,0.2,0.2").toString()));
 	setTransitSatelliteColor(Vec3f(conf->value("transit_satellite_color", "0.0,0.0,0.0").toString()));
@@ -4108,9 +4122,18 @@ void Satellites::update(double deltaTime)
 	const double JD=core->getJD();
 	const QList<StelObjectP> selected = GETSTELMODULE(StelObjectMgr)->getSelectedObject("Satellite");
 	const Satellite* selectedSat = selected.isEmpty() ? nullptr : static_cast<const Satellite*>(selected.first().data());
+	const double dtSec = qBound(0.001, deltaTime, 0.12);
 #ifdef Q_OS_OHOS
 	for (const auto& sat : std::as_const(satellites))
+	{
 		sat->orbitPreview = !selected.isEmpty() && selected.first().data() == sat.data();
+		if (sat->orbitDisplayed)
+			sat->orbitExpandProgress = 1.0f;
+		else if (sat->orbitPreview)
+			sat->orbitExpandProgress = qMin(1.0f, sat->orbitExpandProgress + static_cast<float>(dtSec / 0.42));
+		else if (sat->orbitExpandProgress > 0.f)
+			sat->orbitExpandProgress = qMax(0.0f, sat->orbitExpandProgress - static_cast<float>(dtSec / 0.22));
+	}
 #endif
 
 	// Precompute unit Sun direction once per frame for all Satellite::update() calls.
@@ -4134,32 +4157,33 @@ void Satellites::update(double deltaTime)
 	}
 
 	const quint32 tick = updateFrameCounter++;
-	const double dtSec = qBound(0.001, deltaTime, 0.12);
 	const double dJD = JD - lastUpdateJD;
 	const double absRateX = (std::fabs(dJD) * 86400.0) / dtSec;
 	const bool timeScrubJump = std::abs(dJD) > (5.0 / 86400.0)
 		|| qAbs(core->getTimeRate()) > (10.0 / 86400.0);
 
-	// Update smooth satellite motion-trail activity envelope (fast attack, smoothstep fade-out)
+	// Update snappy satellite streak envelope (smoothstep(clamp(2t, 0, 1)) at draw time)
 	if (std::fabs(dJD) > 0.015)
 	{
-		// Large single-frame calendar teleport: clear trail activity cleanly
+		// Large single-frame calendar teleport: clear streak activity immediately
 		motionTrailActivity = 0.0;
 		motionTrailIdleSec = 0.0;
 	}
-	else if (absRateX > 18.0 || qAbs(core->getTimeRate()) * 86400.0 > 18.0)
+	else if (absRateX > 16.0 || qAbs(core->getTimeRate()) * 86400.0 > 16.0)
 	{
 		motionTrailIdleSec = 0.0;
-		const double targetAct = qBound(0.0, (qMax(absRateX, qAbs(core->getTimeRate()) * 86400.0) - 18.0) / 140.0, 1.0);
-		const double attack = 1.0 - std::exp(-dtSec / 0.055);
+		const double effRate = qMax(absRateX, qAbs(core->getTimeRate()) * 86400.0);
+		// Perceptual log10 compression matching rapid orbital angular rates
+		const double targetAct = qBound(0.0, std::log10(qMax(1.0, effRate - 15.0)) / 2.6, 1.0);
+		const double attack = 1.0 - std::exp(-dtSec / 0.032);
 		motionTrailActivity += (targetAct - motionTrailActivity) * attack;
 	}
 	else
 	{
 		motionTrailIdleSec += dtSec;
-		if (motionTrailIdleSec >= 0.095)
+		if (motionTrailIdleSec >= 0.045)
 		{
-			motionTrailActivity *= std::exp(-dtSec / 0.15);
+			motionTrailActivity *= std::exp(-dtSec / 0.085);
 			if (motionTrailActivity < 0.004)
 				motionTrailActivity = 0.0;
 		}
@@ -4215,6 +4239,8 @@ void Satellites::update(double deltaTime)
 		// on the active render thread avoids waking all worker cores every frame
 		// (which otherwise triggers thermal throttling and starves GL draw calls).
 		static const QString grpStations = QStringLiteral("space stations");
+		static const QString grpVisual = QStringLiteral("visual");
+		const bool fastMotion = timeScrubJump || motionTrailActivity > 0.02;
 		QVector<Satellite*> batch;
 		batch.reserve(1024);
 		for (int i = 0; i < satellites.size(); ++i)
@@ -4234,9 +4260,11 @@ void Satellites::update(double deltaTime)
 			}
 			quint32 stride = 64u;
 			if (sat->lastFrameOnScreen)
-				stride = (timeScrubJump || motionTrailActivity > 0.05) ? 1u : 3u;
+				stride = fastMotion ? 1u : 3u;
+			else if (fastMotion && sat->elAzPosition[2] >= -0.02 && (sat->stdMag < 6.0 || sat->groups.contains(grpVisual)))
+				stride = 1u;
 			else if (sat->elAzPosition[2] >= -0.035)
-				stride = 16u;
+				stride = fastMotion ? 6u : 16u;
 			if (((static_cast<quint32>(i) + tick) % stride) == 0u)
 				batch.append(sat);
 		}
@@ -4358,7 +4386,7 @@ void Satellites::draw(StelCore* core)
 		if (!sat || !sat->initialized || !sat->displayed || !sat->orbitValid)
 			continue;
 
-		const bool needsOrbit = drawOrbits && sat->shouldDisplayOrbit();
+		const bool needsOrbit = drawOrbits && (sat->shouldDisplayOrbit() || sat->orbitExpandProgress > 0.004f);
 		if (groundOccludes && sat->elAzPosition[2] < -0.025 && !needsOrbit)
 		{
 			sat->lastFrameOnScreen = false;
@@ -4449,99 +4477,196 @@ void Satellites::draw(StelCore* core)
 			}
 		}
 
-		if (drawOrbits && sat->shouldDisplayOrbit() && sat->orbitValid)
+		if (drawOrbits && (sat->shouldDisplayOrbit() || sat->orbitExpandProgress > 0.004f) && sat->orbitValid)
 			orbitDraws.append(sat.data());
 	}
 
 	if (!iconic && sd)
 		sd->postDrawPointSource(&painter);
 
-	// Draw batched tapered smoothstep motion ribbons for rapidly moving satellites
+	// Draw razor-sharp, pinpoint-crisp satellite streaks during fast time-scrubbing
+	// (zero wide halo, tight instantaneous angular arc, smoothstep(clamp(2t, 0, 1)) envelope).
 	if (drawSatTrails && !trailDraws.isEmpty())
 	{
-		const float sAct = static_cast<float>(qBound(0.0, motionTrailActivity, 1.0));
-		const float trailEnv = sAct * sAct * (3.0f - 2.0f * sAct) * Satellite::hintBrightness;
+		const float t2 = qBound(0.f, 2.0f * static_cast<float>(motionTrailActivity), 1.0f);
+		const float trailEnv = t2 * t2 * (3.0f - 2.0f * t2) * Satellite::hintBrightness;
 		if (trailEnv > 0.01f)
 		{
 			const double fovDeg = qBound(0.5, core->getMovementMgr()->getCurrentFov(), 179.0);
 			const int vpH = prj ? prj->getViewportHeight() : 1080;
 			const double radPerPx = (fovDeg * M_PI / 180.0) / qMax(360.0, static_cast<double>(vpH));
 			const double screenScale = qBound(1.0, static_cast<double>(StelApp::getInstance().getScreenScale()), 3.5);
-			const double baseHalfW = qBound(0.00010, 1.05 * screenScale * radPerPx, 0.0024);
+			const double coreHalfW = qBound(0.00005, 0.48 * screenScale * radPerPx, 0.0012);
+			const double maxArcRad = qBound(0.010, 0.012 + 0.068 * static_cast<double>(t2), 0.082);
 
 			satTrailVerts.clear();
 			satTrailColors.clear();
-			QVector<Vec3d> j2kPts;
+			QVector<Vec3d> rawPts;
+			QVector<Vec3d> trimmedPts;
+			QVector<Vec3d> smoothPts;
 			QVector<Vec3d> sideVecs;
-			j2kPts.reserve(14);
-			sideVecs.reserve(14);
+			rawPts.reserve(8);
+			trimmedPts.reserve(8);
+			smoothPts.reserve(16);
+			sideVecs.reserve(16);
+
+			auto pushStreakQuad = [&](const Vec3d& a0, const Vec3d& a1, const Vec3d& b0, const Vec3d& b1,
+				const Vec4f& ca0, const Vec4f& ca1, const Vec4f& cb0, const Vec4f& cb1) {
+				satTrailVerts.append(a0); satTrailColors.append(ca0);
+				satTrailVerts.append(a1); satTrailColors.append(ca1);
+				satTrailVerts.append(b1); satTrailColors.append(cb1);
+
+				satTrailVerts.append(a0); satTrailColors.append(ca0);
+				satTrailVerts.append(b1); satTrailColors.append(cb1);
+				satTrailVerts.append(b0); satTrailColors.append(cb0);
+			};
 
 			for (const Satellite* sat : trailDraws)
 			{
-				const int n = sat->motionTrail.size();
-				if (n < 2)
+				const bool sunlit = (sat->visibility == gSatWrapper::VISIBLE);
+				const bool penumbra = (sat->visibility == gSatWrapper::PENUMBRAL);
+				// Only sunlit & penumbral satellites draw sharp bright streaks; skip eclipsed dark bodies.
+				if (!sunlit && !penumbra)
 					continue;
-				j2kPts.resize(n);
-				sideVecs.resize(n);
-				for (int k = 0; k < n; ++k)
+				const int rawN = sat->motionTrail.size();
+				if (rawN < 2)
+					continue;
+
+				rawPts.resize(rawN);
+				for (int k = 0; k < rawN; ++k)
 				{
 					Vec3d p = core->altAzToJ2000(sat->motionTrail[k].altAzUnit, StelCore::RefractionOff);
 					const double pn = p.norm();
-					j2kPts[k] = (pn > 1e-10) ? (p / pn) : sat->XYZ;
+					rawPts[k] = (pn > 1e-10) ? (p / pn) : sat->XYZ;
 				}
+
+				// Trim backwards from the leading head so total streak length stays tight & razor-sharp.
+				trimmedPts.clear();
+				trimmedPts.append(rawPts.last());
+				double accumArc = 0.0;
+				for (int k = rawN - 2; k >= 0; --k)
+				{
+					const Vec3d& prev = trimmedPts.last();
+					const Vec3d& cur = rawPts[k];
+					const double segAng = std::acos(qBound(-1.0, prev.dot(cur), 1.0));
+					if (segAng < 1e-6)
+						continue;
+					if (accumArc + segAng >= maxArcRad)
+					{
+						const double frac = qBound(0.0, (maxArcRad - accumArc) / segAng, 1.0);
+						Vec3d cut = prev * (1.0 - frac) + cur * frac;
+						const double cn = cut.norm();
+						if (cn > 1e-10)
+							trimmedPts.append(cut / cn);
+						break;
+					}
+					trimmedPts.append(cur);
+					accumArc += segAng;
+				}
+				if (trimmedPts.size() < 2)
+					continue;
+				std::reverse(trimmedPts.begin(), trimmedPts.end()); // index 0 = tail, last = leading head
+
+				// Smoothly subdivide long chords on unit sphere so fast zenith needles have zero kinks.
+				smoothPts.clear();
+				smoothPts.append(trimmedPts[0]);
+				for (int k = 0; k < trimmedPts.size() - 1; ++k)
+				{
+					const Vec3d& p0 = trimmedPts[k];
+					const Vec3d& p1 = trimmedPts[k + 1];
+					const double ang = std::acos(qBound(-1.0, p0.dot(p1), 1.0));
+					const int sub = qBound(1, static_cast<int>(std::ceil(ang / 0.0045)), 4);
+					for (int s = 1; s <= sub; ++s)
+					{
+						const double f = static_cast<double>(s) / static_cast<double>(sub);
+						Vec3d interp = p0 * (1.0 - f) + p1 * f;
+						const double in = interp.norm();
+						smoothPts.append((in > 1e-10) ? (interp / in) : p1);
+					}
+				}
+				const int n = smoothPts.size();
+				if (n < 2)
+					continue;
+
+				sideVecs.resize(n);
 				Vec3d lastSide(1., 0., 0.);
 				for (int k = 0; k < n; ++k)
 				{
 					const int kp = qMax(0, k - 1);
 					const int kn = qMin(n - 1, k + 1);
-					Vec3d tan = j2kPts[kn] - j2kPts[kp];
-					Vec3d side = j2kPts[k] ^ tan;
+					Vec3d tan = smoothPts[kn] - smoothPts[kp];
+					Vec3d side = smoothPts[k] ^ tan;
 					const double sn = side.norm();
 					if (sn > 1e-10) { side /= sn; lastSide = side; }
 					else { side = lastSide; }
 					sideVecs[k] = side;
 				}
 
-				const bool sunlit = (sat->visibility == gSatWrapper::VISIBLE);
-				const bool penumbra = (sat->visibility == gSatWrapper::PENUMBRAL);
-				const Vec3f rgb = sunlit
-					? Vec3f(0.94f, 0.97f, 1.0f)
-					: (penumbra ? Vec3f(1.0f, 0.84f, 0.62f) : Vec3f(0.58f, 0.72f, 0.88f));
-				const float visAlpha = sunlit ? 0.90f : (penumbra ? 0.52f : 0.20f);
-				const double widthMul = (sat->isISS || sunlit) ? 1.15 : 0.82;
+				const Vec3f rgb = sunlit ? Vec3f(0.97f, 0.99f, 1.0f) : Vec3f(1.0f, 0.86f, 0.64f);
+				const float visAlpha = sunlit ? 0.96f : 0.62f;
+				const double widthMul = sat->isISS ? 1.15 : 0.92;
 
-				auto emitSatRibbon = [&](double wScale, float aScale) {
-					for (int k = 0; k < n - 1; ++k)
-					{
-						const float u0 = static_cast<float>(k) / static_cast<float>(n - 1);
-						const float u1 = static_cast<float>(k + 1) / static_cast<float>(n - 1);
-						// u=0 is oldest tail (fade out to 0), u=1 is current satellite head (brightest)
-						const float f0 = u0 * u0 * (3.0f - 2.0f * u0);
-						const float f1 = u1 * u1 * (3.0f - 2.0f * u1);
-						const double hw0 = baseHalfW * widthMul * wScale * (0.42 + 0.58 * static_cast<double>(u0));
-						const double hw1 = baseHalfW * widthMul * wScale * (0.42 + 0.58 * static_cast<double>(u1));
+				// Crisp 3-band sub-pixel AA needle (no fuzzy wide outer halo!)
+				for (int k = 0; k < n - 1; ++k)
+				{
+					const float u0 = static_cast<float>(k) / static_cast<float>(n - 1);
+					const float u1 = static_cast<float>(k + 1) / static_cast<float>(n - 1);
+					// Rapid crisp decay behind the razor-sharp leading pinpoint head (u=1)
+					const float f0 = std::pow(u0, 2.25f);
+					const float f1 = std::pow(u1, 2.25f);
+					const double cw0 = coreHalfW * widthMul * (0.08 + 0.92 * static_cast<double>(u0));
+					const double cw1 = coreHalfW * widthMul * (0.08 + 0.92 * static_cast<double>(u1));
+					const double ow0 = cw0 * 1.95;
+					const double ow1 = cw1 * 1.95;
 
-						const Vec4f c0(rgb[0], rgb[1], rgb[2], qBound(0.f, f0 * visAlpha * trailEnv * aScale, 0.95f));
-						const Vec4f c1(rgb[0], rgb[1], rgb[2], qBound(0.f, f1 * visAlpha * trailEnv * aScale, 0.95f));
+					const float a0 = qBound(0.f, f0 * visAlpha * trailEnv, 0.98f);
+					const float a1 = qBound(0.f, f1 * visAlpha * trailEnv, 0.98f);
+					const Vec4f core0(rgb[0], rgb[1], rgb[2], a0);
+					const Vec4f core1(rgb[0], rgb[1], rgb[2], a1);
+					const Vec4f edge0(rgb[0], rgb[1], rgb[2], 0.f);
+					const Vec4f edge1(rgb[0], rgb[1], rgb[2], 0.f);
 
-						const Vec3d p0L = j2kPts[k] - sideVecs[k] * hw0;
-						const Vec3d p0R = j2kPts[k] + sideVecs[k] * hw0;
-						const Vec3d p1L = j2kPts[k + 1] - sideVecs[k + 1] * hw1;
-						const Vec3d p1R = j2kPts[k + 1] + sideVecs[k + 1] * hw1;
+					const Vec3d p0 = smoothPts[k];
+					const Vec3d p1 = smoothPts[k + 1];
+					const Vec3d s0 = sideVecs[k];
+					const Vec3d s1 = sideVecs[k + 1];
 
-						satTrailVerts.append(p0L); satTrailColors.append(c0);
-						satTrailVerts.append(p0R); satTrailColors.append(c0);
-						satTrailVerts.append(p1R); satTrailColors.append(c1);
+					pushStreakQuad(p0 - s0 * ow0, p0 - s0 * cw0, p1 - s1 * ow1, p1 - s1 * cw1, edge0, core0, edge1, core1);
+					pushStreakQuad(p0 - s0 * cw0, p0 + s0 * cw0, p1 - s1 * cw1, p1 + s1 * cw1, core0, core0, core1, core1);
+					pushStreakQuad(p0 + s0 * cw0, p0 + s0 * ow0, p1 + s1 * cw1, p1 + s1 * ow1, core0, edge0, core1, edge1);
+				}
 
-						satTrailVerts.append(p0L); satTrailColors.append(c0);
-						satTrailVerts.append(p1R); satTrailColors.append(c1);
-						satTrailVerts.append(p1L); satTrailColors.append(c1);
-					}
-				};
-
-				emitSatRibbon(1.0, 1.0f);
+				// Pinpoint specular leading head diamond so the sharp moving dot pops cleanly
 				if (sunlit)
-					emitSatRibbon(2.4, 0.26f);
+				{
+					Vec3d fwd = smoothPts[n - 1] - smoothPts[n - 2];
+					const double fn = fwd.norm();
+					if (fn > 1e-10)
+					{
+						fwd /= fn;
+						const double headR = coreHalfW * widthMul * 2.1;
+						const Vec3d hc = smoothPts[n - 1];
+						const Vec3d hs = sideVecs[n - 1];
+						const Vec4f hCenter(1.f, 1.f, 1.f, qBound(0.f, 0.98f * trailEnv, 1.f));
+						const Vec4f hEdge(rgb[0], rgb[1], rgb[2], 0.f);
+						const Vec3d pF = hc + fwd * headR;
+						const Vec3d pB = hc - fwd * (headR * 0.7);
+						const Vec3d pL = hc - hs * headR;
+						const Vec3d pR = hc + hs * headR;
+						satTrailVerts.append(hc); satTrailColors.append(hCenter);
+						satTrailVerts.append(pF); satTrailColors.append(hEdge);
+						satTrailVerts.append(pR); satTrailColors.append(hEdge);
+						satTrailVerts.append(hc); satTrailColors.append(hCenter);
+						satTrailVerts.append(pR); satTrailColors.append(hEdge);
+						satTrailVerts.append(pB); satTrailColors.append(hEdge);
+						satTrailVerts.append(hc); satTrailColors.append(hCenter);
+						satTrailVerts.append(pB); satTrailColors.append(hEdge);
+						satTrailVerts.append(pL); satTrailColors.append(hEdge);
+						satTrailVerts.append(hc); satTrailColors.append(hCenter);
+						satTrailVerts.append(pL); satTrailColors.append(hEdge);
+						satTrailVerts.append(pF); satTrailColors.append(hEdge);
+					}
+				}
 			}
 
 			if (!satTrailVerts.isEmpty())

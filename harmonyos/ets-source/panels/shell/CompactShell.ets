@@ -1,5 +1,5 @@
 import { curves, Theme } from '@kit.ArkUI'
-import { ShellAction } from '../../pages/StellariumTypes'
+import { ShellAction, SatellitePass } from '../../pages/StellariumTypes'
 import { BottomDock } from './BottomDock'
 import { CompactTopQuickControls } from './CompactTopQuickControls'
 import { DockClockLayer, DockFovLayer, SkyZoomLayer } from './PanelChromeExtras'
@@ -124,6 +124,7 @@ export struct CompactShell {
   onDismiss: () => void = () => {}
   onSelectTab: (index: number) => void = () => {}
   onLoadPasses: () => void = () => {}
+  onJumpToPass: (pass: SatellitePass) => void = () => {}
   onMediaOpen: () => void = () => {}
   onMediaRetry: () => void = () => {}
   onModelExpand: () => void = () => {}
@@ -292,6 +293,7 @@ export struct CompactShell {
             onCollapseObserve: () => { this.onCollapseObserve() },
             onSelectTab: (index: number) => { this.onSelectTab(index) },
             onLoadPasses: () => { this.onLoadPasses() },
+            onJumpToPass: (pass: SatellitePass) => { this.onJumpToPass(pass) },
             onMediaOpen: () => { this.onMediaOpen() },
             onMediaRetry: () => { this.onMediaRetry() },
             onModelExpand: () => { this.onModelExpand() },

@@ -1,6 +1,7 @@
 import { I18n } from '../../pages/I18n'
 import { objectDetailFontSize } from '../../common/ui/UiTypography'
 import { ObjectDetailStore } from '../../state/ObjectDetailStore'
+import { SatellitePass } from '../../pages/StellariumTypes'
 import { ObjectDataTile, ObjectMetric, ObjectScheduleTile } from './DetailTiles'
 import { ObjectDataRow } from './DetailRows'
 import { ObjectDistanceNotice, SelectedCoordinateRows } from './DetailLiveRows'
@@ -104,6 +105,7 @@ export struct ObjectDetailDataTab {
   @State private c: ThemeSlots = DEFAULT_SLOTS
   resolve: (key: string) => string = () => ''
   onLoadPasses: () => void = () => {}
+  onJumpToPass: (pass: SatellitePass) => void = () => {}
   onMediaOpen: () => void = () => {}
   onMediaRetry: () => void = () => {}
   onModelExpand: () => void = () => {}
@@ -133,7 +135,11 @@ export struct ObjectDetailDataTab {
   onModelExpand: () => { this.onModelExpand() },
   onModelTouch: (event: TouchEvent) => { this.onModelTouch(event) }
 })
-            SatellitePassDetails({ store: this.store, tablet: false, visible: this.satelliteVisible, tleEpoch: this.tleEpoch, onLoad: () => { this.onLoadPasses() } })
+            SatellitePassDetails({
+              store: this.store, tablet: false, visible: this.satelliteVisible, tleEpoch: this.tleEpoch,
+              onLoad: () => { this.onLoadPasses() },
+              onJumpToPass: (pass: SatellitePass) => { this.onJumpToPass(pass) }
+            })
             ConstellationCultureView({ store: this.store, tablet: false, visible: this.cultureVisible })
             Row({ space: 8 }) {
               Column({ space: 7 }) {
