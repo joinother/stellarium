@@ -2,7 +2,9 @@ import { I18n } from '../../capability/I18n'
 import { notificationText } from '../../capability/NotificationText'
 import { Theme } from '@kit.ArkUI'
 import { panelFontSize } from '../../common/ui/UiTypography'
-import { UI_RADIUS_CONTROL } from '../../common/ui/UiTokens'
+import { UI_OPTION_ANIMATION_MS, UI_RADIUS_CARD, UI_RADIUS_CONTROL } from '../../common/ui/UiTokens'
+import { uiFadeUpTransition } from '../../common/ui/UiMotion'
+import { InfoTipButton } from '../../common/ui/InfoTipButton'
 import { DEFAULT_SLOTS, ThemeSlots, slotsFromTheme } from '../../state/StellariumTheme'
 import { AstronomyReminderItem } from '../../qability/AstronomyReminderService'
 
@@ -103,14 +105,15 @@ export struct NotificationSection {
   @Builder
   hint(text: string) {
     Text(text).fontSize(panelFontSize(10, this.readableUi)).fontColor(this.c.sub)
-      .width('100%').padding({ left: 10, right: 8 }).margin({ bottom: 4 })
+      .width('100%').padding({ left: 12, right: 10 }).margin({ bottom: 4 })
   }
 
   @Builder
   action(label: string, enabled: boolean, callback: () => void) {
     Button(label, { type: ButtonType.Normal }).fontSize(panelFontSize(12, this.readableUi))
       .fontColor(this.c.text).backgroundColor(this.c.input).borderRadius(UI_RADIUS_CONTROL)
-      .constraintSize({ minHeight: 40 }).padding({ left: 12, right: 12 })
+      .constraintSize({ minHeight: 38 }).padding({ left: 12, right: 12 })
+      .clickEffect({ level: ClickEffectLevel.LIGHT })
       .enabled(enabled).onClick(() => { callback() })
   }
 
@@ -123,17 +126,24 @@ export struct NotificationSection {
           this.action(this.t('开启通知'), !this.notificationBusy, () => { this.onRequestAccess() })
         }
           .width('100%')
-          .padding({ left: 10, right: 8, top: 8, bottom: 8 })
+          .padding({ left: 12, right: 10, top: 8, bottom: 8 })
           .backgroundColor(this.c.bg)
           .border({ width: 1, color: this.c.dividerSoft })
-          .borderRadius(UI_RADIUS_CONTROL)
-          .margin({ bottom: 6 })
+          .borderRadius(UI_RADIUS_CARD)
+          .margin({ bottom: 4 })
       }
-      Column({ space: 4 }) {
+      Column({ space: 2 }) {
         Row() {
-          Text(this.t('天象事件')).fontSize(panelFontSize(14, this.readableUi)).fontColor(this.c.text).layoutWeight(1)
+          Row({ space: 2 }) {
+            Text(this.t('天象事件')).fontSize(panelFontSize(14, this.readableUi)).fontColor(this.c.text)
+            InfoTipButton({
+              title: this.t('天象事件'),
+              tip: this.t('订阅本地天象日历中的近期事件。打开应用时自动更新近期提醒；关闭分类会取消该分类的订阅提醒。')
+            })
+          }.layoutWeight(1).alignItems(VerticalAlign.Center)
           Toggle({ type: ToggleType.Switch, isOn: this.astronomyOn }).width(44).height(24)
             .selectedColor(this.c.accent).enabled(!this.notificationBusy && !this.preferencesBusy)
+            .clickEffect({ level: ClickEffectLevel.LIGHT })
             .onChange((enabled: boolean) => {
               if (enabled === this.astronomyOn) return
               this.astronomyOn = enabled
@@ -142,20 +152,26 @@ export struct NotificationSection {
         }
           .width('100%')
           .height(this.readableUi ? 50 : 42)
-          .padding({ left: 10, right: 8 })
-        this.hint(this.t('订阅本地天象日历中的近期事件。'))
+          .padding({ left: 12, right: 10 })
         if (this.astronomySubscriptionStatus.length > 0) { this.hint(this.t(this.astronomySubscriptionStatus)) }
       }
         .width('100%')
         .backgroundColor(this.astronomyOn ? this.c.soft : this.c.bg)
         .border({ width: 1, color: this.astronomyOn ? this.c.soft : this.c.dividerSoft })
-        .borderRadius(UI_RADIUS_CONTROL)
-        .margin({ bottom: 6 })
+        .borderRadius(UI_RADIUS_CARD)
+        .animation({ duration: UI_OPTION_ANIMATION_MS, curve: Curve.EaseOut })
       Column({ space: 4 }) {
         Row() {
-          Text(this.t('卫星通过')).fontSize(panelFontSize(14, this.readableUi)).fontColor(this.c.text).layoutWeight(1)
+          Row({ space: 2 }) {
+            Text(this.t('卫星通过')).fontSize(panelFontSize(14, this.readableUi)).fontColor(this.c.text)
+            InfoTipButton({
+              title: this.t('卫星通过'),
+              tip: this.t('按你选择的观测地点预测可见通过，无需定位权限。打开应用时自动更新近期提醒。')
+            })
+          }.layoutWeight(1).alignItems(VerticalAlign.Center)
           Toggle({ type: ToggleType.Switch, isOn: this.satelliteOn }).width(44).height(24)
             .selectedColor(this.c.accent).enabled(!this.notificationBusy && !this.preferencesBusy)
+            .clickEffect({ level: ClickEffectLevel.LIGHT })
             .onChange((enabled: boolean) => {
               if (enabled === this.satelliteOn) return
               this.satelliteOn = enabled
@@ -164,8 +180,7 @@ export struct NotificationSection {
         }
           .width('100%')
           .height(this.readableUi ? 50 : 42)
-          .padding({ left: 10, right: 8 })
-        this.hint(this.t('按你选择的观测地点预测可见通过，无需定位权限。'))
+          .padding({ left: 12, right: 10 })
         Row({ space: 8 }) {
           Text(this.t('提前提醒')).fontSize(panelFontSize(13, this.readableUi)).fontColor(this.c.text).layoutWeight(1)
           this.action('−', !this.notificationBusy && !this.preferencesBusy && this.passLeadMinutes > 0, () => { this.onLeadChange(-1) })
@@ -173,20 +188,28 @@ export struct NotificationSection {
           this.action('＋', !this.notificationBusy && !this.preferencesBusy && this.passLeadMinutes < 60, () => { this.onLeadChange(1) })
         }
           .width('100%')
-          .padding({ left: 10, right: 8 })
-          .margin({ bottom: 4 })
+          .padding({ left: 12, right: 10, bottom: 8 })
         if (this.satelliteSubscriptionStatus.length > 0) { this.hint(this.t(this.satelliteSubscriptionStatus)) }
       }
         .width('100%')
         .backgroundColor(this.satelliteOn ? this.c.soft : this.c.bg)
         .border({ width: 1, color: this.satelliteOn ? this.c.soft : this.c.dividerSoft })
-        .borderRadius(UI_RADIUS_CONTROL)
-        .margin({ bottom: 6 })
+        .borderRadius(UI_RADIUS_CARD)
+        .animation({ duration: UI_OPTION_ANIMATION_MS, curve: Curve.EaseOut })
       Column({ space: 4 }) {
         Row() {
-          Text(this.t('静默时段')).fontSize(panelFontSize(14, this.readableUi)).fontColor(this.c.text).layoutWeight(1)
+          Row({ space: 2 }) {
+            Text(this.t('静默时段')).fontSize(panelFontSize(14, this.readableUi)).fontColor(this.c.text)
+            InfoTipButton({
+              title: this.t('静默时段'),
+              tip: this.dndStartMinutes === this.dndEndMinutes ? this.t('起止时间相同表示全天静默。') :
+                (this.dndSatelliteOnlyOn ? this.t('静默时段仅跳过卫星通过，不拦截深夜天象事件。') :
+                  this.t('所有本地订阅跳过静默时段，不延迟事件。'))
+            })
+          }.layoutWeight(1).alignItems(VerticalAlign.Center)
           Toggle({ type: ToggleType.Switch, isOn: this.dndOn }).width(44).height(24)
             .selectedColor(this.c.accent).enabled(!this.notificationBusy && !this.preferencesBusy)
+            .clickEffect({ level: ClickEffectLevel.LIGHT })
             .onChange((enabled: boolean) => {
               if (enabled === this.dndOn) return
               this.dndOn = enabled
@@ -195,50 +218,57 @@ export struct NotificationSection {
         }
           .width('100%')
           .height(this.readableUi ? 50 : 42)
-          .padding({ left: 10, right: 8 })
+          .padding({ left: 12, right: 10 })
         if (this.dndOn) {
-          Row({ space: 8 }) {
-            this.action(this.hhmm(this.dndStartMinutes), !this.notificationBusy && !this.preferencesBusy, () => { this.chooseQuietTime(true) })
-            Text(this.t('至')).fontSize(panelFontSize(12, this.readableUi)).fontColor(this.c.sub)
-            this.action(this.hhmm(this.dndEndMinutes), !this.notificationBusy && !this.preferencesBusy, () => { this.chooseQuietTime(false) })
+          Column({ space: 4 }) {
+            Row({ space: 8 }) {
+              this.action(this.hhmm(this.dndStartMinutes), !this.notificationBusy && !this.preferencesBusy, () => { this.chooseQuietTime(true) })
+              Text(this.t('至')).fontSize(panelFontSize(12, this.readableUi)).fontColor(this.c.sub)
+              this.action(this.hhmm(this.dndEndMinutes), !this.notificationBusy && !this.preferencesBusy, () => { this.chooseQuietTime(false) })
+            }
+              .width('100%')
+              .padding({ left: 12, right: 10 })
+            Row() {
+              Text(this.t('仅限卫星通过')).fontSize(panelFontSize(13, this.readableUi)).fontColor(this.c.text).layoutWeight(1)
+              Toggle({ type: ToggleType.Switch, isOn: this.dndSatelliteOnlyOn }).width(44).height(24)
+                .selectedColor(this.c.accent).enabled(!this.notificationBusy && !this.preferencesBusy)
+                .clickEffect({ level: ClickEffectLevel.LIGHT })
+                .onChange((enabled: boolean) => {
+                  if (enabled === this.dndSatelliteOnlyOn) return
+                  this.dndSatelliteOnlyOn = enabled
+                  this.onToggleDndSatelliteOnly(enabled)
+                })
+            }
+              .width('100%')
+              .height(this.readableUi ? 44 : 38)
+              .padding({ left: 12, right: 10, bottom: 4 })
           }
             .width('100%')
-            .padding({ left: 10, right: 8 })
-            .margin({ bottom: 4 })
-          Row() {
-            Text(this.t('仅限卫星通过')).fontSize(panelFontSize(13, this.readableUi)).fontColor(this.c.text).layoutWeight(1)
-            Toggle({ type: ToggleType.Switch, isOn: this.dndSatelliteOnlyOn }).width(44).height(24)
-              .selectedColor(this.c.accent).enabled(!this.notificationBusy && !this.preferencesBusy)
-              .onChange((enabled: boolean) => {
-                if (enabled === this.dndSatelliteOnlyOn) return
-                this.dndSatelliteOnlyOn = enabled
-                this.onToggleDndSatelliteOnly(enabled)
-              })
-          }
-            .width('100%')
-            .height(this.readableUi ? 44 : 38)
-            .padding({ left: 10, right: 8 })
-          this.hint(this.dndStartMinutes === this.dndEndMinutes ? this.t('起止时间相同表示全天静默。') :
-            (this.dndSatelliteOnlyOn ? this.t('静默时段仅跳过卫星通过，不拦截深夜天象事件。') :
-              this.t('所有本地订阅跳过静默时段，不延迟事件。')))
+            .transition(uiFadeUpTransition())
         }
       }
         .width('100%')
         .backgroundColor(this.dndOn ? this.c.soft : this.c.bg)
         .border({ width: 1, color: this.dndOn ? this.c.soft : this.c.dividerSoft })
-        .borderRadius(UI_RADIUS_CONTROL)
-        .margin({ bottom: 6 })
+        .borderRadius(UI_RADIUS_CARD)
+        .animation({ duration: UI_OPTION_ANIMATION_MS, curve: Curve.EaseOut })
       Column({ space: 6 }) {
-        Row({ space: 8 }) {
-          Text(this.t('已注册提醒（') + String(this.reminderCount) + this.t('）'))
-            .fontSize(panelFontSize(13, this.readableUi)).fontColor(this.c.text).layoutWeight(1)
+        Row({ space: 6 }) {
+          Row({ space: 2 }) {
+            Text(this.t('已注册提醒（') + String(this.reminderCount) + this.t('）'))
+              .fontSize(panelFontSize(13, this.readableUi)).fontColor(this.c.text)
+            InfoTipButton({
+              title: this.t('已注册提醒'),
+              tip: this.t('系统可能保留已到时但尚未关闭的提醒；此列表不是送达记录。打开应用时会自动更新近期提醒。')
+            })
+          }.layoutWeight(1).alignItems(VerticalAlign.Center)
           this.action(this.t('刷新'), !this.notificationBusy, () => { this.onRefreshReminders() })
           if (this.reminders.length > 0) {
             this.action(this.t('清除全部'), !this.notificationBusy, () => { this.onClearReminders() })
           }
         }
           .width('100%')
-          .padding({ left: 10, right: 8, top: 8 })
+          .padding({ left: 12, right: 10, top: 8 })
         if (!this.reminderListLoaded && this.reminders.length === 0) {
           this.hint(this.t('点击刷新读取系统提醒。'))
         } else if (this.reminders.length === 0) {
@@ -256,18 +286,15 @@ export struct NotificationSection {
               this.action(this.t('取消'), !this.notificationBusy, () => { this.onCancelReminder(item.reminderId) })
             }
               .width('100%')
-              .padding({ left: 10, right: 8, top: 4, bottom: 4 })
+              .padding({ left: 12, right: 10, top: 4, bottom: 4 })
           }, (item: AstronomyReminderItem) => `${item.reminderId}:${item.title}`)
-          this.hint(this.t('系统可能保留已到时但尚未关闭的提醒；此列表不是送达记录。'))
         }
       }
         .width('100%')
-        .padding({ bottom: 6 })
+        .padding({ bottom: 8 })
         .backgroundColor(this.c.bg)
         .border({ width: 1, color: this.c.dividerSoft })
-        .borderRadius(UI_RADIUS_CONTROL)
-        .margin({ bottom: 6 })
-      this.hint(this.t('打开应用时更新近期提醒；关闭分类会取消该分类的订阅提醒。'))
+        .borderRadius(UI_RADIUS_CARD)
       if (this.statusText.length > 0) { this.hint(this.t(this.statusText)) }
       if (this.preferencesError.length > 0) { this.hint(this.t(this.preferencesError)) }
       if (this.reminderListError.length > 0) { this.hint(this.t(this.reminderListError)) }

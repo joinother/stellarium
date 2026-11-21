@@ -3,7 +3,7 @@ import { DEFAULT_SLOTS, ThemeSlots, slotsFromTheme } from '../../state/Stellariu
 import { I18n } from '../../pages/I18n'
 import { SatelliteListItem, SatelliteSource, SatelliteUpdateSettings, CatalogHealthEntry, OFFLINE_APPGALLERY_BUILD } from '../../pages/MainWindowModels'
 import { SatelliteGroupSelector } from '../satellite/SatelliteGroupSelector'
-import { UI_RADIUS_CONTROL } from '../../common/ui/UiTokens'
+import { UI_RADIUS_CONTROL, UI_RADIUS_MEDIA } from '../../common/ui/UiTokens'
 import { SatelliteStore } from '../../state/SatelliteStore'
 import { classifySatelliteArchetype, satelliteVisualProfile } from '../../form/SatelliteVisualRegistry'
 import { satelliteIconResource } from '../../form/WidgetVisuals'
@@ -354,7 +354,7 @@ export struct SatellitesPanel {
                     .fontColor(satelliteVisualProfile(classifySatelliteArchetype(item.englishName + ' ' + item.name, item.id, this.satelliteStore.activeSatGroup)).accentHex)
                     .padding({ left: 6, right: 6, top: 2, bottom: 2 })
                     .backgroundColor(this.c.input)
-                    .borderRadius(8)
+                    .borderRadius(UI_RADIUS_MEDIA)
                   if (item.outdated) {
                     Text('历元过期').fontSize(10).fontColor(this.c.warning)
                   }

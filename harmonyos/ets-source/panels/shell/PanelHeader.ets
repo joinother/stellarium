@@ -1,6 +1,7 @@
-import { curves, Theme } from '@kit.ArkUI'
+import { Theme } from '@kit.ArkUI'
 import { panelFontSize, uiControlHeight } from '../../common/ui/UiTypography'
-import { UI_RADIUS_PILL } from '../../common/ui/UiTokens'
+import { UI_MOTION_FAST_MS, UI_RADIUS_PILL } from '../../common/ui/UiTokens'
+import { uiSpringSnappy } from '../../common/ui/UiMotion'
 import { getIcon } from '../../common/ui/ShellIcons'
 import { tintMatrixFor } from '../../common/ui/IconTint'
 import { DEFAULT_SLOTS, ThemeSlots, slotsFromTheme } from '../../state/StellariumTheme'
@@ -63,8 +64,8 @@ export struct PanelHeader {
           .zIndex(3)
           .stateStyles({ pressed: { .opacity(0.62) } })
           .transition(TransitionEffect.asymmetric(
-            TransitionEffect.OPACITY.animation({ duration: 130, curve: Curve.EaseOut })
-              .combine(TransitionEffect.translate({ x: -10, y: 0 }).animation({ duration: 180, curve: curves.springMotion(0.42, 0.86) })),
+            TransitionEffect.OPACITY.animation({ duration: UI_MOTION_FAST_MS, curve: Curve.EaseOut })
+              .combine(TransitionEffect.translate({ x: -10, y: 0 }).animation({ curve: uiSpringSnappy() })),
             TransitionEffect.OPACITY.animation({ duration: 100, curve: Curve.EaseIn })
           ))
           .onClick(() => { this.onBack() })
@@ -172,6 +173,6 @@ export struct PanelHeader {
       .alignItems(VerticalAlign.Center)
       .margin({ bottom: this.compactMargin ? 0 : 12 })
       .zIndex(4)
-      .animation({ duration: 180, curve: curves.springMotion(0.42, 0.86) })
+      .animation({ curve: uiSpringSnappy() })
   }
 }

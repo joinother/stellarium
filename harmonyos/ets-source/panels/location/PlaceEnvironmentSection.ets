@@ -3,7 +3,8 @@ import { I18n } from '../../pages/I18n'
 import { pressureAtAltitudeHpa, temperatureAtAltitudeC } from '../../common/derive/atmosphere'
 import { BarometerReader } from '../../capability/BarometerReader'
 import { DEFAULT_SLOTS, ThemeSlots, slotsFromTheme } from '../../state/StellariumTheme'
-import { UI_RADIUS_CONTROL } from '../../common/ui/UiTokens'
+import { UI_RADIUS_CARD, UI_RADIUS_CONTROL } from '../../common/ui/UiTokens'
+import { InfoTipButton } from '../../common/ui/InfoTipButton'
 import { panelFontSize } from '../../common/ui/UiTypography'
 
 // 共享的观测环境模块（仅地球观测点）：按海拔推算站点气压与基准气温，
@@ -123,7 +124,7 @@ export struct PlaceEnvironmentSection {
   @Builder
   modeChip(mode: string, label: string, enabled: boolean) {
     Button(label)
-      .height(30)
+      .height(34)
       .fontSize(panelFontSize(12, this.readableUi))
       .fontColor(this.mode === mode ? this.c.onAccent : this.c.sub)
       .backgroundColor(this.mode === mode ? this.c.accent : this.c.bg)
@@ -132,13 +133,19 @@ export struct PlaceEnvironmentSection {
       .layoutWeight(1)
       .enabled(enabled)
       .opacity(enabled ? 1 : 0.55)
+      .clickEffect({ level: ClickEffectLevel.LIGHT })
       .onClick(() => { this.selectMode(mode) })
   }
 
   build() {
     Column({ space: 6 }) {
-      Text(I18n.t('place_env_title')).fontSize(panelFontSize(14, this.readableUi)).fontColor(this.c.text).width('100%')
-      Text(I18n.t('place_env_hint')).fontSize(10).fontColor(this.c.sub).width('100%')
+      Row({ space: 4 }) {
+        Text(I18n.t('place_env_title')).fontSize(panelFontSize(14, this.readableUi)).fontWeight(FontWeight.Medium).fontColor(this.c.text)
+        InfoTipButton({
+          title: I18n.t('place_env_title'),
+          tip: I18n.t('place_env_hint')
+        })
+      }.width('100%').alignItems(VerticalAlign.Center)
       Row({ space: 6 }) {
         this.modeChip('estimate', I18n.t('place_env_mode_estimate'), true)
         this.modeChip('barometer', I18n.t('place_env_mode_barometer'), this.barometerAvailable)
@@ -176,6 +183,7 @@ export struct PlaceEnvironmentSection {
         .borderRadius(UI_RADIUS_CONTROL)
         .width('100%')
         .enabled(this.barometerState !== 'reading')
+        .clickEffect({ level: ClickEffectLevel.LIGHT })
         .id('place-environment-apply')
         .onClick(() => {
           const pressure = this.activePressure()
@@ -187,10 +195,10 @@ export struct PlaceEnvironmentSection {
         })
     }
       .width('100%')
-      .padding(10)
+      .padding(12)
       .backgroundColor(this.c.soft)
       .border({ width: 1, color: this.c.softStrong })
-      .borderRadius(UI_RADIUS_CONTROL)
+      .borderRadius(UI_RADIUS_CARD)
       .margin({ bottom: 8 })
       .id('place-environment')
   }

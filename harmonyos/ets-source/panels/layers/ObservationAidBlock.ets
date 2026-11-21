@@ -1,8 +1,9 @@
 ﻿import { Theme } from '@kit.ArkUI'
 import { I18n } from '../../pages/I18n'
 import { DEFAULT_SLOTS, ThemeSlots, slotsFromTheme } from '../../state/StellariumTheme'
-import { UI_RADIUS_CONTROL } from '../../common/ui/UiTokens'
+import { UI_RADIUS_CARD, UI_RADIUS_CONTROL, UI_RADIUS_PANEL } from '../../common/ui/UiTokens'
 import { panelFontSize } from '../../common/ui/UiTypography'
+import { InfoTipButton } from '../../common/ui/InfoTipButton'
 import { LayerSwitchRow } from './LayerSwitchRow'
 import { PlaceEnvironmentSection } from '../location/PlaceEnvironmentSection'
 
@@ -196,17 +197,19 @@ export struct ObservationAidBlock {
           Button(I18n.t('loc_cancel')).fontSize(14).fontColor(this.c.text)
             .backgroundColor(this.c.softStrong).borderRadius(UI_RADIUS_CONTROL)
             .height(38).layoutWeight(1)
+            .clickEffect({ level: ClickEffectLevel.LIGHT })
             .onClick(() => { this.editorOpen = false })
           Button(I18n.t('loc_confirm')).fontSize(14).fontColor(this.c.onAccent)
             .backgroundColor(this.c.accent).borderRadius(UI_RADIUS_CONTROL)
             .height(38).layoutWeight(1)
+            .clickEffect({ level: ClickEffectLevel.LIGHT })
             .onClick(() => { this.confirmEditor() })
         }.width('100%')
       }
         .width('86%').padding(16)
         .backgroundColor(this.dialogBackground())
         .border({ width: 1, color: this.c.border })
-        .borderRadius(UI_RADIUS_CONTROL)
+        .borderRadius(UI_RADIUS_PANEL)
         .shadow({ radius: 24, color: 'rgba(0,0,0,0.45)' })
     }
       .width('100%').height('100%')
@@ -225,7 +228,8 @@ export struct ObservationAidBlock {
         .onClick(() => { this.openEditor('pressure') })
       Button(I18n.t('atmo_adjust')).fontSize(panelFontSize(11, this.readableUi)).fontColor(this.c.text)
         .backgroundColor(this.c.softStrong)
-        .borderRadius(UI_RADIUS_CONTROL).height(28).padding({ left: 10, right: 10 })
+        .borderRadius(UI_RADIUS_CONTROL).height(30).padding({ left: 10, right: 10 })
+        .clickEffect({ level: ClickEffectLevel.LIGHT })
         .onClick(() => { this.openEditor('pressure') })
     }
       .height(this.readableUi ? 50 : 42).width('100%').padding({ left: 10, right: 8 })
@@ -242,7 +246,8 @@ export struct ObservationAidBlock {
         .onClick(() => { this.openEditor('temperature') })
       Button(I18n.t('atmo_adjust')).fontSize(panelFontSize(11, this.readableUi)).fontColor(this.c.text)
         .backgroundColor(this.c.softStrong)
-        .borderRadius(UI_RADIUS_CONTROL).height(28).padding({ left: 10, right: 10 })
+        .borderRadius(UI_RADIUS_CONTROL).height(30).padding({ left: 10, right: 10 })
+        .clickEffect({ level: ClickEffectLevel.LIGHT })
         .onClick(() => { this.openEditor('temperature') })
     }
       .height(this.readableUi ? 50 : 42).width('100%').padding({ left: 10, right: 8 })
@@ -253,13 +258,20 @@ export struct ObservationAidBlock {
   @Builder
   extinctionRow() {
     Row({ space: 6 }) {
-      Text(I18n.t('atmo_extinction')).fontSize(panelFontSize(14, this.readableUi)).fontColor(this.c.text).width(86)
+      Row({ space: 2 }) {
+        Text(I18n.t('atmo_extinction')).fontSize(panelFontSize(14, this.readableUi)).fontColor(this.c.text)
+        InfoTipButton({
+          title: I18n.t('atmo_extinction'),
+          tip: I18n.t('atmo_extinction_hint') + '\n' + I18n.t('atmo_value_hint')
+        })
+      }.width(86).alignItems(VerticalAlign.Center)
       Text(this.atmoExtinction.toFixed(2))
         .fontSize(panelFontSize(13, this.readableUi)).fontColor(this.c.text).layoutWeight(1)
         .onClick(() => { this.openEditor('extinction') })
       Button(I18n.t('atmo_adjust')).fontSize(panelFontSize(11, this.readableUi)).fontColor(this.c.text)
         .backgroundColor(this.c.softStrong)
-        .borderRadius(UI_RADIUS_CONTROL).height(28).padding({ left: 10, right: 10 })
+        .borderRadius(UI_RADIUS_CONTROL).height(30).padding({ left: 10, right: 10 })
+        .clickEffect({ level: ClickEffectLevel.LIGHT })
         .onClick(() => { this.openEditor('extinction') })
     }
       .height(this.readableUi ? 50 : 42).width('100%').padding({ left: 10, right: 8 })
@@ -275,7 +287,7 @@ export struct ObservationAidBlock {
         .margin({ top: 8, bottom: 2 })
       LayerSwitchRow({
         label: I18n.t('atmo_refraction'),
-        hint: I18n.t('atmo_refraction_hint'),
+        infoTip: I18n.t('atmo_refraction_hint'),
         isOn: this.refractionOn,
         onToggle: (v: boolean) => { this.onAtmosphere(v ? 1013 : 0, this.atmoTemperature, this.atmoExtinction) }
       })
@@ -293,10 +305,6 @@ export struct ObservationAidBlock {
       this.pressureRow()
       this.temperatureRow()
       this.extinctionRow()
-      Text(I18n.t('atmo_extinction_hint'))
-        .fontSize(10).fontColor(this.c.sub).width('100%').padding({ left: 2 }).margin({ bottom: 4 })
-      Text(I18n.t('atmo_value_hint'))
-        .fontSize(10).fontColor(this.c.sub).width('100%').padding({ left: 2 }).margin({ bottom: 4 })
     }
       .width('100%')
       .bindContentCover(this.editorOpen, this.editorCover)

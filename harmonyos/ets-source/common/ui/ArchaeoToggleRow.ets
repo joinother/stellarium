@@ -1,10 +1,13 @@
 import { Theme } from '@kit.ArkUI'
-import { UI_RADIUS_CONTROL } from './UiTokens'
+import { panelFontSize, uiControlHeight } from './UiTypography'
+import { UI_OPTION_ANIMATION_MS, UI_RADIUS_CONTROL } from './UiTokens'
 import { DEFAULT_SLOTS, ThemeSlots, slotsFromTheme } from '../../state/StellariumTheme'
 
-// 考古线设置开关行（标签 + 开关，选中态带底色/描边强调）。
+// 考古线设置开关行（标签 + 开关，选中态带底色/描边强调，与全局开关行统一规范）。
 @Component
 export struct ArchaeoToggleRow {
+  @StorageProp('stellariumReadableUi') readableUi: boolean = false
+  @StorageProp('stellariumControlScale') controlScale: number = 1.0
   @Prop label: ResourceStr
   @Prop isOn: boolean
   @Prop canToggle: boolean
@@ -16,14 +19,27 @@ export struct ArchaeoToggleRow {
   }
 
   build() {
-    Row() {
-      Text(this.label).fontSize(12).fontColor(this.c.text).layoutWeight(1).maxLines(2)
+    Row({ space: 8 }) {
+      Text(this.label)
+        .fontSize(panelFontSize(13, this.readableUi))
+        .fontColor(this.c.text)
+        .layoutWeight(1)
+        .maxLines(2)
+        .textOverflow({ overflow: TextOverflow.Ellipsis })
       Toggle({ type: ToggleType.Switch, isOn: this.isOn })
+        .width(44)
+        .height(26)
+        .selectedColor(this.c.accent)
+        .clickEffect({ level: ClickEffectLevel.LIGHT })
         .enabled(this.canToggle)
         .onChange((v: boolean) => { this.onToggle(v) })
-    }.width('100%').padding({ left: 10, right: 10, top: 5, bottom: 5 })
+    }
+      .width('100%')
+      .constraintSize({ minHeight: uiControlHeight(40, this.readableUi, this.controlScale) })
+      .padding({ left: 10, right: 8, top: 6, bottom: 6 })
       .backgroundColor(this.isOn ? this.c.soft : this.c.bg)
-      .border({ width: 1, color: this.isOn ? this.c.soft : this.c.border })
+      .border({ width: 1, color: this.isOn ? this.c.soft : this.c.dividerSoft })
+      .animation({ duration: UI_OPTION_ANIMATION_MS, curve: Curve.EaseOut })
       .borderRadius(UI_RADIUS_CONTROL)
   }
 }

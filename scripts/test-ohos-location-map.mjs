@@ -94,7 +94,7 @@ test('full-screen map is Map Kit only, with search and a retryable error state',
   assert.match(fullScreen, /Text\(this\.surfaceLabel\(\)\)/)
   // Separate pill-shaped title and circular back button, both with glass backing.
   assert.match(fullScreen, /Text\(this\.surfaceLabel\(\)\)[\s\S]{0,800}borderRadius\(UI_RADIUS_PILL\)/)
-  assert.match(fullScreen, /borderRadius\(22\)/)
+  assert.match(fullScreen, /\.width\(44\)\.height\(44\)[\s\S]{0,160}borderRadius\(UI_RADIUS_PILL\)/)
   assert.doesNotMatch(fullScreen, /map_tool_title/)
 })
 

@@ -3,7 +3,8 @@ import { DEFAULT_SLOTS, ThemeSlots, slotsFromTheme } from '../../state/Stellariu
 import { I18n } from '../../pages/I18n'
 import { PluginItem } from '../../pages/StellariumTypes'
 import { PluginStore } from '../../state/PluginStore'
-import { UI_RADIUS_CONTROL, UI_RADIUS_PANEL, UI_RADIUS_PILL } from '../../common/ui/UiTokens'
+import { UI_OPTION_ANIMATION_MS, UI_RADIUS_CARD, UI_RADIUS_CONTROL, UI_RADIUS_PILL } from '../../common/ui/UiTokens'
+import { uiFadeUpTransition } from '../../common/ui/UiMotion'
 import { uiControlHeight, uiFontSize } from '../../common/ui/UiTypography'
 import {
   pluginCategoryFor,
@@ -92,7 +93,9 @@ export struct PluginCenterSection {
   }
 
   private toggleDetails(id: string): void {
-    this.expandedPluginId = this.expandedPluginId === id ? '' : id
+    this.getUIContext().animateTo({ duration: UI_OPTION_ANIMATION_MS, curve: Curve.EaseOut }, () => {
+      this.expandedPluginId = this.expandedPluginId === id ? '' : id
+    })
   }
 
   build() {
@@ -268,13 +271,14 @@ export struct PluginCenterSection {
               .padding({ left: 10, right: 10, top: 8, bottom: 8 })
               .backgroundColor(this.c.soft)
               .borderRadius(UI_RADIUS_CONTROL)
+              .transition(uiFadeUpTransition())
             }
           }
           .width('100%')
           .padding({ left: 12, right: 12, top: 11, bottom: 11 })
           .backgroundColor(this.c.bg)
           .border({ width: 0.6, color: this.c.border })
-          .borderRadius(UI_RADIUS_PANEL)
+          .borderRadius(UI_RADIUS_CARD)
         }, (pl: PluginItem) => pl.id + '_' + this.selectedCategory)
       }
       .width('100%')
@@ -299,9 +303,12 @@ export struct PluginCenterSection {
           .padding({ left: 12, right: 12 })
           .backgroundColor(this.c.soft)
           .border({ width: 0.6, color: this.c.border })
-          .borderRadius(UI_RADIUS_CONTROL)
+          .borderRadius(UI_RADIUS_CARD)
+          .clickEffect({ level: ClickEffectLevel.LIGHT })
           .onClick(() => {
-            this.showInactiveModules = !this.showInactiveModules
+            this.getUIContext().animateTo({ duration: UI_OPTION_ANIMATION_MS, curve: Curve.EaseOut }, () => {
+              this.showInactiveModules = !this.showInactiveModules
+            })
           })
 
           if (this.showInactiveModules) {
@@ -335,10 +342,11 @@ export struct PluginCenterSection {
                 .padding({ left: 12, right: 12, top: 9, bottom: 9 })
                 .backgroundColor(this.c.bg)
                 .border({ width: 0.5, color: this.c.border })
-                .borderRadius(UI_RADIUS_CONTROL)
+                .borderRadius(UI_RADIUS_CARD)
               }, (pl: PluginItem) => 'inactive_' + pl.id)
             }
             .width('100%')
+            .transition(uiFadeUpTransition())
           }
         }
         .width('100%')

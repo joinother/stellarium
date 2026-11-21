@@ -1,7 +1,7 @@
 import { Theme } from '@kit.ArkUI'
 import { DEFAULT_SLOTS, ThemeSlots, slotsFromTheme } from '../../state/StellariumTheme'
-import { curves } from '@kit.ArkUI'
-import { UI_RADIUS_CONTROL } from '../../common/ui/UiTokens'
+import { UI_RADIUS_CARD } from '../../common/ui/UiTokens'
+import { uiSpringSnappy } from '../../common/ui/UiMotion'
 import { getIcon } from '../../common/ui/ShellIcons'
 import { tintMatrixFor } from '../../common/ui/IconTint'
 import { ShellAction } from '../../pages/StellariumTypes'
@@ -72,7 +72,7 @@ export struct MorePanel {
           .padding(0)
           .backgroundColor(this.c.rowBg)
           .border({ width: 0.5, color: this.c.border })
-          .borderRadius(UI_RADIUS_CONTROL)
+          .borderRadius(UI_RADIUS_CARD)
           .clickEffect({ level: ClickEffectLevel.LIGHT })
           .stateStyles({
             pressed: {
@@ -80,7 +80,7 @@ export struct MorePanel {
               .backgroundColor(this.c.softStrong)
             }
           })
-          .animation({ duration: 220, curve: curves.springMotion(0.42, 0.86) })
+          .animation({ curve: uiSpringSnappy() })
           .onClick(() => {
             this.onOpenPanel(item.panel)
           })

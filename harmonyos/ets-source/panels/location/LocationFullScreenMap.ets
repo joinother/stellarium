@@ -1533,7 +1533,8 @@ export struct LocationFullScreenMap {
         .width(44).height(44).justifyContent(FlexAlign.Center)
         .backgroundColor(this.c.panelGlassStrong)
         .border({ width: 1, color: this.c.border })
-        .borderRadius(22)
+        .borderRadius(UI_RADIUS_PILL)
+        .clickEffect({ level: ClickEffectLevel.LIGHT })
         .onClick(() => { this.onClose() })
         .accessibilityText(I18n.t('map_close'))
       Column({ space: 1 }) {
@@ -1747,7 +1748,8 @@ export struct LocationFullScreenMap {
           .width(40).height(40).justifyContent(FlexAlign.Center)
           .backgroundColor(this.c.panelGlassStrong)
           .border({ width: 1, color: this.c.border })
-          .borderRadius(20)
+          .borderRadius(UI_RADIUS_PILL)
+          .clickEffect({ level: ClickEffectLevel.LIGHT })
           .onClick(() => {
             this.layerMenuOpen = false
             this.recenter()
@@ -1765,7 +1767,8 @@ export struct LocationFullScreenMap {
             .width(40).height(40).justifyContent(FlexAlign.Center)
             .backgroundColor(this.c.panelGlassStrong)
             .border({ width: 1, color: this.c.border })
-            .borderRadius(20)
+            .borderRadius(UI_RADIUS_PILL)
+            .clickEffect({ level: ClickEffectLevel.LIGHT })
             .opacity(this.gpsBusy ? 0.6 : 1)
             .onClick(() => {
               if (!this.gpsBusy) {
@@ -1784,7 +1787,8 @@ export struct LocationFullScreenMap {
             .width(40).height(40).justifyContent(FlexAlign.Center)
             .backgroundColor(this.c.panelGlassStrong)
             .border({ width: 1, color: this.c.border })
-            .borderRadius(20)
+            .borderRadius(UI_RADIUS_PILL)
+            .clickEffect({ level: ClickEffectLevel.LIGHT })
             .onClick(() => { this.layerMenuOpen = !this.layerMenuOpen })
             .accessibilityText(I18n.t('map_layer_title'))
         }

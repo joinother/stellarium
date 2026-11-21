@@ -150,13 +150,11 @@ export struct DeviceSection {
     Column({ space: 0 }) {
       LayerSwitchRow({
         label: I18n.t('i0043'),
+        infoTip: I18n.t('settings_gyro_desc'),
         isOn: this.gyroscopeEnabled,
         onToggle: (value: boolean) => { this.onToggleGyroscope(value) }
       })
       GyroSensitivityRow({ sensitivityText: this.sensitivityText })
-      Text(I18n.t('settings_gyro_desc'))
-        .fontSize(10).fontColor(this.c.sub).width('100%')
-        .padding({ left: 10, right: 10 }).margin({ top: 2, bottom: 6 })
     }.width('100%')
   }
 }

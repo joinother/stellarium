@@ -320,7 +320,7 @@ export struct LocationOverviewCard {
         }
           .width(24).height(24).justifyContent(FlexAlign.Center)
           .backgroundColor(this.c.panelGlassStrong)
-          .borderRadius(12)
+          .borderRadius(UI_RADIUS_PILL)
           .position({ x: this.previewWidth - 32, y: this.previewHeight - 32 })
           .hitTestBehavior(HitTestMode.None)
       }

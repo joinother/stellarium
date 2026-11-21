@@ -3,7 +3,7 @@ import { I18n } from '../../pages/I18n'
 import { SavedLocation } from '../../pages/StellariumTypes'
 import { LocationStore } from '../../state/LocationStore'
 import { SessionToolStore } from '../../state/SessionToolStore'
-import { UI_RADIUS_CONTROL } from '../../common/ui/UiTokens'
+import { UI_RADIUS_CONTROL, UI_RADIUS_MEDIA } from '../../common/ui/UiTokens'
 import { DEFAULT_SLOTS, ThemeSlots, slotsFromTheme } from '../../state/StellariumTheme'
 
 // 位置面板的「已保存位置 / 最近使用」区。
@@ -156,7 +156,7 @@ export struct CityChipsRow {
           .fontColor(this.c.sub)
           .padding({ left: 6, right: 6, top: 1, bottom: 1 })
           .backgroundColor(this.c.softStrong)
-          .borderRadius(8)
+          .borderRadius(UI_RADIUS_MEDIA)
         Blank()
         Button(I18n.t('loc_save_current'))
           .fontSize(10).fontColor(this.c.tertiary)

@@ -1,7 +1,9 @@
 import { Theme } from '@kit.ArkUI'
 import { DEFAULT_SLOTS, ThemeSlots, slotsFromTheme } from '../../state/StellariumTheme'
 import { panelFontSize } from '../../common/ui/UiTypography'
-import { UI_RADIUS_CONTROL } from '../../common/ui/UiTokens'
+import { UI_OPTION_ANIMATION_MS, UI_RADIUS_CARD, UI_RADIUS_CONTROL, UI_RADIUS_MEDIA } from '../../common/ui/UiTokens'
+import { uiFadeUpTransition } from '../../common/ui/UiMotion'
+import { InfoTipButton } from '../../common/ui/InfoTipButton'
 import { I18n } from '../../capability/I18n'
 import { DEFAULT_HAPTIC_INTENSITY } from '../../capability/HapticFeedback'
 
@@ -78,7 +80,7 @@ export struct HapticSection {
   // 14600101 不是设备能力问题：系统触感反馈关闭时，OpenHarmony 的
   // MiscdeviceService 会以 IGNORE_FEEDBACK 丢弃 usage=touch 的请求。
   // 此时应提示用户打开系统开关，而不是误报“设备不支持”。
-  private statusText(): string {
+  private alertText(): string {
     if (this.failed) {
       if (this.errorCode === 14600101) {
         if (this.systemFeedback === 0) {
@@ -95,33 +97,42 @@ export struct HapticSection {
       return this.text('系统未能播放触觉效果，请检查系统触感设置与设备支持情况。',
         'The system could not play haptics. Check system haptics and device support.')
     }
-    if (this.available) {
-      return this.text('选中天体、切换面板与时间刻度时，给予轻微反馈。',
-        'Gentle feedback for object selection, panels and time steps.')
+    if (!this.available) {
+      return this.text('此设备不支持应用使用的轻触振动效果。',
+        'This device does not support these gentle haptic effects.')
     }
-    return this.text('此设备不支持应用使用的轻触振动效果。',
-      'This device does not support these gentle haptic effects.')
+    return ''
   }
 
   build() {
     Column({ space: 4 }) {
-      Row({ space: 12 }) {
-        Text(this.text('触觉反馈', 'Haptic feedback'))
-          .fontSize(panelFontSize(14, this.readableUi)).fontColor(this.c.text).layoutWeight(1)
+      Row({ space: 6 }) {
+        Row({ space: 2 }) {
+          Text(this.text('触觉反馈', 'Haptic feedback'))
+            .fontSize(panelFontSize(14, this.readableUi)).fontColor(this.c.text)
+          InfoTipButton({
+            title: this.text('触觉反馈', 'Haptic feedback'),
+            tip: this.text('选中天体、切换面板与拨动时间刻度时，给予轻微振动反馈。实际手感受系统触感设置与设备马达支持影响。',
+              'Gentle feedback for object selection, panels and time steps. Actual feel depends on system haptics and device support.')
+          })
+        }.layoutWeight(1).alignItems(VerticalAlign.Center)
         Toggle({ type: ToggleType.Switch, isOn: this.toggleOn })
           .selectedColor(this.c.accent).enabled(!this.busy && (this.available || this.toggleOn))
+          .clickEffect({ level: ClickEffectLevel.LIGHT })
           .onChange((value: boolean) => this.userChanged(value))
       }
         .width('100%')
         .height(this.readableUi ? 50 : 42)
-        .padding({ left: 10, right: 8 })
-      Text(this.statusText())
-        .fontSize(panelFontSize(10, this.readableUi)).fontColor(this.c.sub).width('100%')
-        .padding({ left: 10, right: 8 }).margin({ bottom: 4 })
+        .padding({ left: 12, right: 10 })
+      if (this.alertText().length > 0) {
+        Text(this.alertText())
+          .fontSize(panelFontSize(10, this.readableUi)).fontColor(this.c.sub).width('100%')
+          .padding({ left: 12, right: 10 }).margin({ bottom: 4 })
+      }
       if (this.systemFeedback === 0) {
         Text(this.text('前往系统设置开启“系统触感反馈”', 'Open system settings to enable touch feedback'))
           .fontSize(panelFontSize(10, this.readableUi)).fontColor(this.c.accent).width('100%')
-          .padding({ left: 10, right: 8 }).margin({ bottom: 4 })
+          .padding({ left: 12, right: 10 }).margin({ bottom: 4 })
           .onClick(() => { this.onOpenSystemSettings() })
       }
       Row({ space: 8 }) {
@@ -131,14 +142,19 @@ export struct HapticSection {
           .fontSize(panelFontSize(10, this.readableUi)).fontColor(this.c.sub).maxLines(1)
         Text(this.intensityExpanded ? this.text('收起', 'Hide') : this.text('调整', 'Adjust'))
           .fontSize(panelFontSize(10, this.readableUi)).fontColor(this.c.accent)
-          .padding({ left: 8, right: 8, top: 3, bottom: 3 })
-          .backgroundColor(this.c.input).borderRadius(8)
+          .padding({ left: 8, right: 8, top: 4, bottom: 4 })
+          .backgroundColor(this.c.input).borderRadius(UI_RADIUS_MEDIA)
       }
         .width('100%')
-        .height(34)
-        .padding({ left: 10, right: 8 })
-        .margin({ bottom: 8 })
-        .onClick(() => { this.intensityExpanded = !this.intensityExpanded })
+        .height(36)
+        .padding({ left: 12, right: 10 })
+        .margin({ bottom: 6 })
+        .clickEffect({ level: ClickEffectLevel.LIGHT })
+        .onClick(() => {
+          this.getUIContext().animateTo({ duration: UI_OPTION_ANIMATION_MS, curve: Curve.EaseOut }, () => {
+            this.intensityExpanded = !this.intensityExpanded
+          })
+        })
       if (this.intensityExpanded) {
         Row() {
           Column({ space: 6 }) {
@@ -160,12 +176,10 @@ export struct HapticSection {
               Blank()
               Text(this.text('强', 'Strong')).fontSize(panelFontSize(9, this.readableUi)).fontColor(this.c.tertiary)
             }.width('100%')
-            Text(this.text('实际手感受系统触感设置与设备马达支持影响。',
-              'Actual feel depends on system haptics and device support.'))
-              .fontSize(panelFontSize(9, this.readableUi)).fontColor(this.c.sub).width('100%').maxLines(2)
             Button(this.text('试一下', 'Try feedback'), { type: ButtonType.Normal })
               .height(36).width('100%').borderRadius(UI_RADIUS_CONTROL)
               .backgroundColor(this.c.input).fontColor(this.c.text)
+              .clickEffect({ level: ClickEffectLevel.LIGHT })
               .enabled(this.available && this.toggleOn && !this.busy && !this.previewing)
               .onClick(() => { this.preview() })
           }
@@ -176,13 +190,15 @@ export struct HapticSection {
           .borderRadius(UI_RADIUS_CONTROL)
         }
         .width('100%')
-        .padding({ left: 10, right: 8, bottom: 8 })
+        .padding({ left: 10, right: 10, bottom: 10 })
+        .transition(uiFadeUpTransition())
       }
     }
     .width('100%')
     .backgroundColor(this.toggleOn ? this.c.soft : this.c.bg)
     .border({ width: 1, color: this.toggleOn ? this.c.soft : this.c.dividerSoft })
-    .borderRadius(UI_RADIUS_CONTROL)
+    .borderRadius(UI_RADIUS_CARD)
+    .animation({ duration: UI_OPTION_ANIMATION_MS, curve: Curve.EaseOut })
     .margin({ bottom: 6 })
   }
 }

@@ -5,7 +5,8 @@ import { I18n, PROJECTION_KEYS } from '../../pages/I18n'
 import { DEFAULT_HAPTIC_INTENSITY } from '../../capability/HapticFeedback'
 import { TabItem, PluginItem } from '../../pages/StellariumTypes'
 import { ConfigurationOption } from '../../pages/MainWindowModels'
-import { UI_RADIUS_CONTROL } from '../../common/ui/UiTokens'
+import { UI_OPTION_ANIMATION_MS, UI_RADIUS_CARD, UI_RADIUS_CONTROL } from '../../common/ui/UiTokens'
+import { InfoTipButton } from '../../common/ui/InfoTipButton'
 import { panelFontSize, uiControlHeight } from '../../common/ui/UiTypography'
 import { GyroStore } from '../../state/GyroStore'
 import { OverlayStore } from '../../state/OverlayStore'
@@ -203,6 +204,21 @@ export struct SettingsPanel {
     this.onRequestScrollTop()
   }
 
+  private confirmRestoreDefaults(): void {
+    AlertDialog.show({
+      title: '恢复默认设置',
+      message: '将重置引擎配置与界面偏好；收藏、观测列表等用户数据会保留。需要重启应用生效。',
+      primaryButton: {
+        value: '取消',
+        action: () => {}
+      },
+      secondaryButton: {
+        value: '恢复',
+        action: () => { this.restoreCoreDefaults() }
+      }
+    })
+  }
+
   // 脚本页：头部固定，列表占满面板剩余高度并自行滚动。
   @Builder
   scriptTabContent() {
@@ -384,59 +400,56 @@ export struct SettingsPanel {
               .margin({ bottom: 12 })
               .onClick(() => { this.confirmPrivacyRevocation() })
           } else if (this.configTab === 0) {
-            Row() {
-              Column({ space: 2 }) {
+            Row({ space: 6 }) {
+              Row({ space: 2 }) {
                 Text('恢复默认设置')
                   .fontSize(Math.round(panelFontSize(14, this.readableUi) * this.uiFontScale))
-                  .fontColor(this.c.text).width('100%')
-                Text('重置引擎配置与界面偏好；收藏、观测列表等用户数据保留')
-                  .fontSize(Math.round(panelFontSize(10, this.readableUi) * this.uiFontScale))
-                  .fontColor(this.c.sub).width('100%')
+                  .fontColor(this.c.text)
+                InfoTipButton({
+                  title: '恢复默认设置',
+                  tip: '重置引擎配置与界面偏好；收藏、观测列表等用户数据会保留。需要重启应用生效。'
+                })
               }
               .layoutWeight(1)
-              .alignItems(HorizontalAlign.Start)
-              .padding({ left: 10, right: 8 })
+              .alignItems(VerticalAlign.Center)
+              .padding({ left: 10 })
               Button('重置', { type: ButtonType.Capsule })
                 .fontSize(Math.round(panelFontSize(13, this.readableUi) * this.uiFontScale))
                 .fontColor(this.c.errorText)
                 .backgroundColor(this.c.errorBg)
-                .constraintSize({ minHeight: uiControlHeight(38, this.readableUi, this.controlScale) })
-                .padding({ left: 20, right: 20, top: 6, bottom: 6 })
-                .margin({ right: 10 })
+                .constraintSize({ minHeight: uiControlHeight(36, this.readableUi, this.controlScale) })
+                .padding({ left: 18, right: 18, top: 6, bottom: 6 })
+                .margin({ right: 8 })
+                .clickEffect({ level: ClickEffectLevel.LIGHT })
+                .onClick(() => { this.confirmRestoreDefaults() })
             }
-            .constraintSize({ minHeight: uiControlHeight(50, this.readableUi, this.controlScale) })
+            .constraintSize({ minHeight: uiControlHeight(48, this.readableUi, this.controlScale) })
             .padding({ top: 6, bottom: 6 })
             .width('100%')
-            .margin({ bottom: 4 })
-            .onClick(() => {
-              AlertDialog.show({
-                title: '恢复默认设置',
-                message: '将重置引擎配置与界面偏好；收藏、观测列表等用户数据会保留。需要重启应用生效。',
-                primaryButton: {
-                  value: '取消',
-                  action: () => {}
-                },
-                secondaryButton: {
-                  value: '恢复',
-                  action: () => { this.restoreCoreDefaults() }
-                }
-              })
-            })
+            .backgroundColor(this.c.bg)
+            .border({ width: 1, color: this.c.dividerSoft })
+            .borderRadius(UI_RADIUS_CARD)
+            .margin({ bottom: 6 })
             LanguageRow({ selectedLanguage: this.selectedLanguage, onSelect: (code: string) => { this.setLanguage(code) } })
             // 统一界面字体与按钮尺寸分级控制（跟随系统或手动 3 档，统筹管理按钮行高与字号）
             Column({ space: 8 }) {
               Row() {
-                Text('界面字体与按钮大小')
-                  .fontSize(Math.round(panelFontSize(13, this.readableUi) * this.uiFontScale))
-                  .fontWeight(FontWeight.Medium)
-                  .fontColor(this.c.text)
-                  .layoutWeight(1)
+                Row({ space: 2 }) {
+                  Text('界面字体与按钮大小')
+                    .fontSize(Math.round(panelFontSize(13, this.readableUi) * this.uiFontScale))
+                    .fontWeight(FontWeight.Medium)
+                    .fontColor(this.c.text)
+                  InfoTipButton({
+                    title: '界面字体与按钮大小',
+                    tip: '已适配系统字体缩放（上限 145%），按钮与行高随字号同步调整，避免截断或重叠。'
+                  })
+                }.layoutWeight(1).alignItems(VerticalAlign.Center)
                 Text(this.uiFontScaleMode === 'system'
                   ? ('跟随系统 · ' + Math.round(this.systemFontScale * 100).toString() + '%')
                   : (this.uiFontScaleMode === 'standard' ? '标准 100%' : (this.uiFontScaleMode === 'large' ? '偏大 115%' : '大号 130%')))
                   .fontSize(Math.round(panelFontSize(11, this.readableUi) * this.uiFontScale))
                   .fontColor(this.c.accent)
-              }.width('100%')
+              }.width('100%').alignItems(VerticalAlign.Center)
               Row({ space: 6 }) {
                 ForEach(FONT_SCALE_CHOICES, (opt: FontScaleChoice) => {
                   Row() {
@@ -456,59 +469,72 @@ export struct SettingsPanel {
                   .backgroundColor(this.uiFontScaleMode === opt.mode ? this.c.accent : this.c.input)
                   .borderRadius(UI_RADIUS_CONTROL)
                   .clickEffect({ level: ClickEffectLevel.LIGHT, scale: 0.97 })
-                  .animation({ duration: 180, curve: Curve.EaseOut })
+                  .animation({ duration: UI_OPTION_ANIMATION_MS, curve: Curve.EaseOut })
                   .onClick(() => { this.setUiFontScaleMode(opt.mode) })
                 }, (opt: FontScaleChoice) => opt.mode)
               }.width('100%')
-              Text('已适配系统字体缩放（上限 145%），按钮与行高随字号同步调整，避免截断或重叠。')
-                .fontSize(Math.round(panelFontSize(10, this.readableUi) * this.uiFontScale))
-                .fontColor(this.c.sub)
-                .width('100%')
             }
             .width('100%')
-            .padding({ left: 10, right: 10, top: 10, bottom: 10 })
+            .padding({ left: 12, right: 12, top: 10, bottom: 10 })
             .backgroundColor(this.c.soft)
-            .borderRadius(UI_RADIUS_CONTROL)
+            .border({ width: 1, color: this.c.border })
+            .borderRadius(UI_RADIUS_CARD)
             .margin({ top: 6, bottom: 6 })
-            Text('行星历表').fontSize(12).fontColor(this.c.sub).width('100%').padding({ left: 8 }).margin({ top: 6, bottom: 4 })
-            Text('用于行星位置计算的 JPL 数值星历。仅显示设备中已安装的文件。').fontSize(10).fontColor(this.c.sub).width('100%').padding({ left: 10, right: 10 }).margin({ bottom: 5 })
+            Row({ space: 2 }) {
+              Text('行星历表').fontSize(12).fontColor(this.c.sub)
+              InfoTipButton({
+                title: '行星历表',
+                tip: '用于行星位置计算的 JPL 数值星历。仅显示设备中已安装的文件。'
+              })
+            }.width('100%').padding({ left: 8 }).margin({ top: 6, bottom: 2 }).alignItems(VerticalAlign.Center)
             EphemerisToggleRow({ label: 'DE430', available: this.ephemerisStore.ephemerisDe430Available, isEnabled: this.ephemerisStore.ephemerisDe430Active, onToggle: (v: boolean) => { this.setEphemerisEnabled('de430', this.ephemerisStore.ephemerisDe430Available, v) } })
             EphemerisToggleRow({ label: 'DE431', available: this.ephemerisStore.ephemerisDe431Available, isEnabled: this.ephemerisStore.ephemerisDe431Active, onToggle: (v: boolean) => { this.setEphemerisEnabled('de431', this.ephemerisStore.ephemerisDe431Available, v) } })
             EphemerisToggleRow({ label: 'DE440', available: this.ephemerisStore.ephemerisDe440Available, isEnabled: this.ephemerisStore.ephemerisDe440Active, onToggle: (v: boolean) => { this.setEphemerisEnabled('de440', this.ephemerisStore.ephemerisDe440Available, v) } })
             EphemerisToggleRow({ label: 'DE441', available: this.ephemerisStore.ephemerisDe441Available, isEnabled: this.ephemerisStore.ephemerisDe441Active, onToggle: (v: boolean) => { this.setEphemerisEnabled('de441', this.ephemerisStore.ephemerisDe441Available, v) } })
             Row() {
-              Text(I18n.t('set_distance_units')).fontSize(12).fontColor(this.c.sub).width(72)
+              Text(I18n.t('set_distance_units')).fontSize(12).fontColor(this.c.sub).layoutWeight(1)
               Row({ space: 6 }) {
                 Text(I18n.t('unit_km'))
-                  .fontSize(11).fontColor(this.viewSettingsStore.useMetricUnits ? this.c.onAccent : this.c.tertiary)
-                  .padding({ left: 8, right: 8, top: 3, bottom: 3 })
+                  .fontSize(12).fontColor(this.viewSettingsStore.useMetricUnits ? this.c.onAccent : this.c.tertiary)
+                  .padding({ left: 12, right: 12, top: 6, bottom: 6 })
                   .backgroundColor(this.viewSettingsStore.useMetricUnits ? this.c.accent : this.c.input)
                   .borderRadius(UI_RADIUS_CONTROL)
+                  .animation({ duration: UI_OPTION_ANIMATION_MS, curve: Curve.EaseOut })
+                  .clickEffect({ level: ClickEffectLevel.LIGHT })
                   .onClick(() => {
                     this.setDistanceUnit(true)
                   })
                 Text(I18n.t('unit_mile'))
-                  .fontSize(11).fontColor(!this.viewSettingsStore.useMetricUnits ? this.c.onAccent : this.c.tertiary)
-                  .padding({ left: 8, right: 8, top: 3, bottom: 3 })
+                  .fontSize(12).fontColor(!this.viewSettingsStore.useMetricUnits ? this.c.onAccent : this.c.tertiary)
+                  .padding({ left: 12, right: 12, top: 6, bottom: 6 })
                   .backgroundColor(!this.viewSettingsStore.useMetricUnits ? this.c.accent : this.c.input)
                   .borderRadius(UI_RADIUS_CONTROL)
+                  .animation({ duration: UI_OPTION_ANIMATION_MS, curve: Curve.EaseOut })
+                  .clickEffect({ level: ClickEffectLevel.LIGHT })
                   .onClick(() => {
                     this.setDistanceUnit(false)
                   })
               }
-            }.height(34).width('100%').padding({ left: 10, right: 10 }).margin({ bottom: 4 })
+            }.constraintSize({ minHeight: 42 }).width('100%').padding({ left: 12, right: 10 }).margin({ top: 4, bottom: 4 })
+              .backgroundColor(this.c.bg).border({ width: 1, color: this.c.dividerSoft }).borderRadius(UI_RADIUS_CONTROL)
             Row() {
               Button(I18n.t('i0251') + '设置')
                 .fontSize(Math.round(panelFontSize(12, this.readableUi) * this.uiFontScale))
                 .fontColor(this.c.text).backgroundColor(this.c.bg)
+                .border({ width: 1, color: this.c.dividerSoft })
                 .borderRadius(UI_RADIUS_CONTROL)
-                .constraintSize({ minHeight: uiControlHeight(34, this.readableUi, this.controlScale) })
+                .constraintSize({ minHeight: uiControlHeight(36, this.readableUi, this.controlScale) })
                 .padding({ left: 14, right: 14, top: 6, bottom: 6 })
+                .clickEffect({ level: ClickEffectLevel.LIGHT })
                 .onClick(() => { this.saveAppSettings(); this.flashHint('设置已保存') })
-            }.width('100%').padding({ left: 8, right: 8 }).margin({ top: 6 })
-            Text('无线控制（HTTP REST API / 网页遥控）').fontSize(12).fontColor(this.c.sub).width('100%').padding({ left: 8 }).margin({ top: 12, bottom: 4 })
-            Text('开启后，同一 Wi-Fi 下的电脑、手机或脚本可凭访问密钥通过网页或标准 Stellarium /api/* 接口控制星图（支持 Basic 认证、Bearer 令牌与 X-API-Key）。')
-              .fontSize(10).fontColor(this.c.sub).width('100%').padding({ left: 10, right: 10 }).margin({ bottom: 6 })
+            }.width('100%').padding({ left: 2, right: 2 }).margin({ top: 4 })
+            Row({ space: 2 }) {
+              Text('无线控制（HTTP API / 网页遥控）').fontSize(12).fontColor(this.c.sub)
+              InfoTipButton({
+                title: '无线控制',
+                tip: '开启后，同一 Wi-Fi 下的电脑、手机或脚本可凭访问密钥通过网页或标准 Stellarium /api/* 接口控制星图（支持 Basic 认证、Bearer 令牌与 X-API-Key）。'
+              })
+            }.width('100%').padding({ left: 8 }).margin({ top: 10, bottom: 4 }).alignItems(VerticalAlign.Center)
             Column({ space: 8 }) {
               Row() {
                 Column({ space: 2 }) {
@@ -516,6 +542,8 @@ export struct SettingsPanel {
                   Text(this.remoteControlEnabled ? '服务运行中 · 已启用密钥鉴权' : '服务已关闭').fontSize(10).fontColor(this.remoteControlEnabled ? this.c.accent : this.c.sub).width('100%')
                 }.layoutWeight(1).alignItems(HorizontalAlign.Start)
                 Toggle({ type: ToggleType.Switch, isOn: this.remoteControlEnabled }).width(44).height(26)
+                  .selectedColor(this.c.accent)
+                  .clickEffect({ level: ClickEffectLevel.LIGHT })
                   .onChange((value: boolean) => {
                     if (value !== this.remoteControlEnabled) {
                       this.onToggleRemoteControl(value, this.remoteControlPort)
@@ -529,20 +557,21 @@ export struct SettingsPanel {
                     Text(this.remoteControlUrl).fontSize(12).fontWeight(FontWeight.Medium).fontColor(this.c.accent).width('100%')
                   }.layoutWeight(1).alignItems(HorizontalAlign.Start)
                   Button('复制地址').fontSize(11).fontColor(this.c.text).backgroundColor(this.c.bg)
-                    .borderRadius(UI_RADIUS_CONTROL).height(30).padding({ left: 10, right: 10 })
+                    .borderRadius(UI_RADIUS_CONTROL).height(32).padding({ left: 10, right: 10 })
+                    .clickEffect({ level: ClickEffectLevel.LIGHT })
                     .onClick(() => { this.onCopyRemoteText(this.remoteControlUrl, '已复制无线控制地址') })
                 }.width('100%')
               }
               Row({ space: 8 }) {
                 Text('端口').fontSize(12).fontColor(this.c.sub).width(56)
-                TextInput({ text: this.remoteControlPort, placeholder: '8090' }).height(34).fontSize(12)
+                TextInput({ text: this.remoteControlPort, placeholder: '8090' }).height(36).fontSize(12)
                   .fontColor(this.c.text).backgroundColor(this.c.input).borderRadius(UI_RADIUS_CONTROL).layoutWeight(1)
                   .type(InputType.Number)
                   .onChange((value: string) => { this.onRemotePortInput(value) })
               }.width('100%')
               Row({ space: 8 }) {
                 Text('访问密钥').fontSize(12).fontColor(this.c.sub).width(56)
-                TextInput({ text: this.remoteControlPassword, placeholder: '开启时自动生成' }).height(34).fontSize(12)
+                TextInput({ text: this.remoteControlPassword, placeholder: '开启时自动生成' }).height(36).fontSize(12)
                   .fontColor(this.c.text).backgroundColor(this.c.input).borderRadius(UI_RADIUS_CONTROL).layoutWeight(1)
                   .type(InputType.Password)
                   .showPasswordIcon(true)
@@ -550,16 +579,19 @@ export struct SettingsPanel {
               }.width('100%')
               Row({ space: 6 }) {
                 Button('换新密钥').fontSize(11).fontColor(this.c.text).backgroundColor(this.c.bg)
-                  .borderRadius(UI_RADIUS_CONTROL).height(30).padding({ left: 10, right: 10 })
+                  .borderRadius(UI_RADIUS_CONTROL).height(32).padding({ left: 10, right: 10 })
+                  .clickEffect({ level: ClickEffectLevel.LIGHT })
                   .onClick(() => { this.onRegenerateRemotePassword() })
                 if (this.remoteControlPassword.length > 0) {
                   Button('复制密钥').fontSize(11).fontColor(this.c.text).backgroundColor(this.c.bg)
-                    .borderRadius(UI_RADIUS_CONTROL).height(30).padding({ left: 10, right: 10 })
+                    .borderRadius(UI_RADIUS_CONTROL).height(32).padding({ left: 10, right: 10 })
+                    .clickEffect({ level: ClickEffectLevel.LIGHT })
                     .onClick(() => { this.onCopyRemoteText(this.remoteControlPassword, '已复制访问密钥') })
                 }
                 if (this.remoteControlEnabled && this.remoteControlUrl.length > 0 && this.remoteControlPassword.length > 0) {
                   Button('复制 curl').fontSize(11).fontColor(this.c.text).backgroundColor(this.c.bg)
-                    .borderRadius(UI_RADIUS_CONTROL).height(30).padding({ left: 10, right: 10 })
+                    .borderRadius(UI_RADIUS_CONTROL).height(32).padding({ left: 10, right: 10 })
+                    .clickEffect({ level: ClickEffectLevel.LIGHT })
                     .onClick(() => {
                       const cmd = 'curl -H "Authorization: Bearer ' + this.remoteControlPassword + '" "' + this.remoteControlUrl + '/api/main/status"'
                       this.onCopyRemoteText(cmd, '已复制 API 调试 curl 命令')
@@ -567,11 +599,16 @@ export struct SettingsPanel {
                 }
               }.width('100%')
               Row() {
-                Column({ space: 2 }) {
-                  Text('允许跨域调用（CORS）').fontSize(12).fontColor(this.c.text).width('100%')
-                  Text('允许局域网网页工具或第三方前端直接调用 /api/* 接口').fontSize(10).fontColor(this.c.sub).width('100%')
-                }.layoutWeight(1).alignItems(HorizontalAlign.Start)
+                Row({ space: 2 }) {
+                  Text('允许跨域调用（CORS）').fontSize(12).fontColor(this.c.text)
+                  InfoTipButton({
+                    title: '允许跨域调用（CORS）',
+                    tip: '允许局域网网页工具或第三方前端直接调用 /api/* 接口。'
+                  })
+                }.layoutWeight(1).alignItems(VerticalAlign.Center)
                 Toggle({ type: ToggleType.Switch, isOn: this.remoteControlCors }).width(42).height(24)
+                  .selectedColor(this.c.accent)
+                  .clickEffect({ level: ClickEffectLevel.LIGHT })
                   .onChange((value: boolean) => {
                     if (value !== this.remoteControlCors) {
                       this.onToggleRemoteCors(value)
@@ -580,15 +617,17 @@ export struct SettingsPanel {
               }.width('100%')
               if (this.remoteControlEnabled) {
                 Row({ space: 8 }) {
-                  Button('应用端口/密钥并重启服务').fontSize(11).fontColor(this.c.onAccent).backgroundColor(this.c.accent)
-                    .borderRadius(UI_RADIUS_CONTROL).height(32).padding({ left: 12, right: 12 })
+                  Button('应用端口/密钥并重启服务').fontSize(12).fontColor(this.c.onAccent).backgroundColor(this.c.accent)
+                    .borderRadius(UI_RADIUS_CONTROL).height(36).padding({ left: 14, right: 14 })
+                    .clickEffect({ level: ClickEffectLevel.LIGHT })
                     .onClick(() => { this.onApplyRemoteControl() })
                 }.width('100%')
               }
               if (this.remoteControlStatus.length > 0) {
                 Text(this.remoteControlStatus).fontSize(10).fontColor(this.c.sub).width('100%')
               }
-            }.width('100%').padding(10).backgroundColor(this.c.rowBg).borderRadius(UI_RADIUS_CONTROL).margin({ bottom: 8 })
+            }.width('100%').padding(12).backgroundColor(this.c.rowBg)
+              .border({ width: 1, color: this.c.border }).borderRadius(UI_RADIUS_CARD).margin({ bottom: 8 })
           } else if (this.configTab === 1) {
             Row() {
               Text(I18n.t('i0120')).fontSize(12).fontColor(this.c.sub).width(72)
@@ -599,27 +638,48 @@ export struct SettingsPanel {
               InformationModeButton({ labelKey: 'i0249', active: this.informationMode === 'short', canPick: !this.informationSettingPending, onPick: () => { this.selectSettingsChoice('information', 'short') } })
               InformationModeButton({ labelKey: 'i0250', active: this.informationMode === 'none', canPick: !this.informationSettingPending, onPick: () => { this.selectSettingsChoice('information', 'none') } })
               InformationModeButton({ labelKey: 'information_custom_mode', active: this.informationMode === 'custom', canPick: !this.informationSettingPending, onPick: () => { this.selectSettingsChoice('information', 'custom') } })
-            }.width('100%').padding({ left: 4, right: 4 }).margin({ bottom: 4 })
-            Row() {
-              Column() {
-                Text(I18n.t('detail_observe_toggle')).fontSize(12).fontColor(this.c.text).width('100%')
-                Text(I18n.t('detail_observe_hint')).fontSize(10).fontColor(this.c.sub).width('100%')
-              }.layoutWeight(1).alignItems(HorizontalAlign.Start)
+            }.width('100%').padding({ left: 4, right: 4 }).margin({ bottom: 6 })
+            Row({ space: 6 }) {
+              Row({ space: 2 }) {
+                Text(I18n.t('detail_observe_toggle')).fontSize(13).fontColor(this.c.text)
+                InfoTipButton({
+                  title: I18n.t('detail_observe_toggle'),
+                  tip: I18n.t('detail_observe_hint')
+                })
+              }.layoutWeight(1).alignItems(VerticalAlign.Center)
               Toggle({ type: ToggleType.Switch, isOn: this.observeMode })
-                .width(42).height(24)
+                .width(44).height(26).selectedColor(this.c.accent)
+                .clickEffect({ level: ClickEffectLevel.LIGHT })
                 .onChange((value: boolean) => { this.onToggleObserveMode(value) })
-            }.width('100%').padding({ left: 10, right: 10, top: 8, bottom: 8 })
-            Row() {
-              Column() {
-                Text('详情卡指向线').fontSize(12).fontColor(this.c.text).width('100%')
-                Text('在可见天体与详情卡之间显示细连接线').fontSize(10).fontColor(this.c.sub).width('100%')
-              }.layoutWeight(1).alignItems(HorizontalAlign.Start)
+            }.width('100%').constraintSize({ minHeight: 42 }).padding({ left: 12, right: 10 })
+              .backgroundColor(this.observeMode ? this.c.soft : this.c.bg)
+              .border({ width: 1, color: this.observeMode ? this.c.soft : this.c.dividerSoft })
+              .borderRadius(UI_RADIUS_CONTROL).margin({ bottom: 6 })
+              .animation({ duration: UI_OPTION_ANIMATION_MS, curve: Curve.EaseOut })
+            Row({ space: 6 }) {
+              Row({ space: 2 }) {
+                Text('详情卡指向线').fontSize(13).fontColor(this.c.text)
+                InfoTipButton({
+                  title: '详情卡指向线',
+                  tip: '在可见天体与详情卡之间显示细连接线，方便在密集星区一眼确认选中目标。'
+                })
+              }.layoutWeight(1).alignItems(VerticalAlign.Center)
               Toggle({ type: ToggleType.Switch, isOn: this.overlayStore.objectDetailConnectorVisible })
-                .width(42).height(24)
+                .width(44).height(26).selectedColor(this.c.accent)
+                .clickEffect({ level: ClickEffectLevel.LIGHT })
                 .onChange((value: boolean) => { this.setObjectDetailConnector(value) })
-            }.width('100%').padding({ left: 10, right: 10, top: 8, bottom: 8 })
-            Text('自定义信息字段').fontSize(12).fontColor(this.c.sub).width('100%').padding({ left: 8 }).margin({ top: 8, bottom: 4 })
-            Text('选择"自定义"后，详情卡和星体信息栏只显示下面勾选的字段。').fontSize(10).fontColor(this.c.sub).width('100%').padding({ left: 10, right: 10 }).margin({ bottom: 5 })
+            }.width('100%').constraintSize({ minHeight: 42 }).padding({ left: 12, right: 10 })
+              .backgroundColor(this.overlayStore.objectDetailConnectorVisible ? this.c.soft : this.c.bg)
+              .border({ width: 1, color: this.overlayStore.objectDetailConnectorVisible ? this.c.soft : this.c.dividerSoft })
+              .borderRadius(UI_RADIUS_CONTROL).margin({ bottom: 6 })
+              .animation({ duration: UI_OPTION_ANIMATION_MS, curve: Curve.EaseOut })
+            Row({ space: 2 }) {
+              Text('自定义信息字段').fontSize(12).fontColor(this.c.sub)
+              InfoTipButton({
+                title: '自定义信息字段',
+                tip: '选择「自定义」模式后，详情卡和星体信息栏只显示下面勾选的字段。'
+              })
+            }.width('100%').padding({ left: 8 }).margin({ top: 6, bottom: 4 }).alignItems(VerticalAlign.Center)
             InformationSwitchRow({ label: '名称', isOn: this.informationMaskHas('name'), inCustomMode: this.informationMode === 'custom', canToggle: this.informationMode === 'custom' && !this.informationSettingPending, onToggle: (v: boolean) => { this.setInformationField('name', v) } })
             InformationSwitchRow({ label: '目录编号', isOn: this.informationMaskHas('catalog'), inCustomMode: this.informationMode === 'custom', canToggle: this.informationMode === 'custom' && !this.informationSettingPending, onToggle: (v: boolean) => { this.setInformationField('catalog', v) } })
             InformationSwitchRow({ label: '视星等', isOn: this.informationMaskHas('magnitude'), inCustomMode: this.informationMode === 'custom', canToggle: this.informationMode === 'custom' && !this.informationSettingPending, onToggle: (v: boolean) => { this.setInformationField('magnitude', v) } })
@@ -636,57 +696,78 @@ export struct SettingsPanel {
             InformationSwitchRow({ label: '恒星时', isOn: this.informationMaskHas('siderealTime'), inCustomMode: this.informationMode === 'custom', canToggle: this.informationMode === 'custom' && !this.informationSettingPending, onToggle: (v: boolean) => { this.setInformationField('siderealTime', v) } })
             InformationSwitchRow({ label: '附加资料', isOn: this.informationMaskHas('extra'), inCustomMode: this.informationMode === 'custom', canToggle: this.informationMode === 'custom' && !this.informationSettingPending, onToggle: (v: boolean) => { this.setInformationField('extra', v) } })
           } else if (this.configTab === 2) {
-            Text('天空显示设置已统一到"图层 > 天空"').fontSize(11).fontColor(this.c.sub)
-              .width('100%').padding({ left: 10, right: 10, top: 8, bottom: 8 }).maxLines(2)
-            Button('打开图层 > 天空').fontSize(11).fontColor(this.c.onAccent).backgroundColor(this.c.accent)
-              .borderRadius(UI_RADIUS_CONTROL).height(34).width('100%')
-              .onClick(() => { this.onOpenLayersSky() })
-            Row().width('100%').height(0.5).backgroundColor(this.c.border).margin({ top: 8, bottom: 8 })
-            Text(I18n.t('set_projection')).fontSize(12).fontColor(this.c.sub).width('100%').padding({ left: 8 }).margin({ top: 2, bottom: 5 })
-            Row() {
-              Text(I18n.t('set_projection')).fontSize(11).fontColor(this.c.text).layoutWeight(1)
-              Text(I18n.projectionName(this.currentProjection)).fontSize(10).fontColor(this.c.sub).maxLines(1)
+            Row({ space: 8 }) {
+              Text('天空显示设置已统一到「图层 > 天空」').fontSize(12).fontColor(this.c.sub).layoutWeight(1).maxLines(2)
+              Button('前往').fontSize(12).fontColor(this.c.onAccent).backgroundColor(this.c.accent)
+                .borderRadius(UI_RADIUS_CONTROL).height(34).padding({ left: 14, right: 14 })
+                .clickEffect({ level: ClickEffectLevel.LIGHT })
+                .onClick(() => { this.onOpenLayersSky() })
+            }.width('100%').padding({ left: 12, right: 10, top: 10, bottom: 10 })
+              .backgroundColor(this.c.soft).border({ width: 1, color: this.c.border }).borderRadius(UI_RADIUS_CARD)
+            Row().width('100%').height(0.5).backgroundColor(this.c.border).margin({ top: 10, bottom: 8 })
+            Row({ space: 6 }) {
+              Row({ space: 2 }) {
+                Text(I18n.t('set_projection')).fontSize(13).fontWeight(FontWeight.Medium).fontColor(this.c.text)
+                InfoTipButton({
+                  title: I18n.projectionName(this.currentProjection),
+                  tip: I18n.projectionDesc(this.currentProjection)
+                })
+              }.layoutWeight(1).alignItems(VerticalAlign.Center)
+              Text(I18n.projectionName(this.currentProjection)).fontSize(12).fontColor(this.c.accent).maxLines(1)
                 .textOverflow({ overflow: TextOverflow.Ellipsis })
-            }.width('100%').padding({ left: 10, right: 8 }).margin({ bottom: 4 })
+            }.width('100%').padding({ left: 4, right: 4 }).margin({ bottom: 6 })
             Scroll() {
               Row({ space: 6 }) {
                 ForEach(PROJECTION_KEYS, (name: string) => {
-                  Text(I18n.projectionName(name)).fontSize(10)
+                  Text(I18n.projectionName(name)).fontSize(12)
                     .fontColor(this.currentProjection === name ? this.c.onAccent : this.c.sub)
-                    .padding({ left: 9, right: 9, top: 4, bottom: 4 })
+                    .padding({ left: 12, right: 12, top: 6, bottom: 6 })
                     .backgroundColor(this.currentProjection === name ? this.c.accent : this.c.bg)
+                    .border({ width: 1, color: this.currentProjection === name ? this.c.accent : this.c.dividerSoft })
                     .borderRadius(UI_RADIUS_CONTROL)
-                    .animation({ duration: 180, curve: Curve.EaseOut })
+                    .clickEffect({ level: ClickEffectLevel.LIGHT })
+                    .animation({ duration: UI_OPTION_ANIMATION_MS, curve: Curve.EaseOut })
                     .onClick(() => { this.setProjection(name) })
                 }, (name: string) => name)
-              }.padding({ left: 8, right: 8 })
-            }.width('100%').height(32).scrollable(ScrollDirection.Horizontal).scrollBar(BarState.Off)
-            Text(I18n.projectionDesc(this.currentProjection)).fontSize(10).fontColor(this.c.sub).width('100%')
-              .maxLines(2).textOverflow({ overflow: TextOverflow.Ellipsis }).padding({ left: 10, right: 10, top: 4, bottom: 4 })
-            Row().width('100%').height(0.5).backgroundColor(this.c.border).margin({ top: 8, bottom: 8 })
-            Text('渲染输出').fontSize(12).fontColor(this.c.sub).width('100%').padding({ left: 8 }).margin({ top: 2, bottom: 5 })
-            Row() {
-              Text('色彩抖动').fontSize(12).fontColor(this.c.sub).width(72)
-              Text(configDitheringLabel(this.configDitheringMode)).fontSize(12).fontColor(this.c.text).layoutWeight(1).textAlign(TextAlign.End)
-            }.height(30).width('100%').padding({ left: 10, right: 10 })
+              }.padding({ left: 2, right: 8 })
+            }.width('100%').height(38).scrollable(ScrollDirection.Horizontal).scrollBar(BarState.Off).margin({ bottom: 6 })
+            Row().width('100%').height(0.5).backgroundColor(this.c.border).margin({ top: 6, bottom: 8 })
+            Row({ space: 6 }) {
+              Row({ space: 2 }) {
+                Text('色彩抖动').fontSize(13).fontWeight(FontWeight.Medium).fontColor(this.c.text)
+                InfoTipButton({
+                  title: '色彩抖动',
+                  tip: '抖动用于低色深屏幕的颜色平滑过渡，可减少暗夜渐变色带；通常保持 8/8/8 位。'
+                })
+              }.layoutWeight(1).alignItems(VerticalAlign.Center)
+              Text(configDitheringLabel(this.configDitheringMode)).fontSize(12).fontColor(this.c.accent)
+            }.width('100%').padding({ left: 4, right: 4 }).margin({ bottom: 6 })
             Scroll() {
               Row({ space: 6 }) {
                 ForEach([
                   { id: 'Disabled', label: '关闭' }, { id: 'Color565', label: '5/6/5 位' },
                   { id: 'Color666', label: '6/6/6 位' }, { id: 'Color888', label: '8/8/8 位' },
                 ] as ConfigurationOption[], (option: ConfigurationOption) => {
-                  Text(option.label).fontSize(10)
+                  Text(option.label).fontSize(12)
                     .fontColor(this.configDitheringMode === option.id ? this.c.onAccent : this.c.sub)
-                    .padding({ left: 9, right: 9, top: 4, bottom: 4 })
+                    .padding({ left: 12, right: 12, top: 6, bottom: 6 })
                     .backgroundColor(this.configDitheringMode === option.id ? this.c.accent : this.c.bg)
+                    .border({ width: 1, color: this.configDitheringMode === option.id ? this.c.accent : this.c.dividerSoft })
                     .borderRadius(UI_RADIUS_CONTROL)
+                    .clickEffect({ level: ClickEffectLevel.LIGHT })
+                    .animation({ duration: UI_OPTION_ANIMATION_MS, curve: Curve.EaseOut })
                     .onClick(() => { this.setConfigurationDithering(option.id) })
                 }, (option: ConfigurationOption) => option.id)
-              }.padding({ left: 8, right: 8 })
-            }.width('100%').height(31).scrollable(ScrollDirection.Horizontal).scrollBar(BarState.Off)
-            Text('抖动用于低色深屏幕的颜色过渡；通常保持 8/8/8 位。').fontSize(10).fontColor(this.c.sub).width('100%').padding({ left: 10, right: 10 }).margin({ top: 4, bottom: 8 })
-            Row().width('100%').height(0.5).backgroundColor(this.c.border).margin({ top: 2, bottom: 8 })
-            Text(I18n.t('settings_decimal_degrees_title')).fontSize(12).fontColor(this.c.sub).width('100%').padding({ left: 8 }).margin({ top: 2, bottom: 5 })
+              }.padding({ left: 2, right: 8 })
+            }.width('100%').height(38).scrollable(ScrollDirection.Horizontal).scrollBar(BarState.Off).margin({ bottom: 6 })
+            Row().width('100%').height(0.5).backgroundColor(this.c.border).margin({ top: 4, bottom: 8 })
+            Row({ space: 2 }) {
+              Text(I18n.t('settings_decimal_degrees_title')).fontSize(12).fontColor(this.c.sub)
+              InfoTipButton({
+                title: I18n.t('settings_decimal_degrees_title'),
+                tip: I18n.t('settings_decimal_degrees_hint')
+              })
+            }.width('100%').padding({ left: 4 }).margin({ top: 2, bottom: 5 }).alignItems(VerticalAlign.Center)
             NavigationSwitchRow({
               label: I18n.t('settings_decimal_degrees_coords'),
               isOn: this.viewSettingsStore.decimalDegreesCoords,
@@ -697,7 +778,6 @@ export struct SettingsPanel {
               isOn: this.viewSettingsStore.decimalDegreesOther,
               onToggle: (v: boolean) => { this.setDecimalDegreesOther(v) }
             })
-            Text(I18n.t('settings_decimal_degrees_hint')).fontSize(10).fontColor(this.c.sub).width('100%').padding({ left: 10, right: 10 }).margin({ top: 2, bottom: 8 }).maxLines(2)
           } else if (this.configTab === 3) {
             TimeSettingsSection({
               store: this.timeSettingsStore,
@@ -723,54 +803,73 @@ export struct SettingsPanel {
               onOpenFeature: (id: string) => { this.openPluginFeature(id) }
             })
           } else if (this.configTab === 7) {
-            Text(I18n.t('settings_view_navigation')).fontSize(13).fontColor(this.c.text).width('100%').margin({ top: 4, bottom: 3 })
-            Text(I18n.t('settings_view_navigation_hint')).fontSize(10).fontColor(this.c.sub).width('100%').maxLines(3).margin({ bottom: 8 })
+            Row({ space: 2 }) {
+              Text(I18n.t('settings_view_navigation')).fontSize(14).fontWeight(FontWeight.Medium).fontColor(this.c.text)
+              InfoTipButton({
+                title: I18n.t('settings_view_navigation'),
+                tip: I18n.t('settings_view_navigation_hint')
+              })
+            }.width('100%').margin({ top: 2, bottom: 6 }).alignItems(VerticalAlign.Center)
             Text(I18n.t('settings_view_current')).fontSize(12).fontColor(this.c.sub).width('100%').margin({ bottom: 5 })
             Row({ space: 8 }) {
               Column({ space: 2 }) {
                 Text(I18n.t('settings_view_current_fov')).fontSize(10).fontColor(this.c.sub)
                 Text(this.fovText).fontSize(16).fontColor(this.c.text)
               }.layoutWeight(1).alignItems(HorizontalAlign.Start)
-              Button(I18n.t('settings_view_center')).fontSize(10).fontColor(this.c.text).backgroundColor(this.c.bg)
-                .borderRadius(UI_RADIUS_CONTROL).height(30).padding({ left: 10, right: 10 })
+              Button(I18n.t('settings_view_center')).fontSize(12).fontColor(this.c.text).backgroundColor(this.c.softStrong)
+                .borderRadius(UI_RADIUS_CONTROL).height(34).padding({ left: 12, right: 12 })
+                .clickEffect({ level: ClickEffectLevel.LIGHT })
                 .opacity(this.hasSelectedObject() && !this.gyroStore.gyroscopeEnabled ? 1 : 0.58)
                 .onClick(() => { this.moveToSelectedObject() })
-            }.width('100%').padding({ left: 10, right: 8, top: 7, bottom: 7 })
-              .backgroundColor(this.c.bg).borderRadius(UI_RADIUS_CONTROL).margin({ bottom: 8 })
+            }.width('100%').padding({ left: 12, right: 10, top: 8, bottom: 8 })
+              .backgroundColor(this.c.bg).border({ width: 1, color: this.c.dividerSoft })
+              .borderRadius(UI_RADIUS_CARD).margin({ bottom: 8 })
 
-            Column({ space: 5 }) {
-              Row({ space: 8 }) {
-                Text(I18n.t('set_lock_view')).fontSize(11).fontColor(this.c.text).layoutWeight(1)
-                Toggle({ type: ToggleType.Switch, isOn: this.viewSettingsStore.viewLock })
-                  .width(42).height(24)
-                  .onChange((enabled: boolean) => { this.setViewLockState(enabled) })
-              }.width('100%')
-              Text(this.viewSettingsStore.viewLock ? I18n.t('view_lock_enabled') : I18n.t('settings_view_lock_hint'))
-                .fontSize(10).fontColor(this.c.sub).width('100%').maxLines(3)
-            }.width('100%').padding({ left: 10, right: 10, top: 8, bottom: 8 })
-              .backgroundColor(this.c.bg).borderRadius(UI_RADIUS_CONTROL).margin({ bottom: 8 })
+            Row({ space: 6 }) {
+              Row({ space: 2 }) {
+                Text(I18n.t('set_lock_view')).fontSize(13).fontColor(this.c.text)
+                InfoTipButton({
+                  title: I18n.t('set_lock_view'),
+                  tip: this.viewSettingsStore.viewLock ? I18n.t('view_lock_enabled') : I18n.t('settings_view_lock_hint')
+                })
+              }.layoutWeight(1).alignItems(VerticalAlign.Center)
+              Toggle({ type: ToggleType.Switch, isOn: this.viewSettingsStore.viewLock })
+                .width(44).height(26).selectedColor(this.c.accent)
+                .clickEffect({ level: ClickEffectLevel.LIGHT })
+                .onChange((enabled: boolean) => { this.setViewLockState(enabled) })
+            }.width('100%').constraintSize({ minHeight: 44 }).padding({ left: 12, right: 10 })
+              .backgroundColor(this.viewSettingsStore.viewLock ? this.c.soft : this.c.bg)
+              .border({ width: 1, color: this.viewSettingsStore.viewLock ? this.c.soft : this.c.dividerSoft })
+              .borderRadius(UI_RADIUS_CARD).margin({ bottom: 8 })
+              .animation({ duration: UI_OPTION_ANIMATION_MS, curve: Curve.EaseOut })
 
             Text(I18n.t('settings_view_startup')).fontSize(12).fontColor(this.c.sub).width('100%').margin({ bottom: 5 })
-            Column({ space: 2 }) {
-              Text(I18n.format('settings_view_startup_fov', [this.navigationStore.navigationStartupFov.toFixed(1)])).fontSize(11).fontColor(this.c.text).width('100%')
-              Text(I18n.format('settings_view_startup_direction', [this.navigationStore.navigationStartupAzimuth.toFixed(1), this.navigationStore.navigationStartupAltitude.toFixed(1)])).fontSize(10).fontColor(this.c.sub).width('100%')
-            }.width('100%').padding({ left: 10, right: 10, top: 7, bottom: 7 })
-              .backgroundColor(this.c.bg).borderRadius(UI_RADIUS_CONTROL).margin({ bottom: 6 })
-            Button(I18n.t('settings_view_save_current')).fontSize(11).fontColor(this.c.onAccent).backgroundColor(this.c.accent)
-              .borderRadius(UI_RADIUS_CONTROL).height(34).width('100%').margin({ bottom: 8 })
-              .onClick(() => { this.saveCurrentViewAsStartup() })
+            Column({ space: 8 }) {
+              Column({ space: 2 }) {
+                Text(I18n.format('settings_view_startup_fov', [this.navigationStore.navigationStartupFov.toFixed(1)])).fontSize(12).fontColor(this.c.text).width('100%')
+                Text(I18n.format('settings_view_startup_direction', [this.navigationStore.navigationStartupAzimuth.toFixed(1), this.navigationStore.navigationStartupAltitude.toFixed(1)])).fontSize(11).fontColor(this.c.sub).width('100%')
+              }.width('100%')
+              Button(I18n.t('settings_view_save_current')).fontSize(12).fontColor(this.c.onAccent).backgroundColor(this.c.accent)
+                .borderRadius(UI_RADIUS_CONTROL).height(36).width('100%')
+                .clickEffect({ level: ClickEffectLevel.LIGHT })
+                .onClick(() => { this.saveCurrentViewAsStartup() })
+            }.width('100%').padding(12)
+              .backgroundColor(this.c.bg).border({ width: 1, color: this.c.dividerSoft })
+              .borderRadius(UI_RADIUS_CARD).margin({ bottom: 8 })
 
-            Text(I18n.t('settings_view_max_fov')).fontSize(12).fontColor(this.c.sub).width('100%').margin({ top: 4, bottom: 4 })
-            Row() {
-              Text(this.maxFovDraft.toFixed(0) + '°').fontSize(14).fontColor(this.c.text).width(48)
+            Text(I18n.t('settings_view_max_fov')).fontSize(12).fontColor(this.c.sub).width('100%').margin({ top: 2, bottom: 4 })
+            Row({ space: 8 }) {
+              Text(this.maxFovDraft.toFixed(0) + '°').fontSize(14).fontColor(this.c.text).width(46)
               Slider({ value: this.maxFovDraft, min: 30, max: 360, step: 1, style: SliderStyle.OutSet })
                 .sliderInteractionMode(SliderInteraction.SLIDE_ONLY).minResponsiveDistance(8)
-                .layoutWeight(1).trackColor(this.c.bg)
+                .layoutWeight(1).trackColor(this.c.input).selectedColor(this.c.accent).blockColor(this.c.accent)
                 .showSteps(false).onChange((value: number) => { this.maxFovDraft = Math.round(value) })
-              Button(I18n.t('settings_view_apply')).fontSize(10).fontColor(this.c.text).backgroundColor(this.c.bg)
-                .borderRadius(UI_RADIUS_CONTROL).height(28).padding({ left: 9, right: 9 })
+              Button(I18n.t('settings_view_apply')).fontSize(12).fontColor(this.c.text).backgroundColor(this.c.softStrong)
+                .borderRadius(UI_RADIUS_CONTROL).height(32).padding({ left: 12, right: 12 })
+                .clickEffect({ level: ClickEffectLevel.LIGHT })
                 .onClick(() => { this.setNavigationMaxFov(this.maxFovDraft) })
-            }.width('100%').padding({ left: 8, right: 8, top: 5, bottom: 5 }).backgroundColor(this.c.bg).borderRadius(UI_RADIUS_CONTROL).margin({ bottom: 8 })
+            }.width('100%').padding({ left: 12, right: 10, top: 6, bottom: 6 }).backgroundColor(this.c.bg)
+              .border({ width: 1, color: this.c.dividerSoft }).borderRadius(UI_RADIUS_CARD).margin({ bottom: 8 })
 
             Text(I18n.t('settings_view_navigation_controls')).fontSize(12).fontColor(this.c.sub).width('100%').margin({ bottom: 5 })
             NavigationSwitchRow({ label: I18n.t('settings_view_mouse_navigation'), isOn: this.navigationStore.navigationMouseEnabled, onToggle: (v: boolean) => { this.setNavigationBoolean('mouseNavigation', v) } })
@@ -791,10 +890,12 @@ export struct SettingsPanel {
               onResetAll: () => { this.keyboardShortcutResetAllChange() }
             })
 
-            Button(I18n.t('settings_restore_defaults')).fontSize(10).fontColor(this.c.text).backgroundColor(this.c.bg)
-              .borderRadius(UI_RADIUS_CONTROL).height(32).width('100%')
-              .onClick(() => { this.restoreCoreDefaults() })
-              .margin({ top: 2, bottom: 8 })
+            Button(I18n.t('settings_restore_defaults')).fontSize(12).fontColor(this.c.errorText).backgroundColor(this.c.errorBg)
+              .border({ width: 1, color: this.c.errorBg })
+              .borderRadius(UI_RADIUS_CONTROL).height(38).width('100%')
+              .clickEffect({ level: ClickEffectLevel.LIGHT })
+              .onClick(() => { this.confirmRestoreDefaults() })
+              .margin({ top: 4, bottom: 8 })
           } else if (this.configTab === 8) {
             AboutSection({
               tools: this.toolsStore,

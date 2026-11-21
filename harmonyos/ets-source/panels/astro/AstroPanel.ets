@@ -9,7 +9,8 @@
 import { TonightPlanet, TonightShower, WutTarget, EphemerisRow, RtsCalendarDay, AltAzPoint, AnnualElevationPoint, ObservabilityDay, LunarElongationPoint, PlanetTimeSeriesPoint, PlanetPairDistancePoint, PlanetCalcItem, PhenomenonItem, EclipseItem, PlanetaryTransitItem, MoonPhaseItem, SeasonEvent, TabItem, PlanetPosition, HeliocentricPosition, CelestialPosition } from '../../pages/StellariumTypes'
 import { HELIOCENTRIC_PLANET_ORBITS, CELESTIAL_POSITION_CATEGORIES, PHENOMENA_START_OPTIONS, HeliocentricOrbit, CelestialPositionCategory, PhenomenaStartOption } from '../../pages/MainWindowModels'
 import { I18n } from '../../pages/I18n'
-import { UI_RADIUS_CONTROL, UI_RADIUS_PILL, UI_OPTION_ANIMATION_MS } from '../../common/ui/UiTokens'
+import { UI_RADIUS_CARD, UI_RADIUS_CONTROL, UI_RADIUS_PILL, UI_OPTION_ANIMATION_MS } from '../../common/ui/UiTokens'
+import { InfoTipButton } from '../../common/ui/InfoTipButton'
 import { uiChipPaddingV, uiControlHeight, uiFontSize } from '../../common/ui/UiTypography'
 import { tintMatrixFor } from '../../common/ui/IconTint'
 import { AstroStore } from '../../state/AstroStore'
@@ -475,13 +476,19 @@ export struct AstroPanel {
                   }, (p: PlanetPosition, index: number) => p.name)
                 }.width('100%').margin({ top: 4, bottom: 8 })
               } else if (this.store.positionMode === 1) {
-                Text('以太阳为中心显示实时日心位置；每条细椭圆对应一颗行星的轨道。').fontSize(this.fs(10)).fontColor(this.c.sub).width('100%').padding({ left: 2 }).margin({ bottom: 5 })
-                Row({ space: 8 }) {
-                  Text('已选小天体').fontSize(this.fs(10)).fontColor(this.c.text).layoutWeight(1)
+                Row({ space: 6 }) {
+                  Row({ space: 2 }) {
+                    Text('已选小天体').fontSize(this.fs(11)).fontColor(this.c.text)
+                    InfoTipButton({
+                      title: '日心黄道',
+                      tip: '以太阳为中心显示实时日心位置；每条细椭圆对应一颗行星的轨道，可开启下方开关叠加当前选中的小天体或彗星。'
+                    })
+                  }.layoutWeight(1).alignItems(VerticalAlign.Center)
                    Toggle({ type: ToggleType.Switch, isOn: this.store.hecIncludeSelectedMinor })
-                     .width(38).height(22)
+                     .width(38).height(22).selectedColor(this.c.accent)
+                     .clickEffect({ level: ClickEffectLevel.LIGHT })
                      .onChange((value: boolean) => { this.store.hecIncludeSelectedMinor = value; this.host.loadHeliocentricPositions() })
-                }.width('100%').height(30).padding({ left: 4, right: 4 })
+                }.width('100%').height(34).padding({ left: 4, right: 4 })
                 Row({ space: 8 }) {
                   Text('显示明亮彗星').fontSize(this.fs(10)).fontColor(this.c.text).layoutWeight(1)
                    Toggle({ type: ToggleType.Switch, isOn: this.store.hecIncludeBrightComets })
@@ -547,7 +554,13 @@ export struct AstroPanel {
                   }, (position: HeliocentricPosition) => position.englishName)
                 }.width('100%').margin({ bottom: 8 })
               } else {
-                Text('列出当前地平线以上、满足星等条件的目录天体；按高度由高到低排列。').fontSize(this.fs(10)).fontColor(this.c.sub).width('100%').padding({ left: 2 }).margin({ bottom: 5 })
+                Row({ space: 6 }) {
+                  Text('地平以上目录天体').fontSize(this.fs(11)).fontColor(this.c.sub)
+                  InfoTipButton({
+                    title: '天体位置表',
+                    tip: '列出当前地平线以上、满足星等条件的目录天体；按高度由高到低排列，点击任意项可定位星图。'
+                  })
+                }.width('100%').padding({ left: 2 }).margin({ bottom: 4 }).alignItems(VerticalAlign.Center)
                 Scroll() {
                   Row({ space: 4 }) {
                     ForEach(CELESTIAL_POSITION_CATEGORIES, (category: CelestialPositionCategory) => {
@@ -1083,9 +1096,15 @@ export struct AstroPanel {
                 .alignItems(HorizontalAlign.Start)
                 .padding(10)
                 .backgroundColor(this.c.soft)
-                .borderRadius(UI_RADIUS_CONTROL)
+                .borderRadius(UI_RADIUS_CARD)
                 .margin({ bottom: 8 })
-              Text('合相按最大角距筛选；点任一结果可平滑跳到发生时刻。').fontSize(this.fs(11)).fontColor(this.c.sub).width('100%').padding({ left: 2 }).margin({ bottom: 6 })
+              Row({ space: 4 }) {
+                Text('天象列表').fontSize(this.fs(11)).fontColor(this.c.sub)
+                InfoTipButton({
+                  title: '天象计算',
+                  tip: '合相按最大角距筛选，同时涵盖大距、冲日、留等主要行星天象；点任一结果可平滑跳到发生时刻。'
+                })
+              }.width('100%').padding({ left: 2 }).margin({ bottom: 4 }).alignItems(VerticalAlign.Center)
               if (this.store.phenomenaLoading) {
                 Row({ space: 8 }) {
                   LoadingProgress().width(22).height(22).color(this.c.accent)

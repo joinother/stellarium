@@ -1,5 +1,6 @@
 ﻿import { Theme } from '@kit.ArkUI'
-import { UI_RADIUS_CONTROL, UI_RADIUS_SHEET } from '../../common/ui/UiTokens'
+import { UI_OPTION_ANIMATION_MS, UI_RADIUS_CARD, UI_RADIUS_CONTROL } from '../../common/ui/UiTokens'
+import { InfoTipButton } from '../../common/ui/InfoTipButton'
 import { ARStore } from '../../state/ARStore'
 import { DEFAULT_SLOTS, ThemeSlots, slotsFromTheme } from '../../state/StellariumTheme'
 
@@ -7,7 +8,6 @@ import { DEFAULT_SLOTS, ThemeSlots, slotsFromTheme } from '../../state/Stellariu
 //
 // 离线预览「只保留星空、逐步抠除地景」的视觉逻辑：模式切换（星空叠加 / 地景递进 /
 // 深度遮挡 / 只保留星空）+ 地景抠除进度滑杆 + 状态文案。不打开摄像头。
-// 状态走 @ObjectLink ARStore；主题色与三个动作回调解宿主注入。
 interface ArPreviewModeOption {
   id: string
   label: string
@@ -27,9 +27,13 @@ export struct ARPreviewPanel {
   build() {
     Scroll() {
       Column({ space: 10 }) {
-        Text('AR 模式预研').fontSize(16).fontWeight(FontWeight.Medium).fontColor(this.c.text).width('100%')
-        Text('先验证"只保留星空、逐步抠除地景"的视觉逻辑。当前是离线预览，不会打开摄像头，也不会把真实地面当成星图地景。')
-          .fontSize(11).fontColor(this.c.sub).width('100%')
+        Row({ space: 4 }) {
+          Text('AR 模式预研').fontSize(16).fontWeight(FontWeight.Medium).fontColor(this.c.text)
+          InfoTipButton({
+            title: 'AR 模式预研',
+            tip: '离线验证「只保留星空、逐步抠除地景」的视觉逻辑（不开启摄像头）。真实 AR 链路为：相机背景 → AR Engine 运动跟踪 → 竖直平面/环境 Mesh → 深度遮挡 → 星空渲染层。'
+          })
+        }.width('100%').alignItems(VerticalAlign.Center)
         Row({ space: 6 }) {
           ForEach([
             { id: 'overlay', label: '星空叠加' },
@@ -42,10 +46,12 @@ export struct ARPreviewPanel {
               .fontColor(this.arStore.arPreviewMode === item.id ? this.c.onAccent : this.c.sub)
               .textAlign(TextAlign.Center)
               .layoutWeight(1)
-              .height(32)
+              .height(34)
               .padding({ top: 8, bottom: 8 })
               .backgroundColor(this.arStore.arPreviewMode === item.id ? this.c.accent : this.c.bg)
               .borderRadius(UI_RADIUS_CONTROL)
+              .clickEffect({ level: ClickEffectLevel.LIGHT })
+              .animation({ duration: UI_OPTION_ANIMATION_MS, curve: Curve.EaseOut })
               .onClick(() => { this.onSetMode(item.id) })
           }, (item: ArPreviewModeOption) => item.id)
         }.width('100%')
@@ -71,10 +77,10 @@ export struct ARPreviewPanel {
               Text('门户边缘').fontSize(10).fontColor(this.c.iconSecondary)
             }
               .width(110).height(150).border({ width: 1.5, color: this.c.dockActive })
-              .borderRadius(18).margin({ left: 18, top: 32 }).opacity(0.86)
+              .borderRadius(UI_RADIUS_CARD).margin({ left: 18, top: 32 }).opacity(0.86)
           }
         }
-          .width('100%').height(214).clip(true).borderRadius(UI_RADIUS_SHEET)
+          .width('100%').height(214).clip(true).borderRadius(UI_RADIUS_CARD)
           .border({ width: 0.5, color: this.c.border })
         Row({ space: 8 }) {
           Text('地景抠除').fontSize(12).fontColor(this.c.text).width(62)
@@ -83,9 +89,9 @@ export struct ARPreviewPanel {
             .onChange((value: number) => { this.onSetRevealProgress(value) })
           Text(Math.round(this.arStore.arRevealProgress * 100) + '%').fontSize(11).fontColor(this.c.sub).width(42).textAlign(TextAlign.End)
         }.width('100%').height(38)
-        Text(this.arStore.arPreviewStatus).fontSize(10).fontColor(this.c.spinner).width('100%')
-        Text('真实 AR 的推荐链路：相机背景 → AR Engine 运动跟踪 → 竖直平面/环境 Mesh → 深度遮挡 → 星空渲染层。所谓"打碎一面墙"应是门户或裂隙的视觉效果，不会真的删除现实墙体。')
-          .fontSize(10).fontColor(this.c.sub).width('100%')
+        if (this.arStore.arPreviewStatus.length > 0) {
+          Text(this.arStore.arPreviewStatus).fontSize(10).fontColor(this.c.spinner).width('100%')
+        }
       }.width('100%').padding({ left: 8, right: 8, top: 8, bottom: 12 })
     }.width('100%').layoutWeight(1).scrollBar(BarState.Auto).scrollBarWidth(4).scrollBarColor(this.c.scrollbar)
   }

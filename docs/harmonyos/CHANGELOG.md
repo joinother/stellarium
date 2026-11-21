@@ -1,5 +1,26 @@
 > **身份图例**：本文件真机记录中出现的 `com.cnchensh.stellarium` 是**本机调试签名身份**（本机 DevEco 自动生成，非发布身份）；发布身份为 `com.joinother.skyinstrument`。构建脚本 `build-ohos-hap-windows.ps1 -Install` 从产物 `pack.info` 读取实际包名，仓库不写死任何签名身份（见 `docs/harmonyos/release/BUNDLE-IDENTITY-CLEANUP.md`）。
 
+## [2026-11-21] 全应用鸿蒙设计语言统一（同心圆角体系、物理动效令牌、全局 `ⓘ` 解释气泡与设置/面板逻辑收口）
+
+- **修改文件：** `harmonyos/ets-source/common/ui/UiTokens.ets`、`harmonyos/ets-source/common/ui/UiMotion.ets`（新增）、`harmonyos/ets-source/common/ui/InfoTipButton.ets`（新增）、`harmonyos/ets-source/common/ui/SettingsSwitchRow.ets`、`harmonyos/ets-source/common/ui/ArchaeoToggleRow.ets`、`harmonyos/ets-source/common/ui/NavStarsToggleRow.ets`、`harmonyos/ets-source/panels/layers/LayerSwitchRow.ets`、`harmonyos/ets-source/panels/layers/AtmosphereGroundSection.ets`、`harmonyos/ets-source/panels/layers/ObservationAidBlock.ets`、`harmonyos/ets-source/panels/location/PlaceEnvironmentSection.ets`、`harmonyos/ets-source/panels/location/LocationOverviewCard.ets`、`harmonyos/ets-source/panels/location/LocationFullScreenMap.ets`、`harmonyos/ets-source/panels/location/CityChipsRow.ets`、`harmonyos/ets-source/panels/panels/SettingsPanel.ets`、`harmonyos/ets-source/panels/panels/AstronomyCalendarPanel.ets`、`harmonyos/ets-source/panels/panels/MorePanel.ets`、`harmonyos/ets-source/panels/panels/SatellitesPanel.ets`、`harmonyos/ets-source/panels/settings/HapticSection.ets`、`harmonyos/ets-source/panels/settings/NotificationSection.ets`、`harmonyos/ets-source/panels/settings/PluginCenterSection.ets`、`harmonyos/ets-source/panels/settings/DeviceAndLanguageRows.ets`、`harmonyos/ets-source/panels/time/SiderealTimeRow.ets`、`harmonyos/ets-source/panels/astro/AstroPanel.ets`、`harmonyos/ets-source/panels/ar/ARPreviewPanel.ets`、`harmonyos/ets-source/panels/shell/PanelChromeExtras.ets`、`harmonyos/ets-source/panels/shell/PanelHeader.ets`、`scripts/test-ohos-design-system-and-infotip.mjs`（新增）、`scripts/test-ohos-location-map.mjs`、`docs/harmonyos/CHANGELOG.md`。
+- **核心改动：**
+  1. **对齐华为 HarmonyOS 官方圆角层级体系（`corner-radius-parameter`「同层统一 + 层级正相关」）：**
+     - 在 `UiTokens.ets` 建立完整 9 级语义同心圆角阶梯：`MICRO (2)` / `TAG (4)` / `MEDIA (8)` / `CONTROL (12)` / `CARD (16)` / `BUTTON (20)` / `PANEL (24)` / `SHEET (32)` / `PILL (999)`；
+     - 卡片与分组容器统一升级为 `UI_RADIUS_CARD (16vp)`，内部开关/按钮/输入框采用 `UI_RADIUS_CONTROL (12vp)`，浮动面板 `24vp`、半模态与弹窗 `32vp`，实现严丝合缝的同心嵌套曲率；
+     - 清除 `AstronomyCalendarPanel`、`LocationFullScreenMap`、`LocationOverviewCard`、`PanelChromeExtras`、`ARPreviewPanel`、`SatellitesPanel`、`CityChipsRow`、`HapticSection` 等处的零散硬编码圆角值。
+  2. **统一物理动效令牌（`UiMotion.ets`，对齐 `arkts-animation-usage-guide`）：**
+     - 封装 `uiSpringSnappy` / `uiSpringStandard` / `uiSpringGentle` 三档物理弹簧曲线与 `uiFadeUpTransition` / `uiSlideTransition` 共享转场，消除 `springMotion` 与固定 `duration` 混用误区，并补齐 `clickEffect({ level: ClickEffectLevel.LIGHT })` 触控先行反馈与统一开关行选中色/动画。
+  3. **新增全局 `ⓘ` 信息气泡组件（`InfoTipButton.ets`）全面消除大段贴脸解释文案：**
+     - 采用鸿蒙系统符号 `$r('sys.symbol.info_circle')`（`28×28vp` 防误触热区）+ 原生 `bindPopup`（`BlurStyle.NONE` + 深空 `#F6132234` / 红光夜视 `#F6220908` 专属底色 + `256vp` 自动折行，杜绝系统浅色主题白底白字与右侧裁切）；
+     - 为 `LayerSwitchRow` / `SettingsSwitchRow` 新增可选 `infoTip` 属性，将「图层 → 天空（大气层和地面 / 观测条件）」「位置 → 观测环境」「设置（主设置 / 信息 / 附加 / 视角与导航 / 陀螺仪 / 触觉 / 通知）」「时间 → 恒星时」「天文计算」「天象日历」「AR 预研」共 20+ 处长段静默解释收入 `ⓘ` 气泡，界面首屏信息密度大幅提纯。
+  4. **逻辑与交互细节收口：**
+     - 修复「设置 → 视角与导航」底部重复「恢复默认设置」按钮无二次确认直接清空配置的误触风险，与主设置统一走 `confirmRestoreDefaults()` 确认弹窗；
+     - 修复「设置 → 附加（视图）」重复渲染两次 `投影方式` 标题、信息页 `观测模式`/`详情卡指向线` 无底板卡片、以及「大气层和地面」`Select` 下拉框浅色模糊白底问题；
+     - 统一 `ArchaeoToggleRow` / `NavStarsToggleRow` / `SettingsSwitchRow` / `LayerSwitchRow` 四套开关行视觉与交互节奏。
+- **验证与真机实测（MatePad Mini `192.168.31.234:42713`，`com.joinother.skyinstrument`）：**
+  - 主机验证：15 套自动化测试全部通过（含新增 `test-ohos-design-system-and-infotip.mjs` 与 `check-ohos-ui-contract.mjs` 37 面板 / 60 锚点）。
+  - 真机实拍核验：已合并 PR #11 并增量重编 `libstellarium.so` + 打包安装；实拍确认「图层」「设置（主设置 / 设备与隐私）」「天象日历」同心圆角层级清爽统一，点击 `ⓘ` 弹出深空底色气泡（带指向箭头与完整多行折行、无白底白字、零 JS/ArkTS 报错）。
+
 ## [2026-11-20] 面板底部留白收口、时间轮竖向滚动与设置单滚动修复
 
 - **修改文件：** `harmonyos/ets-source/pages/MainWindowNativeNode.ets`、`harmonyos/ets-source/panels/panels/TimePanel.ets`、`harmonyos/ets-source/panels/panels/MorePanel.ets`、`harmonyos/ets-source/panels/panels/SettingsPanel.ets`、`harmonyos/ets-source/panels/time/TimeWheelCanvas.ets`、`harmonyos/ets-source/panels/time/TimeWheelScrubber.ets`、`harmonyos/ets-source/state/TimeWheelController.ets`、`harmonyos/ets-source/common/derive/actions.ets`、`harmonyos/ets-source/common/derive/labels.ets`、`scripts/test-ohos-compact-panel-geometry.mjs`、`scripts/test-ohos-time-panel.mjs`、`scripts/test-ohos-location-panel.mjs`、`scripts/test-ohos-settings-choice-motion.mjs`、`docs/harmonyos/CHANGELOG.md`。
