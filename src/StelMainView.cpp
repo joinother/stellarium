@@ -2318,6 +2318,8 @@ enum class OhosPinchAnchorMode
 };
 static OhosPinchAnchorMode s_ohosPinchAnchorMode = OhosPinchAnchorMode::None;
 static Vec3d s_ohosPinchSkyPointJ2000(0.0, 0.0, 1.0);
+static Vec3d s_ohosPinchSkyPointAltAz(0.0, 0.0, 1.0);
+static bool s_ohosPinchUseAltAzAnchor = false;
 static double s_ohosPinchTargetXRatio = 0.5;
 static double s_ohosPinchTargetYRatio = 0.5;
 static double s_ohosPanInertiaVx = 0.0; // viewport pixels per millisecond
@@ -3008,6 +3010,7 @@ static void ohosAnchorSkyDirection(const Vec3d& directionJ2000, double xRatio, d
 static void ohosBeginPinchAnchor(double touchX, double touchY, double touchWidth, double touchHeight)
 {
 	s_ohosPinchAnchorMode = OhosPinchAnchorMode::None;
+	s_ohosPinchUseAltAzAnchor = false;
 	StelApp* app = &StelApp::getInstance();
 	if (!app || !app->isInitialized() || touchWidth <= 1.0 || touchHeight <= 1.0)
 		return;
@@ -3045,9 +3048,25 @@ static void ohosBeginPinchAnchor(double touchX, double touchY, double touchWidth
 
 	const double viewportX = viewport[0] + s_ohosPinchTargetXRatio * viewport[2];
 	const double viewportY = viewport[1] + viewport[3] - 1 - s_ohosPinchTargetYRatio * viewport[3];
-	if (projector->unProject(viewportX, viewportY, s_ohosPinchSkyPointJ2000))
+	StelMovementMgr* movementMgr = core->getMovementMgr();
+	const bool altAzMount = !movementMgr || movementMgr->getMountMode() == StelMovementMgr::MountAltAzimuthal;
+	const StelProjectorP altAzProjector = core->getProjection(StelCore::FrameAltAz, StelCore::RefractionOff);
+	if (altAzMount && altAzProjector && altAzProjector->unProject(viewportX, viewportY, s_ohosPinchSkyPointAltAz))
+	{
+		// In Alt-Az mode, anchor the pinch focal point in the horizon-fixed AltAz
+		// frame rather than FrameJ2000 so fast-flowing simulation time does not drag
+		// or spin the camera while the user pinches and pans with two fingers.
+		s_ohosPinchSkyPointAltAz.normalize();
+		s_ohosPinchSkyPointJ2000 = core->altAzToJ2000(s_ohosPinchSkyPointAltAz, StelCore::RefractionOff);
+		if (s_ohosPinchSkyPointJ2000.normSquared() > 1e-18)
+			s_ohosPinchSkyPointJ2000.normalize();
+		s_ohosPinchUseAltAzAnchor = true;
+		s_ohosPinchAnchorMode = OhosPinchAnchorMode::SkyPoint;
+	}
+	else if (projector->unProject(viewportX, viewportY, s_ohosPinchSkyPointJ2000))
 	{
 		s_ohosPinchSkyPointJ2000.normalize();
+		s_ohosPinchUseAltAzAnchor = false;
 		s_ohosPinchAnchorMode = OhosPinchAnchorMode::SkyPoint;
 	}
 }
@@ -3065,7 +3084,17 @@ static void ohosMaintainPinchSkyAnchor()
 	if ((!s_ohosPinchActive && !s_ohosPinchSettleActive) ||
 		s_ohosPinchAnchorMode != OhosPinchAnchorMode::SkyPoint || s_gyroViewActive)
 		return;
-	ohosAnchorSkyDirection(s_ohosPinchSkyPointJ2000, s_ohosPinchTargetXRatio, s_ohosPinchTargetYRatio);
+	Vec3d anchorJ2000 = s_ohosPinchSkyPointJ2000;
+	if (s_ohosPinchUseAltAzAnchor)
+	{
+		if (StelCore* core = StelApp::getInstance().getCore())
+		{
+			anchorJ2000 = core->altAzToJ2000(s_ohosPinchSkyPointAltAz, StelCore::RefractionAuto);
+			if (anchorJ2000.normSquared() > 1e-18)
+				anchorJ2000.normalize();
+		}
+	}
+	ohosAnchorSkyDirection(anchorJ2000, s_ohosPinchTargetXRatio, s_ohosPinchTargetYRatio);
 	ohosCaptureSelectedZoomAnchor();
 }
 

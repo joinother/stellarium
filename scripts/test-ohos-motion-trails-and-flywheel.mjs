@@ -128,9 +128,11 @@ test('vivid star spectral coloration, uniform photographic star trails, satellit
   assert.match(skyDrawer, /coreHot/);
   assert.match(skyDrawer, /haloBoost/);
 
-  // Suppress star trails when an artificial satellite is selected; uniform photographic ribbon otherwise
-  assert.match(starMgr, /const bool satelliteSelected = objectMgr && !objectMgr->getSelectedObject\("Satellite"\)\.isEmpty\(\);/);
-  assert.match(starMgr, /&& !satelliteSelected;/);
+  // Suppress star trails whenever any celestial object is selected or FOV zooms below threshold
+  assert.match(starMgr, /const bool anyObjectSelected = objectMgr && objectMgr->getWasSelected\(\);/);
+  assert.match(starMgr, /constexpr double kMinTrailFovDeg = 12\.0;/);
+  assert.match(starMgr, /&& !anyObjectSelected\s*\n\s*&& currentFovDeg > kMinTrailFovDeg;/);
+  assert.match(starMgr, /&& !anyObjectSelected\s*\n\s*&& currentFovDeg > 12\.0\s*\n\s*&& absTrailArc > 0\.0022;/);
   assert.match(starMgr, /auto endCapAlpha = \[\]\(float u\)/);
   assert.doesNotMatch(starMgr, /1\.0 - 0\.56 \* static_cast<double>\(u0\)/);
 

@@ -2297,11 +2297,29 @@ void Satellite::drawOrbit(StelCore *core, StelPainter& painter)
 	if (size < 2 || visibilityPoints.size() < size)
 		return;
 
-	const bool isPreview = orbitPreview && !orbitDisplayed;
+	const bool isFadingOut = !orbitDisplayed && !orbitPreview && orbitExpandProgress > 0.004f;
+	const bool isPreview = (orbitPreview || isFadingOut) && !orbitDisplayed;
 	const float rawT = orbitDisplayed ? 1.0f : qBound(0.f, orbitExpandProgress, 1.f);
 	const float invT = 1.0f - rawT;
 	const float revealT = orbitDisplayed ? 1.0f : (1.0f - invT * invT * invT);
 	if (revealT <= 0.004f)
+		return;
+	// Smooth opacity envelope: quick silky fade-in as the arc expands on select,
+	// and a full smoothstep dissolve when deselecting so the orbit never snaps off.
+	float orbitFadeAlpha = 1.0f;
+	if (!orbitDisplayed)
+	{
+		if (orbitPreview)
+		{
+			const float inT = qBound(0.f, rawT / 0.35f, 1.f);
+			orbitFadeAlpha = inT * inT * (3.0f - 2.0f * inT);
+		}
+		else
+		{
+			orbitFadeAlpha = rawT * rawT * (3.0f - 2.0f * rawT);
+		}
+	}
+	if (orbitFadeAlpha <= 0.004f)
 		return;
 
 	const StelProjectorP prj = painter.getProjector();
@@ -2350,6 +2368,43 @@ void Satellite::drawOrbit(StelCore *core, StelPainter& painter)
 	const float revealSpanIdx = qMax(1.0f, revealT * halfSpanIdx);
 	const double dashPeriodRad = qBound(1e-5, 16.0 * screenScale * radPerPx, 0.036);
 
+	// Locate the satellite's exact live continuous position along the cached orbit polyline
+	// so the solid-past / dashed-future transition and forward direction chevrons glide
+	// smoothly every frame instead of stepping once per orbitStepSeconds.
+	const double dtFromComp = (gTime(epochTime) - gTime(lastEpochCompForOrbit)).getDblSeconds();
+	const double estIdx = qBound(0.0,
+		static_cast<double>(centerIdx) + dtFromComp / qMax(1.0, orbitStepSeconds),
+		static_cast<double>(size - 1));
+	double liveIdx = estIdx;
+	double liveArc = cumArc[qBound(0, static_cast<int>(estIdx), size - 1)];
+	Vec3d satDir = XYZ;
+	const double satNorm = satDir.norm();
+	if (satNorm > 1e-10)
+	{
+		satDir /= satNorm;
+		const int winLo = qMax(0, static_cast<int>(std::floor(estIdx)) - 2);
+		const int winHi = qMin(size - 2, static_cast<int>(std::ceil(estIdx)) + 2);
+		double bestDistSq = 1e9;
+		for (int i = winLo; i <= winHi; ++i)
+		{
+			const Vec3d ab = j2kPts[i + 1] - j2kPts[i];
+			const double abLenSq = ab.normSquared();
+			const double t = (abLenSq > 1e-14)
+				? qBound(0.0, (satDir - j2kPts[i]).dot(ab) / abLenSq, 1.0)
+				: 0.0;
+			Vec3d proj = j2kPts[i] + ab * t;
+			const double pn = proj.norm();
+			if (pn > 1e-10) proj /= pn;
+			const double dSq = (satDir - proj).normSquared();
+			if (dSq < bestDistSq)
+			{
+				bestDistSq = dSq;
+				liveIdx = static_cast<double>(i) + t;
+				liveArc = cumArc[i] + (cumArc[i + 1] - cumArc[i]) * t;
+			}
+		}
+	}
+
 	// Blend sunlit color with custom orbitColor when a satellite specifies an explicit non-neutral tint.
 	const Vec3f sunlitBase(0.56f, 0.88f, 1.0f);
 	const float orbitChroma = qMax(qAbs(orbitColor[0] - orbitColor[1]), qMax(qAbs(orbitColor[1] - orbitColor[2]), qAbs(orbitColor[0] - orbitColor[2])));
@@ -2366,7 +2421,7 @@ void Satellite::drawOrbit(StelCore *core, StelPainter& painter)
 
 	for (int i = 0; i < size; ++i)
 	{
-		const float distIdx = std::fabs(static_cast<float>(i) - static_cast<float>(centerIdx));
+		const float distIdx = std::fabs(static_cast<float>(i) - static_cast<float>(liveIdx));
 		if (distIdx > revealSpanIdx)
 		{
 			nodeAlpha[i] = 0.f;
@@ -2387,16 +2442,16 @@ void Satellite::drawOrbit(StelCore *core, StelPainter& painter)
 			continue;
 		}
 
-		const bool isFuture = (i >= centerIdx);
+		const bool isFuture = (static_cast<double>(i) >= liveIdx);
 		const float segFade = calculateOrbitSegmentIntensity(i);
 		const float frontierFade = (revealT < 0.995f && distIdx > revealSpanIdx - 3.5f)
 			? qBound(0.f, (revealSpanIdx - distIdx) / 3.5f, 1.f)
 			: 1.f;
 		const float fracFromCenter = qBound(0.f, distIdx / halfSpanIdx, 1.f);
 		const float dirAlpha = isFuture
-			? (0.94f - 0.16f * fracFromCenter)
-			: (0.46f * (1.0f - 0.52f * fracFromCenter));
-		const double dirWidth = isFuture ? 1.0 : 0.76;
+			? (0.94f - 0.18f * fracFromCenter)
+			: (0.78f * (1.0f - 0.56f * fracFromCenter));
+		const double dirWidth = isFuture ? 1.0 : 0.90;
 		const float horizonMul = (altSin[i] >= -0.005) ? 1.0f : 0.34f;
 
 		Vec3f rgb = sunlitCol;
@@ -2409,18 +2464,18 @@ void Satellite::drawOrbit(StelCore *core, StelPainter& painter)
 		else if (eclipsed)
 		{
 			rgb = shadowCol;
-			visMul = 0.68f;
+			visMul = 0.72f;
 		}
 
 		nodeRgb[i] = rgb;
-		nodeAlpha[i] = qBound(0.f, hintBrightness * segFade * frontierFade * dirAlpha * visMul * horizonMul, 0.96f);
-		nodeWidth[i] = baseCoreW * dirWidth * (eclipsed ? 0.88 : 1.0);
+		nodeAlpha[i] = qBound(0.f, hintBrightness * orbitFadeAlpha * segFade * frontierFade * dirAlpha * visMul * horizonMul, 0.96f);
+		nodeWidth[i] = baseCoreW * dirWidth * (eclipsed ? 0.90 : 1.0);
 	}
 
 	orbitRibbonVerts.clear();
 	orbitRibbonColors.clear();
-	orbitRibbonVerts.reserve(size * 24 + 256);
-	orbitRibbonColors.reserve(size * 24 + 256);
+	orbitRibbonVerts.reserve(size * 32 + 512);
+	orbitRibbonColors.reserve(size * 32 + 512);
 
 	auto pushQuad = [&](const Vec3d& a0, const Vec3d& a1, const Vec3d& b0, const Vec3d& b1,
 		const Vec4f& ca0, const Vec4f& ca1, const Vec4f& cb0, const Vec4f& cb1) {
@@ -2433,44 +2488,33 @@ void Satellite::drawOrbit(StelCore *core, StelPainter& painter)
 		orbitRibbonVerts.append(b0); orbitRibbonColors.append(cb0);
 	};
 
-	for (int i = 0; i < size - 1; ++i)
-	{
-		if (nodeAlpha[i] < 0.004f && nodeAlpha[i + 1] < 0.004f)
-			continue;
-		const double segDot = j2kPts[i].dot(j2kPts[i + 1]);
-		if (segDot < 0.5)
-			continue;
-
+	auto emitOrbitSubSpan = [&](int i, double spanStartF, double spanEndF, bool dashed,
+		const Vec3f& coreRgb0, const Vec3f& coreRgb1) {
 		const double segArc = cumArc[i + 1] - cumArc[i];
-		const bool segEclipsed = nodeEclipsed[i] && nodeEclipsed[i + 1];
-		// Subdivide eclipsed chords along arc length so dashes stay crisp at every FOV
-		const int subSteps = segEclipsed
-			? qBound(1, static_cast<int>(std::ceil(segArc / qMax(0.0005, dashPeriodRad * 0.25))), 12)
+		const double subArc = segArc * (spanEndF - spanStartF);
+		if (subArc <= 1e-12)
+			return;
+		const int subSteps = dashed
+			? qBound(1, static_cast<int>(std::ceil(subArc / qMax(0.0004, dashPeriodRad * 0.20))), 16)
 			: 1;
-
-		const float boost0 = (i >= centerIdx && visibilityPoints[i] == gSatWrapper::VISIBLE) ? 0.24f : 0.f;
-		const float boost1 = (i + 1 >= centerIdx && visibilityPoints[i + 1] == gSatWrapper::VISIBLE) ? 0.24f : 0.f;
-		const Vec3f coreRgb0(
-			nodeRgb[i][0] + (1.f - nodeRgb[i][0]) * boost0,
-			nodeRgb[i][1] + (1.f - nodeRgb[i][1]) * boost0,
-			nodeRgb[i][2] + (1.f - nodeRgb[i][2]) * boost0);
-		const Vec3f coreRgb1(
-			nodeRgb[i + 1][0] + (1.f - nodeRgb[i + 1][0]) * boost1,
-			nodeRgb[i + 1][1] + (1.f - nodeRgb[i + 1][1]) * boost1,
-			nodeRgb[i + 1][2] + (1.f - nodeRgb[i + 1][2]) * boost1);
-
 		for (int s = 0; s < subSteps; ++s)
 		{
-			const double f0 = static_cast<double>(s) / static_cast<double>(subSteps);
-			const double f1 = static_cast<double>(s + 1) / static_cast<double>(subSteps);
+			const double f0 = spanStartF + (spanEndF - spanStartF) * (static_cast<double>(s) / static_cast<double>(subSteps));
+			const double f1 = spanStartF + (spanEndF - spanStartF) * (static_cast<double>(s + 1) / static_cast<double>(subSteps));
 			const double arcMid = cumArc[i] + segArc * (0.5 * (f0 + f1));
 			float dashMul = 1.0f;
-			if (segEclipsed)
+			if (dashed)
 			{
-				const double cyc = std::fmod(arcMid / dashPeriodRad, 1.0);
-				if (cyc > 0.56)
+				// Future path is drawn as a crisp dashed line anchored relative to liveArc:
+				// brief breathing gap [0.00..0.38) then clean dash [0.38..1.00) with smooth AA ends.
+				const double futureDist = qMax(0.0, arcMid - liveArc);
+				const double cyc = std::fmod(futureDist / dashPeriodRad, 1.0);
+				if (cyc < 0.38)
 					continue;
-				dashMul = (cyc > 0.48) ? static_cast<float>((0.56 - cyc) / 0.08) : 1.0f;
+				if (cyc < 0.44)
+					dashMul = static_cast<float>((cyc - 0.38) / 0.06);
+				else if (cyc > 0.94)
+					dashMul = static_cast<float>((1.0 - cyc) / 0.06);
 			}
 
 			Vec3d p0 = j2kPts[i] * (1.0 - f0) + j2kPts[i + 1] * f0;
@@ -2504,12 +2548,54 @@ void Satellite::drawOrbit(StelCore *core, StelPainter& painter)
 			pushQuad(p0 - s0 * cW0, p0 + s0 * cW0, p1 - s1 * cW1, p1 + s1 * cW1, core0, core0, core1, core1);
 			pushQuad(p0 + s0 * cW0, p0 + s0 * oW0, p1 + s1 * cW1, p1 + s1 * oW1, core0, edge0, core1, edge1);
 		}
+	};
+
+	for (int i = 0; i < size - 1; ++i)
+	{
+		if (nodeAlpha[i] < 0.004f && nodeAlpha[i + 1] < 0.004f)
+			continue;
+		const double segDot = j2kPts[i].dot(j2kPts[i + 1]);
+		if (segDot < 0.5)
+			continue;
+
+		const float boost0 = (static_cast<double>(i) >= liveIdx && visibilityPoints[i] == gSatWrapper::VISIBLE) ? 0.24f : 0.f;
+		const float boost1 = (static_cast<double>(i + 1) >= liveIdx && visibilityPoints[i + 1] == gSatWrapper::VISIBLE) ? 0.24f : 0.f;
+		const Vec3f coreRgb0(
+			nodeRgb[i][0] + (1.f - nodeRgb[i][0]) * boost0,
+			nodeRgb[i][1] + (1.f - nodeRgb[i][1]) * boost0,
+			nodeRgb[i][2] + (1.f - nodeRgb[i][2]) * boost0);
+		const Vec3f coreRgb1(
+			nodeRgb[i + 1][0] + (1.f - nodeRgb[i + 1][0]) * boost1,
+			nodeRgb[i + 1][1] + (1.f - nodeRgb[i + 1][1]) * boost1,
+			nodeRgb[i + 1][2] + (1.f - nodeRgb[i + 1][2]) * boost1);
+
+		// Past trajectory (behind satellite): solid line.
+		// Future trajectory (ahead of satellite): dashed line.
+		// When a chord straddles liveArc, split cleanly at the exact satellite position.
+		if (cumArc[i + 1] <= liveArc)
+		{
+			emitOrbitSubSpan(i, 0.0, 1.0, false, coreRgb0, coreRgb1);
+		}
+		else if (cumArc[i] >= liveArc)
+		{
+			emitOrbitSubSpan(i, 0.0, 1.0, true, coreRgb0, coreRgb1);
+		}
+		else
+		{
+			const double segArc = cumArc[i + 1] - cumArc[i];
+			const double splitF = (segArc > 1e-12) ? qBound(0.0, (liveArc - cumArc[i]) / segArc, 1.0) : 0.5;
+			if (splitF > 1e-4)
+				emitOrbitSubSpan(i, 0.0, splitF, false, coreRgb0, coreRgb1);
+			if (1.0 - splitF > 1e-4)
+				emitOrbitSubSpan(i, splitF, 1.0, true, coreRgb0, coreRgb1);
+		}
 	}
 
-	// Selected-satellite orbital landmarks: direction chevron, minute ticks, shadow transitions & culmination apex
-	if (orbitPreview && revealT > 0.35f)
+	// Selected-satellite orbital landmarks: continuously gliding direction chevrons,
+	// minute ticks, shadow transitions & culmination apex (fade out smoothly on deselect)
+	if ((orbitPreview || isFadingOut) && revealT > 0.35f)
 	{
-		const float landmarkEnv = qBound(0.f, (revealT - 0.35f) / 0.45f, 1.f) * hintBrightness;
+		const float landmarkEnv = qBound(0.f, (revealT - 0.35f) / 0.45f, 1.f) * hintBrightness * orbitFadeAlpha;
 		auto emitStroke = [&](const Vec3d& a, const Vec3d& b, double halfW, const Vec4f& col) {
 			Vec3d dir = b - a;
 			Vec3d mid = a + b;
@@ -2546,43 +2632,69 @@ void Satellite::drawOrbit(StelCore *core, StelPainter& painter)
 			orbitRibbonVerts.append(pN); orbitRibbonColors.append(outer);
 		};
 
-		// 1. Forward motion chevron ahead of the satellite
-		const double chevronTargetArc = qBound(0.014, 28.0 * screenScale * radPerPx, 0.055);
-		int chevIdx = -1;
-		for (int i = centerIdx + 1; i < size - 1; ++i)
+		// Continuous arc-length sampler along the orbit polyline so forward chevrons
+		// glide smoothly ahead of the satellite every frame instead of freezing on discrete nodes.
+		auto sampleOrbitAtArc = [&](double targetArc, Vec3d& outPos, Vec3d& outFwd, Vec3d& outSide, double& outAltSin) -> bool {
+			if (targetArc <= cumArc[0] || targetArc >= cumArc[size - 1])
+				return false;
+			const auto it = std::upper_bound(cumArc.cbegin(), cumArc.cend(), targetArc);
+			int seg = static_cast<int>(it - cumArc.cbegin()) - 1;
+			seg = qBound(0, seg, size - 2);
+			const double segLen = cumArc[seg + 1] - cumArc[seg];
+			if (segLen <= 1e-12 || j2kPts[seg].dot(j2kPts[seg + 1]) < 0.5)
+				return false;
+			const double t = qBound(0.0, (targetArc - cumArc[seg]) / segLen, 1.0);
+			outPos = j2kPts[seg] * (1.0 - t) + j2kPts[seg + 1] * t;
+			const double pn = outPos.norm();
+			if (pn <= 1e-10) return false;
+			outPos /= pn;
+			Vec3d tan = j2kPts[seg + 1] - j2kPts[seg];
+			tan -= outPos * outPos.dot(tan);
+			const double tn = tan.norm();
+			if (tn <= 1e-10) return false;
+			outFwd = tan / tn;
+			outSide = outPos ^ outFwd;
+			const double sn = outSide.norm();
+			if (sn <= 1e-10) return false;
+			outSide /= sn;
+			outAltSin = altSin[seg] * (1.0 - t) + altSin[seg + 1] * t;
+			return true;
+		};
+
+		// 1. Continuously gliding forward motion chevrons ahead of the live satellite position
+		const int maxRevealIdx = qBound(0, static_cast<int>(std::floor(liveIdx + revealSpanIdx - 2.0)), size - 1);
+		const double maxFutureRevealArc = cumArc[maxRevealIdx];
+		const double chevronTargetArc = qBound(0.012, 30.0 * screenScale * radPerPx, 0.055);
+		const double chevronSpacingArc = qBound(0.045, 115.0 * screenScale * radPerPx, 0.22);
+		const double armLen = qBound(0.0014, 6.5 * screenScale * radPerPx, 0.022);
+		for (int cIdx = 0; cIdx < 3; ++cIdx)
 		{
-			if (static_cast<float>(i - centerIdx) > revealSpanIdx - 2.0f)
+			const double targetArc = liveArc + chevronTargetArc + static_cast<double>(cIdx) * chevronSpacingArc;
+			if (targetArc >= maxFutureRevealArc)
 				break;
-			if (cumArc[i] - cumArc[centerIdx] >= chevronTargetArc && altSin[i] >= 0.0)
-			{
-				chevIdx = i;
-				break;
-			}
-		}
-		if (chevIdx > centerIdx && chevIdx < size - 1)
-		{
-			Vec3d fwd = j2kPts[chevIdx + 1] - j2kPts[chevIdx - 1];
-			const double fn = fwd.norm();
-			if (fn > 1e-10)
-			{
-				fwd /= fn;
-				const double armLen = qBound(0.0014, 6.5 * screenScale * radPerPx, 0.022);
-				const Vec3d tip = j2kPts[chevIdx] + fwd * (armLen * 0.45);
-				const Vec3d wingL = tip - fwd * armLen - sideVecs[chevIdx] * (armLen * 0.68);
-				const Vec3d wingR = tip - fwd * armLen + sideVecs[chevIdx] * (armLen * 0.68);
-				const Vec4f chevCol(0.84f, 0.96f, 1.0f, 0.92f * landmarkEnv);
-				emitStroke(wingL, tip, baseCoreW * 0.95, chevCol);
-				emitStroke(wingR, tip, baseCoreW * 0.95, chevCol);
-			}
+			Vec3d pos, fwd, side;
+			double chevAltSin = 0.0;
+			if (!sampleOrbitAtArc(targetArc, pos, fwd, side, chevAltSin))
+				continue;
+			if (chevAltSin < 0.0)
+				continue;
+			const Vec3d tip = pos + fwd * (armLen * 0.45);
+			const Vec3d wingL = tip - fwd * armLen - side * (armLen * 0.68);
+			const Vec3d wingR = tip - fwd * armLen + side * (armLen * 0.68);
+			const float chevAlpha = (cIdx == 0 ? 0.94f : (cIdx == 1 ? 0.74f : 0.56f)) * landmarkEnv;
+			const Vec4f chevCol(0.84f, 0.96f, 1.0f, chevAlpha);
+			emitStroke(wingL, tip, baseCoreW * 0.95, chevCol);
+			emitStroke(wingR, tip, baseCoreW * 0.95, chevCol);
 		}
 
 		// 2. Subtle time ticks along the future above-horizon arc (every 60s for LEO, 600s for MEO/GSO)
 		const double tickIntervalSec = (orbitStepSeconds <= 12.0) ? 60.0 : 600.0;
 		const int tickStride = qMax(4, static_cast<int>(std::lround(tickIntervalSec / qMax(1.0, orbitStepSeconds))));
 		const double tickHalfLen = qBound(0.0006, 3.2 * screenScale * radPerPx, 0.011);
-		for (int i = centerIdx + tickStride; i < size - 2; i += tickStride)
+		const int firstTickIdx = qMax(centerIdx + tickStride, static_cast<int>(std::ceil(liveIdx)) + 2);
+		for (int i = firstTickIdx; i < size - 2; i += tickStride)
 		{
-			if (static_cast<float>(i - centerIdx) > revealSpanIdx - 2.0f)
+			if (static_cast<float>(i) - static_cast<float>(liveIdx) > revealSpanIdx - 2.0f)
 				break;
 			if (altSin[i] < 0.02 || nodeAlpha[i] < 0.12f)
 				continue;

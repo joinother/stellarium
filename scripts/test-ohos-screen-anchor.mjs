@@ -40,6 +40,11 @@ test('release is finalized after this frame corrects its anchor', () => {
 test('off-target zoom hands back the final position, not the pre-gesture position', () => {
   const maintain = section('static void ohosMaintainPinchSkyAnchor()', 'static void ohosDeferSelectedAnchor');
   assert.ok(maintain.indexOf('ohosAnchorSkyDirection(') < maintain.indexOf('ohosCaptureSelectedZoomAnchor()'));
+  assert.match(maintain, /s_ohosPinchUseAltAzAnchor/);
+  assert.match(maintain, /altAzToJ2000\(s_ohosPinchSkyPointAltAz/);
+  const begin = section('static void ohosBeginPinchAnchor(', 'static void ohosUpdatePinchTarget(');
+  assert.match(begin, /MountAltAzimuthal/);
+  assert.match(begin, /s_ohosPinchSkyPointAltAz/);
   const anchor = section('static void ohosAnchorSkyDirection(', 'static void ohosBeginPinchAnchor(');
   assert.match(anchor, /params.fov = static_cast<float>\(movementMgr->getCurrentFov\(\)\)/);
   assert.doesNotMatch(anchor, /dragView|qRound|panView|app.update/);

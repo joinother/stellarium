@@ -37,6 +37,14 @@ test('selected satellite orbit arc expands smoothly outward as a wide AA ribbon 
   assert.match(drawOrbit, /tickIntervalSec/);
   assert.match(drawOrbit, /emitDiamond/);
   assert.match(drawOrbit, /\+\+orbitDrawCount;/);
+  // Solid past path, dashed future path split at liveArc, continuously gliding chevrons & smooth fade-out
+  assert.match(drawOrbit, /double liveArc =/);
+  assert.match(drawOrbit, /emitOrbitSubSpan\(i, 0\.0, 1\.0, false,/);
+  assert.match(drawOrbit, /emitOrbitSubSpan\(i, 0\.0, 1\.0, true,/);
+  assert.match(drawOrbit, /sampleOrbitAtArc/);
+  assert.match(drawOrbit, /orbitFadeAlpha/);
+  assert.match(drawOrbit, /\(orbitPreview \|\| isFadingOut\)/);
+  assert.match(satsCpp, /dtSec \/ 0\.38/);
 });
 
 test('adaptive orbit sampling scales cleanly for LEO, MEO, and GSO while preserving validation guards', () => {

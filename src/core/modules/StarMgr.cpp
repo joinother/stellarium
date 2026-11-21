@@ -1395,8 +1395,12 @@ void StarMgr::draw(StelCore* core)
 	
 	// Draw all the stars of all the selected zones
 	const double absTrailArc = std::fabs(m_smoothedTrailAngleRad);
+	const bool anyObjectSelected = objectMgr && objectMgr->getWasSelected();
+	const double currentFovDeg = prj ? prj->getFov() : 0.0;
 	const bool collectTrails = flagMotionTrails
 		&& core->getFlagClearSky()
+		&& !anyObjectSelected
+		&& currentFovDeg > 12.0
 		&& absTrailArc > 0.0022;
 	float trailPointCrossfade = 0.0f;
 	if (collectTrails)
@@ -1541,11 +1545,15 @@ void StarMgr::update(double deltaTime)
 	m_timeSinceLastJdChange += dt;
 
 	StelMovementMgr* mmgr = core->getMovementMgr();
-	const bool satelliteSelected = objectMgr && !objectMgr->getSelectedObject("Satellite").isEmpty();
+	const bool anyObjectSelected = objectMgr && objectMgr->getWasSelected();
+	constexpr double kMinTrailFovDeg = 12.0;
+	constexpr double kFullTrailFovDeg = 25.0;
+	const double currentFovDeg = mmgr ? mmgr->getCurrentFov() : 0.0;
 	const bool diurnalViewActive = mmgr
 		&& mmgr->getMountMode() == StelMovementMgr::MountAltAzimuthal
 		&& !mmgr->getFlagTracking()
-		&& !satelliteSelected;
+		&& !anyObjectSelected
+		&& currentFovDeg > kMinTrailFovDeg;
 
 	if (!diurnalViewActive || !core->getFlagClearSky())
 	{
@@ -1615,7 +1623,9 @@ void StarMgr::update(double deltaTime)
 		const double sign = (m_smoothedAngularVel >= 0.0) ? 1.0 : -1.0;
 		const double maxArcRad = 0.265; // ~15.2 deg tasteful cinematic ceiling
 		const double rawArc = (absOmega - deadzone) * 0.115;
-		targetAngle = sign * maxArcRad * std::tanh(rawArc / maxArcRad);
+		const double fovT = qBound(0.0, (currentFovDeg - kMinTrailFovDeg) / (kFullTrailFovDeg - kMinTrailFovDeg), 1.0);
+		const double fovScale = fovT * fovT * (3.0 - 2.0 * fovT);
+		targetAngle = sign * maxArcRad * std::tanh(rawArc / maxArcRad) * fovScale;
 	}
 
 	const double tau = (std::fabs(targetAngle) > std::fabs(m_smoothedTrailAngleRad)) ? 0.055 : 0.135;

@@ -4465,9 +4465,9 @@ void Satellites::update(double deltaTime)
 		if (sat->orbitDisplayed)
 			sat->orbitExpandProgress = 1.0f;
 		else if (sat->orbitPreview)
-			sat->orbitExpandProgress = qMin(1.0f, sat->orbitExpandProgress + static_cast<float>(dtSec / 0.42));
+			sat->orbitExpandProgress = qMin(1.0f, sat->orbitExpandProgress + static_cast<float>(dtSec / 0.45));
 		else if (sat->orbitExpandProgress > 0.f)
-			sat->orbitExpandProgress = qMax(0.0f, sat->orbitExpandProgress - static_cast<float>(dtSec / 0.22));
+			sat->orbitExpandProgress = qMax(0.0f, sat->orbitExpandProgress - static_cast<float>(dtSec / 0.38));
 	}
 #endif
 
