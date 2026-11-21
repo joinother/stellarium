@@ -22,7 +22,7 @@ import { DEFAULT_SLOTS, ThemeSlots, slotsFromTheme } from '../../state/Stellariu
 export struct UnifiedObjectDetailCard {
   @ObjectLink store: ObjectDetailStore
   @ObjectLink mediaStore: ObjectMediaStore
-  @Prop activeIndex: number
+  @Prop @Watch('onActiveTabChange') activeIndex: number
   @Prop liveInfoVisible: boolean
   @Prop contentOpacity: number
   @Prop contentTranslateX: number
@@ -48,6 +48,10 @@ export struct UnifiedObjectDetailCard {
   @Prop tleEpoch: string
   @Prop cultureVisible: boolean
   @State private c: ThemeSlots = DEFAULT_SLOTS
+  @State private scrollBlurProgress: number = 0
+  @State private topChromeHeight: number = 178
+  private pendingScrollBlurOffsetY: number = 0
+  private scrollBlurUpdatePending: boolean = false
   scroller: Scroller = new Scroller()
   resolve: (key: string) => string = () => ''
   nameOf: (name: string) => string = () => ''
@@ -74,6 +78,34 @@ export struct UnifiedObjectDetailCard {
 
   onWillApplyTheme(theme: Theme) { this.c = slotsFromTheme(theme) }
 
+  aboutToAppear(): void {
+    this.scrollBlurProgress = 0
+  }
+
+  private onActiveTabChange(): void {
+    setTimeout(() => {
+      this.updateScrollBlur(this.scroller.currentOffset()?.yOffset ?? 0)
+    }, 32)
+  }
+
+  // 遵循华为 HarmonyOS 标题栏动态模糊规范（ui-design-navigation-dynamic-blur：0 -> 20vp 渐进）：
+  // 滚动回调可能发生在布局/渲染阶段，合并到下一轮事件循环更新 @State，避免状态渲染重入。
+  private updateScrollBlur(offsetY: number): void {
+    this.pendingScrollBlurOffsetY = offsetY
+    if (this.scrollBlurUpdatePending) return
+    this.scrollBlurUpdatePending = true
+    setTimeout(() => {
+      this.scrollBlurUpdatePending = false
+      const pending = this.pendingScrollBlurOffsetY
+      const clamped = Number.isFinite(pending) ? Math.max(0, Math.min(1, pending / 20)) : 0
+      if (Math.abs(clamped - this.scrollBlurProgress) >= 0.04
+        || (clamped === 0 && this.scrollBlurProgress !== 0)
+        || (clamped === 1 && this.scrollBlurProgress !== 1)) {
+        this.scrollBlurProgress = clamped
+      }
+    }, 0)
+  }
+
   // 观测极简形态：只有页头会渲染（页签栏 + 分隔线 + 滚动区整体不渲染）。
   // 观测极简形态：页头之后只剩卡片下沿的展开箭头（页签栏 / 实时行 / 滚动区都不渲染）。
   private observeCompact(): boolean {
@@ -87,76 +119,152 @@ export struct UnifiedObjectDetailCard {
 
   build() {
     Column() {
-      ObjectDetailCardHeader({
-        store: this.store, iconName: this.iconName, liveInfoVisible: this.liveInfoVisible,
-        detailDisplayMode: this.detailDisplayMode,
-        // 距离摘要的可见性/回退由宿主决定（`distanceSummaryText`）；两个实参在页头内直接读
-        // `@ObjectLink store`，仅用于建立元素级依赖，使切换天体时该摘要会重算。
-        distanceSummary: (_distance: string, _compact: string) => this.distanceSummaryText,
-        nameOf: this.nameOf, typeOf: this.typeOf,
-        onDragTouch: (event: TouchEvent) => { this.onDragTouch(event) }, onDismiss: () => { this.onDismiss() },
-        onCenterObject: () => { this.onCenterObject() }
-      })
-
-      if (!this.observeCompact()) {
-        ObjectDetailCardTabs({ activeIndex: this.activeIndex, onSelect: (index: number) => { this.onSelectTab(index) } })
-
-        Divider().color(this.c.softStrong).margin({ left: 16, right: 16 })
-
-        Scroll(this.scroller) {
-          Column({ space: 8 }) {
-            if (this.activeIndex === 0) {
-              ObjectDetailObserveTab({ store: this.store, distanceText: this.distanceText, resolve: this.resolve })
-            } else if (this.activeIndex === 1) {
-              ObjectDetailCoordinateTab({ store: this.store, distanceText: this.distanceText, resolve: this.resolve })
-            } else if (this.activeIndex === 2) {
-              ObjectDetailDataTab({
-                store: this.store, mediaStore: this.mediaStore, tablet: false, distanceText: this.distanceText,
-                iconName: this.iconName, imageHeight: this.imageHeight, inlineModelSize: this.inlineModelSize,
-                modelReady: this.modelReady, modelRendering: this.modelRendering, hasModelTexture: this.hasModelTexture,
-                modelNotice: this.modelNotice, warmupText: this.warmupText, fallbackKind: this.fallbackKind,
-                satelliteVisible: this.satelliteVisible, tleEpoch: this.tleEpoch,
-                cultureVisible: this.cultureVisible,
-                resolve: this.resolve,
-                onLoadPasses: () => { this.onLoadPasses() },
-                onJumpToPass: (pass: SatellitePass) => { this.onJumpToPass(pass) },
-                onSelectComplexMember: (member: StationComplexMember) => { this.onSelectComplexMember(member) },
-                onMediaOpen: () => { this.onMediaOpen() },
-                onMediaRetry: () => { this.onMediaRetry() }, onModelExpand: () => { this.onModelExpand() },
-                onModelTouch: (event: TouchEvent) => { this.onModelTouch(event) }
-              })
-            } else {
-              ObjectDetailActionsTab({
-                viewLock: this.viewLock,
-                speechStatus: this.speechStatus,
-                inObservingList: this.inObservingList,
-                onCenter: () => { this.onCenter() },
-                onToggleLock: () => { this.onToggleLock() },
-                onToggleObserving: () => { this.onToggleObserving() },
-                onRefresh: () => { this.onRefresh() },
-                onReselect: () => { this.onReselect() },
-                onSpeak: () => { this.onSpeak() }
-              })
+      if (this.observeCompact()) {
+        ObjectDetailCardHeader({
+          store: this.store, iconName: this.iconName, liveInfoVisible: this.liveInfoVisible,
+          detailDisplayMode: this.detailDisplayMode,
+          // 距离摘要直接消费页头从 `@ObjectLink store` 实时读出的 distance/compact，
+          // 仅用 `distanceSummaryText === '--'` 判断用户是否关闭了距离显示。
+          distanceSummary: (distance: string, compact: string) => this.distanceSummaryText === '--'
+            ? '--'
+            : (distance.length > 0 ? (compact.length > 0 ? compact : distance) : I18n.t('distance_missing')),
+          nameOf: this.nameOf, typeOf: this.typeOf,
+          onDragTouch: (event: TouchEvent) => { this.onDragTouch(event) }, onDismiss: () => { this.onDismiss() },
+          onCenterObject: () => { this.onCenterObject() }
+        })
+      } else {
+        Stack({ alignContent: Alignment.Top }) {
+          // 底层滚动内容区：向上穿透到吸顶页头与页签栏下方，遵循 HarmonyOS 内容穿透式顶部动态模糊规范。
+          Scroll(this.scroller) {
+            Column({ space: 8 }) {
+              if (this.activeIndex === 0) {
+                ObjectDetailObserveTab({ store: this.store, distanceText: this.distanceText, resolve: this.resolve })
+              } else if (this.activeIndex === 1) {
+                ObjectDetailCoordinateTab({ store: this.store, distanceText: this.distanceText, resolve: this.resolve })
+              } else if (this.activeIndex === 2) {
+                ObjectDetailDataTab({
+                  store: this.store, mediaStore: this.mediaStore, tablet: false, distanceText: this.distanceText,
+                  iconName: this.iconName, imageHeight: this.imageHeight, inlineModelSize: this.inlineModelSize,
+                  modelReady: this.modelReady, modelRendering: this.modelRendering, hasModelTexture: this.hasModelTexture,
+                  modelNotice: this.modelNotice, warmupText: this.warmupText, fallbackKind: this.fallbackKind,
+                  satelliteVisible: this.satelliteVisible, tleEpoch: this.tleEpoch,
+                  cultureVisible: this.cultureVisible,
+                  resolve: this.resolve,
+                  onLoadPasses: () => { this.onLoadPasses() },
+                  onJumpToPass: (pass: SatellitePass) => { this.onJumpToPass(pass) },
+                  onSelectComplexMember: (member: StationComplexMember) => { this.onSelectComplexMember(member) },
+                  onMediaOpen: () => { this.onMediaOpen() },
+                  onMediaRetry: () => { this.onMediaRetry() }, onModelExpand: () => { this.onModelExpand() },
+                  onModelTouch: (event: TouchEvent) => { this.onModelTouch(event) }
+                })
+              } else {
+                ObjectDetailActionsTab({
+                  viewLock: this.viewLock,
+                  speechStatus: this.speechStatus,
+                  inObservingList: this.inObservingList,
+                  onCenter: () => { this.onCenter() },
+                  onToggleLock: () => { this.onToggleLock() },
+                  onToggleObserving: () => { this.onToggleObserving() },
+                  onRefresh: () => { this.onRefresh() },
+                  onReselect: () => { this.onReselect() },
+                  onSpeak: () => { this.onSpeak() }
+                })
+              }
             }
+              .width('100%').padding({ left: 16, right: 16, top: this.topChromeHeight + 8, bottom: 12 })
           }
-            .width('100%').padding({ left: 16, right: 16, top: 10, bottom: 10 })
+            .scrollable(ScrollDirection.Vertical)
+            .scrollBar(BarState.Auto)
+            .edgeEffect(EdgeEffect.Spring)
+            .width('100%')
+            .height('100%')
+            .opacity(this.contentOpacity)
+            .translate({ x: this.contentTranslateX, y: 0 })
+            .id('object-detail-content-scroll')
+            .onDidScroll(() => {
+              const offsetY = this.scroller.currentOffset()?.yOffset ?? 0
+              AppStorage.setOrCreate('stellariumObjectDetailScrollY', this.scroller.currentOffset()?.yOffset ?? 0)
+              this.updateScrollBlur(offsetY)
+            })
+            .onScrollStop(() => {
+              const offsetY = this.scroller.currentOffset()?.yOffset ?? 0
+              AppStorage.setOrCreate('stellariumObjectDetailScrollY', this.scroller.currentOffset()?.yOffset ?? 0)
+              this.updateScrollBlur(offsetY)
+            })
+            .onAreaChange((_oldArea: Area, newArea: Area) => {
+              const height = Number(newArea.height)
+              const visibleViewport = Math.max(120, height - this.topChromeHeight)
+              if (Number.isFinite(visibleViewport) && visibleViewport > 0 && Math.abs(visibleViewport - this.mediaStore.objectInspectorMediaViewportHeight) > 1) {
+                this.mediaStore.objectInspectorMediaViewportHeight = visibleViewport
+              }
+            })
+
+          // 顶栏下方 14vp 柔和渐隐羽化带：滚动时浮现，柔化内容区进入顶栏毛玻璃的边界
+          Column()
+            .width('100%')
+            .height(14)
+            .position({ x: 0, y: this.topChromeHeight })
+            .linearGradient({
+              direction: GradientDirection.Bottom,
+              colors: [
+                [this.c.panelGlassStrong, 0.0],
+                [Color.Transparent, 1.0]
+              ]
+            })
+            .opacity(this.scrollBlurProgress * 0.72)
+            .hitTestBehavior(HitTestMode.None)
+            .zIndex(11)
+
+          // 吸顶页头 + 页签栏 + 动态毛玻璃背板（随 0 -> 20vp 滚动平滑渐显）
+          Stack({ alignContent: Alignment.Top }) {
+            Column()
+              .width('100%')
+              .height(this.topChromeHeight)
+              .backdropBlur(this.scrollBlurProgress > 0.02 ? Math.round(this.scrollBlurProgress * 26) : 0)
+              .linearGradient({
+                direction: GradientDirection.Bottom,
+                colors: [
+                  [this.c.panelGlassStrong, 0.0],
+                  [this.c.panelGlassStrong, 0.84],
+                  [Color.Transparent, 1.0]
+                ]
+              })
+              .opacity(this.scrollBlurProgress)
+              .hitTestBehavior(HitTestMode.None)
+
+            Column() {
+              ObjectDetailCardHeader({
+                store: this.store, iconName: this.iconName, liveInfoVisible: this.liveInfoVisible,
+                detailDisplayMode: this.detailDisplayMode,
+                distanceSummary: (distance: string, compact: string) => this.distanceSummaryText === '--'
+                  ? '--'
+                  : (distance.length > 0 ? (compact.length > 0 ? compact : distance) : I18n.t('distance_missing')),
+                nameOf: this.nameOf, typeOf: this.typeOf,
+                onDragTouch: (event: TouchEvent) => { this.onDragTouch(event) }, onDismiss: () => { this.onDismiss() },
+                onCenterObject: () => { this.onCenterObject() }
+              })
+
+              ObjectDetailCardTabs({ activeIndex: this.activeIndex, onSelect: (index: number) => { this.onSelectTab(index) } })
+
+              Divider()
+                .color(this.c.softStrong)
+                .margin({ left: 16, right: 16 })
+                .opacity(0.38 + this.scrollBlurProgress * 0.62)
+            }
+              .width('100%')
+              .onAreaChange((_oldArea: Area, newArea: Area) => {
+                const h = Number(newArea.height)
+                if (Number.isFinite(h) && h > 40 && Math.abs(h - this.topChromeHeight) > 0.5) {
+                  this.topChromeHeight = h
+                }
+              })
+          }
+            .width('100%')
+            .zIndex(12)
         }
-          .scrollable(ScrollDirection.Vertical)
-          .scrollBar(BarState.Auto)
           .width('100%')
           .layoutWeight(1)
-          .opacity(this.contentOpacity)
-          .translate({ x: this.contentTranslateX, y: 0 })
-          .id('object-detail-content-scroll')
-          .onScroll(() => {
-            AppStorage.setOrCreate('stellariumObjectDetailScrollY', this.scroller.currentOffset()?.yOffset ?? 0)
-          })
-          .onAreaChange((_oldArea: Area, newArea: Area) => {
-            const height = Number(newArea.height)
-            if (Number.isFinite(height) && height > 0 && Math.abs(height - this.mediaStore.objectInspectorMediaViewportHeight) > 1) {
-              this.mediaStore.objectInspectorMediaViewportHeight = height
-            }
-          })
+          .clip(true)
       }
 
       if (this.observeMode()) {
@@ -204,6 +312,7 @@ export struct UnifiedObjectDetailCard {
       .backdropBlur(28)
       .border({ width: 0.5, color: this.c.softStrong })
       .borderRadius(UI_RADIUS_PANEL)
+      .clip(true)
       .shadow({ radius: 20, color: this.c.shadowSoft, offsetX: 0, offsetY: 8 })
   }
 }

@@ -780,6 +780,10 @@ export interface StellariumBridgeResponse {
   grsJd?: number
   vividAtmosphere?: boolean
   zoomFadeEnvironment?: boolean
+  auroraEnabled?: boolean
+  auroraStyle?: number
+  auroraOpacity?: number
+  auroraSolarGate?: number
   environmentMode?: number
   starTwinkle?: boolean
   forcedStarTwinkle?: boolean

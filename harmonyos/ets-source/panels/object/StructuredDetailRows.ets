@@ -245,6 +245,24 @@ function hasDistinctName(store: ObjectDetailStore): boolean {
   return true
 }
 
+// 通过 @ObjectLink store 直接读取 live 字段值：保持 ForEach 键值稳定不重建行节点，
+// 同时让轨道/表面/月相/彗星/卫星等动态结构化字段在拖动时间轴时实时刷新。
+@Component
+struct LiveStructuredDetailRow {
+  @ObjectLink store: ObjectDetailStore
+  @Prop fieldKey: string
+  @Prop label: string
+  @Prop tablet: boolean
+
+  build() {
+    StructuredDetailRow({
+      label: this.label,
+      value: detailFieldValue(this.store, this.fieldKey),
+      tablet: this.tablet
+    })
+  }
+}
+
 @Component
 export struct StructuredDetailRows {
   @ObjectLink store: ObjectDetailStore
@@ -277,7 +295,7 @@ export struct StructuredDetailRows {
               }
             }
             ForEach(detailFieldsForSection(this.store, section), (field: ObjectDetailField) => {
-              StructuredDetailRow({ label: detailFieldLabel(field.key), value: detailFieldValue(this.store, field.key), tablet: this.tablet })
+              LiveStructuredDetailRow({ store: this.store, fieldKey: field.key, label: detailFieldLabel(field.key), tablet: this.tablet })
             }, (field: ObjectDetailField) => field.section + ":" + field.key)
           }
             .width("100%")

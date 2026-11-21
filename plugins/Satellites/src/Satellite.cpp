@@ -2063,7 +2063,17 @@ SatelliteRenderState Satellite::getRenderState(const StelCore* core, const StelP
 	const bool needsOrbitCheck = shouldDisplayOrbit() && orbitLinesFlag;
 	if (prj)
 	{
-		st.projectable = prj->projectCheck(XYZ, st.screenWin);
+		// Include directional screen-edge margins matching icon & (+10, +10) right/top-offset labels
+		// so labels glide smoothly off all four edges without wasting top-N label slots on off-right satellites.
+		const double scale = static_cast<double>(StelApp::getInstance().getScreenScale());
+		const double leftPad   = 260.0 * scale;
+		const double rightPad  = 32.0 * scale;
+		const double bottomPad = 48.0 * scale;
+		const double topPad    = 32.0 * scale;
+		const Vec4i& vp = prj->getViewport();
+		st.projectable = prj->project(XYZ, st.screenWin)
+			&& st.screenWin[0] >= vp[0] - leftPad   && st.screenWin[0] <= vp[0] + vp[2] + rightPad
+			&& st.screenWin[1] >= vp[1] - bottomPad && st.screenWin[1] <= vp[1] + vp[3] + topPad;
 		if (!st.projectable && !needsOrbitCheck)
 			return st;
 	}
@@ -2150,10 +2160,16 @@ SatelliteRenderState Satellite::getRenderState(const StelCore* core, const StelP
 			const float effectiveLimit = st.limitMag + 3.2f * zoomReveal;
 			st.pointDrawn = (sunlit || penumbra) && (st.magSat <= effectiveLimit);
 
+			// Smooth continuous reveal helper (starts cleanly from 0 -> zero zoom pop cliffs!)
+			auto smoothRamp = [](float edge0, float edge1, float x) -> float {
+				const float t = qBound(0.f, (x - edge0) / qMax(1e-4f, edge1 - edge0), 1.f);
+				return t * t * (3.f - 2.f * t);
+			};
+
 			// Tiered subtle satellite micro-marker:
 			// - Always crisp for selected satellite & space stations
 			// - Crisp for visible/bright sunlit satellites so they stand apart from stars
-			// - Progressively reveals faint & Earth-shadow satellites when zooming in (< 28 deg)
+			// - Progressively reveals faint & Earth-shadow satellites smoothly when zooming in (< 36/28 deg)
 			if (isSelected)
 			{
 				st.markerDrawn = true;
@@ -2169,33 +2185,50 @@ SatelliteRenderState Satellite::getRenderState(const StelCore* core, const StelP
 				st.markerDrawn = true;
 				st.markerOpacity = qBound(0.46f, 0.92f - qMax(0.f, st.magSat - 1.5f) * 0.12f, 0.92f);
 			}
-			else if (sunlit && st.pointDrawn)
+			else if (sunlit)
 			{
-				st.markerDrawn = true;
-				st.markerOpacity = qBound(0.32f, 0.40f + 0.46f * zoomReveal, 0.86f);
+				const float magReveal = MarkerVisibility::magnitudeOpacity(st.magSat, effectiveLimit, 1.35f);
+				const float opacity = magReveal * qBound(0.32f, 0.40f + 0.46f * zoomReveal, 0.86f);
+				if (opacity > 0.01f)
+				{
+					st.markerDrawn = true;
+					st.markerOpacity = opacity;
+				}
 			}
-			else if (penumbra && (st.pointDrawn || zoomReveal > 0.12f))
+			else if (penumbra)
 			{
-				st.markerDrawn = true;
-				st.markerOpacity = qBound(0.28f, 0.34f + 0.46f * zoomReveal, 0.80f);
+				const float penReveal = qMax(
+					MarkerVisibility::magnitudeOpacity(st.magSat, effectiveLimit, 1.35f),
+					smoothRamp(0.05f, 0.35f, zoomReveal));
+				const float opacity = penReveal * qBound(0.28f, 0.34f + 0.46f * zoomReveal, 0.80f);
+				if (opacity > 0.01f)
+				{
+					st.markerDrawn = true;
+					st.markerOpacity = opacity;
+				}
 			}
-			else if (!sunlit && !penumbra && shadowZoomReveal > 0.05f)
+			else
 			{
-				st.markerDrawn = true;
-				st.markerOpacity = 0.28f + 0.56f * shadowZoomReveal;
+				const float shReveal = smoothRamp(0.02f, 0.35f, shadowZoomReveal);
+				const float opacity = shReveal * (0.28f + 0.56f * shadowZoomReveal);
+				if (opacity > 0.01f)
+				{
+					st.markerDrawn = true;
+					st.markerOpacity = opacity;
+				}
 			}
 
 			float txtMag = st.magSat;
 			if (isSelected || isStation)
 				txtMag = qMin(st.magSat, st.limitMag - 2.6f);
 			else if (penumbra)
-				txtMag = qMin(st.magSat - 3.f, st.limitMag - (0.6f + 1.4f * zoomReveal));
+				txtMag = qMin(st.magSat - 3.f, st.limitMag - (0.6f + 1.4f * zoomReveal) * st.markerOpacity);
 			else if (!sunlit)
-				txtMag = (shadowZoomReveal > 0.05f)
-					? (st.limitMag - (0.4f + 1.8f * shadowZoomReveal))
+				txtMag = st.markerDrawn
+					? (st.limitMag - (0.4f + 1.8f * shadowZoomReveal) * st.markerOpacity)
 					: (st.magSat - 10.f);
 			else if (st.markerDrawn)
-				txtMag = qMin(st.magSat, st.limitMag - (0.8f + 1.2f * zoomReveal));
+				txtMag = qMin(st.magSat, st.limitMag - (0.8f + 1.2f * zoomReveal) * st.markerOpacity);
 
 			st.txtMag = txtMag;
 			st.labelDrawn = isSelected || (showLabels && (st.markerDrawn || txtMag <= st.limitMag));
@@ -2382,26 +2415,36 @@ void Satellite::drawOrbit(StelCore *core, StelPainter& painter)
 	if (satNorm > 1e-10)
 	{
 		satDir /= satNorm;
-		const int winLo = qMax(0, static_cast<int>(std::floor(estIdx)) - 2);
-		const int winHi = qMin(size - 2, static_cast<int>(std::ceil(estIdx)) + 2);
-		double bestDistSq = 1e9;
-		for (int i = winLo; i <= winHi; ++i)
-		{
-			const Vec3d ab = j2kPts[i + 1] - j2kPts[i];
-			const double abLenSq = ab.normSquared();
-			const double t = (abLenSq > 1e-14)
-				? qBound(0.0, (satDir - j2kPts[i]).dot(ab) / abLenSq, 1.0)
-				: 0.0;
-			Vec3d proj = j2kPts[i] + ab * t;
-			const double pn = proj.norm();
-			if (pn > 1e-10) proj /= pn;
-			const double dSq = (satDir - proj).normSquared();
-			if (dSq < bestDistSq)
+		auto searchSpan = [&](int lo, int hi, double& bestDistSqRef) {
+			for (int i = lo; i <= hi; ++i)
 			{
-				bestDistSq = dSq;
-				liveIdx = static_cast<double>(i) + t;
-				liveArc = cumArc[i] + (cumArc[i + 1] - cumArc[i]) * t;
+				const Vec3d ab = j2kPts[i + 1] - j2kPts[i];
+				const double abLenSq = ab.normSquared();
+				const double t = (abLenSq > 1e-14)
+					? qBound(0.0, (satDir - j2kPts[i]).dot(ab) / abLenSq, 1.0)
+					: 0.0;
+				Vec3d proj = j2kPts[i] + ab * t;
+				const double pn = proj.norm();
+				if (pn > 1e-10) proj /= pn;
+				const double dSq = (satDir - proj).normSquared();
+				if (dSq < bestDistSqRef)
+				{
+					bestDistSqRef = dSq;
+					liveIdx = static_cast<double>(i) + t;
+					liveArc = cumArc[i] + (cumArc[i + 1] - cumArc[i]) * t;
+				}
 			}
+		};
+		const int winLo = qMax(0, static_cast<int>(std::floor(estIdx)) - 3);
+		const int winHi = qMin(size - 2, static_cast<int>(std::ceil(estIdx)) + 3);
+		double bestDistSq = 1e9;
+		searchSpan(winLo, winHi, bestDistSq);
+		// Fallback full-polyline scan if the satellite ever sits outside the local window
+		// (e.g. after a rapid time-wheel scrub), guaranteeing the solid/dashed seam locks
+		// dead-center on the satellite icon.
+		if (bestDistSq > 1e-6)
+		{
+			searchSpan(0, size - 2, bestDistSq);
 		}
 	}
 
@@ -2804,91 +2847,91 @@ void Satellite::computeOrbitPoints()
 	orbitStepSeconds = static_cast<double>(effectiveSegSec);
 	lastOrbitStepSeconds = orbitStepSeconds;
 
-	gTimeSpan computeInterval(0, 0, 0, effectiveSegSec);
-	gTimeSpan orbitSpan(0, 0, 0, orbitLineSegments * effectiveSegSec / 2);
+	const int halfSegments = orbitLineSegments / 2;
+	const gTimeSpan computeInterval(0, 0, 0, effectiveSegSec);
+	const gTimeSpan orbitSpan(0, 0, 0, halfSegments * effectiveSegSec);
+	const gTimeSpan tailSpan(0, 0, 0, (orbitLineSegments - halfSegments) * effectiveSegSec);
 	gTime epochTm;
 	gTime epoch(epochTime);
-	gTime lastEpochComp(lastEpochCompForOrbit);	
-	int diffSlots;
+	gTime lastEpochComp(lastEpochCompForOrbit);
+	int diffSlots = 0;
 
-	if (orbitPoints.isEmpty())//Setup orbitPoints
-	{
-		epochTm  = epoch - orbitSpan;
-
-		for (int i=0; i<=orbitLineSegments; i++)
+	const auto rebuildCenteredOrbit = [&]() {
+		orbitPoints.clear();
+		visibilityPoints.clear();
+		epochTm = epoch - orbitSpan;
+		for (int i = 0; i <= orbitLineSegments; i++)
 		{
 			pSatWrapper->setEpoch(epochTm.getGmtTm());
 			if (!validSample()) return;
 			Vec3d sat = pSatWrapper->getAltAz();
-			orbitPoints.append(Vec4d(sat[0],sat[1],sat[2],pSatWrapper->getSubPoint()[2]));
+			orbitPoints.append(Vec4d(sat[0], sat[1], sat[2], pSatWrapper->getSubPoint()[2]));
 			visibilityPoints.append(pSatWrapper->getVisibilityPredict());
-			epochTm    += computeInterval;
+			epochTm += computeInterval;
 		}
 		lastEpochCompForOrbit = epochTime;
+	};
+
+	if (orbitPoints.size() != orbitLineSegments + 1 || visibilityPoints.size() != orbitLineSegments + 1)
+	{
+		rebuildCenteredOrbit();
 	}
 	else if (epochTime > lastEpochCompForOrbit)
 	{
-		// compute next orbit point when clock runs forward
+		// Slide orbit polyline forward strictly by whole slots so orbitPoints[halfSegments]
+		// stays locked to lastEpochCompForOrbit without accumulating fractional-second drift.
 		gTimeSpan diffTime = epoch - lastEpochComp;
-		diffSlots          = static_cast<int>(diffTime.getDblSeconds()/effectiveSegSec);
+		diffSlots          = static_cast<int>(diffTime.getDblSeconds() / effectiveSegSec);
 
-		if (diffSlots > 0)
+		if (diffSlots > orbitLineSegments)
 		{
-			if (diffSlots > orbitLineSegments)
+			rebuildCenteredOrbit();
+		}
+		else if (diffSlots > 0)
+		{
+			epochTm = lastEpochComp + tailSpan + computeInterval;
+			for (int i = 0; i < diffSlots; i++)
 			{
-				diffSlots = orbitLineSegments + 1;
-				epochTm  = epoch - orbitSpan;
-			}
-			else
-			{
-				epochTm   = lastEpochComp + orbitSpan + computeInterval;
-			}
-
-			for (int i=0; i<diffSlots; i++)
-			{
-				//remove points at beginning of list and add points at end.
 				orbitPoints.removeFirst();
 				visibilityPoints.removeFirst();
 				pSatWrapper->setEpoch(epochTm.getGmtTm());
 				if (!validSample()) return;
 				Vec3d sat = pSatWrapper->getAltAz();
-				orbitPoints.append(Vec4d(sat[0],sat[1],sat[2],pSatWrapper->getSubPoint()[2]));
+				orbitPoints.append(Vec4d(sat[0], sat[1], sat[2], pSatWrapper->getSubPoint()[2]));
 				visibilityPoints.append(pSatWrapper->getVisibilityPredict());
-				epochTm    += computeInterval;
+				epochTm += computeInterval;
 			}
-
-			lastEpochCompForOrbit = epochTime;
+			lastEpochComp += gTimeSpan(0, 0, 0, diffSlots * effectiveSegSec);
+			lastEpochCompForOrbit = lastEpochComp.getGmtTm();
 		}
 	}
 	else if (epochTime < lastEpochCompForOrbit)
 	{
-		// compute next orbit point when clock runs backward
+		// Slide orbit polyline backward strictly from the existing oldest sample
+		// (lastEpochComp - orbitSpan - computeInterval) so order and center epoch remain exact.
 		gTimeSpan diffTime = lastEpochComp - epoch;
-		diffSlots          = static_cast<int>(diffTime.getDblSeconds()/effectiveSegSec);
+		diffSlots          = static_cast<int>(diffTime.getDblSeconds() / effectiveSegSec);
 
-		if (diffSlots > 0)
+		if (diffSlots > orbitLineSegments)
 		{
-			if (diffSlots > orbitLineSegments)
+			rebuildCenteredOrbit();
+		}
+		else if (diffSlots > 0)
+		{
+			epochTm = lastEpochComp - orbitSpan - computeInterval;
+			for (int i = 0; i < diffSlots; i++)
 			{
-				diffSlots = orbitLineSegments + 1;
-				epochTm   = epoch + orbitSpan;
-			}
-			else
-			{
-				epochTm   = epoch - orbitSpan - computeInterval;
-			}
-			for (int i=0; i<diffSlots; i++)
-			{ //remove points at end of list and add points at beginning.
 				orbitPoints.removeLast();
 				visibilityPoints.removeLast();
 				pSatWrapper->setEpoch(epochTm.getGmtTm());
 				if (!validSample()) return;
 				Vec3d sat = pSatWrapper->getAltAz();
-				orbitPoints.push_front(Vec4d(sat[0],sat[1],sat[2],pSatWrapper->getSubPoint()[2]));
+				orbitPoints.push_front(Vec4d(sat[0], sat[1], sat[2], pSatWrapper->getSubPoint()[2]));
 				visibilityPoints.push_front(pSatWrapper->getVisibilityPredict());
 				epochTm -= computeInterval;
 			}
-			lastEpochCompForOrbit = epochTime;
+			lastEpochComp -= gTimeSpan(0, 0, 0, diffSlots * effectiveSegSec);
+			lastEpochCompForOrbit = lastEpochComp.getGmtTm();
 		}
 	}
 	pSatWrapper->setEpoch(epochTime);

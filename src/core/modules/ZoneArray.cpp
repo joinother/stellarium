@@ -567,7 +567,9 @@ void SpecialZoneArray<Star>::draw(StelPainter* sPainter, int index, bool isInsid
 		{
 			trailSamples->append({ v, tmpRcmag->radius, tmpRcmag->luminance, static_cast<unsigned char>(s->getBVIndex()) });
 		}
-		if (starDrawn && core->getFlagClearSky() && s->hasName() && extinctedMagIndex < maxMagStarName && s->hasComponentID()<=1)
+		// Queue star labels even if the star dot just crossed the left/bottom viewport edge,
+		// since queueSkyLabel checks exact label rect intersection with the viewport.
+		if ((starDrawn || !isInsideViewport) && core->getFlagClearSky() && s->hasName() && extinctedMagIndex < maxMagStarName && s->hasComponentID()<=1)
 		{
 			const float offset = tmpRcmag->radius*0.7f;
 			const Vec3f color = StelSkyDrawer::indexToColor(s->getBVIndex())*0.75f;

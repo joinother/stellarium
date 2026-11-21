@@ -31,6 +31,32 @@ export struct AtmosphereGroundSection {
     return this.text('仅大气层 · 自定义', 'Atmosphere only · Custom')
   }
 
+  @Builder
+  private auroraStyleChip(styleIndex: number, label: string, dotColor: string) {
+    Row({ space: 4 }) {
+      Circle({ width: 6, height: 6 })
+        .fill(this.c.isNight ? this.c.accent : dotColor)
+      Text(label)
+        .fontSize(panelFontSize(12, this.readableUi))
+        .fontWeight(this.layerStore.auroraStyle === styleIndex ? FontWeight.Medium : FontWeight.Regular)
+        .fontColor(this.layerStore.auroraStyle === styleIndex ? this.c.accent : this.c.sub)
+        .maxLines(1)
+        .textOverflow({ overflow: TextOverflow.Ellipsis })
+    }
+    .layoutWeight(1)
+    .height(34)
+    .justifyContent(FlexAlign.Center)
+    .alignItems(VerticalAlign.Center)
+    .padding({ left: 4, right: 4 })
+    .backgroundColor(this.layerStore.auroraStyle === styleIndex ? this.c.bg : Color.Transparent)
+    .border({
+      width: 1,
+      color: this.layerStore.auroraStyle === styleIndex ? this.c.accent : this.c.border
+    })
+    .borderRadius(UI_RADIUS_CONTROL)
+    .onClick(() => { this.onSetSkyDisplay('auroraStyle', styleIndex) })
+  }
+
   build() {
     Column({ space: 8 }) {
       Row({ space: 4 }) {
@@ -69,6 +95,21 @@ export struct AtmosphereGroundSection {
         isOn: this.layerStore.vividAtmosphere,
         onToggle: (enabled: boolean) => { this.onSetSkyDisplay('vividAtmosphere', enabled) }
       })
+      LayerSwitchRow({
+        label: this.text('极光效果', 'Aurora'),
+        infoTip: this.text('程序化三维大气极光视觉层，天文暮影后于地球夜空自然显现；支持切换多种自然形态与色系，仅作观星氛围呈现，不代表当地实时地磁预报。',
+          'Procedural volumetric aurora curtains visible in Earth night skies after twilight. Choose among natural morphologies and emission palettes; visual atmosphere only, not a local geomagnetic forecast.'),
+        isOn: this.layerStore.auroraEnabled,
+        onToggle: (enabled: boolean) => { this.onSetSkyDisplay('auroraEnabled', enabled) }
+      })
+      if (this.layerStore.auroraEnabled) {
+        Row({ space: 6 }) {
+          this.auroraStyleChip(0, this.text('经典绿幕', 'Arctic'), '#22E588')
+          this.auroraStyleChip(1, this.text('红绿磁暴', 'Storm'), '#FF2E7E')
+          this.auroraStyleChip(2, this.text('紫韵光柱', 'Pillars'), '#B44CFF')
+          this.auroraStyleChip(3, this.text('蓝绿极夜', 'Sapphire'), '#38C8E8')
+        }.width('100%').margin({ top: 2, bottom: 2 })
+      }
       LayerSwitchRow({
         label: this.text('现实星等', 'Realistic star visibility'),
         infoTip: this.text('开启时，明亮天空会淹没暗星、银河与深空天体；关闭后，白天也能辨认恒星、银河与深空天体，适合学习星空。',

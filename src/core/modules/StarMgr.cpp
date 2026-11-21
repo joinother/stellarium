@@ -1363,6 +1363,11 @@ void StarMgr::draw(StelCore* core)
 		// Saemundsson's inversion formula for atmospheric refraction is not exact, so need some padding in terms of arcseconds
 		margin = 30000. * MAS2RAD * prj->getPixelPerRadAtCenter();  // 0.5 arcmin
 	}
+	// Pad viewport caps so bright star halos and right/top-offset star labels stay visible
+	// while the star center slides just outside a screen edge.
+	const double scale = static_cast<double>(StelApp::getInstance().getScreenScale());
+	const double edgePad = qMin(220.0 * scale, 0.25 * static_cast<double>(qMin(prj->getViewportWidth(), prj->getViewportHeight())));
+	margin = qMax(margin, edgePad);
 	
 	QVector<SphericalCap> viewportCaps = prj->getViewportConvexPolygon(margin, margin)->getBoundingSphericalCaps();
 	viewportCaps.append(core->getVisibleSkyArea());

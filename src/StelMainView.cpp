@@ -1000,6 +1000,150 @@ void drawOhosTelescopeOverlay(StelCore* core)
 	painter.setLineSmooth(false);
 }
 
+static QString s_ohosSelectionReticleKey;
+static double s_ohosSelectionReticleStartSec = -10.0;
+constexpr double kOhosReticleLockDurationSec = 0.24;
+
+bool ohosSelectionReticleAnimating()
+{
+	const double now = StelApp::getTotalRunTime();
+	return !s_ohosSelectionReticleKey.isEmpty() && (now - s_ohosSelectionReticleStartSec) < (kOhosReticleLockDurationSec + 0.04);
+}
+
+void drawOhosSelectionReticle(StelCore* core)
+{
+	if (!core || !core->getFlagClearSky())
+		return;
+	StelObjectMgr* objMgr = GETSTELMODULE(StelObjectMgr);
+	if (!objMgr)
+		return;
+	const QList<StelObjectP> selected = objMgr->getSelectedObject();
+	if (selected.isEmpty() || !selected.first())
+	{
+		s_ohosSelectionReticleKey.clear();
+		return;
+	}
+	const StelObjectP obj = selected.first();
+	if (obj->getType() == QLatin1String("Constellation"))
+	{
+		s_ohosSelectionReticleKey.clear();
+		return;
+	}
+
+	const StelProjectorP prj = core->getProjection(StelCore::FrameJ2000);
+	if (!prj)
+		return;
+	Vec3d screen;
+	if (!prj->project(obj->getJ2000EquatorialPos(core), screen))
+		return;
+
+	const double now = StelApp::getTotalRunTime();
+	const QString objKey = obj->getType() + QLatin1Char(':') + obj->getID();
+	if (objKey != s_ohosSelectionReticleKey)
+	{
+		s_ohosSelectionReticleKey = objKey;
+		s_ohosSelectionReticleStartSec = now;
+	}
+
+	const double scale = qBound(1.0, static_cast<double>(StelApp::getInstance().getScreenScale()), 3.5);
+	const double objRadPx = qBound(0.0,
+		obj->getAngularRadius(core) * M_PI_180 * static_cast<double>(prj->getPixelPerRadAtCenter()),
+		145.0 * scale);
+	const double baseR = qMax(14.5 * scale, objRadPx + 10.0 * scale);
+
+	const double t = qBound(0.0, (now - s_ohosSelectionReticleStartSec) / kOhosReticleLockDurationSec, 1.0);
+	const double invT = 1.0 - t;
+	const double ease = 1.0 - invT * invT * invT;
+	const double radius = baseR * (1.52 - 0.52 * ease);
+	const float alpha = static_cast<float>(0.90 * ease);
+	if (alpha <= 0.01f)
+		return;
+
+	const Vec4i& vp = prj->getViewport();
+	const double pad = radius + 16.0 * scale;
+	if (screen[0] < vp[0] - pad || screen[0] > vp[0] + vp[2] + pad ||
+	    screen[1] < vp[1] - pad || screen[1] > vp[1] + vp[3] + pad)
+		return;
+
+	const bool night = StelApp::getInstance().getVisionModeNight();
+	const Vec3f rgb = night ? Vec3f(0.95f, 0.28f, 0.25f) : Vec3f(0.54f, 0.84f, 1.00f);
+
+	const double cx = screen[0];
+	const double cy = screen[1];
+	const double halfStroke = 0.62 * scale;
+	const double feather = 0.90 * scale;
+	const double rCoreIn  = qMax(1.0, radius - halfStroke);
+	const double rCoreOut = radius + halfStroke;
+	const double rSoftIn  = qMax(0.5, rCoreIn - feather);
+	const double rSoftOut = rCoreOut + feather;
+
+	QVector<Vec2f> verts;
+	QVector<Vec4f> cols;
+	constexpr int kSegs = 72;
+	verts.reserve(kSegs * 18 + 24);
+	cols.reserve(kSegs * 18 + 24);
+
+	const Vec4f cSolid(rgb[0], rgb[1], rgb[2], alpha);
+	const Vec4f cZero(rgb[0], rgb[1], rgb[2], 0.f);
+
+	auto pushQuad = [&](const Vec2f& a, const Vec2f& b, const Vec2f& c, const Vec2f& d,
+	                    const Vec4f& ca, const Vec4f& cb, const Vec4f& cc, const Vec4f& cd) {
+		verts.append(a); cols.append(ca);
+		verts.append(b); cols.append(cb);
+		verts.append(c); cols.append(cc);
+		verts.append(a); cols.append(ca);
+		verts.append(c); cols.append(cc);
+		verts.append(d); cols.append(cd);
+	};
+
+	// Single razor-crisp anti-aliased precision hairline ring (3-band AA)
+	for (int i = 0; i < kSegs; ++i)
+	{
+		const double a0 = (2.0 * M_PI * i) / kSegs;
+		const double a1 = (2.0 * M_PI * (i + 1)) / kSegs;
+		const double c0 = std::cos(a0), s0 = std::sin(a0);
+		const double c1 = std::cos(a1), s1 = std::sin(a1);
+
+		const Vec2f pSI0(static_cast<float>(cx + rSoftIn * c0),  static_cast<float>(cy + rSoftIn * s0));
+		const Vec2f pSI1(static_cast<float>(cx + rSoftIn * c1),  static_cast<float>(cy + rSoftIn * s1));
+		const Vec2f pCI0(static_cast<float>(cx + rCoreIn * c0),  static_cast<float>(cy + rCoreIn * s0));
+		const Vec2f pCI1(static_cast<float>(cx + rCoreIn * c1),  static_cast<float>(cy + rCoreIn * s1));
+		const Vec2f pCO0(static_cast<float>(cx + rCoreOut * c0), static_cast<float>(cy + rCoreOut * s0));
+		const Vec2f pCO1(static_cast<float>(cx + rCoreOut * c1), static_cast<float>(cy + rCoreOut * s1));
+		const Vec2f pSO0(static_cast<float>(cx + rSoftOut * c0), static_cast<float>(cy + rSoftOut * s0));
+		const Vec2f pSO1(static_cast<float>(cx + rSoftOut * c1), static_cast<float>(cy + rSoftOut * s1));
+
+		pushQuad(pSI0, pSI1, pCI1, pCI0, cZero, cZero, cSolid, cSolid);
+		pushQuad(pCI0, pCI1, pCO1, pCO0, cSolid, cSolid, cSolid, cSolid);
+		pushQuad(pCO0, pCO1, pSO1, pSO0, cSolid, cSolid, cZero, cZero);
+	}
+
+	// 4 delicate outer radial precision ticks (0, 90, 180, 270 deg)
+	const double tickStart = rCoreOut + 2.6 * scale;
+	const double tickEnd   = tickStart + 4.8 * scale;
+	const double tickHalfW = 0.65 * scale;
+	const Vec4f cTick(rgb[0], rgb[1], rgb[2], alpha * 0.88f);
+	for (int k = 0; k < 4; ++k)
+	{
+		const double ang = k * (M_PI * 0.5);
+		const double dx = std::cos(ang), dy = std::sin(ang);
+		const double px = -dy * tickHalfW, py = dx * tickHalfW;
+		const Vec2f q0(static_cast<float>(cx + dx * tickStart - px), static_cast<float>(cy + dy * tickStart - py));
+		const Vec2f q1(static_cast<float>(cx + dx * tickStart + px), static_cast<float>(cy + dy * tickStart + py));
+		const Vec2f q2(static_cast<float>(cx + dx * tickEnd   + px), static_cast<float>(cy + dy * tickEnd   + py));
+		const Vec2f q3(static_cast<float>(cx + dx * tickEnd   - px), static_cast<float>(cy + dy * tickEnd   - py));
+		pushQuad(q0, q1, q2, q3, cTick, cTick, cTick, cTick);
+	}
+
+	StelPainter painter(core->getProjection2d());
+	painter.setBlending(true, GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+	painter.enableClientStates(true, false, true);
+	painter.setVertexPointer(2, GL_FLOAT, verts.constData());
+	painter.setColorPointer(4, GL_FLOAT, cols.constData());
+	painter.drawFromArray(StelPainter::Triangles, verts.size(), 0, false);
+	painter.enableClientStates(false);
+}
+
 QJsonObject enrichTelescopeProfileJson(const QJsonObject& stored)
 {
 	QJsonObject value = stored;
@@ -4760,6 +4904,10 @@ QJsonObject currentStateJson()
 		result["environmentMode"] = landscape->getFlagAtmosphere() ? (ground ? 2 : 3) : (ground ? 1 : 0);
 		result["vividAtmosphere"] = landscape->getFlagVividAtmosphere();
 		result["zoomFadeEnvironment"] = landscape->getFlagZoomFadeEnvironment();
+		result["auroraEnabled"] = landscape->getFlagAurora();
+		result["auroraStyle"] = landscape->getAuroraStyle();
+		result["auroraOpacity"] = static_cast<double>(landscape->getAuroraEffectiveOpacity());
+		result["auroraSolarGate"] = static_cast<double>(landscape->getAuroraSolarGate());
 		result["landscapeAutoSelection"] = landscape->getFlagLandscapeAutoSelection();
 	}
 	if (SporadicMeteorMgr* mmgr = GETSTELMODULE(SporadicMeteorMgr))
@@ -13138,6 +13286,30 @@ extern "C" __attribute__((visibility("default"))) const char* StellariumOhos_com
 				}
 				landscape->setFlagZoomFadeEnvironment(enabled);
 			}
+			else if (setting == "auroraEnabled")
+			{
+				LandscapeMgr* landscape = GETSTELMODULE(LandscapeMgr);
+				if (!landscape || (value != "0" && value != "1" && value != "true" && value != "false"))
+				{
+					result["ok"] = false;
+					result["error"] = "auroraEnabled requires a boolean and a loaded landscape manager";
+					return result;
+				}
+				landscape->setFlagAurora(enabled);
+			}
+			else if (setting == "auroraStyle")
+			{
+				bool valid = false;
+				const int style = value.toInt(&valid);
+				LandscapeMgr* landscape = GETSTELMODULE(LandscapeMgr);
+				if (!landscape || !valid || style < 0 || style >= AuroraRenderer::kStyleCount)
+				{
+					result["ok"] = false;
+					result["error"] = "auroraStyle must be 0..3";
+					return result;
+				}
+				landscape->setAuroraStyle(style);
+			}
 			else if (setting == "environmentMode")
 			{
 				bool valid = false;
@@ -14290,6 +14462,10 @@ extern "C" __attribute__((visibility("default"))) const char* StellariumOhos_com
 			result["atmosphereProfile"] = lmgr->getAtmosphereProfile();
 			result["atmosphereAverageLuminance"] = lmgr->getAtmosphereAverageLuminance();
 			result["zoomFadeEnvironment"] = lmgr->getFlagZoomFadeEnvironment();
+			result["auroraEnabled"] = lmgr->getFlagAurora();
+			result["auroraStyle"] = lmgr->getAuroraStyle();
+			result["auroraOpacity"] = static_cast<double>(lmgr->getAuroraEffectiveOpacity());
+			result["auroraSolarGate"] = static_cast<double>(lmgr->getAuroraSolarGate());
 			const double currentFov = core->getMovementMgr() ? core->getMovementMgr()->getCurrentFov() : 60.0;
 			result["mistZoomVisibility"] = EnvironmentZoomFade::mistVisibility(currentFov);
 			result["environmentZoomVisibility"] = EnvironmentZoomFade::environmentVisibility(
@@ -24157,6 +24333,7 @@ void StelMainView::renderOhosFrameNow()
 		app.draw();
 		// Keep instrument overlays on this render thread so they cannot lag behind
 		// the native sky projection while the user pans, zooms or flips the view.
+		drawOhosSelectionReticle(app.getCore());
 		drawOhosPolarScopeOverlay(app.getCore());
 		drawOhosTelescopeOverlay(app.getCore());
 		const double t4 = StelApp::getTotalRunTime();
@@ -24371,13 +24548,15 @@ bool StelMainView::needsMaxFPS() const
 #if defined(__OHOS__)
 	StelMovementMgr* moveMgr = stelApp->getCore()->getMovementMgr();
 	StelObjectMgr* objMgr = GETSTELMODULE(StelObjectMgr);
+	LandscapeMgr* landMgr = GETSTELMODULE(LandscapeMgr);
 	const bool satelliteSelected = objMgr && !objMgr->getSelectedObject("Satellite").isEmpty();
+	const bool auroraAnimating = landMgr && landMgr->getAuroraEffectiveOpacity() > 0.005f;
 	const bool zoomedLiveMotion = fabs(timeRate) > 0.0
 		&& ((moveMgr && moveMgr->getCurrentFov() < 28.0) || satelliteSelected);
 	return (now - lastEventTimeSec < 0.8) || s_ohosPanInertiaActive || s_ohosPinchActive ||
 		s_ohosPinchSettleActive || s_gyroTransitionActive ||
 		(moveMgr && moveMgr->getFlagAutoMove()) ||
-		zoomedLiveMotion ||
+		zoomedLiveMotion || auroraAnimating || ohosSelectionReticleAnimating() ||
 		ohosTelescopeMarkerAnimating() || fabs(timeRate) > StelCore::JD_SECOND;
 #else
 	return (now - lastEventTimeSec < 4.0) || fabs(timeRate) > StelCore::JD_SECOND;

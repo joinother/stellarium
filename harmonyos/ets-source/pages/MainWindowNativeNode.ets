@@ -61,7 +61,7 @@ import { resourceText, describeDecodeError, zhNameOf, zhType, planetZh, sensZh, 
 import { isSafeSkyCultureArtPath, cleanSkyCultureDescription, cleanSkyCultureNarration, isCliPanelName, parseObservingList, formatRate, configDitheringLabel, isRecordable } from '../common/derive/skycult'
 import { primaryDockActions, moreActions, observingHubActions, skyDataHubActions, automationHubActions, getCityPreset, validationFromResponse, officialLocationAliases, panelRouteParent, panelRouteRoot, inferredPanelRouteDirection, locationSearchMatchScore } from '../common/derive/actions'
 import { quickActionById, quickCandidateRowsFor } from '../common/derive/quickActions'
-import { pointInsideRect, pointOverlapsUiObstacle, touchScreenX, touchScreenY, touchWindowX, touchWindowY, azBarHeight, compactTopQuickY, baseCompactObjectPeekY, expandedDetailSummaryHeight, isPhoneDetailPeek, useTabletObjectInspector, useExpandedDetailSummary, railTop, expandedMainPanelLeft, panelLeft, panelRight, baseExpandedDetailSummaryX, baseExpandedDetailSummaryY, baseTabletInspectorX, baseTabletInspectorY, tabletInspectorHeight, baseBottomCardX, baseBottomCardY, expandedDockWidth, expandedDockLeft, dockWidthPixels, dockLeft, chromeRowPosXLeft, chromeRowPosXRight, guideCardHeight, guideCardX, guideCardY, scriptControlWidth, scriptControlX, scriptControlY, isPanelBackPoint, isDockPoint, isObjectDetailCardPoint, canShowExpandedDetailSummary, expandedDetailSummaryWidth } from '../common/derive/geometry'
+import { pointInsideRect, pointOverlapsUiObstacle, touchScreenX, touchScreenY, touchWindowX, touchWindowY, azBarHeight, compactTopQuickY, baseCompactObjectPeekY, expandedDetailSummaryHeight, isPhoneDetailPeek, useTabletObjectInspector, useExpandedDetailSummary, railTop, expandedMainPanelLeft, panelLeft, panelRight, baseExpandedDetailSummaryX, baseExpandedDetailSummaryY, baseTabletInspectorX, baseTabletInspectorY, tabletInspectorHeight, baseBottomCardX, baseBottomCardY, expandedDockOccupiedLeft, expandedDockWidth, expandedDockLeft, dockWidthPixels, dockLeft, chromeRowPosXLeft, chromeRowPosXRight, guideCardHeight, guideCardX, guideCardY, scriptControlWidth, scriptControlX, scriptControlY, isPanelBackPoint, isDockPoint, isObjectDetailCardPoint, canShowExpandedDetailSummary, expandedDetailSummaryWidth } from '../common/derive/geometry'
 import { catalogIconForModule, catalogIconForObjectType, wutCategoryOptions, wutCategoryKey, wutDirectionLabel } from '../common/derive/catalog'
 import { objectInspectorFallbackVisualKind, objectInspectorStarColor } from '../common/derive/media'
 import { BridgeClient } from '../bridge/BridgeClient'
@@ -3238,7 +3238,11 @@ export struct WindowNativeNode {
         },
         setTimeRate: (rate: number): void => { this.timeCtl().setTimeRate(rate) },
         syncTimeRateState: (rate: number): void => { this.timeCtl().syncTimeRateState(rate) },
-        syncWheelFromSimulation: (jd: number): void => { this.wheel().syncFromSimulation(jd) },
+        syncWheelFromSimulation: (jd: number): void => {
+          this.lastSimulationJd = jd
+          this.syncSimulatedDateLabel(jd)
+          this.wheel().syncFromSimulation(jd)
+        },
         refreshTimeNow: (): void => { this.timeCtl().refreshTimeNow() },
         refreshState: (): void => { this.refreshState() }
       }
@@ -4030,7 +4034,11 @@ export struct WindowNativeNode {
         animateOption: (action: () => void): void => {
           this.getUIContext().animateTo({ duration: UI_OPTION_ANIMATION_MS, curve: Curve.EaseOut }, action)
         },
-        syncWheelFromSimulation: (jd: number): void => { this.wheel().syncFromSimulation(jd) },
+        syncWheelFromSimulation: (jd: number): void => {
+          this.lastSimulationJd = jd
+          this.syncSimulatedDateLabel(jd)
+          this.wheel().syncFromSimulation(jd)
+        },
         syncJulianDateFields: (response: StellariumBridgeResponse, jd: number): void => { this.julianStore.syncJulianDateFields(response, jd) },
         refreshSelectedObject: (): void => { this.refreshSelectedObject() },
         moveToSelectedObject: (): void => { this.moveToSelectedObject() },
@@ -4816,10 +4824,7 @@ export struct WindowNativeNode {
         resolvedRouteDirection, currentPanel, panel)
     }
     const routeSerial = nextVisible ? this.beginPanelRouteTransition(switchingPanel) : 0
-    if (panel !== 'object') {
-      this.fullInspectorRequested = false
-      this.infoWindowStore.infoWinExpanded = false
-    }
+    // 菜单面板与展开态大星体详情卡保持独立、不互斥：打开或切换菜单面板时保留当前详情卡展开状态。
     this.timeCtl().stopPanelTimers()
     this.skyCultureCtl().stopSkyCultureTimeFollowTimer()
     this.polarScopeCtl().stopPolarScopeTimer()
@@ -5444,8 +5449,16 @@ export struct WindowNativeNode {
         return true
       }
     }
-    if (isObjectDetailCardPoint(x, y, this.objectDetailStore.isObjectDetailCardRendered(this.infoWindowStore.infoWinVisible), this.detailCardX(), this.detailCardY(), this.detailCardWidth(), this.detailCardHeight())) {
-      return true
+    if (this.objectDetailStore.isObjectDetailCardRendered(this.infoWindowStore.infoWinVisible)) {
+      if (this.infoWindowStore.infoWinExpanded) {
+        if (isObjectDetailCardPoint(x, y, true, this.detailCardX(), this.detailCardY(), this.detailCardWidth(), this.detailCardHeight())) {
+          return true
+        }
+      } else if (this.selectionPillVisible()) {
+        if (isObjectDetailCardPoint(x, y, true, this.selectionPillX(), this.selectionPillY(), this.selectionPillWidth(), this.selectionPillHeight())) {
+          return true
+        }
+      }
     }
     if (this.isExpandedLayout) {
       // 浮动面板区域（含 30vp 余量，覆盖圆角/边距，杜绝点面板却拖星图）
@@ -6035,6 +6048,107 @@ export struct WindowNativeNode {
 
   private detailCardHeight(): number {
     return this.bottomCardHeight()
+  }
+
+  private selectionPillVisible(): boolean {
+    if (!this.infoWindowStore.infoWinVisible
+      || this.objectDetailStore.selectedName.length === 0
+      || this.infoWindowStore.infoWinExpanded) {
+      return false
+    }
+    if (this.isExpandedLayout) {
+      if (this.panelVisible) {
+        const freeLeft = expandedDockOccupiedLeft(true, this.panelWidth, this.panelOffsetX, this.EDGE_MARGIN)
+        const freeW = this.skyWidth - this.EDGE_MARGIN - freeLeft
+        if (freeW < 220) {
+          return false
+        }
+      }
+      return true
+    }
+    if (this.isFoldHoverLayout) {
+      return !this.panelVisible
+    }
+    // 手机紧凑模式：浮标位于顶部安全区左侧（避开底部 Dock / FOV / 时钟 / 竖排缩放按钮及右上快捷区）；
+    // 当陀螺仪校准浮层开启，或底部菜单抽屉上拉至 90% 接近浮标时自动隐藏避让。
+    if (this.gyroStore.gyroscopeEnabled && this.gyroStore.gyroCalibPanelOpen) {
+      return false
+    }
+    if (this.panelVisible && this.compactPanelTop() < this.selectionPillY() + this.selectionPillHeight() + 12) {
+      return false
+    }
+    return true
+  }
+
+  private selectionPillWidth(): number {
+    if (this.isExpandedLayout) {
+      const dockW = expandedDockWidth(this.skyWidth, this.panelVisible, this.panelWidth, this.panelOffsetX, this.EDGE_MARGIN)
+      const desired = clamp(this.skyWidth * 0.56, 356, 400)
+      if (this.panelVisible) {
+        const freeLeft = expandedDockOccupiedLeft(true, this.panelWidth, this.panelOffsetX, this.EDGE_MARGIN)
+        const freeW = Math.max(220, this.skyWidth - this.EDGE_MARGIN - freeLeft)
+        return clamp(desired, Math.min(240, freeW), Math.min(dockW, freeW))
+      }
+      // 面板关闭时给左下 FOV+横排缩放、右下时钟留出对称余量，同时保证标题与星等完整显示。
+      const centerSpan = Math.max(240, this.skyWidth - (this.EDGE_MARGIN + 104) * 2)
+      return clamp(desired, Math.min(248, centerSpan), Math.min(dockW, centerSpan))
+    }
+    if (this.isFoldHoverLayout) {
+      return clamp(this.skyWidth * 0.50, 276, 380)
+    }
+    // 手机紧凑模式：紧贴顶部左缘，右侧为右上角陀螺仪/音频快捷列留出 10vp 间距。
+    const avail = this.compactTopQuickX() - 16 - 10
+    return clamp(avail, Math.min(220, Math.max(190, avail)), 340)
+  }
+
+  private selectionPillHeight(): number {
+    return this.selectionPillWidth() < 310 ? 76 : 58
+  }
+
+  private selectionPillX(): number {
+    const w = this.selectionPillWidth()
+    if (this.isExpandedLayout) {
+      const dockL = expandedDockLeft(this.skyWidth, this.panelVisible, this.panelWidth, this.panelOffsetX, this.EDGE_MARGIN)
+      const dockW = expandedDockWidth(this.skyWidth, this.panelVisible, this.panelWidth, this.panelOffsetX, this.EDGE_MARGIN)
+      const freeLeft = this.panelVisible
+        ? expandedDockOccupiedLeft(true, this.panelWidth, this.panelOffsetX, this.EDGE_MARGIN)
+        : this.EDGE_MARGIN
+      const centered = dockL + Math.max(0, (dockW - w) / 2)
+      return Math.max(freeLeft, Math.min(this.skyWidth - w - this.EDGE_MARGIN, centered))
+    }
+    if (this.isFoldHoverLayout) {
+      return Math.max(12, Math.min(this.skyWidth - w - 12, (this.skyWidth - w) / 2))
+    }
+    return 16
+  }
+
+  private selectionPillY(): number {
+    const h = this.selectionPillHeight()
+    if (this.isExpandedLayout) {
+      const safeTop = this.scriptControlSafeTop()
+      const aboveDock = this.dockTop() - h - 14
+      return Math.max(safeTop, aboveDock)
+    }
+    if (this.isFoldHoverLayout) {
+      return Math.max(this.hoverConsoleTop() + 10, this.dockTop() - h - 12)
+    }
+    // 手机紧凑模式：对齐右上角快捷区顶部基线并尊重状态栏安全区，展开为顶部大详情卡时原地衔接。
+    return Math.max(compactTopQuickY(), this.scriptControlSafeTop())
+  }
+
+  private expandDetailPill(): void {
+    if (!this.infoWindowStore.infoWinVisible || this.objectDetailStore.selectedName.length === 0) {
+      return
+    }
+    // 大星体详情卡与菜单面板不互斥：展开详情卡时保留已打开的菜单面板，两者可同时查看与拖动。
+    this.infoWindowStore.infoWinExpanded = true
+    this.fullInspectorRequested = true
+    this.detailConnectorCtl().markObjectCardPlacementPending()
+    if (!this.objectDetailStore.selectedDetailLoaded) {
+      this.requestSelectedDetails(this.objectDetailStore.selectedName)
+    }
+    this.detailConnectorCtl().startObjectDetailConnectorRefresh()
+    this.detailConnectorCtl().refreshObjectDetailConnector()
   }
 
   private clampedObjectCardOffsetX(base: number, width: number): number {
@@ -7222,9 +7336,16 @@ export struct WindowNativeNode {
         // 换了目标就回到极简形态：观测模式下的「展开」只对当前这颗天体有效。
         this.infoWindowStore.resetObserveExpand()
       }
-      // 再次点选同一目标：清除“已关闭”记录并恢复展开态，让详情页重新弹出。
+      // 再次点选同一目标：
+      // - 若已关闭：恢复为一阶段轻浮标；
+      // - 若正处于一阶段轻浮标：平滑展开为二阶段完整详情卡。
+      const expandFromPillOnRetap = userReselect && !targetChanged && this.infoWindowStore.infoWinVisible
+        && !this.infoWindowStore.infoWinExpanded
       if (reopenDismissedDetail) {
         this.dismissedObjectName = ''
+        this.infoWindowStore.infoWinExpanded = false
+        this.fullInspectorRequested = true
+      } else if (expandFromPillOnRetap) {
         this.infoWindowStore.infoWinExpanded = true
         this.fullInspectorRequested = true
       }
@@ -7232,11 +7353,13 @@ export struct WindowNativeNode {
         this.infoWindowStore.infoWinVisible = true
       }
       if (isNewSelection) {
-        this.infoWindowStore.infoWinExpanded = true
+        // 一阶段默认以轻量悬浮胶囊出现，保留 95% 纯净星空；轻点胶囊或再点同一星体即展开完整大卡。
+        this.infoWindowStore.infoWinExpanded = false
         this.fullInspectorRequested = true
         this.objectMediaStore.objectInspectorMoreOpen = false
         this.objectDetailStore.bottomCardIndex = 2
         this.detailConnectorCtl().markObjectCardPlacementPending()
+        this.detailConnectorCtl().clearObjectDetailConnector()
         // The lightweight tap/search response deliberately has no detailFields.
         // Never leave the previous target's structured data visible while loading.
         this.objectDetailStore.selectedDetailFields = []
@@ -7367,6 +7490,7 @@ export struct WindowNativeNode {
   }
 
   private dismissObjectInspector(): void {
+    const dismissFromPill = !this.infoWindowStore.infoWinExpanded
     if (this.objectDetailStore.selectedUiLayoutTimer !== 0) {
       clearTimeout(this.objectDetailStore.selectedUiLayoutTimer)
       this.objectDetailStore.selectedUiLayoutTimer = 0
@@ -7382,6 +7506,16 @@ export struct WindowNativeNode {
     this.skyTouchActive = false
     this.skyTouchFeedback = false
     this.skyDragging = false
+    if (dismissFromPill) {
+      // 从轻浮标点 ✕ 时一并清除当前选中与准星，避免残留空准星。
+      const requestSerial = ++this.skySelectionRequestSerial
+      this.detailConnectorCtl().stop()
+      this.applySelectedObject({ ok: true, found: false } as StellariumBridgeResponse)
+      this.callInteractive('clearSelection', '', (result) => {
+        if (requestSerial !== this.skySelectionRequestSerial) { return }
+        this.applySelectedObject(result)
+      })
+    }
     // Closing the inspector must not alter the camera mode. Tracking and
     // fixed-position anchoring are independent of the card's visibility.
   }
@@ -8014,6 +8148,7 @@ export struct WindowNativeNode {
       if (r.ok !== true || r.jd === undefined) { return }
       const jd: number = r.jd as number
       this.lastSimulationJd = jd
+      this.syncSimulatedDateLabel(jd)
       // 固定走本地 jd 格式化：jdToLocalTimeText 返回定长 'YYYY-MM-DD HH:mm:ss'，截取后 5 位为 HH:mm
       const text: string = jdToLocalTimeText(jd + this.utcOffsetHours / 24.0).substring(11, 16)
       if (text !== this.dockClockText) {
@@ -8156,11 +8291,30 @@ export struct WindowNativeNode {
     })
   }
 
+  private syncSimulatedDateLabel(jd: number): void {
+    if (!Number.isFinite(jd) || jd <= 0) return
+    const simDate = jdToLocalTimeText(jd + this.utcOffsetHours / 24.0).substring(0, 10)
+    const nowJd = Date.now() / 86400000.0 + 2440587.5
+    const todayDate = jdToLocalTimeText(nowJd + this.utcOffsetHours / 24.0).substring(0, 10)
+    const nextLabel = simDate === todayDate ? '' : simDate
+    if (AppStorage.get<string>('stellariumSimDateLabel') !== nextLabel) {
+      AppStorage.setOrCreate('stellariumSimDateLabel', nextLabel)
+    }
+  }
+
   private wheel(): TimeWheelController {
     if (this.timeWheelController === undefined) {
       this.timeWheelController = new TimeWheelController(
         this.timeWheelStore,
-        (jd: number) => { this.callNativeFire('setTimeToJD', jd.toFixed(8)) },
+        (jd: number) => {
+          this.callNativeFire('setTimeToJD', jd.toFixed(8))
+          this.lastSimulationJd = jd
+          this.syncSimulatedDateLabel(jd)
+          // 转动时间轴时紧随 setTimeToJD 立刻拉一次选中天体数据，保证坐标/星等/大气/升落/轨道参数即时刷新。
+          if (this.infoWindowStore.infoWinVisible && this.objectDetailStore.selectedStatus === 'Selected') {
+            this.refreshSelectedObject()
+          }
+        },
         () => { this.timeCtl().stopTimeWheelSpeed() },
         () => { return this.utcOffsetHours },
         (index: number) => {
@@ -8501,6 +8655,8 @@ export struct WindowNativeNode {
     }
     if (result.vividAtmosphere !== undefined) this.layerStore.vividAtmosphere = result.vividAtmosphere === true
     if (result.zoomFadeEnvironment !== undefined) this.layerStore.zoomFadeEnvironment = result.zoomFadeEnvironment === true
+    if (result.auroraEnabled !== undefined) this.layerStore.auroraEnabled = result.auroraEnabled === true
+    if (result.auroraStyle !== undefined) this.layerStore.auroraStyle = Math.max(0, Math.min(3, Math.round(result.auroraStyle as number)))
     if (result.environmentMode !== undefined) this.layerStore.environmentMode = result.environmentMode
     if (result.starTwinkle !== undefined) this.layerStore.starTwinkle = result.starTwinkle === true
     if (result.forcedStarTwinkle !== undefined) this.layerStore.forcedStarTwinkle = result.forcedStarTwinkle === true
@@ -8533,6 +8689,7 @@ export struct WindowNativeNode {
     }
     if (result.jd !== undefined) {
       this.lastSimulationJd = result.jd as number
+      this.syncSimulatedDateLabel(result.jd as number)
     }
     if (result.timeText !== undefined) {
       this.timeStore.observationTimeText = result.formattedTime ?? this.formatObservationTime(result.timeText)
@@ -9073,6 +9230,12 @@ export struct WindowNativeNode {
                 dockLabelFontSize: this.compactDockLabelFontSize(),
                 dockItemHeight: this.compactDockItemHeight(),
                 infoWinVisible: this.infoWindowStore.infoWinVisible,
+                infoWinExpanded: this.infoWindowStore.infoWinExpanded,
+                pillVisible: this.selectionPillVisible(),
+                pillWidth: this.selectionPillWidth(),
+                pillHeight: this.selectionPillHeight(),
+                pillX: this.selectionPillX(),
+                pillY: this.selectionPillY(),
                 bottomCardIndex: this.objectDetailStore.bottomCardIndex,
                 liveInfoVisible: this.infoWindowStore.selectedLiveInfoVisible(),
                 contentOpacity: this.objectDetailContentOpacity,
@@ -9125,6 +9288,7 @@ export struct WindowNativeNode {
                 nameOf: (name: string) => zhNameOf(name),
                 typeOf: (type: string) => zhType(type),
                 onDragTouch: (event: TouchEvent) => { this.handleObjectInspectorDragTouch(event) },
+                onExpandDetailPill: () => { this.expandDetailPill() },
                 onDismiss: () => { this.dismissObjectInspector() },
                 onSelectTab: (index: number) => { this.selectObjectDetailTab(index) },
                 onLoadPasses: () => { this.objectDetailStore.loadSelectedSatellitePasses() },
@@ -9185,6 +9349,12 @@ export struct WindowNativeNode {
                 gyroPanelLeft: this.EDGE_MARGIN + 64,
                 gyroPanelTop: railTop(this.EDGE_MARGIN) + 120,
                 infoWinVisible: this.infoWindowStore.infoWinVisible,
+                infoWinExpanded: this.infoWindowStore.infoWinExpanded,
+                pillVisible: this.selectionPillVisible(),
+                pillWidth: this.selectionPillWidth(),
+                pillHeight: this.selectionPillHeight(),
+                pillX: this.selectionPillX(),
+                pillY: this.selectionPillY(),
                 bottomCardIndex: this.objectDetailStore.bottomCardIndex,
                 liveInfoVisible: this.infoWindowStore.selectedLiveInfoVisible(),
                 contentOpacity: this.objectDetailContentOpacity,
@@ -9249,6 +9419,7 @@ export struct WindowNativeNode {
                 nameOf: (name: string) => zhNameOf(name),
                 typeOf: (type: string) => zhType(type),
                 onDragTouch: (event: TouchEvent) => { this.handleObjectInspectorDragTouch(event) },
+                onExpandDetailPill: () => { this.expandDetailPill() },
                 onDismiss: () => { this.dismissObjectInspector() },
                 onSelectTab: (index: number) => { this.selectObjectDetailTab(index) },
                 onLoadPasses: () => { this.objectDetailStore.loadSelectedSatellitePasses() },
@@ -9314,6 +9485,12 @@ export struct WindowNativeNode {
                 quickX: this.compactTopQuickX(),
                 quickY: compactTopQuickY(),
                 infoWinVisible: this.infoWindowStore.infoWinVisible,
+                infoWinExpanded: this.infoWindowStore.infoWinExpanded,
+                pillVisible: this.selectionPillVisible(),
+                pillWidth: this.selectionPillWidth(),
+                pillHeight: this.selectionPillHeight(),
+                pillX: this.selectionPillX(),
+                pillY: this.selectionPillY(),
                 bottomCardIndex: this.objectDetailStore.bottomCardIndex,
                 liveInfoVisible: this.infoWindowStore.selectedLiveInfoVisible(),
                 contentOpacity: this.objectDetailContentOpacity,
@@ -9391,6 +9568,7 @@ export struct WindowNativeNode {
                 nameOf: (name: string) => zhNameOf(name),
                 typeOf: (type: string) => zhType(type),
                 onDragTouch: (event: TouchEvent) => { this.handleObjectInspectorDragTouch(event) },
+                onExpandDetailPill: () => { this.expandDetailPill() },
                 onDismiss: () => { this.dismissObjectInspector() },
                 onSelectTab: (index: number) => { this.selectObjectDetailTab(index) },
                 onLoadPasses: () => { this.objectDetailStore.loadSelectedSatellitePasses() },

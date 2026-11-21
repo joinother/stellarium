@@ -383,7 +383,13 @@ void MeteorShower::drawRadiant(StelCore *core, StelPainter* radiantPainter)
 	float mag = 2.0f;
 
 	Vec3d win;
-	if (m_mgr->getEnableMarker() && painter.getProjector()->projectCheck(m_position, win) && mag<=mlimit)
+	const StelProjectorP prj = painter.getProjector();
+	const Vec4i& vp = prj->getViewport();
+	const double edgePad = 260.0 * static_cast<double>(StelApp::getInstance().getScreenScale());
+	const bool radiantNearViewport = prj->project(m_position, win)
+		&& win[0] >= vp[0] - edgePad && win[0] <= vp[0] + vp[2] + edgePad
+		&& win[1] >= vp[1] - edgePad && win[1] <= vp[1] + vp[3] + edgePad;
+	if (m_mgr->getEnableMarker() && radiantNearViewport && mag<=mlimit)
 	{
 		m_mgr->getRadiantTexture()->bind();
 		const float scale = StelApp::getInstance().getScreenScale();

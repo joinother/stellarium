@@ -359,6 +359,9 @@ void AsterismMgr::drawNames(StelPainter& sPainter, const Vec3d &obsVelocity) con
 	sPainter.setBlending(true);
 	const auto selected = GETSTELMODULE(StelObjectMgr)->getSelectedObject("Asterism");
 	sPainter.beginSkyLabels(QStringLiteral("asterisms"), selected.isEmpty() ? QString() : selected.first()->getID());
+	const StelProjectorP prj = sPainter.getProjector();
+	const Vec4i& vp = prj->getViewport();
+	const double labelMargin = 240.0 * static_cast<double>(StelApp::getInstance().getScreenScale());
 	for (auto* asterism : asterisms)
 	{
 		if (!asterism->flagAsterism) continue;
@@ -371,8 +374,10 @@ void AsterismMgr::drawNames(StelPainter& sPainter, const Vec3d &obsVelocity) con
 			XYZname.normalize();
 
 			Vec3d xyName;
-			// Check if in the field of view
-			if (sPainter.getProjector()->projectCheck(XYZname, xyName))
+			// Allow labels to slide smoothly off screen edges; queueSkyLabel clips by exact label rect.
+			if (prj->project(XYZname, xyName) &&
+			    xyName[0] >= vp[0] - labelMargin && xyName[0] <= vp[0] + vp[2] + labelMargin &&
+			    xyName[1] >= vp[1] - labelMargin && xyName[1] <= vp[1] + vp[3] + labelMargin)
 				asterism->drawName(xyName, sPainter);
 		}
 	}

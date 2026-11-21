@@ -4705,6 +4705,7 @@ void Satellites::draw(StelCore* core)
 	struct SatLabelCandidate
 	{
 		const Satellite* sat;
+		QWeakPointer<Satellite> satRef;
 		float magSat;
 		float txtMag;
 		Vec3f color;
@@ -4714,6 +4715,7 @@ void Satellites::draw(StelCore* core)
 	struct SatMarkerCandidate
 	{
 		const Satellite* sat;
+		QWeakPointer<Satellite> satRef;
 		float magSat;
 		float opacity;
 		Vec3f color;
@@ -4822,13 +4824,13 @@ void Satellites::draw(StelCore* core)
 					if (st.pointDrawn)
 						transitDraws.append({sat.data(), st.spriteSize});
 					if (st.markerDrawn)
-						markerCandidates.append({sat.data(), st.magSat, st.markerOpacity * Satellite::hintBrightness,
+						markerCandidates.append({sat.data(), sat.toWeakRef(), st.magSat, st.markerOpacity * Satellite::hintBrightness,
 							markerSunlitColor, isStation, isSelected, !st.pointDrawn, rank});
 					if (st.labelDrawn)
 					{
 						const Vec3f lblCol = brightDaylight ? Satellite::transitSatelliteColor : whiteColor;
 						const float lblAlpha = brightDaylight ? 1.f : Satellite::hintBrightness;
-						labelCandidates.append({sat.data(), st.magSat, st.txtMag, lblCol, lblAlpha, isSelected ? 4 : 3});
+						labelCandidates.append({sat.data(), sat.toWeakRef(), st.magSat, st.txtMag, lblCol, lblAlpha, isSelected ? 4 : 3});
 					}
 				}
 				else
@@ -4851,7 +4853,7 @@ void Satellites::draw(StelCore* core)
 							mCol = markerSunlitColor;
 						else if (sat->visibility == gSatWrapper::PENUMBRAL)
 							mCol = markerPenumbraColor;
-						markerCandidates.append({sat.data(), st.magSat, st.markerOpacity * Satellite::hintBrightness,
+						markerCandidates.append({sat.data(), sat.toWeakRef(), st.magSat, st.markerOpacity * Satellite::hintBrightness,
 							mCol, isStation, isSelected, !st.pointDrawn, rank});
 					}
 					if (st.labelDrawn)
@@ -4868,7 +4870,7 @@ void Satellites::draw(StelCore* core)
 								lblCol = (sat->hintColor.normSquared() > 0.05f) ? sat->hintColor : markerSunlitColor;
 							else if (sat->visibility == gSatWrapper::PENUMBRAL)
 								lblCol = markerPenumbraColor;
-							labelCandidates.append({sat.data(), st.magSat, st.txtMag, lblCol, labelOpacity, rank});
+							labelCandidates.append({sat.data(), sat.toWeakRef(), st.magSat, st.txtMag, lblCol, labelOpacity, rank});
 						}
 					}
 				}
@@ -4891,7 +4893,7 @@ void Satellites::draw(StelCore* core)
 					else if (sat->isISS || sat->groups.contains(grpStations)) rank = 3;
 					else if (sat->visibility == gSatWrapper::VISIBLE) rank = 2;
 					else if (sat->visibility == gSatWrapper::PENUMBRAL) rank = 1;
-					labelCandidates.append({sat.data(), st.magSat, st.txtMag, drawColor,
+					labelCandidates.append({sat.data(), sat.toWeakRef(), st.magSat, st.txtMag, drawColor,
 						st.transitSunMoon ? 1.f : Satellite::hintBrightness, rank});
 				}
 			}
@@ -5151,11 +5153,37 @@ void Satellites::draw(StelCore* core)
 		}
 	}
 
+	// Compute frame delta for smooth satellite marker & label zoom transitions (zero abrupt pop-in/out!)
+	static double s_lastSatFadeTimeSec = -1.0;
+	const double nowSatSec = StelApp::getTotalRunTime();
+	const float satFadeDt = (s_lastSatFadeTimeSec >= 0.0)
+		? static_cast<float>(qBound(0.0, nowSatSec - s_lastSatFadeTimeSec, 0.05))
+		: 0.016f;
+	s_lastSatFadeTimeSec = nowSatSec;
+	const float satFadeInStep  = satFadeDt / 0.28f;
+	const float satFadeOutStep = satFadeDt / 0.24f;
+	const double satZoomFrac = qBound(0.0, (60.0 - currentFovDeg) / 42.0, 1.0);
+
 	// Draw batched minimal instrument micro-markers (crisp diamond + solar wings for stations)
-	// so satellites stand apart from background stars and faint/shadow satellites remain visible on zoom.
-	if (!markerCandidates.isEmpty() && core->getFlagClearSky())
+	// so satellites stand apart from background stars and faint/shadow satellites reveal smoothly on zoom.
+	struct SatMarkerFadeState
 	{
-		const int maxMarkers = (currentFovDeg >= 40.0) ? 28 : 72;
+		QWeakPointer<Satellite> satRef;
+		float alpha = 0.f;
+		Vec3f color = Vec3f(0.62f, 0.90f, 1.0f);
+		bool isStation = false;
+		bool isSelected = false;
+		bool needsCenterDot = false;
+		bool touched = false;
+	};
+	static QHash<QString, SatMarkerFadeState> s_satMarkerFadeMap;
+	for (auto it = s_satMarkerFadeMap.begin(); it != s_satMarkerFadeMap.end(); ++it)
+		it->touched = false;
+
+	if (core->getFlagClearSky())
+	{
+		// Continuous adaptive cap (28 at wide FOV -> 72 when zoomed in; eliminates the 40 deg cliff)
+		const int maxMarkers = qRound(28.0 + 44.0 * satZoomFrac);
 		if (markerCandidates.size() > maxMarkers)
 		{
 			std::partial_sort(markerCandidates.begin(), markerCandidates.begin() + maxMarkers, markerCandidates.end(),
@@ -5166,6 +5194,50 @@ void Satellites::draw(StelCore* core)
 				});
 			markerCandidates.resize(maxMarkers);
 		}
+		for (SatMarkerCandidate& mc : markerCandidates)
+		{
+			auto& stFade = s_satMarkerFadeMap[mc.sat->id];
+			stFade.satRef = mc.satRef;
+			stFade.color = mc.color;
+			stFade.isStation = mc.isStation;
+			stFade.isSelected = mc.isSelected;
+			stFade.needsCenterDot = mc.needsCenterDot;
+			stFade.touched = true;
+			const float target = mc.opacity;
+			if (mc.isSelected)
+				stFade.alpha = target;
+			else if (target > stFade.alpha)
+				stFade.alpha = qMin(target, stFade.alpha + satFadeInStep);
+			else
+				stFade.alpha = qMax(target, stFade.alpha - satFadeOutStep);
+			mc.opacity = stFade.alpha;
+		}
+		// Smoothly fade out markers that dropped below threshold or cap during fast zoom-out
+		for (auto it = s_satMarkerFadeMap.begin(); it != s_satMarkerFadeMap.end(); )
+		{
+			if (!it->touched)
+			{
+				it->alpha = qMax(0.f, it->alpha - satFadeOutStep);
+				SatelliteP satLock = it->satRef.toStrongRef();
+				if (it->alpha <= 0.008f || !satLock || !satLock->displayed || !satLock->orbitValid ||
+				    (groundOccludes && satLock->elAzPosition[2] < -0.025))
+				{
+					it = s_satMarkerFadeMap.erase(it);
+					continue;
+				}
+				markerCandidates.append({satLock.data(), it->satRef, 99.f, it->alpha,
+					it->color, it->isStation, false, it->needsCenterDot, -1});
+			}
+			++it;
+		}
+	}
+	else
+	{
+		s_satMarkerFadeMap.clear();
+	}
+
+	if (!markerCandidates.isEmpty() && core->getFlagClearSky())
+	{
 
 		const double fovDeg = qBound(0.02, currentFovDeg, 179.0);
 		const int vpH = prj ? prj->getViewportHeight() : 1080;
@@ -5285,8 +5357,20 @@ void Satellites::draw(StelCore* core)
 			painter.drawSprite2dMode(td.sat->XYZ, td.spriteSize);
 	}
 
-	// Adaptive label cap: clean & uncluttered at wide FOV (top 20), deeper detail when zoomed in (top 48).
-	const int maxSatelliteLabels = (currentFovDeg >= 40.0) ? 20 : 48;
+	// Continuous adaptive label cap (20 at wide FOV -> 48 when zoomed in; eliminates the 40 deg cliff)
+	// combined with per-satellite temporal fade-in / fade-out so fast pinch zoom never pops labels.
+	struct SatLabelFadeState
+	{
+		QWeakPointer<Satellite> satRef;
+		float alpha = 0.f;
+		Vec3f color = Vec3f(1.f, 1.f, 1.f);
+		bool touched = false;
+	};
+	static QHash<QString, SatLabelFadeState> s_satLabelFadeMap;
+	for (auto it = s_satLabelFadeMap.begin(); it != s_satLabelFadeMap.end(); ++it)
+		it->touched = false;
+
+	const int maxSatelliteLabels = qRound(20.0 + 28.0 * satZoomFrac);
 	if (labelCandidates.size() > maxSatelliteLabels)
 	{
 		std::partial_sort(labelCandidates.begin(), labelCandidates.begin() + maxSatelliteLabels, labelCandidates.end(),
@@ -5300,14 +5384,60 @@ void Satellites::draw(StelCore* core)
 	for (const SatLabelCandidate& lc : labelCandidates)
 	{
 		lc.sat->lastFrameOnScreen = true;
-		painter.setColor(lc.color, lc.opacity);
-		painter.queueSkyLabel(lc.sat->id, lc.sat->XYZ, lc.sat->getNameI18n(), lc.magSat, lc.rank, 10, 10);
+		auto& fade = s_satLabelFadeMap[lc.sat->id];
+		fade.satRef = lc.satRef;
+		fade.color = lc.color;
+		fade.touched = true;
+		const bool isSelectedCand = (lc.rank >= 4);
+		if (isSelectedCand)
+			fade.alpha = lc.opacity;
+		else if (lc.opacity > fade.alpha)
+			fade.alpha = qMin(lc.opacity, fade.alpha + satFadeInStep);
+		else
+			fade.alpha = qMax(lc.opacity, fade.alpha - satFadeOutStep);
+		if (fade.alpha > 0.008f)
+		{
+			painter.setColor(lc.color, fade.alpha);
+			painter.queueSkyLabel(lc.sat->id, lc.sat->XYZ, lc.sat->getNameI18n(), lc.magSat, lc.rank, 10, 10);
+		}
 	}
 
 	for (Satellite* orbitSat : orbitDraws)
 		orbitSat->drawOrbit(core, painter);
 
 	painter.flushSkyLabels();
+
+	// Gracefully dissolve departing satellite labels that dropped below threshold/cap during fast zoom-out
+	// without reserving collision occupancy against newly entering labels.
+	const bool allowDissolveLabels = Satellite::showLabels && Satellite::hintBrightness > 0.01f && core->getFlagClearSky();
+	for (auto it = s_satLabelFadeMap.begin(); it != s_satLabelFadeMap.end(); )
+	{
+		if (!it->touched)
+		{
+			it->alpha = allowDissolveLabels ? qMax(0.f, it->alpha - satFadeOutStep) : 0.f;
+			SatelliteP satLock = it->satRef.toStrongRef();
+			if (it->alpha <= 0.008f || !satLock || !satLock->displayed || !satLock->orbitValid ||
+			    (groundOccludes && satLock->elAzPosition[2] < -0.025))
+			{
+				it = s_satLabelFadeMap.erase(it);
+				continue;
+			}
+			Vec3d win;
+			if (prj && prj->project(satLock->XYZ, win))
+			{
+				const double scale = static_cast<double>(StelApp::getInstance().getScreenScale());
+				const Vec4i& vp = prj->getViewport();
+				if (win[0] >= vp[0] - 260.0 * scale && win[0] <= vp[0] + vp[2] + 32.0 * scale &&
+				    win[1] >= vp[1] - 48.0 * scale  && win[1] <= vp[1] + vp[3] + 32.0 * scale)
+				{
+					painter.setColor(it->color, it->alpha);
+					painter.drawText(static_cast<float>(win[0]), static_cast<float>(win[1]),
+						satLock->getNameI18n(), 0.f, 10.f, 10.f, false);
+				}
+			}
+		}
+		++it;
+	}
 
 	// In screen accumulation mode (star trails), circles or pointer should be suppressed.
 	if (!core->getFlagClearSky())

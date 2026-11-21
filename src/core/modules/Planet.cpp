@@ -4019,7 +4019,15 @@ void Planet::draw(StelCore* core, float maxMagLabels, const QFont& planetNameFon
 	// Compute the 2D position and check if in the screen
 	const StelProjectorP prj = core->getProjection(transfo);
 	const double screenRd = (getAngularRadius(core))*M_PI_180*static_cast<double>(prj->getPixelPerRadAtCenter());
-	const double viewportBufferSz = englishName==L1S("Sun") ? screenRd+125. : screenRd;	// enlarge if this is sun with its huge halo.
+	const double scale = static_cast<double>(StelApp::getInstance().getScreenScale());
+	// Include halo & label padding scaled by screen scale so Moon/Sun/planet halos and labels
+	// glide smoothly off the screen edges instead of snapping out when the center leaves.
+	double haloPad = 180.0 * scale;
+	if (englishName == L1S("Sun"))
+		haloPad = 360.0 * scale;
+	else if (englishName == L1S("Moon"))
+		haloPad = 240.0 * scale;
+	const double viewportBufferSz = screenRd + haloPad;
 	const double viewport_left = prj->getViewportPosX();
 	const double viewport_bottom = prj->getViewportPosY();
 	const double viewport_width = prj->getViewportWidth();

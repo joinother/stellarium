@@ -1134,6 +1134,9 @@ void ConstellationMgr::drawNames(StelPainter& sPainter, const Vec3d &obsVelocity
 	sPainter.setBlending(true);
 	const auto selected = GETSTELMODULE(StelObjectMgr)->getSelectedObject("Constellation");
 	sPainter.beginSkyLabels(QStringLiteral("constellations"), selected.isEmpty() ? QString() : selected.first()->getID());
+	const StelProjectorP prj = sPainter.getProjector();
+	const Vec4i& vp = prj->getViewport();
+	const double labelMargin = 240.0 * static_cast<double>(StelApp::getInstance().getScreenScale());
 	for (auto* constellation : constellations)
 	{
 		for (int i=0; i<constellation->XYZname.size(); ++i)
@@ -1144,8 +1147,10 @@ void ConstellationMgr::drawNames(StelPainter& sPainter, const Vec3d &obsVelocity
 			XYZname.normalize();
 
 			Vec3d xyName;
-			// Check if in the field of view
-			if (sPainter.getProjector()->projectCheck(XYZname, xyName))
+			// Allow labels to slide smoothly off screen edges; queueSkyLabel clips by exact label rect.
+			if (prj->project(XYZname, xyName) &&
+			    xyName[0] >= vp[0] - labelMargin && xyName[0] <= vp[0] + vp[2] + labelMargin &&
+			    xyName[1] >= vp[1] - labelMargin && xyName[1] <= vp[1] + vp[3] + labelMargin)
 				constellation->drawName(xyName, sPainter, i);
 		}
 	}

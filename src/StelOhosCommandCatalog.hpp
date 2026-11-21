@@ -172,7 +172,7 @@ inline QJsonObject item(const QString& name)
 	}
 	else if (name == "setSkyDisplaySetting")
 	{
-		value["description"] = QStringLiteral("setting|value；environmentMode:0无/1仅地面/2大气和地面；realisticStarVisibility:1真实可见性/0白天恒星教学显示；vividAtmosphere:1绚丽大气/0原始渲染；zoomFadeEnvironment:1缩放特写(FOV 10°→2°)自动淡出大气与实景地景/0保留物理模拟。其它天空参数兼容原有设置。getState回读当前值，environmentMode=3表示自定义仅大气。");
+		value["description"] = QStringLiteral("setting|value；environmentMode:0无/1仅地面/2大气和地面；realisticStarVisibility:1真实可见性/0白天恒星教学显示；vividAtmosphere:1绚丽大气/0原始渲染；zoomFadeEnvironment:1缩放特写(FOV 10°→2°)自动淡出大气与实景地景/0保留物理模拟；auroraEnabled:1极光视觉效果/0关闭；auroraStyle:0经典绿幕/1红绿磁暴/2紫韵光柱/3蓝绿极夜。其它天空参数兼容原有设置。getState回读当前值，environmentMode=3表示自定义仅大气。");
 		value["examplePayload"] = "vividAtmosphere|1";
 	}
 	else if (name == "setPluginLoadAtStartup")

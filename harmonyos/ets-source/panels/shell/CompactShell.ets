@@ -5,6 +5,7 @@ import { CompactTopQuickControls } from './CompactTopQuickControls'
 import { DockClockLayer, DockFovLayer, SkyZoomLayer } from './PanelChromeExtras'
 import { GyroCalibPanel } from '../sensors/GyroCalibPanel'
 import { ObjectDetailConnectorLayer } from '../overlay/ObjectDetailConnectorLayer'
+import { ObjectSelectionPill } from '../object/ObjectSelectionPill'
 import { UnifiedObjectDetailCard } from '../object/UnifiedObjectDetailCard'
 import { GyroStore } from '../../state/GyroStore'
 import { ObjectDetailStore } from '../../state/ObjectDetailStore'
@@ -58,6 +59,12 @@ export struct CompactShell {
   @Prop quickX: number
   @Prop quickY: number
   @Prop infoWinVisible: boolean
+  @Prop infoWinExpanded: boolean
+  @Prop pillVisible: boolean
+  @Prop pillWidth: number
+  @Prop pillHeight: number
+  @Prop pillX: number
+  @Prop pillY: number
   @Prop bottomCardIndex: number
   @Prop liveInfoVisible: boolean
   @Prop contentOpacity: number
@@ -121,6 +128,7 @@ export struct CompactShell {
   nameOf: (name: string) => string = () => ''
   typeOf: (type: string) => string = () => ''
   onDragTouch: (event: TouchEvent) => void = () => {}
+  onExpandDetailPill: () => void = () => {}
   onDismiss: () => void = () => {}
   onSelectTab: (index: number) => void = () => {}
   onLoadPasses: () => void = () => {}
@@ -252,7 +260,33 @@ export struct CompactShell {
             TransitionEffect.OPACITY.animation({ duration: 160, curve: Curve.EaseIn })
           ))
       }
-      if (this.infoWinVisible && this.objectDetailStore.selectedName.length > 0) {
+      if (this.pillVisible) {
+        Stack() {
+          ObjectSelectionPill({
+            store: this.objectDetailStore,
+            iconName: this.iconName,
+            pillWidth: this.pillWidth,
+            pillHeight: this.pillHeight,
+            distanceSummaryText: this.distanceSummaryText,
+            nameOf: (name: string) => this.nameOf(name),
+            typeOf: (type: string) => this.typeOf(type),
+            onExpand: () => { this.onExpandDetailPill() },
+            onDismiss: () => { this.onDismiss() }
+          })
+        }
+          .position({ x: this.pillX, y: this.pillY })
+          .width(this.pillWidth)
+          .height(this.pillHeight)
+          .zIndex(48)
+          .hitTestBehavior(HitTestMode.BLOCK_HIERARCHY)
+          .transition(TransitionEffect.asymmetric(
+            TransitionEffect.OPACITY.animation({ duration: 200, curve: Curve.EaseOut })
+              .combine(TransitionEffect.translate({ x: 0, y: -14 }).animation({ duration: 280, curve: curves.springMotion(0.5, 0.86) })),
+            TransitionEffect.OPACITY.animation({ duration: 150, curve: Curve.EaseIn })
+              .combine(TransitionEffect.translate({ x: 0, y: -10 }).animation({ duration: 160, curve: Curve.EaseIn }))
+          ))
+      }
+      if (this.infoWinVisible && this.objectDetailStore.selectedName.length > 0 && this.infoWinExpanded) {
          ObjectDetailConnectorLayer({
            visible: this.connectorVisible,
            beamLength: this.connectorLength,

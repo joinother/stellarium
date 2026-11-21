@@ -24,6 +24,7 @@
 
 #include "StelModule.hpp"
 #include "StelUtils.hpp"
+#include "AuroraRenderer.hpp"
 #include "Landscape.hpp"
 #include "Skylight.hpp"
 
@@ -151,6 +152,8 @@ class LandscapeMgr : public StelModule
 		   NOTIFY atmosphereModelChanged)
 	Q_PROPERTY(bool flagVividAtmosphere READ getFlagVividAtmosphere WRITE setFlagVividAtmosphere NOTIFY flagVividAtmosphereChanged)
 	Q_PROPERTY(bool flagZoomFadeEnvironment READ getFlagZoomFadeEnvironment WRITE setFlagZoomFadeEnvironment NOTIFY flagZoomFadeEnvironmentChanged)
+	Q_PROPERTY(bool flagAurora READ getFlagAurora WRITE setFlagAurora NOTIFY flagAuroraChanged)
+	Q_PROPERTY(int auroraStyle READ getAuroraStyle WRITE setAuroraStyle NOTIFY auroraStyleChanged)
 	Q_PROPERTY(QString atmosphereModelPath
 		   READ getAtmosphereModelPath
 		   WRITE setAtmosphereModelPath
@@ -563,6 +566,12 @@ public slots:
 	void setFlagVividAtmosphere(bool enabled);
 	bool getFlagZoomFadeEnvironment() const { return flagZoomFadeEnvironment; }
 	void setFlagZoomFadeEnvironment(bool enabled);
+	bool getFlagAurora() const { return flagAurora; }
+	void setFlagAurora(bool enabled);
+	int getAuroraStyle() const { return auroraStyle; }
+	void setAuroraStyle(int style);
+	float getAuroraEffectiveOpacity() const { return auroraRenderer.effectiveOpacity(); }
+	float getAuroraSolarGate() const { return auroraRenderer.solarGate(); }
 
 	QString getAtmosphereModel() const;
 	QString getAtmosphereProfile() const;
@@ -738,6 +747,8 @@ signals:
 	void atmosphereModelChanged(const QString& model);
 	void flagVividAtmosphereChanged(bool enabled);
 	void flagZoomFadeEnvironmentChanged(bool enabled);
+	void flagAuroraChanged(bool enabled);
+	void auroraStyleChanged(int style);
 	void atmosphereModelPathChanged(const QString& model);
 	void atmosphereStoppedWithErrorChanged(bool error);
 	void atmosphereStatusTextChanged(const QString& status);
@@ -860,6 +871,7 @@ private:
 	Landscape* oldLandscape;		// Used only during transitions to newly loaded landscape.
 	LandscapeMist mistHorizon;
 	bool mistHorizonEnabled = true;
+	AuroraRenderer auroraRenderer;
 
 	// Used to display error messages: e.g. when atmosphere model fails
 	LinearFader messageFader;
@@ -876,6 +888,8 @@ private:
 	bool atmosphereNoScatter; //!< true to suppress actual blue-sky rendering but keep refraction & extinction
 	bool flagVividAtmosphere = false;
 	bool flagZoomFadeEnvironment = false;
+	bool flagAurora = false;
+	int auroraStyle = 0;
 
 	//! control drawing of a Polygonal line, if one is defined.
 	bool flagPolyLineDisplayedOnly;

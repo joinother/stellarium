@@ -46,7 +46,13 @@ void StelObjectMgr::init()
 {
 	QSettings* conf = StelApp::getInstance().getSettings();
 	Q_ASSERT(conf);
+#if defined(__OHOS__)
+	// HarmonyOS draws a single unified vector precision reticle in StelMainView;
+	// suppress legacy per-module raster sprites so rings never double-stack.
+	setFlagSelectedObjectPointer(false);
+#else
 	setFlagSelectedObjectPointer(conf->value("viewing/flag_show_selection_marker", true).toBool());
+#endif
 
 	addAction("actionToggle_Selected_Object_Pointer", N_("Miscellaneous"), N_("Toggle visibility of pointers for selected objects"), "objectPointerVisibility", "");
 	addAction("actionShow_Narration", N_("Selected object information"), N_("Start narration (speech synthesis)"), this, "narrate()", "Shift+R"); // "read"

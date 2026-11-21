@@ -2,6 +2,7 @@ import { Theme } from '@kit.ArkUI'
 import { ShellAction, SatellitePass, StationComplexMember } from '../../pages/StellariumTypes'
 import { BottomDock } from './BottomDock'
 import { ObjectDetailConnectorLayer } from '../overlay/ObjectDetailConnectorLayer'
+import { ObjectSelectionPill } from '../object/ObjectSelectionPill'
 import { UnifiedObjectDetailCard } from '../object/UnifiedObjectDetailCard'
 import { ObjectDetailStore } from '../../state/ObjectDetailStore'
 import { ObjectMediaStore } from '../../state/ObjectMediaStore'
@@ -44,6 +45,12 @@ export struct HoverObservatoryShell {
   @Prop dockLabelFontSize: number
   @Prop dockItemHeight: number
   @Prop infoWinVisible: boolean
+  @Prop infoWinExpanded: boolean
+  @Prop pillVisible: boolean
+  @Prop pillWidth: number
+  @Prop pillHeight: number
+  @Prop pillX: number
+  @Prop pillY: number
   @Prop bottomCardIndex: number
   @Prop liveInfoVisible: boolean
   @Prop contentOpacity: number
@@ -98,6 +105,7 @@ export struct HoverObservatoryShell {
   nameOf: (name: string) => string = () => ''
   typeOf: (type: string) => string = () => ''
   onDragTouch: (event: TouchEvent) => void = () => {}
+  onExpandDetailPill: () => void = () => {}
   onDismiss: () => void = () => {}
   onSelectTab: (index: number) => void = () => {}
   onLoadPasses: () => void = () => {}
@@ -199,7 +207,27 @@ export struct HoverObservatoryShell {
         .hitTestBehavior(HitTestMode.Block)
         .zIndex(40)
 
-      if (this.infoWinVisible && this.objectDetailStore.selectedName.length > 0) {
+      if (this.pillVisible) {
+        Stack() {
+          ObjectSelectionPill({
+            store: this.objectDetailStore,
+            iconName: this.iconName,
+            pillWidth: this.pillWidth,
+            pillHeight: this.pillHeight,
+            distanceSummaryText: this.distanceSummaryText,
+            nameOf: (name: string) => this.nameOf(name),
+            typeOf: (type: string) => this.typeOf(type),
+            onExpand: () => { this.onExpandDetailPill() },
+            onDismiss: () => { this.onDismiss() }
+          })
+        }
+          .position({ x: this.pillX, y: this.pillY })
+          .width(this.pillWidth)
+          .height(this.pillHeight)
+          .zIndex(35)
+          .hitTestBehavior(HitTestMode.BLOCK_HIERARCHY)
+      }
+      if (this.infoWinVisible && this.objectDetailStore.selectedName.length > 0 && this.infoWinExpanded) {
          ObjectDetailConnectorLayer({
            visible: this.connectorVisible,
            beamLength: this.connectorLength,

@@ -213,8 +213,27 @@ NebulaMgr::NebulaMgr(void) : StelObjectModule()
 	setObjectName("NebulaMgr");
 }
 
+namespace
+{
+struct DsoFadeEntry
+{
+	Nebula* nebula = nullptr;
+	float labelAlpha = 0.f;
+	float hintAlpha = 0.f;
+	float labelShift = 15.f;
+	QString label;
+	bool touched = false;
+};
+QHash<unsigned int, DsoFadeEntry>& dsoFadeCache()
+{
+	static QHash<unsigned int, DsoFadeEntry> cache;
+	return cache;
+}
+}
+
 NebulaMgr::~NebulaMgr()
 {
+	dsoFadeCache().clear();
 	Nebula::texRegion = StelTextureSP();
 	Nebula::texPointElement = StelTextureSP();
 	Nebula::texPlanetaryNebula = StelTextureSP();
@@ -672,7 +691,14 @@ struct DrawNebulaFuncObject
 		candidate.nebula = n;
 		candidate.outlineAlpha = outlineAlpha;
 
-		if ((labelAlpha > 0.f || hintAlpha > 0.f) && sPainter->getProjector()->projectCheck(n->XYZ, n->XY))
+		const auto& projector = sPainter->getProjector();
+		const Vec4i& vp = projector->getViewport();
+		const double edgePad = 220.0 * static_cast<double>(StelApp::getInstance().getScreenScale());
+		const bool inPaddedViewport = (labelAlpha > 0.f || hintAlpha > 0.f)
+			&& projector->project(n->XYZ, n->XY)
+			&& n->XY[0] >= vp[0] - edgePad && n->XY[0] <= vp[0] + vp[2] + edgePad
+			&& n->XY[1] >= vp[1] - edgePad && n->XY[1] <= vp[1] + vp[3] + edgePad;
+		if (inPaddedViewport)
 		{
 			++stats.projected;
 			Vec3d direction = n->XYZ;
@@ -680,14 +706,13 @@ struct DrawNebulaFuncObject
 			{
 				direction += aberration;
 				direction.normalize();
-				sPainter->getProjector()->project(direction, n->XY);
+				projector->project(direction, n->XY);
 			}
 			candidate.direction = direction;
 			const bool isSelected = selected == n;
 			const bool named = !n->getEnglishName().isEmpty() || !n->culturalNames.isEmpty();
 			const int priority = isSelected ? std::numeric_limits<int>::max() : (named ? 1 : 0);
 			const std::string owner = "dso:" + std::to_string(n->DSO_nb);
-			const auto& projector = sPainter->getProjector();
 			const ScreenLabelLayout::Rect viewport{static_cast<float>(projector->getViewportPosX()),
 				static_cast<float>(projector->getViewportPosY()),
 				static_cast<float>(projector->getViewportPosX() + projector->getViewportWidth()),
@@ -710,18 +735,26 @@ struct DrawNebulaFuncObject
 			}
 			if (hintAlpha > 0.f)
 			{
-				++stats.hints.candidates;
-				candidate.hintKey = owner + ":hint";
-				candidate.hintAlpha = hintAlpha;
 				const float scale = std::max(projector->getScreenScale(),
 					static_cast<float>(projector->getDevicePixelsPerPixel()));
 				const float radius = (n->getHintSize(*sPainter) + 5.f) * scale;
-				const ScreenLabelLayout::Rect rect{
-					std::max(viewport.left, static_cast<float>(n->XY[0]) - radius),
-					std::max(viewport.bottom, static_cast<float>(n->XY[1]) - radius),
-					std::min(viewport.right, static_cast<float>(n->XY[0]) + radius),
-					std::min(viewport.top, static_cast<float>(n->XY[1]) + radius)};
-				layout.add({candidate.hintKey, rect, priority, mag, hintAlpha, owner, isSelected});
+				const ScreenLabelLayout::Rect rawHintRect{
+					static_cast<float>(n->XY[0]) - radius,
+					static_cast<float>(n->XY[1]) - radius,
+					static_cast<float>(n->XY[0]) + radius,
+					static_cast<float>(n->XY[1]) + radius};
+				if (rawHintRect.intersects(viewport))
+				{
+					++stats.hints.candidates;
+					candidate.hintKey = owner + ":hint";
+					candidate.hintAlpha = hintAlpha;
+					const ScreenLabelLayout::Rect rect{
+						std::max(viewport.left, rawHintRect.left),
+						std::max(viewport.bottom, rawHintRect.bottom),
+						std::min(viewport.right, rawHintRect.right),
+						std::min(viewport.top, rawHintRect.top)};
+					layout.add({candidate.hintKey, rect, priority, mag, hintAlpha, owner, isSelected});
+				}
 			}
 		}
 		if (outlineAlpha > 0.f)
@@ -731,24 +764,75 @@ struct DrawNebulaFuncObject
 	void draw()
 	{
 		StelPainter::resolveSkyLabelLayout(QStringLiteral("nebulae"));
+		static double s_lastDsoFadeTimeSec = -1.0;
+		const double nowSec = StelApp::getTotalRunTime();
+		const float dt = (s_lastDsoFadeTimeSec >= 0.0)
+			? static_cast<float>(qBound(0.0, nowSec - s_lastDsoFadeTimeSec, 0.05))
+			: 0.016f;
+		s_lastDsoFadeTimeSec = nowSec;
+		const float fadeInStep  = dt / 0.28f;
+		const float fadeOutStep = dt / 0.24f;
+
+		auto& fadeCache = dsoFadeCache();
+		for (auto it = fadeCache.begin(); it != fadeCache.end(); ++it)
+			it->touched = false;
+
 		for (const auto& candidate : candidates)
 		{
 			Nebula* n = candidate.nebula;
 			stats.labels.accepted += layout.accepted(candidate.labelKey);
 			stats.hints.accepted += layout.accepted(candidate.hintKey);
-			const float labelAlpha = layout.visibility(candidate.labelKey);
-			const float hintAlpha = layout.visibility(candidate.hintKey);
-			if (labelAlpha > 0.f)
+			const float targetLabelAlpha = layout.visibility(candidate.labelKey);
+			const float targetHintAlpha = layout.visibility(candidate.hintKey);
+			const bool isSelected = (selected == n);
+
+			float drawLabelAlpha = targetLabelAlpha;
+			float drawHintAlpha = targetHintAlpha;
+			auto it = fadeCache.find(n->DSO_nb);
+			if (targetLabelAlpha > 0.f || targetHintAlpha > 0.f || it != fadeCache.end())
 			{
-				recordDraw(stats.labels, labelAlpha);
-				n->drawVisibility.labelAlpha = labelAlpha;
-				n->drawLabel(*sPainter, labelAlpha, candidate.label, candidate.labelShift);
+				DsoFadeEntry& entry = (it != fadeCache.end()) ? it.value() : fadeCache[n->DSO_nb];
+				entry.nebula = n;
+				entry.touched = true;
+				if (!candidate.label.isEmpty())
+				{
+					entry.label = candidate.label;
+					entry.labelShift = candidate.labelShift;
+				}
+				if (isSelected)
+				{
+					entry.labelAlpha = targetLabelAlpha;
+					entry.hintAlpha = targetHintAlpha;
+				}
+				else
+				{
+					entry.labelAlpha = (targetLabelAlpha > entry.labelAlpha)
+						? qMin(targetLabelAlpha, entry.labelAlpha + fadeInStep)
+						: qMax(targetLabelAlpha, entry.labelAlpha - fadeOutStep);
+					entry.hintAlpha = (targetHintAlpha > entry.hintAlpha)
+						? qMin(targetHintAlpha, entry.hintAlpha + fadeInStep)
+						: qMax(targetHintAlpha, entry.hintAlpha - fadeOutStep);
+				}
+				drawLabelAlpha = entry.labelAlpha;
+				drawHintAlpha = entry.hintAlpha;
 			}
-			if (hintAlpha > 0.f)
+
+			if (drawLabelAlpha > 0.008f)
 			{
-				recordDraw(stats.hints, hintAlpha);
-				n->drawVisibility.hintAlpha = hintAlpha;
-				n->drawHints(*sPainter, hintAlpha, candidate.direction);
+				const QString& lbl = !candidate.label.isEmpty() ? candidate.label : fadeCache.value(n->DSO_nb).label;
+				const float shift = !candidate.label.isEmpty() ? candidate.labelShift : fadeCache.value(n->DSO_nb).labelShift;
+				if (!lbl.isEmpty())
+				{
+					recordDraw(stats.labels, drawLabelAlpha);
+					n->drawVisibility.labelAlpha = drawLabelAlpha;
+					n->drawLabel(*sPainter, drawLabelAlpha, lbl, shift);
+				}
+			}
+			if (drawHintAlpha > 0.008f)
+			{
+				recordDraw(stats.hints, drawHintAlpha);
+				n->drawVisibility.hintAlpha = drawHintAlpha;
+				n->drawHints(*sPainter, drawHintAlpha, candidate.direction);
 			}
 			if (candidate.outlineAlpha > 0.f)
 			{
@@ -757,6 +841,59 @@ struct DrawNebulaFuncObject
 				n->drawVisibility.outlineAlpha = candidate.outlineAlpha;
 				n->drawOutlines(*sPainter, candidate.outlineAlpha, aberration, useAberration);
 			}
+		}
+
+		// Smoothly dissolve DSO labels & hints that dropped below magnitude/FOV threshold
+		// during fast pinch zoom-out so they fade out gracefully instead of popping off in 1 frame.
+		const auto& projector = sPainter->getProjector();
+		const Vec4i& vp = projector->getViewport();
+		const double edgePad = 220.0 * static_cast<double>(StelApp::getInstance().getScreenScale());
+		for (auto it = fadeCache.begin(); it != fadeCache.end(); )
+		{
+			if (!it->touched)
+			{
+				it->labelAlpha = qMax(0.f, it->labelAlpha - fadeOutStep);
+				it->hintAlpha = qMax(0.f, it->hintAlpha - fadeOutStep);
+				Nebula* n = it->nebula;
+				if (!n || (it->labelAlpha <= 0.008f && it->hintAlpha <= 0.008f) ||
+				    (Nebula::labelsBrightness <= 0.005f && Nebula::hintsBrightness <= 0.005f) ||
+				    !n->objectInDisplayedCatalog() || !n->objectInDisplayedType())
+				{
+					it = fadeCache.erase(it);
+					continue;
+				}
+				Vec3d direction = n->XYZ;
+				if (useAberration)
+				{
+					direction += aberration;
+					direction.normalize();
+				}
+				if (projector->project(direction, n->XY) &&
+				    n->XY[0] >= vp[0] - edgePad && n->XY[0] <= vp[0] + vp[2] + edgePad &&
+				    n->XY[1] >= vp[1] - edgePad && n->XY[1] <= vp[1] + vp[3] + edgePad)
+				{
+					const float outLabelAlpha = qMin(it->labelAlpha, Nebula::labelsBrightness);
+					const float outHintAlpha = qMin(it->hintAlpha, Nebula::hintsBrightness);
+					if (outLabelAlpha > 0.008f && !it->label.isEmpty())
+					{
+						recordDraw(stats.labels, outLabelAlpha);
+						n->drawVisibility.labelAlpha = outLabelAlpha;
+						n->drawLabel(*sPainter, outLabelAlpha, it->label, it->labelShift);
+					}
+					if (outHintAlpha > 0.008f)
+					{
+						recordDraw(stats.hints, outHintAlpha);
+						n->drawVisibility.hintAlpha = outHintAlpha;
+						n->drawHints(*sPainter, outHintAlpha, direction);
+					}
+				}
+			}
+			else if (it->labelAlpha <= 0.008f && it->hintAlpha <= 0.008f)
+			{
+				it = fadeCache.erase(it);
+				continue;
+			}
+			++it;
 		}
 	}
 	float maxMagHints;
@@ -1110,6 +1247,7 @@ void NebulaMgr::loadNebulaSet(const QString& setName)
 	QString dsoDiscoveryPath = StelFileMgr::findFile("nebulae/" + setName + "/discovery.dat");
 	QString dsoNamesPath = StelFileMgr::findFile("nebulae/" + setName + "/names.dat");
 
+	dsoFadeCache().clear();
 	dsoArray.clear();
 	dsoDrawIndex.clear();
 	dsoIndex.clear();

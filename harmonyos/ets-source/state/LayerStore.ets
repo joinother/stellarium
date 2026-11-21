@@ -16,6 +16,8 @@ export class LayerStore {
   realisticStarVisibility: boolean = true
   vividAtmosphere: boolean = false
   zoomFadeEnvironment: boolean = false
+  auroraEnabled: boolean = false
+  auroraStyle: number = 0
   environmentMode: number = 2
   starTwinkle: boolean = true
   forcedStarTwinkle: boolean = false

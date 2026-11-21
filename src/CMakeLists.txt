@@ -209,6 +209,8 @@ SET(stellarium_lib_SRCS
      core/modules/LabelMgr.cpp
      core/modules/MarkerMgr.hpp
      core/modules/MarkerMgr.cpp
+     core/modules/AuroraRenderer.cpp
+     core/modules/AuroraRenderer.hpp
      core/modules/Landscape.cpp
      core/modules/Landscape.hpp
      core/modules/LandscapeMgr.cpp

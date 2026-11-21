@@ -629,6 +629,11 @@ void LandscapeMgr::update(double deltaTime)
 	Vec3d moonPos = moon->getAltAzPosAuto(core);
 	moonPos.normalize();
 
+	const double auroraSunAltDeg = std::asin(qBound(-1.0, sunPos[2], 1.0)) * M_180_PI;
+	const bool auroraOnEarth = currentPlanet->getEnglishName() == QLatin1String("Earth");
+	const float auroraZoomVis = EnvironmentZoomFade::environmentVisibility(flagZoomFadeEnvironment, currentFov);
+	auroraRenderer.update(deltaTime, flagAurora, auroraOnEarth, auroraSunAltDeg, auroraZoomVis, auroraStyle);
+
 	// With atmosphere on, we define the solar brightness contribution zero when the sun is 8 degrees below the horizon.
 	// The multiplier of 1.5 just looks better, it somehow represents illumination by scattered sunlight.
 	// Else, we should account for sun's diameter but else just apply Lambertian Cos-rule and check with landscape opacity.
@@ -726,6 +731,10 @@ void LandscapeMgr::draw(StelCore* core)
 		font.setPixelSize(StelApp::getInstance().getScreenFontSize());
 		sun->draw(core, 0, font, 1.0);
 	}
+
+	// Draw volumetric atmospheric aurora curtains behind landscape/mist silhouettes
+	if (auroraRenderer.effectiveOpacity() > 0.002f)
+		auroraRenderer.draw(core);
 
 	// Draw the landscape
 	const double currentFov = core->getMovementMgr() ? core->getMovementMgr()->getCurrentFov() : 60.0;
@@ -885,6 +894,8 @@ void LandscapeMgr::init()
 	// SET SIMPLE PROPERTIES FIRST, before loading the landscape (Loading may already make use of them! GH#1237)
 	flagVividAtmosphere = conf->value("landscape/flag_vivid_atmosphere", false).toBool();
 	flagZoomFadeEnvironment = conf->value("landscape/flag_zoom_fade_environment", false).toBool();
+	flagAurora = conf->value("landscape/flag_aurora", false).toBool();
+	auroraStyle = qBound(0, conf->value("landscape/aurora_style", 0).toInt(), AuroraRenderer::kStyleCount - 1);
 	setFlagLandscapeSetsLocation(conf->value("landscape/flag_landscape_sets_location",false).toBool());
 	setFlagLandscapeAutoSelection(conf->value("viewing/flag_landscape_autoselection", false).toBool());
 	setFlagEnvironmentAutoEnable(conf->value("viewing/flag_environment_auto_enable",true).toBool());
@@ -1828,6 +1839,25 @@ void LandscapeMgr::setFlagZoomFadeEnvironment(bool enabled)
 	flagZoomFadeEnvironment = enabled;
 	StelApp::immediateSave("landscape/flag_zoom_fade_environment", enabled);
 	emit flagZoomFadeEnvironmentChanged(enabled);
+}
+
+void LandscapeMgr::setFlagAurora(bool enabled)
+{
+	if (flagAurora == enabled)
+		return;
+	flagAurora = enabled;
+	StelApp::immediateSave("landscape/flag_aurora", enabled);
+	emit flagAuroraChanged(enabled);
+}
+
+void LandscapeMgr::setAuroraStyle(int style)
+{
+	const int clamped = qBound(0, style, AuroraRenderer::kStyleCount - 1);
+	if (auroraStyle == clamped)
+		return;
+	auroraStyle = clamped;
+	StelApp::immediateSave("landscape/aurora_style", clamped);
+	emit auroraStyleChanged(clamped);
 }
 
 void LandscapeMgr::setAtmosphereModel(const QString& model)

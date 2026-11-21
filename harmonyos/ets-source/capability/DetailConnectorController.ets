@@ -245,8 +245,8 @@ export class DetailConnectorController {
   }
 
   refreshObjectDetailConnector(): void {
-    if (!this.hooks.connectorVisible() || !this.infoWindowStore.infoWinVisible || this.objectDetailStore.selectedStatus !== 'Selected' ||
-      this.objectDetailStore.selectedName.length === 0) {
+    if (!this.hooks.connectorVisible() || !this.infoWindowStore.infoWinVisible || !this.infoWindowStore.infoWinExpanded ||
+      this.objectDetailStore.selectedStatus !== 'Selected' || this.objectDetailStore.selectedName.length === 0) {
       this.clearObjectDetailConnector()
       return
     }
@@ -303,8 +303,8 @@ export class DetailConnectorController {
     const anchorX = cardIntersection[0] + unitX * 5
     const anchorY = cardIntersection[1] + unitY * 5
     if (targetOnScreen) {
-      endX -= unitX * 16
-      endY -= unitY * 16
+      endX -= unitX * 22
+      endY -= unitY * 22
     }
 
     let clippedByUi = false

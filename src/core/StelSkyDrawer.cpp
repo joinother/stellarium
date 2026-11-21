@@ -573,20 +573,34 @@ bool StelSkyDrawer::drawPointSource(StelPainter* sPainter, const Vec3d& v, const
 		return false;
 
 	Vec3d win;
-	if (!(checkInScreen ? sPainter->getProjector()->projectCheck(v, win) : sPainter->getProjector()->project(v, win)))
+	const StelProjectorP prj = sPainter->getProjector();
+	if (!prj->project(v, win))
 		return false;
 
 	const float radius = rcMag.radius;
+	const float scale = StelApp::getInstance().getScreenScale();
+	// If the rmag is big, draw a big halo
+	const float bigHaloThresholdRadius = (MAX_LINEAR_RADIUS+5)*scale;
+	const bool hasBigHalo = flagDrawBigStarHalo && radius > bigHaloThresholdRadius;
+	if (checkInScreen)
+	{
+		// Keep point sources (stars, bright star halos, Moon/planet halos) alive until
+		// their full visible halo/disk has actually exited the viewport instead of popping
+		// out the instant the center crosses a screen edge.
+		const double pad = static_cast<double>(hasBigHalo ? qMax(radius, 150.f * scale) : (radius + 4.f * scale));
+		const Vec4i& vp = prj->getViewport();
+		if (win[0] < vp[0] - pad || win[0] > vp[0] + vp[2] + pad ||
+		    win[1] < vp[1] - pad || win[1] > vp[1] + vp[3] + pad)
+			return false;
+	}
+
 	const float frand=StelApp::getInstance().getRandF();
 
 	// Random coef for star twinkling. twinkleFactor can introduce height-dependent twinkling.
 	const float twinkleStrength = flagForcedTwinkle ? 1.f : (flagHasAtmosphere ? atmosphereVisualStrength : 0.f);
 	const float tw = flagStarTwinkle ? (1.f-twinkleStrength*twinkleFactor*static_cast<float>(twinkleAmount)*frand)*rcMag.luminance : rcMag.luminance;
 
-	const float scale = StelApp::getInstance().getScreenScale();
-	// If the rmag is big, draw a big halo
-	const float bigHaloThresholdRadius = (MAX_LINEAR_RADIUS+5)*scale;
-	if (flagDrawBigStarHalo && radius > bigHaloThresholdRadius)
+	if (hasBigHalo)
 	{
 		const float cmag = qMin(1.0f, qMin(rcMag.luminance, (radius-bigHaloThresholdRadius)/30.f/scale));
 		const float rmag = 150.f * scale;
