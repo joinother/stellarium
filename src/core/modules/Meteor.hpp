@@ -48,6 +48,11 @@ public:
 	void init(const float& radiantAlpha, const float& radiantDelta,
 		  const float& speed, const QList<ColorPair> colors);
 
+	//! Initialize a preview meteor whose 3D AltAz trajectory crosses near centerAltAz.
+	void initInViewport(const Vec3d& centerAltAz, float offsetRightRad, float offsetUpRad,
+			    float slopeAngleRad, float speed, const QList<ColorPair>& colors,
+			    bool isFireball, float startDelaySec = 0.f);
+
 	//! Updates the position of the meteor, and expires it if necessary.
 	//! @param deltaTime the time increment in seconds since the last call.
 	//! @return true of the meteor is still alive, else false.
@@ -58,6 +63,7 @@ public:
 
 	//! Indicate if the meteor still visible.
 	bool isAlive() const { return m_alive; }
+	bool isPreviewBypassDaylight() const { return m_bypassDaylight; }
 	QString getRejectionReason() const { return m_rejectionReason; }
 	//! Set meteor absolute magnitude.
 	void setAbsMag(float mag) { m_absMag = mag; }
@@ -65,20 +71,26 @@ public:
 	float absMag() const { return m_absMag; }
 
 private:
-	//! Determine color vectors of line and prism used to draw meteor train.
+	//! Determine color vectors of outer halo, spectral sheath and incandescent core.
 	void buildColorVectors(const QList<ColorPair> colors);
+
+	//! Configure physical morphology (width class, terminal flare, ionization afterglow).
+	void configureMorphology(bool forceFireball, float speedKmS, const QList<ColorPair>& colors);
 
 	//! get RGB from color name
 	static Vec4f getColorFromName(QString colorName);
 
-	//! Calculates the train thickness and bolide size.
-	static void calculateThickness(const StelCore* core, double &thickness, double &bolideSize);
+	//! Calculates angular base radius (in radians) and bolide angular size.
+	static void calculateThickness(const StelCore* core, const StelPainter& sPainter,
+				       double &angularHalfWidth, double &bolideAngularSize);
 
-	//! Draws the meteor bolide.
-	void drawBolide(StelPainter &sPainter, const double &bolideSize);
+	//! Draws the meteor bolide (camera-facing spectral coma + white-hot core).
+	void drawBolide(StelPainter &sPainter, const Vec3d& headDir, const Vec3d& tangentDir,
+			const double &bolideAngularSize, float headIntensity);
 
-	//! Draws the meteor train.
-	void drawTrain(StelPainter& sPainter, const double &thickness);
+	//! Draws the meteor train (camera-facing tapered multi-layer additive ribbons).
+	void drawTrain(const StelCore* core, StelPainter& sPainter, const double &angularHalfWidth,
+		       Vec3d& outHeadDir, Vec3d& outHeadTangent);
 
 	//! Calculates the z-component of a meteor as a function of meteor zenith angle
 	static float meteorZ(float zenithAngle, float altitude);
@@ -92,6 +104,7 @@ private:
 	const StelCore* m_core;         //! The associated StelCore instance.
 
 	bool m_alive;                   //! Indicates if the meteor it still visible.
+	bool m_bypassDaylight;          //! Preview meteors animate regardless of daylight or pause.
 	QString m_rejectionReason;
 	double m_speed;                  //! Velocity of meteor in km/s.
 	Mat4d m_matAltAzToRadiant;      //! Rotation matrix to convert from horizontal to radiant coordinate system.
@@ -102,11 +115,27 @@ private:
 	float m_minDist;                //! Shortest distance between meteor and observer.
 	float m_absMag;                 //! Absolute magnitude [0, 1]
 	float m_aptMag;                 //! Apparent magnitude [0, 1]
+	float m_peakAbsMag;             //! Initial/peak absolute magnitude for fade ratios
+	float m_startDelay;             //! Optional stagger delay before entering burn (seconds)
+	float m_trainSeconds;           //! Wake persistence window in seconds (0.35..0.85)
+	float m_widthScale;             //! Morphology width multiplier (needle 0.65 .. fireball 1.85)
+	bool m_hasTerminalFlare;        //! Whether meteor exhibits a late-stage ablation flare
+	float m_flarePos;               //! Normalized longitudinal position of flare [0.68, 0.90]
+	float m_flareStrength;          //! Extra brightness/width boost at flare peak
+	bool m_hasAfterglow;            //! Whether bright meteor leaves an O I / Mg ionization afterglow
+	float m_afterglowRemaining;     //! Remaining afterglow seconds after head extinguishes
+	float m_afterglowDuration;      //! Total afterglow seconds
+	bool m_headExtinguished;        //! True once meteor passes m_finalZ
+	float m_headFade;               //! Rapid head fade factor [1 -> 0] after m_finalZ
+	Vec3f m_headTintColor;          //! Spectral tint for bolide coma
+	Vec3f m_afterglowColor;         //! Spectral tint for persistent ionization train
 
 	StelTextureSP m_bolideTexture;  //! Meteor bolide texture
 	const int m_segments;           //! Number of segments along the train (useful to curve along projection distortions)
-	QVector<Vec4f> m_trainColorVector;
-	QVector<Vec4f> m_lineColorVector;
+	QVector<Vec4f> m_outerColorVector;  //! Smooth saturated spectral halo color per segment
+	QVector<Vec4f> m_coreColorVector;   //! Smooth hot incandescent core color per segment
+	QVector<Vec4f> m_trainColorVector;  //! Scratch buffer (2 * m_segments) for ribbon vertices
+	QVector<Vec4f> m_lineColorVector;   //! Scratch buffer (m_segments) for crisp spine highlight
 };
 
 #endif // METEOR_HPP

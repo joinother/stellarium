@@ -30,10 +30,14 @@ class SporadicMeteor : public Meteor
 public:
 	//! Create a SporadicMeteor object.
 	SporadicMeteor(const StelCore* core, const float& maxVel, const StelTextureSP& bolideTexture);
+	//! Create a viewport-directed preview meteor with explicit spectral palette & morphology.
+	SporadicMeteor(const StelCore* core, const Vec3d& centerAltAz,
+		       float offsetRightRad, float offsetUpRad, float slopeAngleRad,
+		       float speed, const QList<ColorPair>& colors,
+		       const StelTextureSP& bolideTexture, bool isFireball, float startDelaySec = 0.f);
 	~SporadicMeteor() override;
 
-private:
-	static QList<ColorPair> getRandColor();
+	static QList<ColorPair> getRandColor(float speedKmS = 45.f);
 };
 
 

@@ -1,4 +1,4 @@
-﻿import { curves, Theme } from '@kit.ArkUI'
+﻿import { curves, LengthMetrics, Theme } from '@kit.ArkUI'
 import { LandscapeItem } from '../../pages/StellariumTypes'
 import { I18n } from '../../pages/I18n'
 import { LayerStore } from '../../state/LayerStore'
@@ -9,6 +9,7 @@ import { UI_RADIUS_CARD, UI_RADIUS_CONTROL, UI_RADIUS_MEDIA, UI_RADIUS_TAG } fro
 import { panelFontSize } from '../../common/ui/UiTypography'
 import { InfoTipButton } from '../../common/ui/InfoTipButton'
 import { getLandscapeStoryZh, LandscapeStoryZh } from '../../common/derive/LandscapeStoriesZh'
+import { absoluteScaleToStarBrightness, starBrightnessToAbsoluteScale } from '../../capability/SkyInputController'
 import { LayerSwitchRow } from './LayerSwitchRow'
 import { ObservationAidBlock } from './ObservationAidBlock'
 import { AtmosphereGroundSection } from './AtmosphereGroundSection'
@@ -16,6 +17,90 @@ import { LayerSpectralSection } from './LayerSpectralSection'
 import { DsoSettingsSection } from './DsoSettingsSection'
 import { SurveyStore } from '../../state/SurveyStore'
 import { ViewCoordinateSettings } from '../view/ViewCoordinateSettings'
+
+// 流星 ZHR 对数滑块映射（0..100 -> 0..maxZhr），让静谧夜空 (10) 到流星暴 (24万) 都有舒适手感和清晰分辨率。
+export function meteorZhrToSliderPos(zhr: number, maxZhr: number): number {
+  const cap = Math.max(1000, maxZhr)
+  const clamped = Math.max(0, Math.min(cap, Math.round(zhr)))
+  if (clamped <= 0) return 0
+  if (clamped <= 5) return 1
+  const ratio = Math.log(clamped / 5) / Math.log(cap / 5)
+  return Math.max(1, Math.min(100, Math.round(1 + ratio * 99)))
+}
+
+export function meteorZhrFromSliderPos(pos: number, maxZhr: number): number {
+  const cap = Math.max(1000, maxZhr)
+  const clamped = Math.max(0, Math.min(100, pos))
+  if (clamped < 0.5) return 0
+  if (clamped <= 1.5) return 5
+  const raw = 5 * Math.pow(cap / 5, (clamped - 1) / 99)
+  if (raw < 20) return Math.round(raw)
+  if (raw < 100) return Math.round(raw / 5) * 5
+  if (raw < 1000) return Math.round(raw / 10) * 10
+  if (raw < 10000) return Math.round(raw / 100) * 100
+  return Math.min(cap, Math.round(raw / 1000) * 1000)
+}
+
+export function formatMeteorZhrLabel(zhr: number): string {
+  const v = Math.max(0, Math.round(zhr))
+  if (v >= 10000) {
+    const wan = v / 10000
+    return (wan >= 10 ? wan.toFixed(0) : wan.toFixed(1).replace(/\.0$/, '')) + '万 /时'
+  }
+  if (v >= 1000) {
+    const k = v / 1000
+    return k.toFixed(1).replace(/\.0$/, '') + '千 /时'
+  }
+  return v.toString() + ' /时'
+}
+
+// 儒略日（UTC 0时为 .5）转 YYYY-MM-DD（Fliegel-Van Flandern 算法）
+export function julianDayToIsoDate(jd: number): string {
+  const z = Math.floor(jd + 0.5)
+  const l0 = z + 68569
+  const n = Math.floor((4 * l0) / 146097)
+  const l1 = l0 - Math.floor((146097 * n + 3) / 4)
+  const i = Math.floor((4000 * (l1 + 1)) / 1461001)
+  const l2 = l1 - Math.floor((1461 * i) / 4) + 31
+  const j = Math.floor((80 * l2) / 2447)
+  const day = l2 - Math.floor((2447 * j) / 80)
+  const l3 = Math.floor(j / 11)
+  const month = j + 2 - 12 * l3
+  const year = 100 * (n - 49) + i + l3
+  const pad = (num: number): string => (num < 10 ? '0' + num.toString() : num.toString())
+  return year.toString() + '-' + pad(month) + '-' + pad(day)
+}
+
+export function currentUtcMidnightJd(): number {
+  return Math.floor(Date.now() / 86400000) + 2440587.5
+}
+
+interface MeteorPresetOption {
+  label: string
+  zhr: number
+}
+
+interface TonePresetOption {
+  label: string
+  lda: number
+  maxdL: number
+  gamma: number
+}
+
+const METEOR_ZHR_PRESETS: Array<MeteorPresetOption> = [
+  { label: '静谧 10', zhr: 10 },
+  { label: '活跃 120', zhr: 120 },
+  { label: '流星雨 1500', zhr: 1500 },
+  { label: '流星暴 1.5万', zhr: 15000 },
+  { label: '极盛 10万', zhr: 100000 }
+]
+
+const TONE_MAPPING_PRESETS: Array<TonePresetOption> = [
+  { label: '标准默认', lda: 50, maxdL: 100, gamma: 2.22 },
+  { label: '深空暗夜', lda: 28, maxdL: 120, gamma: 2.05 },
+  { label: '高对比', lda: 68, maxdL: 90, gamma: 2.45 },
+  { label: '柔和护眼', lda: 42, maxdL: 150, gamma: 1.95 }
+]
 
 // 本组件文件：「图层」面板六个视图标签页（天空 / 太阳系天体 / 深空天体 /
 // 标记与网格 / 地景 / 巡天）。
@@ -41,6 +126,10 @@ export struct LayerSkyTab {
   @Prop atmoTemperature: number
   @Prop atmoExtinction: number
   @State private c: ThemeSlots = DEFAULT_SLOTS
+  @State private meteorDragging: boolean = false
+  @State private meteorDragPos: number = 8
+  private lastMeteorCommitMs: number = 0
+  private lastToneCommitMs: number = 0
   onToggleLayer: (actionId: string, cmd: string, value: boolean) => void = () => {}
   onSetSkyDisplay: (setting: string, value: boolean | number) => void = () => {}
   onStarMagLimit: (value: number) => void = () => {}
@@ -49,18 +138,83 @@ export struct LayerSkyTab {
 
   onWillApplyTheme(theme: Theme) { this.c = slotsFromTheme(theme) }
 
-  private meteorZhrSliderPosition(): number {
-    const value = Math.max(0, Math.min(this.layerViewStore.meteorZhrMax, this.layerViewStore.meteorZhr))
-    if (value <= 1000) return value * 0.75
-    const upperRange = Math.max(1, this.layerViewStore.meteorZhrMax / 1000)
-    return 750 + Math.log(value / 1000) / Math.log(upperRange) * 250
+  private currentMeteorPos(): number {
+    return this.meteorDragging
+      ? this.meteorDragPos
+      : meteorZhrToSliderPos(this.layerViewStore.meteorZhr, this.layerViewStore.meteorZhrMax)
   }
 
-  private meteorZhrFromSliderPosition(position: number): number {
-    const clamped = Math.max(0, Math.min(1000, position))
-    if (clamped <= 750) return Math.round(clamped / 0.75)
-    const upperRange = Math.max(1, this.layerViewStore.meteorZhrMax / 1000)
-    return Math.round(1000 * Math.pow(upperRange, (clamped - 750) / 250))
+  private currentMeteorDisplayZhr(): number {
+    return this.meteorDragging
+      ? meteorZhrFromSliderPos(this.meteorDragPos, this.layerViewStore.meteorZhrMax)
+      : this.layerViewStore.meteorZhr
+  }
+
+  private commitMeteorSlider(position: number, mode: SliderChangeMode): void {
+    const pos = Math.max(0, Math.min(100, Math.round(position)))
+    const zhr = meteorZhrFromSliderPos(pos, this.layerViewStore.meteorZhrMax)
+    const now = Date.now()
+    if (mode === SliderChangeMode.Begin || mode === SliderChangeMode.Moving) {
+      this.meteorDragging = true
+      this.meteorDragPos = pos
+      if (now - this.lastMeteorCommitMs >= 120) {
+        this.lastMeteorCommitMs = now
+        this.onSetSkyDisplay('meteorZhr', zhr)
+      }
+      return
+    }
+    this.meteorDragging = false
+    this.meteorDragPos = pos
+    this.lastMeteorCommitMs = now
+    this.onSetSkyDisplay('meteorZhr', zhr)
+  }
+
+  private commitToneSlider(setting: string, value: number, mode: SliderChangeMode): void {
+    const now = Date.now()
+    if (mode === SliderChangeMode.Begin || mode === SliderChangeMode.Moving) {
+      if (setting === 'toneDisplayAdaptation') this.layerViewStore.toneDisplayAdaptationLuminance = Math.round(value)
+      else if (setting === 'toneMaxLuminance') this.layerViewStore.toneMaxDisplayLuminance = Math.round(value)
+      else if (setting === 'toneGamma') this.layerViewStore.toneDisplayGamma = Math.round(value * 100) / 100
+      else if (setting === 'absoluteStarScale') this.layerViewStore.starBrightnessScale = value
+      if (now - this.lastToneCommitMs >= 90) {
+        this.lastToneCommitMs = now
+        this.onSetSkyDisplay(setting, value)
+      }
+      return
+    }
+    this.lastToneCommitMs = now
+    this.onSetSkyDisplay(setting, value)
+  }
+
+  private applyTonePreset(preset: TonePresetOption): void {
+    this.onSetSkyDisplay('toneDisplayAdaptation', preset.lda)
+    this.onSetSkyDisplay('toneMaxLuminance', preset.maxdL)
+    this.onSetSkyDisplay('toneGamma', preset.gamma)
+    this.onSetSkyDisplay('toneUseTmGamma', true)
+  }
+
+  private isTonePresetActive(preset: TonePresetOption): boolean {
+    return Math.abs(this.layerViewStore.toneDisplayAdaptationLuminance - preset.lda) <= 1 &&
+      Math.abs(this.layerViewStore.toneMaxDisplayLuminance - preset.maxdL) <= 2 &&
+      Math.abs(this.layerViewStore.toneDisplayGamma - preset.gamma) <= 0.03
+  }
+
+  private meteorHintText(): string {
+    if (this.layerViewStore.meteorDrawSuppression === 'daylight-too-bright') {
+      return '当前为白天，偶发流星被天光淹没；可调至夜间或点击「试看流星」立即体验效果'
+    }
+    if (this.layerViewStore.meteorGenSuppression === 'real-time-speed-required') {
+      return '当前时间暂停或变速中，恢复 1× 实时流速后将按频率出现偶发流星'
+    }
+    return '含镁绿、钠金、冰蓝紫与火流星余迹；实际可见数受夜空暗度与地平高度影响'
+  }
+
+  private starBrightnessPercent(): number {
+    return Math.round(absoluteScaleToStarBrightness(this.layerViewStore.starBrightnessScale) * 100)
+  }
+
+  private isStarBrightnessOffset(): boolean {
+    return Math.abs(this.layerViewStore.starBrightnessScale - 1.0) > 0.06
   }
 
   build() {
@@ -136,18 +290,63 @@ export struct LayerSkyTab {
       LayerSwitchRow({ label: I18n.t('s0532'), isOn: this.layerStore.starLabels, onToggle: (value: boolean) => { this.onToggleLayer('actionShow_Stars_Labels', '', value) } })
       LayerSwitchRow({ label: I18n.t('s0308'), isOn: this.layerStore.meteors, onToggle: (value: boolean) => { this.onToggleLayer('setMeteors', 'setMeteors', value) } })
       if (this.layerStore.meteors) {
-        Row() {
-          Text('理论流星率').fontSize(panelFontSize(14, this.readableUi)).fontColor(this.c.text).width(86)
-          Slider({ value: this.meteorZhrSliderPosition(), min: 0, max: 1000, step: 1, style: SliderStyle.OutSet }).sliderInteractionMode(SliderInteraction.SLIDE_ONLY).minResponsiveDistance(8)
-            .layoutWeight(1).trackColor(this.c.softStrong).showSteps(false)
-            .onChange((value: number) => { this.onSetSkyDisplay('meteorZhr', this.meteorZhrFromSliderPosition(value)) })
-          Text(this.layerViewStore.meteorZhr + ' / 小时')
-            .fontSize(panelFontSize(13, this.readableUi)).fontColor(this.c.text).width(70).textAlign(TextAlign.End)
-        }.height(this.readableUi ? 50 : 42).width('100%').padding({ left: 10, right: 8 })
+        Column({ space: 6 }) {
+          Row({ space: 6 }) {
+            Text('理论流星率')
+              .fontSize(panelFontSize(13, this.readableUi)).fontColor(this.c.text)
+            Text(formatMeteorZhrLabel(this.currentMeteorDisplayZhr()))
+              .fontSize(panelFontSize(12, this.readableUi)).fontWeight(FontWeight.Medium).fontColor(this.c.accent)
+              .layoutWeight(1)
+            Button('✦ 试看流星')
+              .fontSize(11).fontColor(this.c.accent).height(26)
+              .backgroundColor(this.c.softStrong).borderRadius(UI_RADIUS_CONTROL)
+              .padding({ left: 9, right: 9 })
+              .onClick(() => { this.onSetSkyDisplay('meteorPreview', 1) })
+          }.width('100%').alignItems(VerticalAlign.Center)
+          Slider({
+            value: this.currentMeteorPos(),
+            min: 0,
+            max: 100,
+            step: 1,
+            style: SliderStyle.OutSet
+          })
+            .sliderInteractionMode(SliderInteraction.SLIDE_AND_CLICK)
+            .width('100%')
+            .trackColor(this.c.softStrong)
+            .selectedColor(this.c.accent)
+            .showSteps(false)
+            .showTips(false)
+            .onChange((value: number, mode: SliderChangeMode) => {
+              this.commitMeteorSlider(value, mode)
+            })
+          Flex({ wrap: FlexWrap.Wrap, space: { main: LengthMetrics.vp(6), cross: LengthMetrics.vp(6) } }) {
+            ForEach(METEOR_ZHR_PRESETS, (preset: MeteorPresetOption) => {
+              Text(preset.label)
+                .fontSize(11)
+                .fontWeight(this.layerViewStore.meteorZhr === preset.zhr ? FontWeight.Medium : FontWeight.Normal)
+                .fontColor(this.layerViewStore.meteorZhr === preset.zhr ? this.c.text : this.c.chipInactiveText)
+                .backgroundColor(this.layerViewStore.meteorZhr === preset.zhr ? this.c.chipActiveBg : this.c.chipInactiveBg)
+                .border({
+                  width: 1,
+                  color: this.layerViewStore.meteorZhr === preset.zhr ? this.c.chipActiveBorder : this.c.chipInactiveBorder
+                })
+                .borderRadius(UI_RADIUS_TAG)
+                .padding({ left: 8, right: 8, top: 4, bottom: 4 })
+                .onClick(() => {
+                  this.meteorDragging = false
+                  this.onSetSkyDisplay('meteorZhr', preset.zhr)
+                })
+            }, (preset: MeteorPresetOption) => preset.label)
+          }.width('100%')
+          Text(this.meteorHintText())
+            .fontSize(10)
+            .fontColor(this.layerViewStore.meteorDrawSuppression === 'daylight-too-bright' ||
+              this.layerViewStore.meteorGenSuppression === 'real-time-speed-required'
+              ? this.c.accent : this.c.sub)
+            .width('100%')
+        }.width('100%').padding({ left: 10, right: 10, top: 8, bottom: 8 })
           .backgroundColor(this.c.bg).border({ width: 1, color: this.c.dividerSoft })
           .borderRadius(UI_RADIUS_CONTROL).margin({ bottom: 6 })
-        Text('实际可见数量还会受夜间、地景亮度和地平高度影响')
-          .fontSize(10).fontColor(this.c.sub).width('100%').padding({ left: 10, right: 10 }).margin({ bottom: 6 })
       }
       LayerSwitchRow({ label: '黄道光', isOn: this.layerStore.zodiacalLight, onToggle: (value: boolean) => { this.onToggleLayer('zodiacalLight', 'setSkyDisplayZodiacalLight', value) } })
       if (this.layerStore.zodiacalLight) {
@@ -191,6 +390,193 @@ export struct LayerSkyTab {
         .backgroundColor(this.c.bg).border({ width: 1, color: this.c.dividerSoft })
         .borderRadius(UI_RADIUS_CONTROL).margin({ bottom: 6 })
       LayerSwitchRow({ label: '人眼动态视觉调适', isOn: this.layerStore.luminanceAdaptation, onToggle: (value: boolean) => { this.onToggleLayer('luminanceAdaptation', 'setSkyDisplayLuminanceAdaptation', value) } })
+      // ── 色调映射与星点亮度调和（折叠高级抽屉） ──
+      Row() {
+        Column({ space: 2 }) {
+          Row({ space: 4 }) {
+            Text('色调映射与亮度调和')
+              .fontSize(panelFontSize(13, this.readableUi)).fontWeight(FontWeight.Medium).fontColor(this.c.text)
+            InfoTipButton({
+              title: '色调映射与亮度调和',
+              tip: '三层互不冲突：①「现实星等」决定白天/光污染下哪些暗星可见；②「双指星点亮度」仅调节已见恒星的显示倍率（重开现实星等自动归位 1.0×）；③「色调映射」控制整体天穹的暗部细节、对比度与屏幕伽马曲线。'
+            })
+          }.alignItems(VerticalAlign.Center)
+          Text('Lda ' + this.layerViewStore.toneDisplayAdaptationLuminance.toFixed(0) +
+            ' · γ ' + this.layerViewStore.toneDisplayGamma.toFixed(2) +
+            ' · 星点 ' + this.layerViewStore.starBrightnessScale.toFixed(2) + '×')
+            .fontSize(10).fontColor(this.c.sub).width('100%')
+        }.layoutWeight(1).alignItems(HorizontalAlign.Start)
+        Text(this.layerViewStore.toneMappingExpanded ? '收起' : '微调')
+          .fontSize(11).fontWeight(FontWeight.Medium).fontColor(this.c.accent)
+          .backgroundColor(this.c.softStrong).borderRadius(UI_RADIUS_CONTROL)
+          .padding({ left: 10, right: 10, top: 6, bottom: 6 })
+      }.width('100%').padding({ left: 10, right: 8, top: 8, bottom: 8 })
+        .backgroundColor(this.c.bg).border({ width: 1, color: this.c.dividerSoft })
+        .borderRadius(UI_RADIUS_CONTROL).margin({ bottom: this.layerViewStore.toneMappingExpanded ? 4 : 6 })
+        .onClick(() => {
+          this.layerViewStore.toneMappingExpanded = !this.layerViewStore.toneMappingExpanded
+        })
+      if (this.layerViewStore.toneMappingExpanded) {
+        Column({ space: 6 }) {
+          // 星点亮度与现实星等调和条（与天穹双指上下滑双向同步）
+          Column({ space: 4 }) {
+            Row({ space: 6 }) {
+              Text('星点亮度（双指同步）')
+                .fontSize(11).fontColor(this.c.text).layoutWeight(1)
+              Text(this.starBrightnessPercent().toString() + '% · ' + this.layerViewStore.starBrightnessScale.toFixed(2) + '×')
+                .fontSize(11).fontColor(this.isStarBrightnessOffset() ? this.c.accent : this.c.sub)
+              if (this.isStarBrightnessOffset()) {
+                Button('归位 1.0×')
+                  .fontSize(10).fontColor(this.c.accent).height(22)
+                  .backgroundColor(this.c.bg).borderRadius(UI_RADIUS_CONTROL).padding({ left: 7, right: 7 })
+                  .onClick(() => { this.onSetSkyDisplay('starBrightnessReset', 1) })
+              }
+            }.width('100%').alignItems(VerticalAlign.Center)
+            Slider({
+              value: this.starBrightnessPercent(),
+              min: 0,
+              max: 100,
+              step: 1,
+              style: SliderStyle.OutSet
+            })
+              .sliderInteractionMode(SliderInteraction.SLIDE_AND_CLICK)
+              .width('100%').trackColor(this.c.softStrong).selectedColor(this.c.accent)
+              .showSteps(false).showTips(false)
+              .onChange((value: number, mode: SliderChangeMode) => {
+                const scale = Math.round(starBrightnessToAbsoluteScale(value / 100) * 1000) / 1000
+                this.commitToneSlider('absoluteStarScale', scale, mode)
+              })
+            Text(this.layerStore.realisticStarVisibility
+              ? (this.isStarBrightnessOffset()
+                ? '现实星等开启中，当前星点已手动偏移；重新开启现实星等或点「归位 1.0×」可恢复物理基准'
+                : '现实星等物理基准（1.0×）生效中：双指上下滑可临时微调视觉亮度')
+              : '教学常亮模式：白天也可自由调亮恒星与深空，与双指上下滑实时联动')
+              .fontSize(10)
+              .fontColor(this.layerStore.realisticStarVisibility && this.isStarBrightnessOffset() ? this.c.accent : this.c.sub)
+              .width('100%')
+          }.width('100%').padding(8).backgroundColor(this.c.rowBg).borderRadius(UI_RADIUS_CONTROL)
+
+          // 一键色调预设
+          Flex({ wrap: FlexWrap.Wrap, space: { main: LengthMetrics.vp(6), cross: LengthMetrics.vp(6) } }) {
+            ForEach(TONE_MAPPING_PRESETS, (preset: TonePresetOption) => {
+              Text(preset.label)
+                .fontSize(11)
+                .fontWeight(this.isTonePresetActive(preset) ? FontWeight.Medium : FontWeight.Normal)
+                .fontColor(this.isTonePresetActive(preset) ? this.c.text : this.c.chipInactiveText)
+                .backgroundColor(this.isTonePresetActive(preset) ? this.c.chipActiveBg : this.c.chipInactiveBg)
+                .border({
+                  width: 1,
+                  color: this.isTonePresetActive(preset) ? this.c.chipActiveBorder : this.c.chipInactiveBorder
+                })
+                .borderRadius(UI_RADIUS_TAG)
+                .padding({ left: 9, right: 9, top: 4, bottom: 4 })
+                .onClick(() => { this.applyTonePreset(preset) })
+            }, (preset: TonePresetOption) => preset.label)
+          }.width('100%')
+
+          // 显示适应亮度 Lda (10..100 cd/m²)
+          Column({ space: 2 }) {
+            Row({ space: 4 }) {
+              Text('显示适应亮度 Lda').fontSize(11).fontColor(this.c.text)
+              InfoTipButton({
+                title: '显示适应亮度 Lda',
+                tip: '模拟观看屏幕时的环境亮度（单位 cd/m²）。调低可提亮暗弱银河与星云细节；调高则压暗天穹背景、突出亮星。默认 50。'
+              })
+              Blank()
+              Text(this.layerViewStore.toneDisplayAdaptationLuminance.toFixed(0) + ' cd/m²')
+                .fontSize(11).fontColor(this.c.sub)
+            }.width('100%').alignItems(VerticalAlign.Center)
+            Slider({
+              value: this.layerViewStore.toneDisplayAdaptationLuminance,
+              min: 10,
+              max: 100,
+              step: 1,
+              style: SliderStyle.OutSet
+            })
+              .sliderInteractionMode(SliderInteraction.SLIDE_AND_CLICK)
+              .width('100%').trackColor(this.c.softStrong).selectedColor(this.c.accent)
+              .showSteps(false).showTips(false)
+              .onChange((value: number, mode: SliderChangeMode) => {
+                this.commitToneSlider('toneDisplayAdaptation', Math.round(value), mode)
+              })
+          }.width('100%').padding({ left: 8, right: 8, top: 6, bottom: 4 }).backgroundColor(this.c.rowBg).borderRadius(UI_RADIUS_CONTROL)
+
+          // 屏幕峰值亮度 maxdL (40..300 cd/m²)
+          Column({ space: 2 }) {
+            Row({ space: 4 }) {
+              Text('屏幕峰值亮度 maxdL').fontSize(11).fontColor(this.c.text)
+              InfoTipButton({
+                title: '屏幕峰值亮度 maxdL',
+                tip: '色调度量对应的参考屏幕最大亮度。调低整体更明亮饱和；调高则保留更多高光层次，减少亮星与银河核心过曝。默认 100。'
+              })
+              Blank()
+              Text(this.layerViewStore.toneMaxDisplayLuminance.toFixed(0) + ' cd/m²')
+                .fontSize(11).fontColor(this.c.sub)
+            }.width('100%').alignItems(VerticalAlign.Center)
+            Slider({
+              value: this.layerViewStore.toneMaxDisplayLuminance,
+              min: 40,
+              max: 300,
+              step: 5,
+              style: SliderStyle.OutSet
+            })
+              .sliderInteractionMode(SliderInteraction.SLIDE_AND_CLICK)
+              .width('100%').trackColor(this.c.softStrong).selectedColor(this.c.accent)
+              .showSteps(false).showTips(false)
+              .onChange((value: number, mode: SliderChangeMode) => {
+                this.commitToneSlider('toneMaxLuminance', Math.round(value), mode)
+              })
+          }.width('100%').padding({ left: 8, right: 8, top: 6, bottom: 4 }).backgroundColor(this.c.rowBg).borderRadius(UI_RADIUS_CONTROL)
+
+          // 色调伽马 γ (1.40..3.00)
+          Column({ space: 2 }) {
+            Row({ space: 4 }) {
+              Text('色调伽马 γ').fontSize(11).fontColor(this.c.text)
+              InfoTipButton({
+                title: '色调伽马 γ',
+                tip: '控制天穹中间调与暗部反差。数值越小暗部越柔和通透，数值越大背景越深邃、亮暗对比越强。默认 2.22。'
+              })
+              Blank()
+              Text(this.layerViewStore.toneDisplayGamma.toFixed(2))
+                .fontSize(11).fontColor(this.c.sub)
+            }.width('100%').alignItems(VerticalAlign.Center)
+            Slider({
+              value: this.layerViewStore.toneDisplayGamma,
+              min: 1.4,
+              max: 3.0,
+              step: 0.05,
+              style: SliderStyle.OutSet
+            })
+              .sliderInteractionMode(SliderInteraction.SLIDE_AND_CLICK)
+              .width('100%').trackColor(this.c.softStrong).selectedColor(this.c.accent)
+              .showSteps(false).showTips(false)
+              .onChange((value: number, mode: SliderChangeMode) => {
+                this.commitToneSlider('toneGamma', Math.round(value * 100) / 100, mode)
+              })
+          }.width('100%').padding({ left: 8, right: 8, top: 6, bottom: 4 }).backgroundColor(this.c.rowBg).borderRadius(UI_RADIUS_CONTROL)
+
+          // 伽马曲线开关 + 恢复默认
+          Row({ space: 8 }) {
+            Text('启用色调伽马曲线').fontSize(11).fontColor(this.c.text).layoutWeight(1)
+            Toggle({ type: ToggleType.Switch, isOn: this.layerViewStore.toneUseTmGamma }).width(40).height(22)
+              .onChange((enabled: boolean) => { this.onSetSkyDisplay('toneUseTmGamma', enabled) })
+          }.height(36).width('100%').padding({ left: 8, right: 8 }).backgroundColor(this.c.rowBg).borderRadius(UI_RADIUS_CONTROL)
+
+          Row({ space: 8 }) {
+            Button('恢复默认色调')
+              .fontSize(11).fontColor(this.c.text).height(30).layoutWeight(1)
+              .backgroundColor(this.c.bg).borderRadius(UI_RADIUS_CONTROL)
+              .onClick(() => { this.onSetSkyDisplay('toneReset', 1) })
+            Button('同时重置星点 1.0×')
+              .fontSize(11).fontColor(this.c.accent).height(30).layoutWeight(1)
+              .backgroundColor(this.c.bg).borderRadius(UI_RADIUS_CONTROL)
+              .onClick(() => {
+                this.onSetSkyDisplay('toneReset', 1)
+                this.onSetSkyDisplay('starBrightnessReset', 1)
+              })
+          }.width('100%')
+        }.width('100%').padding(8).backgroundColor(this.c.soft).borderRadius(UI_RADIUS_CONTROL).margin({ bottom: 8 })
+      }
       // 大气折射（气压 / 气温 / 消光）自时间面板迁入
       ObservationAidBlock({
         refractionOn: this.refractionOn,
@@ -213,7 +599,9 @@ export struct LayerSsoTab {
   @StorageProp('stellariumReadableUi') readableUi: boolean = false
   @Prop expandedLayout: boolean
   @State private c: ThemeSlots = DEFAULT_SLOTS
+  private lastGrsCommitMs: number = 0
   onToggleLayer: (actionId: string, cmd: string, value: boolean) => void = () => {}
+  onSetSkyDisplay: (setting: string, value: boolean | number) => void = () => {}
   onSetOrbitFlag: (setting: string, enabled: boolean) => void = () => {}
   onSetOrbitThickness: (value: number) => void = () => {}
   onSetOrbitColorStyle: (index: number) => void = () => {}
@@ -382,6 +770,152 @@ export struct LayerSsoTab {
         LayerSwitchRow({ label: I18n.t('s0315'), isOn: this.layerStore.enlargeMoon, onToggle: (value: boolean) => { this.onToggleLayer('actionShow_Planets_EnlargeMoon', '', value) } })
         LayerSwitchRow({ label: I18n.t('s0316'), isOn: this.layerStore.enlargePlanets, onToggle: (value: boolean) => { this.onToggleLayer('actionShow_Planets_EnlargePlanets', '', value) } })
         LayerSwitchRow({ label: I18n.t('s0317'), isOn: this.layerStore.enlargeSun, onToggle: (value: boolean) => { this.onToggleLayer('actionShow_Planets_EnlargeSun', '', value) } })
+      }
+      // ── 木星大红斑校准 (GRS) ──
+      Text('观测校准').fontSize(11).fontColor(this.c.sub).width('100%').margin({ top: 8, bottom: 6 }).padding({ left: 2 })
+      Row() {
+        Column({ space: 2 }) {
+          Row({ space: 4 }) {
+            Text('木星大红斑校准 (GRS)')
+              .fontSize(panelFontSize(13, this.readableUi)).fontWeight(FontWeight.Medium).fontColor(this.c.text)
+            InfoTipButton({
+              title: '木星大红斑校准 (GRS)',
+              tip: '木星大红斑在系统 II 经度上每年都在缓慢漂移。高倍望远镜观测大红斑中天前，可按最新观测公报输入参考经度、年漂移率与参考日期，以精确对齐实时盘面位置。'
+            })
+          }.alignItems(VerticalAlign.Center)
+          Text('系统 II ' + this.layerViewStore.grsLongitude.toString() + '° · 漂移 ' +
+            (this.layerViewStore.grsDrift >= 0 ? '+' : '') + this.layerViewStore.grsDrift.toFixed(1) + '°/年 · ' +
+            julianDayToIsoDate(this.layerViewStore.grsJd))
+            .fontSize(10).fontColor(this.c.sub).width('100%')
+        }.layoutWeight(1).alignItems(HorizontalAlign.Start)
+        Text(this.layerViewStore.grsSettingsExpanded ? '收起' : '校准')
+          .fontSize(11).fontWeight(FontWeight.Medium).fontColor(this.c.accent)
+          .backgroundColor(this.c.softStrong).borderRadius(UI_RADIUS_CONTROL)
+          .padding({ left: 10, right: 10, top: 6, bottom: 6 })
+      }.width('100%').padding({ left: 10, right: 8, top: 8, bottom: 8 })
+        .backgroundColor(this.c.bg).border({ width: 1, color: this.c.dividerSoft })
+        .borderRadius(UI_RADIUS_CONTROL).margin({ bottom: this.layerViewStore.grsSettingsExpanded ? 4 : 8 })
+        .onClick(() => {
+          this.layerViewStore.grsSettingsExpanded = !this.layerViewStore.grsSettingsExpanded
+        })
+      if (this.layerViewStore.grsSettingsExpanded) {
+        Column({ space: 6 }) {
+          // 系统 II 参考经度 (0°..360°)
+          Column({ space: 4 }) {
+            Row({ space: 6 }) {
+              Text('系统 II 参考经度').fontSize(11).fontColor(this.c.text).layoutWeight(1)
+              Button('−1°').fontSize(10).fontColor(this.c.text).height(24)
+                .backgroundColor(this.c.softStrong).borderRadius(UI_RADIUS_CONTROL).padding({ left: 7, right: 7 })
+                .onClick(() => {
+                  const next = ((this.layerViewStore.grsLongitude - 1) % 360 + 360) % 360
+                  this.onSetSkyDisplay('grsLongitude', next)
+                })
+              Text(this.layerViewStore.grsLongitude.toString() + '°')
+                .fontSize(12).fontWeight(FontWeight.Medium).fontColor(this.c.accent).width(38).textAlign(TextAlign.Center)
+              Button('+1°').fontSize(10).fontColor(this.c.text).height(24)
+                .backgroundColor(this.c.softStrong).borderRadius(UI_RADIUS_CONTROL).padding({ left: 7, right: 7 })
+                .onClick(() => {
+                  const next = (this.layerViewStore.grsLongitude + 1) % 360
+                  this.onSetSkyDisplay('grsLongitude', next)
+                })
+            }.width('100%').alignItems(VerticalAlign.Center)
+            Slider({
+              value: this.layerViewStore.grsLongitude,
+              min: 0,
+              max: 359,
+              step: 1,
+              style: SliderStyle.OutSet
+            })
+              .sliderInteractionMode(SliderInteraction.SLIDE_AND_CLICK)
+              .width('100%').trackColor(this.c.softStrong).selectedColor(this.c.accent)
+              .showSteps(false).showTips(false)
+              .onChange((value: number, mode: SliderChangeMode) => {
+                const lon = ((Math.round(value) % 360) + 360) % 360
+                const now = Date.now()
+                this.layerViewStore.grsLongitude = lon
+                if (mode === SliderChangeMode.Begin || mode === SliderChangeMode.Moving) {
+                  if (now - this.lastGrsCommitMs >= 90) {
+                    this.lastGrsCommitMs = now
+                    this.onSetSkyDisplay('grsLongitude', lon)
+                  }
+                } else {
+                  this.lastGrsCommitMs = now
+                  this.onSetSkyDisplay('grsLongitude', lon)
+                }
+              })
+          }.width('100%').padding(8).backgroundColor(this.c.rowBg).borderRadius(UI_RADIUS_CONTROL)
+
+          // 年漂移率 (°/年)
+          Column({ space: 4 }) {
+            Row({ space: 6 }) {
+              Text('年漂移率').fontSize(11).fontColor(this.c.text).layoutWeight(1)
+              Button('−0.5').fontSize(10).fontColor(this.c.text).height(24)
+                .backgroundColor(this.c.softStrong).borderRadius(UI_RADIUS_CONTROL).padding({ left: 7, right: 7 })
+                .onClick(() => {
+                  const next = Math.max(-60, Math.round((this.layerViewStore.grsDrift - 0.5) * 10) / 10)
+                  this.onSetSkyDisplay('grsDrift', next)
+                })
+              Text((this.layerViewStore.grsDrift >= 0 ? '+' : '') + this.layerViewStore.grsDrift.toFixed(1) + '°/年')
+                .fontSize(11).fontWeight(FontWeight.Medium).fontColor(this.c.accent).width(58).textAlign(TextAlign.Center)
+              Button('+0.5').fontSize(10).fontColor(this.c.text).height(24)
+                .backgroundColor(this.c.softStrong).borderRadius(UI_RADIUS_CONTROL).padding({ left: 7, right: 7 })
+                .onClick(() => {
+                  const next = Math.min(60, Math.round((this.layerViewStore.grsDrift + 0.5) * 10) / 10)
+                  this.onSetSkyDisplay('grsDrift', next)
+                })
+            }.width('100%').alignItems(VerticalAlign.Center)
+            Slider({
+              value: Math.max(-60, Math.min(60, this.layerViewStore.grsDrift)),
+              min: -60,
+              max: 60,
+              step: 0.5,
+              style: SliderStyle.OutSet
+            })
+              .sliderInteractionMode(SliderInteraction.SLIDE_AND_CLICK)
+              .width('100%').trackColor(this.c.softStrong).selectedColor(this.c.accent)
+              .showSteps(false).showTips(false)
+              .onChange((value: number, mode: SliderChangeMode) => {
+                const drift = Math.round(value * 10) / 10
+                const now = Date.now()
+                this.layerViewStore.grsDrift = drift
+                if (mode === SliderChangeMode.Begin || mode === SliderChangeMode.Moving) {
+                  if (now - this.lastGrsCommitMs >= 90) {
+                    this.lastGrsCommitMs = now
+                    this.onSetSkyDisplay('grsDrift', drift)
+                  }
+                } else {
+                  this.lastGrsCommitMs = now
+                  this.onSetSkyDisplay('grsDrift', drift)
+                }
+              })
+          }.width('100%').padding(8).backgroundColor(this.c.rowBg).borderRadius(UI_RADIUS_CONTROL)
+
+          // 参考历元日期 (JD)
+          Column({ space: 6 }) {
+            Row({ space: 6 }) {
+              Text('参考历元日期').fontSize(11).fontColor(this.c.text)
+              Blank()
+              Text(julianDayToIsoDate(this.layerViewStore.grsJd) + ' (JD ' + this.layerViewStore.grsJd.toFixed(1) + ')')
+                .fontSize(11).fontColor(this.c.sub)
+            }.width('100%')
+            Row({ space: 6 }) {
+              Button('−30天').fontSize(10).fontColor(this.c.text).height(26).layoutWeight(1)
+                .backgroundColor(this.c.softStrong).borderRadius(UI_RADIUS_CONTROL)
+                .onClick(() => { this.onSetSkyDisplay('grsJd', this.layerViewStore.grsJd - 30) })
+              Button('+30天').fontSize(10).fontColor(this.c.text).height(26).layoutWeight(1)
+                .backgroundColor(this.c.softStrong).borderRadius(UI_RADIUS_CONTROL)
+                .onClick(() => { this.onSetSkyDisplay('grsJd', this.layerViewStore.grsJd + 30) })
+              Button('设为今日').fontSize(10).fontColor(this.c.accent).height(26).layoutWeight(1)
+                .backgroundColor(this.c.bg).borderRadius(UI_RADIUS_CONTROL)
+                .onClick(() => { this.onSetSkyDisplay('grsJd', currentUtcMidnightJd()) })
+            }.width('100%')
+          }.width('100%').padding(8).backgroundColor(this.c.rowBg).borderRadius(UI_RADIUS_CONTROL)
+
+          Button('恢复官方默认（46° · +15.0°/年 · 2023-10-01）')
+            .fontSize(11).fontColor(this.c.text).height(30).width('100%')
+            .backgroundColor(this.c.bg).borderRadius(UI_RADIUS_CONTROL)
+            .onClick(() => { this.onSetSkyDisplay('grsReset', 1) })
+        }.width('100%').padding(8).backgroundColor(this.c.soft).borderRadius(UI_RADIUS_CONTROL).margin({ bottom: 8 })
       }
       Row() {
         Text(I18n.t('i0281')).fontSize(panelFontSize(14, this.readableUi)).fontColor(this.c.text).width(86)

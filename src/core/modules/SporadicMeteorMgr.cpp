@@ -24,6 +24,7 @@
 #include "StelCore.hpp"
 #include "StelFileMgr.hpp"
 #include "StelModuleMgr.hpp"
+#include "StelMovementMgr.hpp"
 #include "StelPainter.hpp"
 #include "StelTextureMgr.hpp"
 
@@ -185,8 +186,6 @@ QJsonObject SporadicMeteorMgr::getDiagnostics() const
 		drawSuppression = QStringLiteral("display-disabled");
 	else if (!core)
 		drawSuppression = QStringLiteral("core-unavailable");
-	else if (!core->getSkyDrawer()->getFlagHasAtmosphere() && !m_flagForcedShow)
-		drawSuppression = QStringLiteral("atmosphere-disabled");
 	else
 	{
 		LandscapeMgr* landmgr = GETSTELMODULE(LandscapeMgr);
@@ -199,32 +198,110 @@ QJsonObject SporadicMeteorMgr::getDiagnostics() const
 
 void SporadicMeteorMgr::draw(StelCore* core)
 {
-	if (!m_flagShow || (!core->getSkyDrawer()->getFlagHasAtmosphere() && !getFlagForcedMeteorsActivity()))
+	if (!m_flagShow || activeMeteors.isEmpty())
 	{
 		return;
 	}
 
 	static LandscapeMgr* landmgr = GETSTELMODULE(LandscapeMgr);
-	if (landmgr->getFlagAtmosphere() && landmgr->getLuminance() > 5.f)
-	{
-		return;
-	}
+	const bool daylightHidden = landmgr && landmgr->getFlagAtmosphere() && landmgr->getLuminance() > 5.f;
 
 	// step through and draw all active meteors
 	StelPainter sPainter(core->getProjection(StelCore::FrameAltAz));
 	for (auto* m: std::as_const(activeMeteors))
 	{
+		if (daylightHidden && !m->isPreviewBypassDaylight())
+			continue;
 		m->draw(core, sPainter);
+	}
+}
+
+void SporadicMeteorMgr::triggerPreviewSalvo()
+{
+	StelCore* core = StelApp::getInstance().getCore();
+	if (!core)
+		return;
+
+	// Ensure meteors display is enabled when user explicitly triggers a preview
+	if (!m_flagShow)
+		setFlagShow(true);
+
+	const Vec3d viewJ2000 = core->getMovementMgr()->getViewDirectionJ2000();
+	const Vec3d viewAltAz = core->j2000ToAltAz(viewJ2000);
+	const double fovRad = qBound(18.0, core->getMovementMgr()->getCurrentFov(), 120.0) * M_PI / 180.0;
+	const float span = static_cast<float>(fovRad * 0.34);
+
+	// 5 diverse physical meteor archetypes flying at natural parallel-angled shower geometry
+	const QList<Meteor::ColorPair> emeraldFireball = {
+		{"roseMagenta", 20}, {"emerald", 54}, {"cyanGreen", 18}, {"white", 8}
+	};
+	const QList<Meteor::ColorPair> emeraldClassic = {
+		{"emerald", 52}, {"cyanGreen", 32}, {"white", 16}
+	};
+	const QList<Meteor::ColorPair> sodiumAmber = {
+		{"amberGold", 58}, {"paleGold", 28}, {"white", 14}
+	};
+	const QList<Meteor::ColorPair> calciumViolet = {
+		{"violet", 42}, {"iceBlue", 42}, {"white", 16}
+	};
+	const QList<Meteor::ColorPair> silverNeedle = {
+		{"iceBlue", 36}, {"white", 64}
+	};
+
+	struct SalvoSpec {
+		float offR;
+		float offU;
+		float slope;
+		float speed;
+		QList<Meteor::ColorPair> colors;
+		bool fireball;
+		float delay;
+	};
+	const QVector<SalvoSpec> specs = {
+		{ -0.14f * span,  0.54f * span,  0.44f, 60.f, emeraldFireball, true,  0.00f },
+		{  0.64f * span,  0.44f * span,  0.48f, 38.f, sodiumAmber,     false, 0.14f },
+		{ -0.68f * span,  0.38f * span,  0.40f, 62.f, calciumViolet,   false, 0.26f },
+		{  0.24f * span,  0.58f * span,  0.45f, 54.f, emeraldClassic,  true,  0.40f },
+		{ -0.36f * span,  0.22f * span,  0.43f, 68.f, silverNeedle,    false, 0.56f }
+	};
+
+	for (const auto& s : specs)
+	{
+		SporadicMeteor* m = new SporadicMeteor(core, viewAltAz, s.offR, s.offU, s.slope,
+						       s.speed, s.colors, m_bolideTexture, s.fireball, s.delay);
+		if (m->isAlive())
+		{
+			activeMeteors.append(m);
+		}
+		else
+		{
+			delete m;
+		}
 	}
 }
 
 void SporadicMeteorMgr::setZHR(int zhr)
 {
 	zhr = qBound(0, zhr, MaxZHR);
-	if(zhr!=m_zhr)
+	const int prevZhr = m_zhr;
+	if (zhr != m_zhr)
 	{
 		m_zhr = zhr;
 		StelApp::immediateSave("astro/meteor_zhr", zhr);
 		emit zhrChanged(zhr);
+
+		// Give immediate responsive sky-dome feedback when the user actively raises ZHR
+		// in dark real-time skies instead of waiting minutes for the accumulator to tick.
+		if (m_flagShow && zhr > prevZhr && zhr >= 60)
+		{
+			StelCore* core = StelApp::getInstance().getCore();
+			LandscapeMgr* landmgr = GETSTELMODULE(LandscapeMgr);
+			const bool darkEnough = !landmgr || !landmgr->getFlagAtmosphere() || landmgr->getLuminance() <= 5.f;
+			if (core && core->getRealTimeSpeed() && darkEnough)
+			{
+				const double boost = zhr >= 5000 ? 3.0 : (zhr >= 500 ? 2.0 : 1.0);
+				m_spawnAccumulator = qMax(m_spawnAccumulator, boost);
+			}
+		}
 	}
 }

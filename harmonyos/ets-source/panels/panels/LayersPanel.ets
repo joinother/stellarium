@@ -146,6 +146,7 @@ export struct LayersPanel {
               layerViewStore: this.layerViewStore,
               expandedLayout: this.expandedLayout,
               onToggleLayer: (actionId: string, cmd: string, value: boolean) => { this.onToggleLayer(actionId, cmd, value) },
+              onSetSkyDisplay: (setting: string, value: boolean | number) => { this.onSetSkyDisplay(setting, value) },
               onSetOrbitFlag: (setting: string, enabled: boolean) => { this.onSetOrbitFlag(setting, enabled) },
               onSetOrbitThickness: (value: number) => { this.onSetOrbitThickness(value) },
               onSetOrbitColorStyle: (index: number) => { this.onSetOrbitColorStyle(index) },

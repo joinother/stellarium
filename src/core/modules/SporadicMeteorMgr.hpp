@@ -57,6 +57,9 @@ public slots:
 	//! Set the zenith hourly rate.
 	void setZHR(int zhr);
 
+	//! Spawn a multi-color, multi-morphology preview meteor salvo across the current sky view.
+	void triggerPreviewSalvo();
+
 	//! Set flag used to turn on and off meteor rendering.
 	void setFlagShow(bool b) { if (m_flagShow!=b) { m_flagShow = b; StelApp::immediateSave("astro/flag_meteor", b); } }
 	//! Get value of flag used to turn on and off meteor rendering.

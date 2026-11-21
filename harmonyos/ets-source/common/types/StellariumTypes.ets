@@ -744,6 +744,14 @@ export interface StellariumBridgeResponse {
   decimalDegreesOther?: boolean
   luminanceAdaptation?: boolean
   realisticStarVisibility?: boolean
+  absoluteStarScale?: number
+  toneDisplayAdaptationLuminance?: number
+  toneMaxDisplayLuminance?: number
+  toneDisplayGamma?: number
+  toneUseTmGamma?: boolean
+  grsLongitude?: number
+  grsDrift?: number
+  grsJd?: number
   vividAtmosphere?: boolean
   zoomFadeEnvironment?: boolean
   environmentMode?: number
@@ -753,8 +761,10 @@ export interface StellariumBridgeResponse {
   starSpiky?: boolean
   twinkleAmount?: number
   bortleScale?: number
-	meteorZhr?: number
-	meteorZhrMax?: number
+  meteorZhr?: number
+  meteorZhrMax?: number
+  meteorDrawSuppression?: string
+  meteorGenSuppression?: string
   milkyWayIntensity?: number
   zodiacalLight?: boolean
   zodiacalIntensity?: number

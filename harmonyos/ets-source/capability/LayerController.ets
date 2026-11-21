@@ -264,8 +264,18 @@ export class LayerController {
   // 星空显示设置写回（布尔项写 LayerStore，数值项写 LayerViewStore）。
   setSkyDisplaySetting(setting: string, value: boolean | number): void {
     this.hooks.noteLayerPresetManualChange()
+    let resetStarScaleForRealistic = false
     if (setting === 'luminanceAdaptation') this.layerStore.luminanceAdaptation = value as boolean
-    else if (setting === 'realisticStarVisibility') this.layerStore.realisticStarVisibility = value as boolean
+    else if (setting === 'realisticStarVisibility') {
+      const nextRealistic = value as boolean
+      this.layerStore.realisticStarVisibility = nextRealistic
+      // 调和「现实星等」与「双指上下滑星点亮度」：重新开启现实星等时，若此前手动偏移了星点倍率，
+      // 自动归位至物理基准 1.0×（50%），避免高倍率暗星与现实星等语义互相打架。
+      if (nextRealistic && Math.abs(this.layerViewStore.starBrightnessScale - 1.0) > 0.06) {
+        resetStarScaleForRealistic = true
+        this.layerViewStore.starBrightnessScale = 1.0
+      }
+    }
     else if (setting === 'vividAtmosphere') this.layerStore.vividAtmosphere = value as boolean
     else if (setting === 'zoomFadeEnvironment') this.layerStore.zoomFadeEnvironment = value as boolean
     else if (setting === 'starTwinkle') this.layerStore.starTwinkle = value as boolean
@@ -276,14 +286,46 @@ export class LayerController {
     else if (setting === 'meteorZhr') this.layerViewStore.meteorZhr = Math.round(value as number)
     else if (setting === 'zodiacalLight') this.layerStore.zodiacalLight = value as boolean
     else if (setting === 'zodiacalIntensity') this.layerViewStore.zodiacalIntensity = value as number
+    else if (setting === 'toneDisplayAdaptation') this.layerViewStore.toneDisplayAdaptationLuminance = Math.round(value as number)
+    else if (setting === 'toneMaxLuminance') this.layerViewStore.toneMaxDisplayLuminance = Math.round(value as number)
+    else if (setting === 'toneGamma') this.layerViewStore.toneDisplayGamma = Math.round((value as number) * 100) / 100
+    else if (setting === 'toneUseTmGamma') this.layerViewStore.toneUseTmGamma = value as boolean
+    else if (setting === 'toneReset') {
+      this.layerViewStore.toneDisplayAdaptationLuminance = 50
+      this.layerViewStore.toneMaxDisplayLuminance = 100
+      this.layerViewStore.toneDisplayGamma = 2.22
+      this.layerViewStore.toneUseTmGamma = true
+    }
+    else if (setting === 'absoluteStarScale') this.layerViewStore.starBrightnessScale = value as number
+    else if (setting === 'starBrightnessReset') this.layerViewStore.starBrightnessScale = 1.0
+    else if (setting === 'grsLongitude') this.layerViewStore.grsLongitude = ((Math.round(value as number) % 360) + 360) % 360
+    else if (setting === 'grsDrift') this.layerViewStore.grsDrift = Math.round((value as number) * 10) / 10
+    else if (setting === 'grsJd') this.layerViewStore.grsJd = value as number
+    else if (setting === 'grsReset') {
+      this.layerViewStore.grsLongitude = 46
+      this.layerViewStore.grsDrift = 15.0
+      this.layerViewStore.grsJd = 2460218.5
+    }
     const payload = setting + '|' + (typeof value === 'boolean' ? (value ? '1' : '0') : value.toString())
     this.port.requestInteractive('setSkyDisplaySetting', payload, (r: StellariumBridgeResponse) => {
       if (r.ok === true) {
-        // Do not refresh the whole state for bortleScale while the slider is
-        // being dragged: an older native reply can arrive after a newer value
-        // and reset the thumb, which made the slider feel undraggable. The
-        // local LayerViewStore already holds the value the user selected.
-        if (typeof value === 'boolean' || setting === 'environmentMode') this.hooks.refreshState()
+        if (resetStarScaleForRealistic) {
+          this.port.requestInteractive('setSkyDisplaySetting', 'starBrightnessReset|1', () => {
+            this.hooks.flashHint('已开启现实星等，并恢复星点亮度基准 1.0×')
+            this.hooks.refreshState()
+          })
+          return
+        }
+        if (setting === 'meteorPreview') {
+          this.hooks.flashHint('✦ 彩色流星正在划过当前天穹')
+          return
+        }
+        // Do not refresh the whole state for continuous sliders while dragging:
+        // an older native reply can arrive after a newer value and reset the thumb.
+        if (typeof value === 'boolean' || setting === 'environmentMode' ||
+          setting === 'toneReset' || setting === 'starBrightnessReset' || setting === 'grsReset') {
+          this.hooks.refreshState()
+        }
       } else {
         this.hooks.flashHint(r.error ?? I18n.t('msg_apply_failed'))
         this.hooks.refreshState()

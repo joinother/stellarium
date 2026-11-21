@@ -32,6 +32,7 @@ export struct HarmonyShell {
   @Prop actionHint: ResourceStr
   @Prop starBrightnessHudVisible: boolean = false
   @Prop starBrightnessValue: number = 0.5
+  @Prop realisticStarVisibility: boolean = true
   @State c: ThemeSlots = DEFAULT_SLOTS
 
   onHandleViewCoordinateTouch: (event: TouchEvent) => void = () => {}
@@ -101,35 +102,46 @@ export struct HarmonyShell {
       // 双指上下滑调整星点亮度 HUD 胶囊（置顶、不拦截触摸、松手自动淡出）
       if (this.starBrightnessHudVisible) {
         Row() {
-          Row({ space: 10 }) {
-            Text('✦')
-              .fontSize(14)
-              .fontColor(this.c.accent)
-            Text(I18n.t('star_brightness_hud'))
-              .fontSize(12)
-              .fontWeight(FontWeight.Medium)
-              .fontColor(this.c.sub)
-            Stack({ alignContent: Alignment.Start }) {
-              Row()
+          Column({ space: 3 }) {
+            Row({ space: 10 }) {
+              Text('✦')
+                .fontSize(14)
+                .fontColor(this.c.accent)
+              Text(I18n.t('star_brightness_hud'))
+                .fontSize(12)
+                .fontWeight(FontWeight.Medium)
+                .fontColor(this.c.sub)
+              Stack({ alignContent: Alignment.Start }) {
+                Row()
+                  .width(88)
+                  .height(5)
+                  .borderRadius(3)
+                  .backgroundColor(this.c.chipInactiveBg)
+                Row()
+                  .width(Math.round(Math.max(0, Math.min(1, this.starBrightnessValue)) * 88))
+                  .height(5)
+                  .borderRadius(3)
+                  .backgroundColor(this.c.accent)
+              }
                 .width(88)
                 .height(5)
-                .borderRadius(3)
-                .backgroundColor(this.c.chipInactiveBg)
-              Row()
-                .width(Math.round(Math.max(0, Math.min(1, this.starBrightnessValue)) * 88))
-                .height(5)
-                .borderRadius(3)
-                .backgroundColor(this.c.accent)
+              Text(Math.round(Math.max(0, Math.min(1, this.starBrightnessValue)) * 100).toString() + '%')
+                .fontSize(13)
+                .fontWeight(FontWeight.Medium)
+                .fontColor(this.c.text)
+                .width(38)
+                .textAlign(TextAlign.End)
             }
-              .width(88)
-              .height(5)
-            Text(Math.round(Math.max(0, Math.min(1, this.starBrightnessValue)) * 100).toString() + '%')
-              .fontSize(13)
-              .fontWeight(FontWeight.Medium)
-              .fontColor(this.c.text)
-              .width(38)
-              .textAlign(TextAlign.End)
+            if (this.realisticStarVisibility) {
+              Text(Math.abs(this.starBrightnessValue - 0.5) <= 0.03
+                ? '现实星等基准 · 1.0×'
+                : '星点临时偏移 · 现实星等仍限制暗星（重开现实星等自动归位）')
+                .fontSize(10)
+                .fontColor(Math.abs(this.starBrightnessValue - 0.5) <= 0.03 ? this.c.sub : this.c.accent)
+                .maxLines(1)
+            }
           }
+            .alignItems(HorizontalAlign.Center)
             .padding({ left: 14, right: 14, top: 8, bottom: 8 })
             .backgroundColor(this.c.hintPillBg)
             .borderRadius(UI_RADIUS_PILL)

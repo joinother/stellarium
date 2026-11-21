@@ -91,7 +91,7 @@ import { publishAstronomyCard } from '../qability/AstronomyCardService'
 import { CardTonightData } from '../form/AstronomyCardData'
 import { RecordingController, RecordingHostHooks } from '../capability/RecordingController'
 import { ObjectModelRenderer, ObjectModelRendererHostHooks } from '../capability/ObjectModelRenderer'
-import { SkyInputController, SkyInputHostHooks, absoluteScaleToStarBrightness } from '../capability/SkyInputController'
+import { SkyInputController, SkyInputHostHooks, absoluteScaleToStarBrightness, starBrightnessToAbsoluteScale } from '../capability/SkyInputController'
 import { DetailConnectorController, DetailConnectorHostHooks } from '../capability/DetailConnectorController'
 import { LayerController, LayerHostHooks } from '../capability/LayerController'
 import { SkyTextureStatusController, SkyTextureStatusHostHooks } from '../capability/SkyTextureStatusController'
@@ -3376,7 +3376,7 @@ export struct WindowNativeNode {
             if (r.ok === true && r.fov !== undefined) { onResult(r.fov) }
           })
         },
-        starBrightnessValue: (): number => this.starBrightnessValue,
+        starBrightnessValue: (): number => absoluteScaleToStarBrightness(this.layerViewStore.starBrightnessScale),
         onStarBrightnessChange: (normalized: number, dragging: boolean): void => {
           this.handleStarBrightnessChange(normalized, dragging)
         }
@@ -8432,6 +8432,32 @@ export struct WindowNativeNode {
     if (result.milkyWayIntensity !== undefined) this.layerViewStore.milkyWayBright = Math.max(0, Math.min(6, Math.round((result.milkyWayIntensity as number) * 3)))
     if (result.luminanceAdaptation !== undefined) this.layerStore.luminanceAdaptation = result.luminanceAdaptation === true
     if (result.realisticStarVisibility !== undefined) this.layerStore.realisticStarVisibility = result.realisticStarVisibility === true
+    if (result.absoluteStarScale !== undefined) {
+      const scale = result.absoluteStarScale as number
+      this.layerViewStore.starBrightnessScale = scale
+      this.starBrightnessValue = absoluteScaleToStarBrightness(scale)
+    }
+    if (result.toneDisplayAdaptationLuminance !== undefined) {
+      this.layerViewStore.toneDisplayAdaptationLuminance = Math.round(result.toneDisplayAdaptationLuminance as number)
+    }
+    if (result.toneMaxDisplayLuminance !== undefined) {
+      this.layerViewStore.toneMaxDisplayLuminance = Math.round(result.toneMaxDisplayLuminance as number)
+    }
+    if (result.toneDisplayGamma !== undefined) {
+      this.layerViewStore.toneDisplayGamma = Math.round((result.toneDisplayGamma as number) * 100) / 100
+    }
+    if (result.toneUseTmGamma !== undefined) {
+      this.layerViewStore.toneUseTmGamma = result.toneUseTmGamma === true
+    }
+    if (result.grsLongitude !== undefined) {
+      this.layerViewStore.grsLongitude = ((Math.round(result.grsLongitude as number) % 360) + 360) % 360
+    }
+    if (result.grsDrift !== undefined) {
+      this.layerViewStore.grsDrift = Math.round((result.grsDrift as number) * 10) / 10
+    }
+    if (result.grsJd !== undefined) {
+      this.layerViewStore.grsJd = result.grsJd as number
+    }
     if (result.vividAtmosphere !== undefined) this.layerStore.vividAtmosphere = result.vividAtmosphere === true
     if (result.zoomFadeEnvironment !== undefined) this.layerStore.zoomFadeEnvironment = result.zoomFadeEnvironment === true
     if (result.environmentMode !== undefined) this.layerStore.environmentMode = result.environmentMode
@@ -8441,6 +8467,8 @@ export struct WindowNativeNode {
     if (result.starSpiky !== undefined) this.layerStore.starSpiky = result.starSpiky === true
     if (result.meteorZhr !== undefined) this.layerViewStore.meteorZhr = Math.round(result.meteorZhr as number)
     if (result.meteorZhrMax !== undefined) this.layerViewStore.meteorZhrMax = Math.max(1000, Math.round(result.meteorZhrMax as number))
+    if (result.meteorDrawSuppression !== undefined) this.layerViewStore.meteorDrawSuppression = result.meteorDrawSuppression as string
+    if (result.meteorGenSuppression !== undefined) this.layerViewStore.meteorGenSuppression = result.meteorGenSuppression as string
     if (result.zodiacalLight !== undefined) this.layerStore.zodiacalLight = result.zodiacalLight === true
     if (result.zodiacalIntensity !== undefined) this.layerViewStore.zodiacalIntensity = result.zodiacalIntensity as number
     this.viewSettingsStore.autoZoomResets = result.autoZoomResets === true
@@ -8631,20 +8659,23 @@ export struct WindowNativeNode {
   }
 
   private handleStarBrightnessChange(normalized: number, dragging: boolean): void {
-    this.starBrightnessValue = Math.max(0, Math.min(1, normalized))
+    const clamped = Math.max(0, Math.min(1, normalized))
+    this.starBrightnessValue = clamped
+    this.layerViewStore.starBrightnessScale = starBrightnessToAbsoluteScale(clamped)
     this.starBrightnessHudVisible = true
     this.clearStarBrightnessHudTimer()
     if (!dragging) {
       this.starBrightnessHudTimer = setTimeout(() => {
         this.starBrightnessHudTimer = 0
         this.starBrightnessHudVisible = false
-      }, 1200) as number
+      }, 1400) as number
     }
   }
 
   private syncStarBrightnessFromEngine(): void {
     this.callInteractive('getAbsoluteStarScale', '', (r: StellariumBridgeResponse) => {
       if (r.ok === true && r.scale !== undefined) {
+        this.layerViewStore.starBrightnessScale = r.scale
         this.starBrightnessValue = absoluteScaleToStarBrightness(r.scale)
       }
     })
@@ -9373,6 +9404,7 @@ export struct WindowNativeNode {
             actionHint: this.actionHint,
             starBrightnessHudVisible: this.starBrightnessHudVisible,
             starBrightnessValue: this.starBrightnessValue,
+            realisticStarVisibility: this.layerStore.realisticStarVisibility,
             onHandleViewCoordinateTouch: (event: TouchEvent) => { this.viewCoordinateCtl().handleViewCoordinateTouch(event) }
           })
         }

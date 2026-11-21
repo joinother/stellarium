@@ -82,6 +82,7 @@
 #include "../plugins/Calendars/src/Calendars.hpp"
 #include "../plugins/SolarSystemEditor/src/SolarSystemEditor.hpp"
 #include "StelScriptMgr.hpp"
+#include "StelToneReproducer.hpp"
 #include "SolarSystem.hpp"
 #include "NomenclatureMgr.hpp"
 #include "NomenclatureItem.hpp"
@@ -4637,6 +4638,7 @@ QJsonObject currentStateJson()
 			result["luminanceAdaptation"] = drawer->getFlagLuminanceAdaptation();
 			result["realisticStarVisibility"] = drawer->getFlagRealisticStarVisibility();
 			result["starLimitingMagnitude"] = drawer->getStarLimitMagnitude();
+			result["absoluteStarScale"] = drawer->getAbsoluteStarScale();
 			result["starTwinkle"] = drawer->getFlagTwinkle();
 			result["forcedStarTwinkle"] = drawer->getFlagForcedTwinkle();
 			result["bigStarHalo"] = drawer->getFlagDrawBigStarHalo();
@@ -4645,6 +4647,19 @@ QJsonObject currentStateJson()
 			result["bortleScale"] = StelCore::luminanceToBortleScaleIndex(
 				static_cast<float>(drawer->getLightPollutionLuminance()));
 		}
+		if (StelToneReproducer* tone = core->getToneReproducer())
+		{
+			result["toneDisplayAdaptationLuminance"] = static_cast<double>(tone->getDisplayAdaptationLuminance());
+			result["toneMaxDisplayLuminance"] = static_cast<double>(tone->getMaxDisplayLuminance());
+			result["toneDisplayGamma"] = static_cast<double>(tone->getDisplayGamma());
+			result["toneUseTmGamma"] = tone->getFlagUseTmGamma();
+		}
+	}
+	if (SolarSystem* ssystem = GETSTELMODULE(SolarSystem))
+	{
+		result["grsLongitude"] = ssystem->getGrsLongitude();
+		result["grsDrift"] = ssystem->getGrsDrift();
+		result["grsJd"] = ssystem->getGrsJD();
 	}
 	if (LandscapeMgr* landscape = GETSTELMODULE(LandscapeMgr))
 	{
@@ -4660,6 +4675,9 @@ QJsonObject currentStateJson()
 	{
 		result["meteorZhr"] = mmgr->getZHR();
 		result["meteorZhrMax"] = SporadicMeteorMgr::MaxZHR;
+		const QJsonObject diag = mmgr->getDiagnostics();
+		result["meteorDrawSuppression"] = diag.value(QStringLiteral("drawSuppression")).toString();
+		result["meteorGenSuppression"] = diag.value(QStringLiteral("generationSuppression")).toString();
 	}
 	if (MilkyWay* milkyWay = GETSTELMODULE(MilkyWay))
 		result["milkyWayIntensity"] = milkyWay->getIntensity();
@@ -13079,6 +13097,114 @@ extern "C" __attribute__((visibility("default"))) const char* StellariumOhos_com
 					return result;
 				}
 				mmgr->setZHR(zhr);
+			}
+			else if (setting == "meteorPreview")
+			{
+				SporadicMeteorMgr* mmgr = GETSTELMODULE(SporadicMeteorMgr);
+				if (!mmgr)
+				{
+					result["ok"] = false;
+					result["error"] = "meteor module unavailable";
+					return result;
+				}
+				mmgr->triggerPreviewSalvo();
+			}
+			else if (setting == "toneDisplayAdaptation" || setting == "toneMaxLuminance" ||
+				 setting == "toneGamma" || setting == "toneUseTmGamma" || setting == "toneReset")
+			{
+				StelToneReproducer* tone = StelApp::getInstance().getCore()->getToneReproducer();
+				if (!tone)
+				{
+					result["ok"] = false;
+					result["error"] = "tone reproducer unavailable";
+					return result;
+				}
+				if (setting == "toneUseTmGamma")
+				{
+					tone->setFlagUseTmGamma(enabled);
+				}
+				else if (setting == "toneReset")
+				{
+					tone->setDisplayAdaptationLuminance(50.f);
+					tone->setMaxDisplayLuminance(100.f);
+					tone->setDisplayGamma(2.2222f);
+					tone->setFlagUseTmGamma(true);
+				}
+				else
+				{
+					bool ok = false;
+					const double num = value.toDouble(&ok);
+					if (!ok || !std::isfinite(num))
+					{
+						result["ok"] = false;
+						result["error"] = "invalid tone mapping value";
+						return result;
+					}
+					if (setting == "toneDisplayAdaptation")
+						tone->setDisplayAdaptationLuminance(static_cast<float>(qBound(1.0, num, 100.0)));
+					else if (setting == "toneMaxLuminance")
+						tone->setMaxDisplayLuminance(static_cast<float>(qBound(20.0, num, 500.0)));
+					else if (setting == "toneGamma")
+						tone->setDisplayGamma(static_cast<float>(qBound(1.0, num, 3.5)));
+				}
+			}
+			else if (setting == "absoluteStarScale")
+			{
+				bool ok = false;
+				const double scale = value.toDouble(&ok);
+				if (!ok || !std::isfinite(scale) || scale < 0.05 || scale > 9.0)
+				{
+					result["ok"] = false;
+					result["error"] = "absoluteStarScale must be 0.05..9.0";
+					return result;
+				}
+				drawer->setAbsoluteStarScale(scale);
+			}
+			else if (setting == "starBrightnessReset")
+			{
+				drawer->setAbsoluteStarScale(1.0);
+			}
+			else if (setting == "grsLongitude" || setting == "grsDrift" ||
+				 setting == "grsJd" || setting == "grsReset")
+			{
+				SolarSystem* ssystem = GETSTELMODULE(SolarSystem);
+				if (!ssystem)
+				{
+					result["ok"] = false;
+					result["error"] = "solar system module unavailable";
+					return result;
+				}
+				if (setting == "grsReset")
+				{
+					ssystem->setGrsLongitude(46);
+					ssystem->setGrsDrift(15.0);
+					ssystem->setGrsJD(2460218.5);
+				}
+				else
+				{
+					bool ok = false;
+					const double num = value.toDouble(&ok);
+					if (!ok || !std::isfinite(num))
+					{
+						result["ok"] = false;
+						result["error"] = "invalid GRS parameter";
+						return result;
+					}
+					if (setting == "grsLongitude")
+					{
+						int lon = static_cast<int>(std::lround(num)) % 360;
+						if (lon < 0) lon += 360;
+						ssystem->setGrsLongitude(lon);
+					}
+					else if (setting == "grsDrift")
+					{
+						ssystem->setGrsDrift(qBound(-100.0, num, 100.0));
+					}
+					else if (setting == "grsJd")
+					{
+						ssystem->setGrsJD(qBound(1721057.5, num, 3442447.5));
+					}
+				}
 			}
 			else if (setting == "zodiacalLight" || setting == "zodiacalIntensity")
 			{

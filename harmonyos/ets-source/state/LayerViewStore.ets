@@ -26,7 +26,23 @@ export class LayerViewStore {
   milkyWayBright: number = 3
   meteorZhr: number = 10
   meteorZhrMax: number = 240000
+  meteorDrawSuppression: string = 'none'
+  meteorGenSuppression: string = 'none'
   zodiacalIntensity: number = 1
+
+  // —— 色调映射与星点亮度调和 ——
+  toneMappingExpanded: boolean = false
+  toneDisplayAdaptationLuminance: number = 50
+  toneMaxDisplayLuminance: number = 100
+  toneDisplayGamma: number = 2.22
+  toneUseTmGamma: boolean = true
+  starBrightnessScale: number = 1.0
+
+  // —— 木星大红斑校准 (GRS) ——
+  grsSettingsExpanded: boolean = false
+  grsLongitude: number = 46
+  grsDrift: number = 15.0
+  grsJd: number = 2460218.5
 
   // —— 行星轨道 ——
   orbitSettingsExpanded: boolean = false
