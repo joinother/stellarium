@@ -45,6 +45,8 @@ export class SkyCultureSettingsStore {
   skyCultureTerritoryMapYearInput: string = new Date().getFullYear().toString()
   skyCultureMapUseLocationRotation: boolean = false
   skyCultureObserverLatitude: number = 0
+  // 手动切换位置或跨越历史年代时，底部是否弹出轻量不打扰的文化推荐胶囊（默认开启，绝不强行自动切换）
+  skyCultureSmartRecommend: boolean = true
 
   // —— 当前文化的只读元信息 ——
   skyCultureRegions: string[] = []

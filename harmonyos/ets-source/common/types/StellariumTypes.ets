@@ -77,6 +77,9 @@ export interface LandscapeItem {
   name: string
   author?: string
   description?: string
+  localizedDescription?: string
+  landscapeType?: string
+  previewPath?: string
   source?: string
   hasDescription?: boolean
   hasLocation?: boolean

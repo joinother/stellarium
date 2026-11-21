@@ -3491,6 +3491,303 @@ QJsonObject constellationDetailMediaJson(const StelObjectP& object)
 	return result;
 }
 
+namespace
+{
+struct OhosNebulaTileEntry
+{
+	QString imageUrl;
+	QString credit;
+	QStringList tokens;
+	Vec3d centerDir;
+	double halfRadiusRad = 0.0;
+	double areaApprox = 0.0;
+};
+
+QString normalizeOhosDsoToken(const QString& raw)
+{
+	QString s = raw.trimmed().toLower();
+	if (s.isEmpty())
+		return QString();
+	s.replace(QRegularExpression(QStringLiteral("\\s+")), QString());
+	// Expand shorthand prefixes used in textures.json filenames (e.g. n7000 -> ngc7000, u123 -> ugc123, p123 -> pgc123, b33 -> barnard33)
+	static const QRegularExpression reN(QStringLiteral("^n(\\d+[a-z]?)$"));
+	static const QRegularExpression reU(QStringLiteral("^u(\\d+[a-z]?)$"));
+	static const QRegularExpression reP(QStringLiteral("^p(\\d+[a-z]?)$"));
+	static const QRegularExpression reB(QStringLiteral("^b(\\d+[a-z]?)$"));
+	static const QRegularExpression reSh(QStringLiteral("^sh2[-_]?(\\d+[a-z]?)$"));
+	static const QRegularExpression reShShort(QStringLiteral("^sh[-_]?(\\d+[a-z]?)$"));
+	static const QRegularExpression reCed(QStringLiteral("^ced[-_]?(\\d+[a-z]?)$"));
+	static const QRegularExpression reVdb(QStringLiteral("^vdb[-_]?(\\d+[a-z]?)$"));
+	static const QRegularExpression reRcw(QStringLiteral("^rcw[-_]?(\\d+[a-z]?)$"));
+	static const QRegularExpression reLbn(QStringLiteral("^lbn[-_]?(\\d+[a-z]?)$"));
+	static const QRegularExpression reLdn(QStringLiteral("^ldn[-_]?(\\d+[a-z]?)$"));
+	static const QRegularExpression reAbell(QStringLiteral("^abell[-_]?(\\d+[a-z]?)$"));
+	static const QRegularExpression reM(QStringLiteral("^m0*(\\d+[a-z]?)$"));
+	static const QRegularExpression reNgc(QStringLiteral("^ngc0*(\\d+[a-z]?)$"));
+	static const QRegularExpression reIc(QStringLiteral("^ic0*(\\d+[a-z]?)$"));
+	static const QRegularExpression reBarnard(QStringLiteral("^barnard0*(\\d+[a-z]?)$"));
+
+	QRegularExpressionMatch m;
+	if ((m = reM.match(s)).hasMatch()) return QStringLiteral("m") + m.captured(1);
+	if ((m = reNgc.match(s)).hasMatch()) return QStringLiteral("ngc") + m.captured(1);
+	if ((m = reN.match(s)).hasMatch()) return QStringLiteral("ngc") + m.captured(1);
+	if ((m = reIc.match(s)).hasMatch()) return QStringLiteral("ic") + m.captured(1);
+	if ((m = reU.match(s)).hasMatch()) return QStringLiteral("ugc") + m.captured(1);
+	if ((m = reP.match(s)).hasMatch()) return QStringLiteral("pgc") + m.captured(1);
+	if ((m = reB.match(s)).hasMatch()) return QStringLiteral("barnard") + m.captured(1);
+	if ((m = reBarnard.match(s)).hasMatch()) return QStringLiteral("barnard") + m.captured(1);
+	if ((m = reSh.match(s)).hasMatch()) return QStringLiteral("sh2-") + m.captured(1);
+	if ((m = reShShort.match(s)).hasMatch()) return QStringLiteral("sh2-") + m.captured(1);
+	if ((m = reCed.match(s)).hasMatch()) return QStringLiteral("ced") + m.captured(1);
+	if ((m = reVdb.match(s)).hasMatch()) return QStringLiteral("vdb") + m.captured(1);
+	if ((m = reRcw.match(s)).hasMatch()) return QStringLiteral("rcw") + m.captured(1);
+	if ((m = reLbn.match(s)).hasMatch()) return QStringLiteral("lbn") + m.captured(1);
+	if ((m = reLdn.match(s)).hasMatch()) return QStringLiteral("ldn") + m.captured(1);
+	if ((m = reAbell.match(s)).hasMatch()) return QStringLiteral("abell") + m.captured(1);
+	return s;
+}
+
+QStringList extractOhosTileTokens(const QString& imageUrl)
+{
+	QStringList out;
+	const QString stem = QFileInfo(imageUrl).completeBaseName().toLower();
+	if (stem.isEmpty())
+		return out;
+	// Match leading catalog pattern (e.g. m1dumont -> m1, n7000-dss -> ngc7000, sh2-155 -> sh2-155)
+	static const QRegularExpression reLead(
+		QStringLiteral("^(sh2[-_]?\\d+[a-z]?|sh[-_]?\\d+[a-z]?|ngc\\d+[a-z]?|ic\\d+[a-z]?|barnard\\d+[a-z]?|abell\\d+[a-z]?|vdb\\d+[a-z]?|rcw\\d+[a-z]?|ced\\d+[a-z]?|lbn\\d+[a-z]?|ldn\\d+[a-z]?|dwb\\d+[a-z]?|wr\\d+[a-z]?|m\\d+[a-z]?|n\\d+[a-z]?|u\\d+[a-z]?|p\\d+[a-z]?|b\\d+[a-z]?)"));
+	const QRegularExpressionMatch lead = reLead.match(stem);
+	if (lead.hasMatch())
+	{
+		const QString norm = normalizeOhosDsoToken(lead.captured(1));
+		if (!norm.isEmpty() && !out.contains(norm))
+			out.append(norm);
+	}
+	// Also split by - / _ for multi-object tiles like n6960-n6992 or ic434-b33
+	const QStringList parts = stem.split(QRegularExpression(QStringLiteral("[-_]+")), Qt::SkipEmptyParts);
+	for (const QString& part : parts)
+	{
+		const QString norm = normalizeOhosDsoToken(part);
+		if (norm.size() >= 2 && !out.contains(norm))
+			out.append(norm);
+	}
+	return out;
+}
+
+QString cleanOhosNebulaCredit(QString credit)
+{
+	credit = credit.trimmed();
+	if (credit.isEmpty())
+		return QString();
+	// Remove raw URLs and overly verbose remix boilerplate so caption stays crisp
+	credit.remove(QRegularExpression(QStringLiteral("https?://\\S+")));
+	credit.replace(QRegularExpression(QStringLiteral("\\s+")), QStringLiteral(" "));
+	credit = credit.trimmed();
+	if (credit.startsWith(QStringLiteral("This image file was remixed"), Qt::CaseInsensitive))
+		return QStringLiteral("Sun Shuwei / 开源天文摄影");
+	if (credit.endsWith(QStringLiteral("at"), Qt::CaseInsensitive))
+		credit.chop(2);
+	credit = credit.trimmed();
+	if (credit.size() > 52)
+		credit = credit.left(49).trimmed() + QStringLiteral("…");
+	return credit;
+}
+
+const QVector<OhosNebulaTileEntry>& ohosNebulaTilesCache()
+{
+	static bool initialized = false;
+	static QVector<OhosNebulaTileEntry> tiles;
+	if (initialized)
+		return tiles;
+	initialized = true;
+
+	const QString jsonPath = StelFileMgr::findFile(QStringLiteral("nebulae/default/textures.json"), StelFileMgr::File);
+	if (jsonPath.isEmpty())
+		return tiles;
+	QFile f(jsonPath);
+	if (!f.open(QIODevice::ReadOnly))
+		return tiles;
+	QByteArray raw = f.readAll();
+	// Upstream textures.json contains a literal tab inside a JSON string literal (line 2266);
+	// replace raw tabs with spaces so strict QJsonDocument::fromJson parses all 674 entries.
+	raw.replace('\t', ' ');
+	QJsonParseError err;
+	const QJsonDocument doc = QJsonDocument::fromJson(raw, &err);
+	if (err.error != QJsonParseError::NoError || !doc.isObject())
+	{
+		qWarning() << "[StellariumOhos][nebula-media] failed to parse nebulae/default/textures.json:" << err.errorString();
+		return tiles;
+	}
+	const QJsonArray subTiles = doc.object().value(QStringLiteral("subTiles")).toArray();
+	tiles.reserve(subTiles.size());
+	for (const QJsonValue& v : subTiles)
+	{
+		if (!v.isObject())
+			continue;
+		const QJsonObject obj = v.toObject();
+		const QString imageUrl = obj.value(QStringLiteral("imageUrl")).toString().trimmed();
+		if (imageUrl.isEmpty())
+			continue;
+		const QJsonObject credits = obj.value(QStringLiteral("imageCredits")).toObject();
+		QString credit = credits.value(QStringLiteral("short")).toString();
+		if (credit.isEmpty())
+			credit = credits.value(QStringLiteral("Short")).toString();
+
+		QVector<Vec3d> corners;
+		const QJsonArray polys = obj.value(QStringLiteral("worldCoords")).toArray();
+		for (const QJsonValue& polyVal : polys)
+		{
+			const QJsonArray ring = polyVal.toArray();
+			for (const QJsonValue& ptVal : ring)
+			{
+				const QJsonArray pt = ptVal.toArray();
+				if (pt.size() < 2)
+					continue;
+				const double raRad = pt.at(0).toDouble() * (M_PI / 180.0);
+				const double decRad = pt.at(1).toDouble() * (M_PI / 180.0);
+				const double cosDec = std::cos(decRad);
+				corners.append(Vec3d(cosDec * std::cos(raRad), cosDec * std::sin(raRad), std::sin(decRad)));
+			}
+		}
+		if (corners.isEmpty())
+			continue;
+
+		Vec3d sum(0.0, 0.0, 0.0);
+		for (const Vec3d& c : corners)
+			sum += c;
+		if (sum.normSquared() < 1e-12)
+			continue;
+		sum.normalize();
+
+		double maxAng = 0.0;
+		for (const Vec3d& c : corners)
+		{
+			const double dot = qBound(-1.0, sum.dot(c), 1.0);
+			const double ang = std::acos(dot);
+			if (ang > maxAng)
+				maxAng = ang;
+		}
+		if (maxAng < 1e-6)
+			continue;
+
+		OhosNebulaTileEntry entry;
+		entry.imageUrl = imageUrl;
+		entry.credit = cleanOhosNebulaCredit(credit);
+		entry.tokens = extractOhosTileTokens(imageUrl);
+		entry.centerDir = sum;
+		entry.halfRadiusRad = maxAng;
+		entry.areaApprox = maxAng * maxAng;
+		tiles.append(entry);
+	}
+	qInfo() << "[StellariumOhos][nebula-media] indexed" << tiles.size() << "offline nebula photos from textures.json";
+	return tiles;
+}
+
+QJsonObject ohosNebulaDetailMediaJson(const StelObjectP& object, StelCore* core)
+{
+	QJsonObject result;
+	if (!object || object->getType() != QLatin1String("Nebula"))
+		return result;
+
+	const QVector<OhosNebulaTileEntry>& tiles = ohosNebulaTilesCache();
+	if (tiles.isEmpty())
+		return result;
+
+	const NebulaP nebula = qSharedPointerCast<Nebula>(object);
+	if (!nebula)
+		return result;
+
+	Vec3d objDir = core ? nebula->getJ2000EquatorialPos(core) : nebula->getJ2000EquatorialPos(nullptr);
+	const bool hasPos = objDir.normSquared() > 1e-12;
+	if (hasPos)
+		objDir.normalize();
+	const double objSizeRad = core ? (nebula->getAngularRadius(core) * (M_PI / 180.0)) : 0.0;
+
+	// Build normalized designation tokens from all available DSO identifiers
+	QStringList dsoTokens;
+	const QStringList rawNames = {
+		nebula->getDSODesignationWIC(),
+		nebula->getDSODesignation(),
+		nebula->getID(),
+		nebula->getEnglishName()
+	};
+	for (const QString& raw : rawNames)
+	{
+		if (raw.trimmed().isEmpty())
+			continue;
+		const QStringList parts = raw.split(QRegularExpression(QStringLiteral("[/,;()]+")), Qt::SkipEmptyParts);
+		for (const QString& part : parts)
+		{
+			const QString norm = normalizeOhosDsoToken(part);
+			if (norm.size() >= 2 && !dsoTokens.contains(norm))
+				dsoTokens.append(norm);
+		}
+	}
+
+	const OhosNebulaTileEntry* bestTokenMatch = nullptr;
+	double bestTokenScore = 1e30;
+	const OhosNebulaTileEntry* bestCoordMatch = nullptr;
+	double bestCoordArea = 1e30;
+
+	for (const OhosNebulaTileEntry& tile : tiles)
+	{
+		double distRad = M_PI;
+		if (hasPos)
+		{
+			const double dot = qBound(-1.0, objDir.dot(tile.centerDir), 1.0);
+			distRad = std::acos(dot);
+		}
+
+		// Pass 1: exact catalog designation token match (sanity-checked within 15 deg so unrelated homonyms never match)
+		if (!dsoTokens.isEmpty() && (!hasPos || distRad < 15.0 * (M_PI / 180.0)))
+		{
+			bool tokenHit = false;
+			for (const QString& dt : dsoTokens)
+			{
+				if (tile.tokens.contains(dt))
+				{
+					tokenHit = true;
+					break;
+				}
+			}
+			if (tokenHit)
+			{
+				const double score = distRad + tile.areaApprox * 0.5;
+				if (score < bestTokenScore)
+				{
+					bestTokenScore = score;
+					bestTokenMatch = &tile;
+				}
+			}
+		}
+
+		// Pass 2: J2000 sky coordinate containment inside the photographed tile core
+		if (hasPos && distRad <= tile.halfRadiusRad * 0.85)
+		{
+			const double tightThreshold = qMax(0.08 * (M_PI / 180.0), tile.halfRadiusRad * 0.48);
+			const bool centered = distRad <= tightThreshold;
+			const bool comparableSize = objSizeRad >= tile.halfRadiusRad * 0.22;
+			if ((centered || comparableSize) && tile.areaApprox < bestCoordArea)
+			{
+				bestCoordArea = tile.areaApprox;
+				bestCoordMatch = &tile;
+			}
+		}
+	}
+
+	const OhosNebulaTileEntry* matched = bestTokenMatch ? bestTokenMatch : bestCoordMatch;
+	if (!matched)
+		return result;
+
+	result[QStringLiteral("detailMediaPath")] = QStringLiteral("nebulae/default/") + matched->imageUrl;
+	result[QStringLiteral("detailMediaKind")] = QStringLiteral("image");
+	result[QStringLiteral("detailMediaLabel")] = matched->credit.isEmpty()
+		? QStringLiteral("离线深空实拍图")
+		: (QStringLiteral("深空实拍 · ") + matched->credit);
+	return result;
+}
+} // namespace
+
 QJsonObject constellationCultureDescriptionJson(const StelObjectP& object, StelCore* core)
 {
 	QJsonObject result;
@@ -3743,7 +4040,9 @@ QJsonObject selectedObjectJson(StelCore* core = nullptr, bool includeDetails = f
 				result["englishName"] = fallback;
 		}
 	}
-	const QJsonObject detailMedia = constellationDetailMediaJson(object);
+	QJsonObject detailMedia = constellationDetailMediaJson(object);
+	if (detailMedia.isEmpty())
+		detailMedia = ohosNebulaDetailMediaJson(object, core);
 	for (auto it = detailMedia.constBegin(); it != detailMedia.constEnd(); ++it)
 		result[it.key()] = it.value();
 	const QJsonObject cultureDescription = constellationCultureDescriptionJson(object, core);
@@ -9245,8 +9544,41 @@ extern "C" __attribute__((visibility("default"))) const char* StellariumOhos_com
 					QSettings ini(iniPath, QSettings::IniFormat);
 					item["author"] = ini.value("landscape/author").toString();
 					item["description"] = ini.value("landscape/description").toString();
+					item["landscapeType"] = ini.value("landscape/type").toString();
 					item["source"] = "landscapes/" + ids[i] + "/landscape.ini";
 					item["hasDescription"] = !ini.value("landscape/description").toString().trimmed().isEmpty();
+					// Resolve bundled preview texture path for spherical / fisheye / old_style landscapes
+					QString previewFile = ini.value("landscape/maptex").toString().trimmed();
+					if (previewFile.isEmpty())
+					{
+						const QString side1 = ini.value("landscape/side1").toString().trimmed();
+						const QString texKey = side1.section(':', 0, 0).trimmed();
+						if (!texKey.isEmpty())
+							previewFile = ini.value("landscape/" + texKey).toString().trimmed();
+						if (previewFile.isEmpty())
+							previewFile = ini.value("landscape/tex1").toString().trimmed();
+					}
+					if (!previewFile.isEmpty())
+					{
+						const QString relPreview = "landscapes/" + ids[i] + "/" + previewFile;
+						if (!StelFileMgr::findFile(relPreview, StelFileMgr::File).isEmpty())
+							item["previewPath"] = relPreview;
+					}
+					// Load localized Chinese description file if bundled
+					const QString zhDescPath = StelFileMgr::findFile("landscapes/" + ids[i] + "/description.zh_CN.utf8", StelFileMgr::File);
+					if (!zhDescPath.isEmpty())
+					{
+						QFile df(zhDescPath);
+						if (df.open(QIODevice::ReadOnly | QIODevice::Text))
+						{
+							QString zhText = QString::fromUtf8(df.readAll());
+							zhText.remove(QRegularExpression(QStringLiteral("<[^>]*>")));
+							zhText.replace(QRegularExpression(QStringLiteral("\\s+")), QStringLiteral(" "));
+							zhText = zhText.trimmed();
+							if (!zhText.isEmpty())
+								item["localizedDescription"] = zhText;
+						}
+					}
 					item["hasLocation"] = ini.childGroups().contains("location");
 					if (item["hasLocation"].toBool())
 					{

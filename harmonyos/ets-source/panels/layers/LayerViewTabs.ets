@@ -1,12 +1,14 @@
-﻿import { Theme } from '@kit.ArkUI'
+﻿import { curves, Theme } from '@kit.ArkUI'
 import { LandscapeItem } from '../../pages/StellariumTypes'
 import { I18n } from '../../pages/I18n'
 import { LayerStore } from '../../state/LayerStore'
 import { LayerViewStore } from '../../state/LayerViewStore'
 import { OverlayStore } from '../../state/OverlayStore'
 import { DEFAULT_SLOTS, ThemeSlots, slotsFromTheme } from '../../state/StellariumTheme'
-import { UI_RADIUS_CONTROL } from '../../common/ui/UiTokens'
+import { UI_RADIUS_CARD, UI_RADIUS_CONTROL, UI_RADIUS_MEDIA, UI_RADIUS_TAG } from '../../common/ui/UiTokens'
 import { panelFontSize } from '../../common/ui/UiTypography'
+import { InfoTipButton } from '../../common/ui/InfoTipButton'
+import { getLandscapeStoryZh, LandscapeStoryZh } from '../../common/derive/LandscapeStoriesZh'
 import { LayerSwitchRow } from './LayerSwitchRow'
 import { ObservationAidBlock } from './ObservationAidBlock'
 import { AtmosphereGroundSection } from './AtmosphereGroundSection'
@@ -622,6 +624,7 @@ export struct LayerLandscapeTab {
   @StorageProp('stellariumReadableUi') readableUi: boolean = false
   @Prop earthObserver: boolean = true
   @State private c: ThemeSlots = DEFAULT_SLOTS
+  @State private expandedLandscapeId: string = ''
   onToggleLayer: (actionId: string, cmd: string, value: boolean) => void = () => {}
   onToggleLandscapeAutoSelection: (enabled: boolean) => void = () => {}
   onSetLandscapeFadeWithZoom: (isOn: boolean) => void = () => {}
@@ -633,6 +636,59 @@ export struct LayerLandscapeTab {
 
   private resourceText(value: string | undefined, fallback: string): string {
     return value !== undefined && value.trim().length > 0 ? value.trim() : fallback
+  }
+
+  private landscapeStory(id: string): LandscapeStoryZh | undefined {
+    return getLandscapeStoryZh(id)
+  }
+
+  private landscapeTitle(item: LandscapeItem): string {
+    const story = this.landscapeStory(item.id)
+    if (story !== undefined) return story.titleZh
+    return I18n.landscapeName(item.name)
+  }
+
+  private landscapeLocation(item: LandscapeItem): string {
+    const story = this.landscapeStory(item.id)
+    if (story !== undefined) return story.locationZh
+    if (item.hasLocation === true) {
+      return this.resourceText(item.planet, 'Earth') + ' · ' + this.resourceText(item.timezone, '标准时区')
+    }
+    return this.resourceText(item.planet, '通用视野')
+  }
+
+  private landscapeSummary(item: LandscapeItem): string {
+    const story = this.landscapeStory(item.id)
+    if (story !== undefined) return story.summaryZh
+    if (item.localizedDescription !== undefined && item.localizedDescription.trim().length > 0) {
+      return item.localizedDescription.trim()
+    }
+    return this.resourceText(item.description, '自定义地景视野')
+  }
+
+  private landscapeFullStory(item: LandscapeItem): string {
+    const story = this.landscapeStory(item.id)
+    if (story !== undefined) return story.storyZh
+    if (item.localizedDescription !== undefined && item.localizedDescription.trim().length > 0) {
+      return item.localizedDescription.trim()
+    }
+    return this.resourceText(item.description, '')
+  }
+
+  private landscapeViewingTip(item: LandscapeItem): string {
+    const story = this.landscapeStory(item.id)
+    return story !== undefined ? story.viewingTipZh : ''
+  }
+
+  private landscapeAccent(item: LandscapeItem): string {
+    const story = this.landscapeStory(item.id)
+    return story !== undefined ? story.accentHex : '#4A5D7A'
+  }
+
+  private toggleLandscapeStory(id: string): void {
+    this.getUIContext().animateTo({ duration: 180, curve: curves.springMotion(0.46, 0.88) }, () => {
+      this.expandedLandscapeId = this.expandedLandscapeId === id ? '' : id
+    })
   }
 
   build() {
@@ -684,16 +740,21 @@ export struct LayerLandscapeTab {
       }.height(this.readableUi ? 50 : 42).width('100%').padding({ left: 10, right: 8 })
         .backgroundColor(this.c.bg).border({ width: 1, color: this.c.dividerSoft })
         .borderRadius(UI_RADIUS_CONTROL).margin({ top: 6, bottom: 6 })
-      Row() {
-        Text(I18n.t('i0288')).fontSize(11).fontColor(this.c.sub).width('100%').padding({ left: 2 })
-      }.height(18).width('100%').margin({ top: 6 })
+      Row({ space: 6 }) {
+        Text(I18n.t('i0288') + (this.layerViewStore.landscapeList.length > 0 ? ' · ' + this.layerViewStore.landscapeList.length + ' 套实景与地平线' : ''))
+          .fontSize(11).fontColor(this.c.sub).layoutWeight(1).padding({ left: 2 })
+        InfoTipButton({
+          title: '内置地景与星空视野',
+          tip: '收录 16 套地球暗夜观测点、洞穴遗迹及太阳系行星云顶与月面全景。点按卡片切换地景，点按「故事」可阅读各地景背后的天文与人文导览。'
+        })
+      }.width('100%').margin({ top: 6, bottom: 4 }).alignItems(VerticalAlign.Center)
       Row({ space: 8 }) {
         Text(I18n.t('btn_import_landscape')).fontSize(11).fontColor(this.c.text).layoutWeight(1)
         if (this.layerViewStore.landscapeImporting) LoadingProgress().width(16).height(16).color(this.c.accent)
         Button(I18n.t('btn_import_landscape')).fontSize(10).fontColor(this.c.accent).backgroundColor(this.c.bg)
           .borderRadius(UI_RADIUS_CONTROL).height(28).padding({ left: 9, right: 9 }).enabled(!this.layerViewStore.landscapeImporting)
           .onClick(() => { this.onImportLandscape() })
-      }.width('100%').height(38).padding({ left: 8, right: 8 }).backgroundColor(this.c.rowBg).borderRadius(UI_RADIUS_CONTROL).margin({ bottom: 5 })
+      }.width('100%').height(38).padding({ left: 8, right: 8 }).backgroundColor(this.c.rowBg).borderRadius(UI_RADIUS_CONTROL).margin({ bottom: 7 })
       if (this.layerViewStore.landscapeLoading && this.layerViewStore.landscapeList.length === 0) {
         Row({ space: 8 }) {
           LoadingProgress().width(16).height(16).color(this.c.accent)
@@ -704,39 +765,83 @@ export struct LayerLandscapeTab {
         Text('暂无可用地景').fontSize(11).fontColor(this.c.sub).width('100%')
           .textAlign(TextAlign.Center).padding({ top: 14, bottom: 14 })
       }
-      Column({ space: 2 }) {
+      Column({ space: 8 }) {
         ForEach(this.layerViewStore.landscapeList, (item: LandscapeItem) => {
-          Column({ space: 2 }) {
-            Row() {
-              Text(I18n.landscapeName(item.name)).fontSize(11)
-                .fontColor(this.layerViewStore.currentLandscapeId === item.id ? this.c.accent : this.c.text)
-                .layoutWeight(1)
-              if (this.layerViewStore.currentLandscapeId === item.id) {
-                Text(I18n.t('s0602')).fontSize(10).fontColor(this.c.accent).margin({ right: 8 })
+          Column({ space: 8 }) {
+            Row({ space: 10 }) {
+              if (item.previewPath !== undefined && item.previewPath.length > 0) {
+                Stack({ alignContent: Alignment.Center }) {
+                  Image($rawfile('stellarium/' + item.previewPath))
+                    .width('100%').height('100%').objectFit(ImageFit.Cover)
+                    .sourceSize({ width: 228, height: 168 })
+                  Row().width('100%').height('100%').backgroundColor(this.c.nightMask)
+                }
+                .width(76).height(56).clip(true).borderRadius(UI_RADIUS_MEDIA)
+                .backgroundColor(this.c.bg)
+                .border({ width: 0.5, color: this.c.border })
+              } else {
+                Column({ space: 3 }) {
+                  Row().width(44).height(2).backgroundColor('#FFFFFF').opacity(0.75).borderRadius(1)
+                  Text(item.id === 'zero' ? '0°' : '山脊').fontSize(10).fontColor('#FFFFFF').fontWeight(FontWeight.Medium)
+                }
+                .width(76).height(56).justifyContent(FlexAlign.Center).alignItems(HorizontalAlign.Center)
+                .borderRadius(UI_RADIUS_MEDIA).backgroundColor(this.landscapeAccent(item))
+                .border({ width: 0.5, color: this.c.border })
               }
-            }
-            if (item.author || item.description) {
-              Text(this.resourceText(item.description, I18n.t('resource_not_provided')))
-                .fontSize(10).fontColor(this.c.sub).width('100%').maxLines(2)
+              Column({ space: 3 }) {
+                Row({ space: 6 }) {
+                  Text(this.landscapeTitle(item))
+                    .fontSize(panelFontSize(13, this.readableUi))
+                    .fontWeight(this.layerViewStore.currentLandscapeId === item.id ? FontWeight.Medium : FontWeight.Regular)
+                    .fontColor(this.layerViewStore.currentLandscapeId === item.id ? this.c.accent : this.c.text)
+                    .layoutWeight(1).maxLines(1).textOverflow({ overflow: TextOverflow.Ellipsis })
+                  if (this.layerViewStore.currentLandscapeId === item.id) {
+                    Text('✓ ' + I18n.t('s0602')).fontSize(10).fontColor(this.c.accent)
+                      .padding({ left: 6, right: 6, top: 2, bottom: 2 })
+                      .backgroundColor(this.c.accentSoft).borderRadius(UI_RADIUS_TAG)
+                  }
+                }.width('100%').alignItems(VerticalAlign.Center)
+                Text(this.landscapeLocation(item))
+                  .fontSize(10).fontColor(this.c.sub).width('100%').maxLines(1)
+                  .textOverflow({ overflow: TextOverflow.Ellipsis })
+                Text(this.landscapeSummary(item))
+                  .fontSize(11).fontColor(this.c.sub).width('100%').maxLines(2).lineHeight(16)
+                  .textOverflow({ overflow: TextOverflow.Ellipsis })
+              }.layoutWeight(1)
+            }.width('100%').alignItems(VerticalAlign.Top)
+            Row({ space: 8 }) {
+              Text(item.author !== undefined && item.author.trim().length > 0 ? '拍摄/制作：' + item.author.trim() : '内置天文地景')
+                .fontSize(10).fontColor(this.c.tertiary).layoutWeight(1).maxLines(1)
                 .textOverflow({ overflow: TextOverflow.Ellipsis })
-              Text(I18n.t('resource_author') + ': ' + this.resourceText(item.author, I18n.t('resource_not_provided')))
-                .fontSize(10).fontColor(this.c.sub).width('100%').maxLines(1)
-            }
-            if (item.hasLocation === true) {
-              Text(this.resourceText(item.planet, 'Earth') + ' · ' + this.resourceText(item.timezone, '时区未提供'))
-                .fontSize(10).fontColor(this.c.sub).width('100%').maxLines(1)
-            }
-            if (item.source) {
-              Text(I18n.t('resource_source') + ': ' + item.source).fontSize(10).fontColor(this.c.sub)
-                .width('100%').maxLines(1).textOverflow({ overflow: TextOverflow.Ellipsis })
+              if (this.landscapeFullStory(item).length > 0) {
+                Button(this.expandedLandscapeId === item.id ? '收起故事 ▴' : '展开故事 ▾')
+                  .fontSize(10).fontColor(this.c.accent).backgroundColor(this.c.bg)
+                  .borderRadius(UI_RADIUS_CONTROL).height(26).padding({ left: 9, right: 9 })
+                  .clickEffect({ level: ClickEffectLevel.LIGHT })
+                  .onClick(() => { this.toggleLandscapeStory(item.id) })
+              }
+            }.width('100%').alignItems(VerticalAlign.Center)
+            if (this.expandedLandscapeId === item.id && this.landscapeFullStory(item).length > 0) {
+              Column({ space: 6 }) {
+                Text(this.landscapeFullStory(item))
+                  .fontSize(11).fontColor(this.c.text).width('100%').lineHeight(19)
+                if (this.landscapeViewingTip(item).length > 0) {
+                  Text('观星提示：' + this.landscapeViewingTip(item))
+                    .fontSize(10).fontColor(this.c.accent).width('100%').lineHeight(16)
+                }
+              }
+              .width('100%').padding({ left: 10, right: 10, top: 8, bottom: 8 })
+              .backgroundColor(this.c.bg).borderRadius(UI_RADIUS_CONTROL)
+              .border({ width: 0.5, color: this.c.border })
             }
           }
-          .height(item.description !== undefined || item.author !== undefined ? (item.hasLocation === true ? 102 : 86) : 48)
-          .width('100%').padding({ left: 12, right: 12, top: 5, bottom: 5 })
-          .backgroundColor(this.layerViewStore.currentLandscapeId === item.id ? this.c.accentSoft : Color.Transparent)
-          .borderRadius(UI_RADIUS_CONTROL)
+          .width('100%').padding({ left: 11, right: 11, top: 10, bottom: 10 })
+          .backgroundColor(this.layerViewStore.currentLandscapeId === item.id ? this.c.chipInactiveBg : this.c.soft)
+          .border({ width: 1, color: this.layerViewStore.currentLandscapeId === item.id ? this.c.chipActiveBorder : this.c.border })
+          .borderRadius(UI_RADIUS_CARD)
+          .clickEffect({ level: ClickEffectLevel.LIGHT, scale: 0.985 })
           .onClick(() => { this.onSelectLandscape(item.id, item.name) })
-        }, (item: LandscapeItem, index: number) => item.id)
+        }, (item: LandscapeItem) => item.id)
       }
       .width('100%')
     }.width('100%')

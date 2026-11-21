@@ -1,6 +1,6 @@
 import hilog from '@ohos.hilog'
 import { I18n } from '../../pages/I18n'
-import { UI_RADIUS_CONTROL, UI_RADIUS_PILL } from '../../common/ui/UiTokens'
+import { UI_RADIUS_CARD, UI_RADIUS_CONTROL, UI_RADIUS_PILL } from '../../common/ui/UiTokens'
 import { getCatalogIcon, getIcon } from '../../common/ui/ShellIcons'
 import { ObjectMediaStore } from '../../state/ObjectMediaStore'
 import { Theme } from '@kit.ArkUI'
@@ -59,13 +59,13 @@ export struct TabletInspectorMediaCard {
       Row({ space: 6 }) {
         Text(this.store.objectInspectorMediaLabel + (this.store.objectInspectorMediaKind === 'constellation' &&
           this.isPlannedModel ? ' · ' + I18n.t('detail_model_planned') : ''))
-          .fontSize(10).fontColor(this.c.fourth).layoutWeight(1)
+          .fontSize(10).fontColor(this.c.fourth).layoutWeight(1).maxLines(2).textOverflow({ overflow: TextOverflow.Ellipsis })
         Text('点按查看').fontSize(10).fontColor(this.c.detailSub)
       }
         .width('100%').padding({ left: 10, right: 10, top: 8, bottom: 8 })
         .backgroundColor(this.c.mediaLabelBar)
     }
-      .width('100%').clip(true).borderRadius(UI_RADIUS_CONTROL)
+      .width('100%').clip(true).borderRadius(UI_RADIUS_CARD)
       .backgroundColor(this.c.mediaCard).clickEffect({ level: ClickEffectLevel.LIGHT })
       .onClick(() => { this.onOpen() })
   }

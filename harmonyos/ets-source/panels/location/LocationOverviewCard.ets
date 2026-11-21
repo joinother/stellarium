@@ -263,11 +263,15 @@ export struct LocationOverviewCard {
 
   build() {
     Stack({ alignContent: Alignment.TopStart }) {
-      // Offline base stays underneath the live map so the card never flashes
-      // empty while Map Kit is loading or when it falls back.
+      // Coordinate-grid backdrop stays underneath Petal Map while it loads or when offline,
+      // avoiding any uncertified offline world-map raster.
       if (this.planet === 'Earth') {
-        Image($rawfile('worldmap.jpg'))
-          .width('100%').height('100%').objectFit(ImageFit.Fill)
+        Stack({ alignContent: Alignment.Center }) {
+          Row().width('100%').height('100%').backgroundColor(this.c.bg)
+          Row().width('100%').height(0.5).backgroundColor(this.c.border)
+          Column().width(0.5).height('100%').backgroundColor(this.c.border)
+        }
+          .width('100%').height('100%')
           .hitTestBehavior(HitTestMode.None)
       } else if (this.texture.length > 0) {
         Image($rawfile('stellarium/textures/' + this.texture))

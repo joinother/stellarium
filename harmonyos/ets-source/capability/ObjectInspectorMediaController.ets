@@ -252,7 +252,8 @@ export class ObjectInspectorMediaController {
     const path = filePath.length > 0 ? this.hooks.pathToUri(filePath) : ''
     const kind = planetTexturePath.length > 0 || proceduralKind.length > 0
       ? 'model'
-      : (this.detailStore.selectedDetailMediaPath.length > 0 ? 'constellation'
+      : (this.detailStore.selectedDetailMediaPath.length > 0
+        ? (this.detailStore.selectedDetailMediaKind === 'image' ? 'image' : 'constellation')
         : (deepSkyImageName.length > 0 ? 'image' : 'visual'))
     const modelRawFilePath = kind === 'model' && !hasConstellationMesh && resolvedPath.length > 0
       ? this.objectInspectorFilePath(resolvedPath + '.model.rgba')
@@ -289,7 +290,11 @@ export class ObjectInspectorMediaController {
     this.objectInspectorProceduralParticles = hasConstellationMesh ? [] : proceduralParticles(proceduralKind, proceduralKey)
     this.mediaStore.objectInspectorMediaLabel = kind === 'model'
       ? (hasConstellationMesh ? I18n.t('model_constellation_3d') : (proceduralKind.length > 0 ? I18n.t('model_schematic') : I18n.t('model_offline')))
-      : (kind === 'constellation' ? this.detailStore.selectedDetailMediaLabel : (kind === 'image' ? '离线深空资料图像' : '本地天体类别示意'))
+      : (kind === 'constellation'
+        ? this.detailStore.selectedDetailMediaLabel
+        : (kind === 'image'
+          ? (this.detailStore.selectedDetailMediaLabel.length > 0 ? this.detailStore.selectedDetailMediaLabel : '离线深空实拍图')
+          : '本地天体类别示意'))
     this.mediaStore.objectInspectorMediaFullscreen = false
     this.mediaStore.objectInspectorMediaPreviewPath = ''
     this.mediaStore.objectInspectorMediaPreviewLoading = false

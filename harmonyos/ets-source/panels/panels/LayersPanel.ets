@@ -36,6 +36,8 @@ export struct LayersPanel {
   @ObjectLink surveyStore: SurveyStore
   @ObjectLink presetStore: LayerPresetStore
   @Prop nightModeOn: boolean
+  @Prop observerLatitude: number = 0
+  @Prop observerLongitude: number = 0
   @Prop observerAltitude: number = 0
   @Prop earthObserver: boolean = true
   @Prop viewTab: number
@@ -47,6 +49,7 @@ export struct LayersPanel {
   @Prop skyCultureArtStates: Record<string, string> = {}
   @Prop narrationParagraphs: Array<string> = []
   @State private c: ThemeSlots = DEFAULT_SLOTS
+  @Prop previewMapAllowed: boolean = false
   mapContextSettings: RenderingContextSettings = new RenderingContextSettings(true)
   mapContext: CanvasRenderingContext2D = new CanvasRenderingContext2D(this.mapContextSettings)
   onSelectTab: (id: number) => void = () => {}
@@ -105,6 +108,7 @@ export struct LayersPanel {
   onLoadObserverInfo: (force: boolean) => void = () => {}
   onArtDecodeError: (rawPath: string) => void = () => {}
   onOpenArtPreview: (art: SkyCultureArtItem) => void = () => {}
+  onJumpToCultureYear: (year: number) => void = () => {}
 
   onWillApplyTheme(theme: Theme): void { this.c = slotsFromTheme(theme) }
 
@@ -192,7 +196,10 @@ export struct LayersPanel {
               skyCultureViewStore: this.skyCultureViewStore,
               artStates: this.skyCultureArtStates,
               narrationParagraphs: this.narrationParagraphs,
-              mapContext: this.mapContext,
+              previewMapAllowed: this.previewMapAllowed,
+              observerLatitude: this.observerLatitude,
+              observerLongitude: this.observerLongitude,
+              earthObserver: this.earthObserver,
               onToggleLayer: (actionId: string, cmd: string, value: boolean) => { this.onToggleLayer(actionId, cmd, value) },
               onLoadList: () => { this.onLoadList() },
               onSelectCulture: (id: string) => { this.onSelectCulture(id) },
@@ -216,7 +223,8 @@ export struct LayersPanel {
               onMapAreaChange: (width: number, height: number) => { this.onMapAreaChange(width, height) },
               onLoadObserverInfo: (force: boolean) => { this.onLoadObserverInfo(force) },
               onArtDecodeError: (rawPath: string) => { this.onArtDecodeError(rawPath) },
-              onOpenArtPreview: (art: SkyCultureArtItem) => { this.onOpenArtPreview(art) }
+              onOpenArtPreview: (art: SkyCultureArtItem) => { this.onOpenArtPreview(art) },
+              onJumpToCultureYear: (year: number) => { this.onJumpToCultureYear(year) }
             })
           } else if (this.viewTab === 6 && !OFFLINE_APPGALLERY_BUILD) {
             LayerSurveysTab({

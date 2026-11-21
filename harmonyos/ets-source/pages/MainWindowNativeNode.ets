@@ -259,6 +259,7 @@ import { SettingsQuickLegacyPanel } from '../panels/panels/SettingsQuickLegacyPa
 import { SettingsPanel } from '../panels/panels/SettingsPanel'
 import { ConfigFallbackPanel } from '../panels/panels/ConfigFallbackPanel'
 import { SkyCultureSectionHeader, SkyCultureMetaItem, SkyCultureLabelSettingCard, SkyCultureFilterPicker } from '../panels/skyculture/SkyCultureViewParts'
+import { recommendSkyCultures, yearToJulianDay } from '../common/derive/SkyCultureRecommender'
 import { SatelliteGroupSelector } from '../panels/satellite/SatelliteGroupSelector'
 import {
   ImageDecodeSize, HeliocentricPositionOptions, PluginFeatureRoute,
@@ -1291,6 +1292,12 @@ export struct WindowNativeNode {
   @State private panelTouching: boolean = false
   // 全屏地图是页面级覆盖层；放在宿主根 Stack 才能盖住浮动面板和 Dock。
   @State private locationMapFullscreen: boolean = false
+  // 时空变更轻量星空文化推荐胶囊（仅在手动改地点或跨越历史年代时短暂展示，绝不强行自动切换）。
+  @State private skyCultureSuggestId: string = ''
+  @State private skyCultureSuggestName: string = ''
+  @State private skyCultureSuggestReason: string = ''
+  private skyCultureSuggestTimer: number = 0
+  private lastSuggestedEraYear: number = new Date().getFullYear()
   // 平板/展开布局的快捷面板同样可上拉展开，底部与 Dock 对齐。
   @State private expandedPanelDragOffsetY: number = 0
   // 时间面板“时间轮 + 倒带/实时”两块的自然高度（vp），用于平板紧凑高度。
@@ -7996,6 +8003,66 @@ export struct WindowNativeNode {
 
 // ----- 图层 / 显示 -----
 
+  private dismissSkyCultureSuggest(): void {
+    if (this.skyCultureSuggestTimer !== 0) {
+      clearTimeout(this.skyCultureSuggestTimer)
+      this.skyCultureSuggestTimer = 0
+    }
+    this.skyCultureSuggestId = ''
+    this.skyCultureSuggestName = ''
+    this.skyCultureSuggestReason = ''
+  }
+
+  private scheduleSpacetimeCultureSuggest(trigger: string, explicitYear?: number): void {
+    if (!this.skyCultureSettingsStore.skyCultureSmartRecommend) return
+    if (this.sessionToolStore.observerPlanet !== 'Earth') return
+    const year = explicitYear !== undefined ? Math.round(explicitYear) : Math.round(this.skyCultureSettingsStore.skyCultureSimulationYear)
+    // 时间场景仅在手动大幅跨越历史年代（≥80年且非快进播放态）时推荐，避免打扰日常调时。
+    if (trigger === 'time') {
+      if (Math.abs(year - this.lastSuggestedEraYear) < 80) return
+      if (Number.isFinite(this.timeStore.lastSyncedTimeRate) && Math.abs(this.timeStore.lastSyncedTimeRate) > 10) return
+    }
+    this.lastSuggestedEraYear = year
+    const recs = recommendSkyCultures({
+      latitude: this.locationPickerStore.locationPickerLatitude,
+      longitude: this.locationPickerStore.locationPickerLongitude,
+      simulationYear: year,
+      earthObserver: true,
+      currentCultureId: this.skyCultureViewStore.currentSkyCultureId,
+      items: this.skyCultureViewStore.skyCultureList
+    })
+    if (recs.length === 0) return
+    const top = recs[0]
+    if (top.id === this.skyCultureViewStore.currentSkyCultureId) return
+    // 位置切换只推荐强地域匹配；年代跳跃只推荐强年代匹配。
+    if (trigger === 'location' && !top.isLocalMatch) return
+    if (trigger === 'time' && !top.isEraMatch) return
+    let displayName = this.skyCultureSettingsStore.skyCultureDisplayName(top.id, top.id)
+    for (const item of this.skyCultureViewStore.skyCultureList) {
+      if (item.id === top.id) {
+        displayName = this.skyCultureSettingsStore.skyCultureDisplayName(item.id, item.name)
+        break
+      }
+    }
+    this.dismissSkyCultureSuggest()
+    this.skyCultureSuggestId = top.id
+    this.skyCultureSuggestName = displayName
+    this.skyCultureSuggestReason = top.reasonZh
+    this.skyCultureSuggestTimer = setTimeout(() => {
+      this.dismissSkyCultureSuggest()
+    }, 4800) as number
+  }
+
+  private jumpToSkyCultureYear(year: number): void {
+    const jd = yearToJulianDay(year)
+    this.callNativeFire('setTimeToJD', jd.toFixed(4))
+    this.skyCultureSettingsStore.skyCultureSimulationYear = year
+    this.lastSuggestedEraYear = year
+    const label = year < 0 ? ('公元前 ' + Math.abs(year) + ' 年') : ('公元 ' + year + ' 年')
+    this.flashHint('已跳转至' + label + '星空')
+    setTimeout(() => { this.refreshState(); this.skyCultureCtl().refreshSkyCultureSimulationYear(true) }, 380)
+  }
+
   private changeFovBySlider(val: number): void {
     this.callInteractive('setFOV', Math.round(val).toString(), (r: StellariumBridgeResponse) => {
       hilog.info(0x0000, 'StellariumArkUI', 'changeFovBySlider %{public}d ok=%{public}s', Math.round(val), r.ok === true ? '1' : '0')
@@ -9455,10 +9522,46 @@ export struct WindowNativeNode {
             // "选此点" now applies the observer immediately; previously it
             // only filled the draft and the user had to press Apply again.
             this.locationCtl().applyPickerLocation()
+            setTimeout(() => { this.scheduleSpacetimeCultureSuggest('location') }, 450)
           },
           onClose: () => { this.locationMapFullscreen = false }
         })
           .width('100%').height('100%').zIndex(200)
+      }
+
+      if (this.skyCultureSuggestId.length > 0 && !this.locationMapFullscreen) {
+        Row({ space: 8 }) {
+          Text('✦').fontSize(12).fontColor(this.hostSlots().accent)
+          Column({ space: 1 }) {
+            Text('推荐切换「' + this.skyCultureSuggestName + '」')
+              .fontSize(12).fontColor(this.hostSlots().text).fontWeight(FontWeight.Medium).maxLines(1).textOverflow({ overflow: TextOverflow.Ellipsis })
+            Text(this.skyCultureSuggestReason)
+              .fontSize(10).fontColor(this.hostSlots().sub).maxLines(1)
+          }.layoutWeight(1)
+          Button('切换')
+            .fontSize(11).fontColor(this.hostSlots().onAccent).backgroundColor(this.hostSlots().accent)
+            .borderRadius(UI_RADIUS_PILL).height(28).padding({ left: 12, right: 12 })
+            .clickEffect({ level: ClickEffectLevel.LIGHT })
+            .onClick(() => {
+              const targetId = this.skyCultureSuggestId
+              const targetName = this.skyCultureSuggestName
+              this.dismissSkyCultureSuggest()
+              this.skyCultureCtl().selectSkyCulture(targetId)
+              this.flashHint('已切换至「' + targetName + '」')
+            })
+          Button('×')
+            .fontSize(13).fontColor(this.hostSlots().sub).backgroundColor(Color.Transparent)
+            .width(26).height(26).padding(0)
+            .onClick(() => { this.dismissSkyCultureSuggest() })
+        }
+        .width(this.isExpandedLayout ? 340 : '88%')
+        .padding({ left: 14, right: 10, top: 9, bottom: 9 })
+        .backgroundColor(this.hostSlots().panelGlassStrong)
+        .border({ width: 0.5, color: this.hostSlots().border })
+        .borderRadius(UI_RADIUS_PILL)
+        .shadow({ radius: 18, color: 'rgba(0,0,0,0.28)', offsetY: 6 })
+        .position({ x: this.isExpandedLayout ? Math.max(16, Math.round((this.skyWidth - 340) / 2)) : '6%', y: Math.max(80, this.skyHeight - 166) })
+        .zIndex(140)
       }
 
     }
@@ -9835,7 +9938,11 @@ export struct WindowNativeNode {
           this.timeStore.manualYear = year; this.timeStore.manualMonth = monthIndex + 1; this.timeStore.manualDay = day
         },
         onPickTime: (hour: number, minute: number) => { this.timeStore.manualHour = hour; this.timeStore.manualMinute = minute },
-        onApplyManual: () => { this.timeCtl().applyManualTime() },
+        onApplyManual: () => {
+          this.timeCtl().applyManualTime()
+          const targetYear = this.timeStore.manualYear
+          setTimeout(() => { this.scheduleSpacetimeCultureSuggest('time', targetYear) }, 500)
+        },
         onResetManual: () => { this.timeCtl().syncManualTimeFromState(); this.flashHint(I18n.t('i0081')) },
         onSpeedBlockHeight: (height: number) => {
           if (Math.abs(height - this.timeSpeedBlockHeight) > 0.5) this.timeSpeedBlockHeight = height
@@ -9862,11 +9969,17 @@ export struct WindowNativeNode {
         onInputFocus: () => { this.keyboardTextInputFocused = true },
         onInputBlur: () => { this.keyboardTextInputFocused = false },
         onPickSearchItem: (item: LocSearchItem) => { this.locationStore.selectSearchLocation(item) },
-        onApply: () => { this.locationCtl().applyPickerLocation() },
+        onApply: () => {
+          this.locationCtl().applyPickerLocation()
+          setTimeout(() => { this.scheduleSpacetimeCultureSuggest('location') }, 450)
+        },
         onSelectContinent: (c: string) => { this.locationCtl().selectContinent(c) },
         onSelectCountry: (c: string) => { this.locationCtl().selectCountry(c) },
         onSelectRegion: (r: string) => { this.locationCtl().selectRegion(r) },
-        onSelectCity: (c: string) => { this.locationCtl().selectCityByName(c) },
+        onSelectCity: (c: string) => {
+          this.locationCtl().selectCityByName(c)
+          setTimeout(() => { this.scheduleSpacetimeCultureSuggest('location') }, 550)
+        },
         onSaveCurrent: () => { this.locationStore.saveCurrentLocation() },
         onApplyLocation: (name: string, lat: number, lon: number, alt: number, planet: string) => { this.locationCtl().setLocation(name, lat, lon, alt, planet) },
         onDeleteLocation: (key: string) => { this.locationStore.deleteSavedLocation(key) },
@@ -9889,6 +10002,8 @@ export struct WindowNativeNode {
         overlayStore: this.overlayStore,
         surveyStore: this.surveyStore,
         nightModeOn: this.nightModeStore.nightMode,
+        observerLatitude: this.locationPickerStore.locationPickerLatitude,
+        observerLongitude: this.locationPickerStore.locationPickerLongitude,
         observerAltitude: this.locationPickerStore.locationPickerAltitude,
         earthObserver: this.sessionToolStore.observerPlanet === 'Earth',
         viewTab: this.viewTab,
@@ -9899,6 +10014,7 @@ export struct WindowNativeNode {
         layerTabs: this.layerCtl().layerTabItems(),
         skyCultureArtStates: this.skyCultureArtStates,
         narrationParagraphs: this.skyCultureViewStore.skyCultureNarrationParagraphs(),
+        previewMapAllowed: this.privacyNativeStartupAllowed && this.applicationInForeground && hasCurrentPrivacyConsent(),
         mapContext: this.skyCultureMapContext,
         onSelectTab: (id: number) => { this.switchViewTab(id) },
         onToggleLayer: (actionId: string, cmd: string, value: boolean) => { this.layerCtl().applyLayerSwitch(actionId, cmd, value) },
@@ -9954,7 +10070,8 @@ export struct WindowNativeNode {
         onMapAreaChange: (width: number, height: number) => { this.skyCultureMapRenderWidth = width; this.skyCultureMapRenderHeight = height; this.drawSkyCultureTerritoryMap() },
         onLoadObserverInfo: (force: boolean) => { this.locationPickerStore.loadObserverInfo(force) },
         onArtDecodeError: (rawPath: string) => { this.skyCultureCtl().setSkyCultureArtStatus(rawPath, 'decodeFailed') },
-        onOpenArtPreview: (art: SkyCultureArtItem) => { this.skyCultureCtl().openSkyCultureArtPreview(art) }
+        onOpenArtPreview: (art: SkyCultureArtItem) => { this.skyCultureCtl().openSkyCultureArtPreview(art) },
+        onJumpToCultureYear: (year: number) => { this.jumpToSkyCultureYear(year) }
       })
     } else if (this.activePanel === 'quick') {
       QuickPanel({
