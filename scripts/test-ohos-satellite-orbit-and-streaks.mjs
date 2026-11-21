@@ -59,6 +59,10 @@ test('fast-time satellite streaks are razor-sharp needles without wide halos and
   assert.match(draw, /maxArcRad/);
   assert.match(draw, /std::pow\(u0, 2\.25f\)/);
   assert.doesNotMatch(draw, /emitSatRibbon\(2\.4/);
+  // Dawn/twilight clutter prevention: only visible pointDrawn satellites within magnitude contrast + top-N cap
+  assert.match(draw, /drawSatTrails && st\.pointDrawn/);
+  assert.match(draw, /constexpr int kMaxSatTrails = 28;/);
+  assert.match(draw, /!core->isBrightDaylight\(\)/);
 });
 
 test('satellite detail view surfaces orbital metrics, radio frequencies, TLE age, and one-tap pass preview', () => {

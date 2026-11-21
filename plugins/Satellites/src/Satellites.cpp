@@ -4732,10 +4732,18 @@ void Satellites::draw(StelCore* core)
 	QVector<SatMarkerCandidate> markerCandidates;
 	markerCandidates.reserve(128);
 	QVector<SatTransitDraw> transitDraws;
+	struct SatTrailCandidate
+	{
+		const Satellite* sat = nullptr;
+		float mag = 99.f;
+		float lumScale = 0.f;
+		bool isPriority = false;
+	};
 	QVector<Satellite*> orbitDraws;
-	QVector<const Satellite*> trailDraws;
+	QVector<SatTrailCandidate> trailDraws;
 	const StarMgr* starMgr = GETSTELMODULE(StarMgr);
 	const bool drawSatTrails = core->getFlagClearSky()
+		&& !core->isBrightDaylight()
 		&& motionTrailActivity > 0.01
 		&& (!starMgr || starMgr->getFlagMotionTrails());
 
@@ -4780,13 +4788,27 @@ void Satellites::draw(StelCore* core)
 
 		if (st.projectable)
 		{
-			if (drawSatTrails && sat->position.normSquared() > 1e6 && sat->velocity.normSquared() > 1e-4 && sat->elAzPosition[2] >= -0.02)
-				trailDraws.append(sat.data());
 			const bool isSelected = !selectedId.isEmpty() && sat->id == selectedId;
 			const bool isStation = sat->isISS
 				|| sat->groups.contains(grpStations)
 				|| sat->groups.contains(grpStationsShort)
 				|| sat->groups.contains(grpCrewed);
+			// Only genuinely visible (pointDrawn & above twilight/sky magnitude contrast) sunlit/penumbral
+			// satellites emit motion streaks, preventing hundreds of faint dawn Starlinks from flooding the sky.
+			if (drawSatTrails && st.pointDrawn
+				&& (sat->visibility == gSatWrapper::VISIBLE || sat->visibility == gSatWrapper::PENUMBRAL)
+				&& sat->position.normSquared() > 1e6 && sat->velocity.normSquared() > 1e-4
+				&& sat->elAzPosition[2] >= 0.0)
+			{
+				const float maxTrailMag = qMin(static_cast<float>(st.limitMag) - 0.35f, (isSelected || isStation) ? 6.5f : 5.2f);
+				if (st.magSat <= maxTrailMag)
+				{
+					const float contrastMargin = qBound(0.f, (static_cast<float>(st.limitMag) - st.magSat) / 3.2f, 1.f);
+					const float magFactor = qBound(0.18f, 1.0f - qMax(0.f, st.magSat - 0.5f) / 6.0f, 1.f);
+					const float lumScale = qBound(0.12f, contrastMargin * magFactor, 1.f);
+					trailDraws.append({ sat.data(), st.magSat, lumScale, isSelected || isStation });
+				}
+			}
 			int rank = 0;
 			if (isSelected) rank = 4;
 			else if (isStation) rank = 3;
@@ -4936,10 +4958,22 @@ void Satellites::draw(StelCore* core)
 			// Smooth exposure span driven by EMA-filtered signed time rate (zero frame-history stutter!)
 			const double rawSpanSec = smoothedTimeVelSecPerSec * 0.042;
 			const double signedSpanSec = qBound(-38.0, rawSpanSec, 38.0);
+			// Cap to brightest visible satellites so dawn/dusk twilight illuminations stay crisp & uncluttered.
+			constexpr int kMaxSatTrails = 28;
+			if (trailDraws.size() > kMaxSatTrails)
+			{
+				std::partial_sort(trailDraws.begin(), trailDraws.begin() + kMaxSatTrails, trailDraws.end(),
+					[](const SatTrailCandidate& a, const SatTrailCandidate& b) {
+						if (a.isPriority != b.isPriority) return a.isPriority;
+						return a.mag < b.mag;
+					});
+				trailDraws.resize(kMaxSatTrails);
+			}
 			if (std::fabs(signedSpanSec) > 0.15)
 			{
-			for (const Satellite* sat : trailDraws)
+			for (const SatTrailCandidate& cand : trailDraws)
 			{
+				const Satellite* sat = cand.sat;
 				const bool sunlit = (sat->visibility == gSatWrapper::VISIBLE);
 				const bool penumbra = (sat->visibility == gSatWrapper::PENUMBRAL);
 				// Only sunlit & penumbral satellites draw sharp bright streaks; skip eclipsed dark bodies.
@@ -5037,8 +5071,8 @@ void Satellites::draw(StelCore* core)
 				}
 
 				const Vec3f rgb = sunlit ? Vec3f(0.97f, 0.99f, 1.0f) : Vec3f(1.0f, 0.86f, 0.64f);
-				const float visAlpha = sunlit ? 0.96f : 0.62f;
-				const double widthMul = sat->isISS ? 1.15 : 0.92;
+				const float visAlpha = (sunlit ? 0.88f : 0.52f) * cand.lumScale;
+				const double widthMul = (sat->isISS ? 1.05 : 0.68) * (0.45 + 0.55 * static_cast<double>(cand.lumScale));
 
 				// Crisp 3-band sub-pixel AA needle (no fuzzy wide outer halo!)
 				for (int k = 0; k < n - 1; ++k)
@@ -5050,11 +5084,11 @@ void Satellites::draw(StelCore* core)
 					const float f1 = std::pow(u1, 2.25f);
 					const double cw0 = coreHalfW * widthMul * (0.08 + 0.92 * static_cast<double>(u0));
 					const double cw1 = coreHalfW * widthMul * (0.08 + 0.92 * static_cast<double>(u1));
-					const double ow0 = cw0 * 1.95;
-					const double ow1 = cw1 * 1.95;
+					const double ow0 = cw0 * 1.85;
+					const double ow1 = cw1 * 1.85;
 
-					const float a0 = qBound(0.f, f0 * visAlpha * trailEnv, 0.98f);
-					const float a1 = qBound(0.f, f1 * visAlpha * trailEnv, 0.98f);
+					const float a0 = qBound(0.f, f0 * visAlpha * trailEnv, 0.95f);
+					const float a1 = qBound(0.f, f1 * visAlpha * trailEnv, 0.95f);
 					const Vec4f core0(rgb[0], rgb[1], rgb[2], a0);
 					const Vec4f core1(rgb[0], rgb[1], rgb[2], a1);
 					const Vec4f edge0(rgb[0], rgb[1], rgb[2], 0.f);
@@ -5070,18 +5104,18 @@ void Satellites::draw(StelCore* core)
 					pushStreakQuad(p0 + s0 * cw0, p0 + s0 * ow0, p1 + s1 * cw1, p1 + s1 * ow1, core0, edge0, core1, edge1);
 				}
 
-				// Pinpoint specular leading head diamond so the sharp moving dot pops cleanly
-				if (sunlit)
+				// Subtle pinpoint specular head only on genuinely bright sunlit satellites (mag <= 3.0)
+				if (sunlit && cand.mag <= 3.0f)
 				{
 					Vec3d fwd = smoothPts[n - 1] - smoothPts[n - 2];
 					const double fn = fwd.norm();
 					if (fn > 1e-10)
 					{
 						fwd /= fn;
-						const double headR = coreHalfW * widthMul * 2.1;
+						const double headR = coreHalfW * widthMul * 1.35;
 						const Vec3d hc = smoothPts[n - 1];
 						const Vec3d hs = sideVecs[n - 1];
-						const Vec4f hCenter(1.f, 1.f, 1.f, qBound(0.f, 0.98f * trailEnv, 1.f));
+						const Vec4f hCenter(1.f, 1.f, 1.f, qBound(0.f, 0.90f * cand.lumScale * trailEnv, 0.95f));
 						const Vec4f hEdge(rgb[0], rgb[1], rgb[2], 0.f);
 						const Vec3d pF = hc + fwd * headR;
 						const Vec3d pB = hc - fwd * (headR * 0.7);
