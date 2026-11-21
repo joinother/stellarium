@@ -24,7 +24,31 @@ assert.match(minorPanel, /InfoTipButton/);
 assert.match(minorPanel, /UI_RADIUS_CARD/);
 assert.match(minorPanel, /minor-bodies-import-comets-btn/);
 assert.match(minorPanel, /minor-bodies-mpc-toggle-btn/);
+assert.match(minorPanel, /minor-bodies-mirror-/);
+assert.match(minorPanel, /离线精密历表已激活/);
+assert.match(minorPanel, /阿里云国内镜像 · MPC 实时目录/);
 assert.match(minorPanel, /showAlertDialog/);
+
+// Domestic Aliyun MPC mirror + SolarSystemEditor OHOS stream-copy & live reload invariants
+const minorStore = read('harmonyos/ets-source/state/MinorBodiesStore.ets');
+assert.match(minorStore, /https:\/\/skyinstrument\.cn/);
+assert.match(minorStore, /cryptoFramework\.createMd\('SHA256'\)/);
+assert.match(minorStore, /OFFLINE_APPGALLERY_BUILD/);
+for (const srcId of ['catalog.mpc.comets', 'catalog.mpc.bright-asteroids', 'catalog.mpc.critlist-asteroids', 'catalog.mpc.distant']) {
+  assert.ok(minorStore.includes(srcId), `MinorBodiesStore missing domestic mirror source ${srcId}`);
+}
+assert.ok(cpp.includes('precisionAsteroidsAvailable'), 'getMinorBodies must report precisionAsteroidsAvailable');
+assert.ok(cpp.includes('action == "importMpcText"'), 'importMinorBodies must support batch importMpcText');
+assert.ok(cpp.includes('ssys->reloadPlanets()'), 'importMinorBodies must hot-reload SolarSystem after append');
+
+const sseCpp = read('plugins/SolarSystemEditor/src/SolarSystemEditor.cpp');
+assert.ok(sseCpp.includes('copySolarSystemFileViaStream'), 'SolarSystemEditor must use stream copy on OHOS sandbox');
+const cloneFnStart = sseCpp.indexOf('bool SolarSystemEditor::cloneSolarSystemConfigurationFile() const');
+const cloneFnEnd = sseCpp.indexOf('bool SolarSystemEditor::resetSolarSystemConfigurationFile() const', cloneFnStart);
+assert.ok(cloneFnStart >= 0 && cloneFnEnd > cloneFnStart, 'cloneSolarSystemConfigurationFile definition not found');
+const cloneFnBody = sseCpp.slice(cloneFnStart, cloneFnEnd);
+assert.ok(cloneFnBody.includes('copySolarSystemFileViaStream'), 'cloneSolarSystemConfigurationFile must call copySolarSystemFileViaStream');
+assert.ok(!cloneFnBody.includes('QFile::copy('), 'cloneSolarSystemConfigurationFile must not rely on QFile::copy');
 
 // Plugin routes activate both Calendars and SolarSystemEditor as first-class control panels
 const labels = read('harmonyos/ets-source/common/derive/labels.ets');

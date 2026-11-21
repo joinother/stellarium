@@ -271,14 +271,47 @@
       "runtimeDefault": "disabled"
     },
     {
-      "id": "catalog.mpc",
-      "kind": "catalog-query",
-      "format": "mpc-orbit-elements",
-      "upstreamUrl": "https://www.minorplanetcenter.net/",
-      "mirrorPath": "/v1/catalogs/mpc",
-      "localPath": "data/ohos/mirror-cache/catalogs/mpc",
+      "id": "catalog.mpc.comets",
+      "kind": "catalog",
+      "format": "mpc-comet-lines",
+      "upstreamUrl": "https://minorplanetcenter.net/iau/Ephemerides/Comets/Soft00Cmt.txt",
+      "mirrorPath": "/v1/catalogs/mpc/comets.txt",
+      "localPath": "data/ohos/mirror-cache/catalogs/mpc/comets.txt",
       "output": "plugins/SolarSystemEditor",
-      "outboundFields": ["object-query"],
+      "outboundFields": [],
+      "runtimeDefault": "disabled"
+    },
+    {
+      "id": "catalog.mpc.bright-asteroids",
+      "kind": "catalog",
+      "format": "mpc-minor-planet-lines",
+      "upstreamUrl": "https://minorplanetcenter.net/iau/Ephemerides/Bright/2026/Soft00Bright.txt",
+      "mirrorPath": "/v1/catalogs/mpc/bright-asteroids.txt",
+      "localPath": "data/ohos/mirror-cache/catalogs/mpc/bright-asteroids.txt",
+      "output": "plugins/SolarSystemEditor",
+      "outboundFields": [],
+      "runtimeDefault": "disabled"
+    },
+    {
+      "id": "catalog.mpc.critlist-asteroids",
+      "kind": "catalog",
+      "format": "mpc-minor-planet-lines",
+      "upstreamUrl": "https://minorplanetcenter.net/iau/Ephemerides/CritList/Soft00CritList.txt",
+      "mirrorPath": "/v1/catalogs/mpc/critlist-asteroids.txt",
+      "localPath": "data/ohos/mirror-cache/catalogs/mpc/critlist-asteroids.txt",
+      "output": "plugins/SolarSystemEditor",
+      "outboundFields": [],
+      "runtimeDefault": "disabled"
+    },
+    {
+      "id": "catalog.mpc.distant",
+      "kind": "catalog",
+      "format": "mpc-minor-planet-lines",
+      "upstreamUrl": "https://minorplanetcenter.net/iau/Ephemerides/Distant/Soft00Distant.txt",
+      "mirrorPath": "/v1/catalogs/mpc/distant.txt",
+      "localPath": "data/ohos/mirror-cache/catalogs/mpc/distant.txt",
+      "output": "plugins/SolarSystemEditor",
+      "outboundFields": [],
       "runtimeDefault": "disabled"
     },
     {

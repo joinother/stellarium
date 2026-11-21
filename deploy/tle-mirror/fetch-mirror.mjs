@@ -162,11 +162,64 @@ export function validatePayload(body, source) {
     requireValid(records.length >= schema[1] && records.every((record) => object(record) && Object.keys(record).length > 0))
     return records.length
   }
+  if (source.format === 'mpc-comet-lines') {
+    const rawLines = body.replace(/^\uFEFF/, '').replaceAll('\r\n', '\n').split('\n')
+    const lines = rawLines.map((l) => l.trimEnd()).filter((l) => l.trim().length > 0)
+    requireValid(lines.length >= 1)
+    let validCount = 0
+    for (const line of lines) {
+      if (line.length < 103) continue
+      const periDate = line.slice(14, 30).trim()
+      const qStr = line.slice(30, 40).trim()
+      const eStr = line.slice(41, 50).trim()
+      const argPeriStr = line.slice(51, 60).trim()
+      const nodeStr = line.slice(61, 70).trim()
+      const inclStr = line.slice(71, 80).trim()
+      const nameStr = line.slice(102).trim()
+      const okDate = /^\d{4}\s+\d{1,2}\s+\d{1,2}(?:\.\d+)?$/.test(periDate)
+      const okNum = finiteNumber(qStr) && Number(qStr) > 0 &&
+        finiteNumber(eStr) && Number(eStr) >= 0 &&
+        finiteNumber(argPeriStr) && Number(argPeriStr) >= 0 && Number(argPeriStr) <= 360 &&
+        finiteNumber(nodeStr) && Number(nodeStr) >= 0 && Number(nodeStr) <= 360 &&
+        finiteNumber(inclStr) && Number(inclStr) >= 0 && Number(inclStr) <= 180
+      if (okDate && okNum && nameStr.length > 0) validCount++
+    }
+    requireValid(validCount > 0 && validCount * 20 >= lines.length * 19)
+    return validCount
+  }
+  if (source.format === 'mpc-minor-planet-lines') {
+    const rawLines = body.replace(/^\uFEFF/, '').replaceAll('\r\n', '\n').split('\n')
+    const lines = rawLines.map((l) => l.trimEnd()).filter((l) => l.trim().length > 0)
+    requireValid(lines.length >= 1)
+    let validCount = 0
+    for (const line of lines) {
+      if (line.length < 167) continue
+      const desig = line.slice(0, 7).trim()
+      const epoch = line.slice(20, 25).trim()
+      const mStr = line.slice(26, 35).trim()
+      const periStr = line.slice(37, 46).trim()
+      const nodeStr = line.slice(48, 57).trim()
+      const inclStr = line.slice(59, 68).trim()
+      const eStr = line.slice(70, 79).trim()
+      const nStr = line.slice(80, 91).trim()
+      const aStr = line.slice(92, 103).trim()
+      const readableName = line.slice(166).trim()
+      const okEpoch = /^[IJK][0-9A-Za-z]{4}$/.test(epoch)
+      const okNum = finiteNumber(mStr) && finiteNumber(periStr) && finiteNumber(nodeStr) &&
+        finiteNumber(inclStr) && Number(inclStr) >= 0 && Number(inclStr) <= 180 &&
+        finiteNumber(eStr) && Number(eStr) >= 0 && Number(eStr) < 1.5 &&
+        finiteNumber(nStr) && Number(nStr) > 0 &&
+        finiteNumber(aStr) && Number(aStr) > 0
+      if (desig.length > 0 && okEpoch && okNum && readableName.length > 0) validCount++
+    }
+    requireValid(validCount > 0 && validCount * 20 >= lines.length * 19)
+    return validCount
+  }
   throw new MirrorError('unsupported_format')
 }
 
 export async function fetchOne(source, { fetchImpl = fetch, maxBytes = MAX_BYTES, timeoutMs = 60000 } = {}) {
-  requireValid(['csv', 'tle-3le', 'satnogs-json', 'json'].includes(source.format) &&
+  requireValid(['csv', 'tle-3le', 'satnogs-json', 'json', 'mpc-comet-lines', 'mpc-minor-planet-lines'].includes(source.format) &&
     (source.format !== 'json' || Object.hasOwn(CATALOGS, source.id)), 'unsupported_format')
   const controller = new AbortController()
   let reader
@@ -176,7 +229,11 @@ export async function fetchOne(source, { fetchImpl = fetch, maxBytes = MAX_BYTES
   })
   try {
     const download = async () => {
-      const response = await fetchImpl(source.upstreamUrl, {
+      const targetUrl = source.upstreamUrl.replace(
+        /\/iau\/Ephemerides\/Bright\/\d{4}\/Soft00Bright\.txt$/,
+        `/iau/Ephemerides/Bright/${new Date().getUTCFullYear()}/Soft00Bright.txt`
+      )
+      const response = await fetchImpl(targetUrl, {
         signal: controller.signal,
         headers: { 'user-agent': 'SkyInstrumentMirror/1.0 (+https://skyinstrument.cn)' },
       })

@@ -911,7 +911,10 @@ export interface StellariumBridgeResponse {
   matchedCount?: number
   counts?: Record<string, number>
   bundledCometsAvailable?: boolean
+  precisionAsteroidsAvailable?: boolean
   importedName?: string
+  importedCount?: number
+  totalParsed?: number
 }
 
 export interface CalendarRowItem {

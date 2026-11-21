@@ -122,10 +122,28 @@
       "format": "json"
     },
     {
-      "id": "catalog.mpc",
-      "upstreamUrl": "https://www.minorplanetcenter.net/",
-      "mirrorPath": "/v1/catalogs/mpc",
-      "format": "mpc-orbit-elements"
+      "id": "catalog.mpc.comets",
+      "upstreamUrl": "https://minorplanetcenter.net/iau/Ephemerides/Comets/Soft00Cmt.txt",
+      "mirrorPath": "/v1/catalogs/mpc/comets.txt",
+      "format": "mpc-comet-lines"
+    },
+    {
+      "id": "catalog.mpc.bright-asteroids",
+      "upstreamUrl": "https://minorplanetcenter.net/iau/Ephemerides/Bright/2026/Soft00Bright.txt",
+      "mirrorPath": "/v1/catalogs/mpc/bright-asteroids.txt",
+      "format": "mpc-minor-planet-lines"
+    },
+    {
+      "id": "catalog.mpc.critlist-asteroids",
+      "upstreamUrl": "https://minorplanetcenter.net/iau/Ephemerides/CritList/Soft00CritList.txt",
+      "mirrorPath": "/v1/catalogs/mpc/critlist-asteroids.txt",
+      "format": "mpc-minor-planet-lines"
+    },
+    {
+      "id": "catalog.mpc.distant",
+      "upstreamUrl": "https://minorplanetcenter.net/iau/Ephemerides/Distant/Soft00Distant.txt",
+      "mirrorPath": "/v1/catalogs/mpc/distant.txt",
+      "format": "mpc-minor-planet-lines"
     },
     {
       "id": "realtime.planes",

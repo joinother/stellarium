@@ -3,9 +3,10 @@
 // 离线解析 MPC 单行轨道根数并一键在星图中定位。
 import { Theme } from '@kit.ArkUI'
 import { DEFAULT_SLOTS, ThemeSlots, slotsFromTheme } from '../../state/StellariumTheme'
-import { MinorBodiesStore } from '../../state/MinorBodiesStore'
+import { MinorBodiesStore, MPC_MIRROR_PACKS, MpcMirrorPackSpec } from '../../state/MinorBodiesStore'
 import { MinorBodyItem } from '../../common/types/StellariumTypes'
-import { UI_OPTION_ANIMATION_MS, UI_RADIUS_CARD, UI_RADIUS_CONTROL, UI_RADIUS_PILL } from '../../common/ui/UiTokens'
+import { OFFLINE_APPGALLERY_BUILD } from '../../common/types/MainWindowModels'
+import { UI_OPTION_ANIMATION_MS, UI_RADIUS_CARD, UI_RADIUS_CONTROL, UI_RADIUS_PILL, UI_RADIUS_TAG } from '../../common/ui/UiTokens'
 import { uiFadeUpTransition } from '../../common/ui/UiMotion'
 import { InfoTipButton } from '../../common/ui/InfoTipButton'
 import { uiControlHeight, uiFontSize } from '../../common/ui/UiTypography'
@@ -29,6 +30,7 @@ export struct MinorBodiesPanel {
   @StorageProp('stellariumUiFontScale') uiFontScale: number = 1.0
   @StorageProp('stellariumControlScale') controlScale: number = 1.0
   @ObjectLink store: MinorBodiesStore
+  @Prop onlineMirrorAllowed: boolean = false
   @State private c: ThemeSlots = DEFAULT_SLOTS
   @State private importExpanded: boolean = false
   @State private mpcKind: string = 'comet'
@@ -115,9 +117,19 @@ export struct MinorBodiesPanel {
 
       // 离线导入与管理工具卡
       Column({ space: 8 }) {
+        if (this.store.precisionAsteroidsAvailable) {
+          Row({ space: 6 }) {
+            Text('✓ 离线精密历表已激活')
+              .fontSize(this.fs(10)).fontColor(this.c.accent).fontWeight(FontWeight.Medium)
+              .padding({ left: 7, right: 7, top: 2, bottom: 2 })
+              .backgroundColor(this.c.accentSoft).borderRadius(UI_RADIUS_TAG)
+            Text('谷神星 / 智神星 / 婚神星 / 灶神星 300 年精密轨道')
+              .fontSize(this.fs(10.5)).fontColor(this.c.sub).layoutWeight(1).maxLines(1).textOverflow({ overflow: TextOverflow.Ellipsis })
+          }.width('100%').alignItems(VerticalAlign.Center)
+        }
         Row({ space: 8 }) {
           if (this.store.bundledCometsAvailable) {
-            Button(this.store.busy ? '导入中…' : '导入千颗彗星')
+            Button(this.store.busy && this.store.mirrorSyncingPack.length === 0 ? '导入中…' : '导入千颗彗星')
               .id('minor-bodies-import-comets-btn')
               .fontSize(this.fs(12))
               .fontWeight(FontWeight.Medium)
@@ -130,7 +142,7 @@ export struct MinorBodiesPanel {
               .clickEffect({ level: ClickEffectLevel.LIGHT })
               .onClick(() => { this.store.importBundledComets() })
           }
-          Button(this.importExpanded ? '收起 MPC' : 'MPC 导入')
+          Button(this.importExpanded ? '收起 MPC' : 'MPC 手动导入')
             .id('minor-bodies-mpc-toggle-btn')
             .fontSize(this.fs(12))
             .fontColor(this.c.text)
@@ -156,6 +168,45 @@ export struct MinorBodiesPanel {
             .clickEffect({ level: ClickEffectLevel.LIGHT })
             .onClick(() => { this.confirmReset() })
         }.width('100%')
+
+        // 阿里云国内镜像实时同步（skyinstrument.cn，只读静态 GET + SHA-256 校验，不上传任何个人信息）
+        if (!OFFLINE_APPGALLERY_BUILD) {
+          Column({ space: 6 }) {
+            Row({ space: 6 }) {
+              Text('阿里云国内镜像 · MPC 实时目录')
+                .fontSize(this.fs(11.5)).fontWeight(FontWeight.Medium).fontColor(this.c.text).layoutWeight(1)
+              InfoTipButton({
+                title: '国内镜像安全同步说明',
+                tip: '通过自有境内镜像 skyinstrument.cn 静态获取国际小行星中心（MPC）每日更新的彗星与小行星轨道。写入前先核验 manifest.json 与 SHA-256 哈希，不上传经纬度、搜索词或设备标识。'
+              })
+            }.width('100%').alignItems(VerticalAlign.Center)
+
+            Flex({ wrap: FlexWrap.Wrap, justifyContent: FlexAlign.SpaceBetween }) {
+              ForEach(MPC_MIRROR_PACKS, (pack: MpcMirrorPackSpec) => {
+                Button(this.store.mirrorSyncingPack === pack.key ? '同步中…' : pack.label)
+                  .id('minor-bodies-mirror-' + pack.key)
+                  .fontSize(this.fs(11))
+                  .fontColor(this.store.mirrorSyncingPack === pack.key ? this.c.onAccent : this.c.accent)
+                  .backgroundColor(this.store.mirrorSyncingPack === pack.key ? this.c.accent : this.c.accentSoft)
+                  .borderRadius(UI_RADIUS_CONTROL)
+                  .constraintSize({ minHeight: this.ch(32) })
+                  .width('48.5%')
+                  .margin({ bottom: 6 })
+                  .padding({ left: 8, right: 8 })
+                  .enabled(!this.store.busy)
+                  .clickEffect({ level: ClickEffectLevel.LIGHT })
+                  .onClick(() => { void this.store.syncMirrorPack(pack.key, this.onlineMirrorAllowed) })
+              }, (pack: MpcMirrorPackSpec) => pack.key)
+            }.width('100%')
+
+            if (this.store.mirrorStatusText.length > 0) {
+              Text(this.store.mirrorStatusText)
+                .fontSize(this.fs(10.5)).fontColor(this.c.sub).width('100%').lineHeight(16)
+            }
+          }
+          .width('100%').padding({ left: 10, right: 10, top: 8, bottom: 6 })
+          .backgroundColor(this.c.soft).borderRadius(UI_RADIUS_CONTROL)
+        }
 
         if (this.importExpanded) {
           Column({ space: 8 }) {

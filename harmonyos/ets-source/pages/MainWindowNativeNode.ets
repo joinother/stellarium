@@ -10624,6 +10624,7 @@ export struct WindowNativeNode {
     } else if (this.activePanel === 'minorBodies') {
       MinorBodiesPanel({
         store: this.minorBodiesStore,
+        onlineMirrorAllowed: !OFFLINE_APPGALLERY_BUILD && this.privacyNativeStartupAllowed && hasCurrentPrivacyConsent(),
         onLocateObject: (englishName: string) => { this.searchObject(englishName, '', '', 'center') }
       })
     } else if (this.activePanel === 'scripts') {

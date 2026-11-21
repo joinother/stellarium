@@ -16748,6 +16748,7 @@ extern "C" __attribute__((visibility("default"))) const char* StellariumOhos_com
 			for (int i = 0; i < matched.size() && i < limit; ++i)
 				items.append(matched.at(i).obj);
 			const QString cometsPath = StelFileMgr::findFile("data/ssystem_1000comets.ini", StelFileMgr::File);
+			const QString precisionAsteroidsPath = StelFileMgr::findFile("data/asteroid_elements.json", StelFileMgr::File);
 			result["ok"] = true;
 			result["totalCount"] = totalLoaded;
 			result["matchedCount"] = matched.size();
@@ -16756,6 +16757,7 @@ extern "C" __attribute__((visibility("default"))) const char* StellariumOhos_com
 				{"dwarf", countDwarf}, {"tno", countTno}
 			};
 			result["bundledCometsAvailable"] = !cometsPath.isEmpty();
+			result["precisionAsteroidsAvailable"] = !precisionAsteroidsPath.isEmpty();
 			result["items"] = items;
 			return result;
 		}
@@ -16810,9 +16812,69 @@ extern "C" __attribute__((visibility("default"))) const char* StellariumOhos_com
 					return result;
 				}
 				const bool ok = sse->appendToSolarSystemConfigurationFile(elem);
+				if (ok)
+				{
+					if (SolarSystem* ssys = GETSTELMODULE(SolarSystem))
+						ssys->reloadPlanets();
+				}
 				result["ok"] = ok;
 				result["importedName"] = elem.value("name").toString();
 				if (!ok) result["error"] = "写入小天体目录失败";
+				return result;
+			}
+			if (action == "importMpcText")
+			{
+				const QString kind = jo.value("kind").toString("comet").trimmed().toLower();
+				const QString text = jo.value("text").toString();
+				const int maxItems = qBound(1, jo.value("maxItems").toInt(350), 1200);
+				if (text.trimmed().isEmpty())
+				{
+					result["ok"] = false;
+					result["error"] = "MPC 目录内容为空";
+					return result;
+				}
+				QTemporaryFile tmpFile;
+				tmpFile.setAutoRemove(true);
+				if (!tmpFile.open())
+				{
+					result["ok"] = false;
+					result["error"] = "无法创建临时轨道文件";
+					return result;
+				}
+				tmpFile.write(text.toUtf8());
+				tmpFile.flush();
+				const QString tmpPath = tmpFile.fileName();
+				QList<SsoElements> parsed = (kind == "asteroid")
+					? sse->readMpcOneLineMinorPlanetElementsFromFile(tmpPath)
+					: sse->readMpcOneLineCometElementsFromFile(tmpPath);
+				if (parsed.isEmpty())
+				{
+					result["ok"] = false;
+					result["error"] = "未能从 MPC 目录解析到有效轨道根数";
+					return result;
+				}
+				// 按绝对星等 H 从亮到暗排序，优先保留最亮且最易观测的小天体/彗星，避免过度膨胀移动端列表
+				std::sort(parsed.begin(), parsed.end(), [](const SsoElements& a, const SsoElements& b) {
+					bool okA = false, okB = false;
+					const double hA = a.value("absolute_magnitude").toDouble(&okA);
+					const double hB = b.value("absolute_magnitude").toDouble(&okB);
+					const double safeA = (okA && std::isfinite(hA)) ? hA : 99.0;
+					const double safeB = (okB && std::isfinite(hB)) ? hB : 99.0;
+					return safeA < safeB;
+				});
+				const int totalParsed = parsed.size();
+				if (parsed.size() > maxItems)
+					parsed = parsed.mid(0, maxItems);
+				const bool ok = sse->appendToSolarSystemConfigurationFile(parsed);
+				if (ok)
+				{
+					if (SolarSystem* ssys = GETSTELMODULE(SolarSystem))
+						ssys->reloadPlanets();
+				}
+				result["ok"] = ok;
+				result["totalParsed"] = totalParsed;
+				result["importedCount"] = parsed.size();
+				if (!ok) result["error"] = "批量写入小天体目录失败";
 				return result;
 			}
 			if (action == "remove")

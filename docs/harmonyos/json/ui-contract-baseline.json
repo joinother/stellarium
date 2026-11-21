@@ -239,6 +239,7 @@
     "panels/skyculture/SkyCultureMakerPanel.ets",
     "panels/skyculture/SkyCultureMakerTabs.ets",
     "panels/skyculture/SkyCultureMakerValidationPanel.ets",
+    "panels/skyculture/SkyCulturePetalMapCard.ets",
     "panels/skyculture/SkyCultureViewParts.ets",
     "panels/skyculture/SkyCultureViewTab.ets",
     "panels/telescope/Lx200ObjectControls.ets",
@@ -440,6 +441,7 @@
     "guide-start-",
     "hub-action-",
     "minor-bodies-cat-",
+    "minor-bodies-mirror-",
     "more-action-",
     "panel-content-",
     "panel-scroll-",
@@ -449,11 +451,11 @@
     "satellites-",
     "search-category-"
   ],
-  "totalIdAnchors": 71,
+  "totalIdAnchors": 72,
   "count": {
     "panels": 39,
     "staticIds": 46,
-    "dynamicIdPrefixes": 22,
-    "totalIdAnchors": 71
+    "dynamicIdPrefixes": 23,
+    "totalIdAnchors": 72
   }
 }

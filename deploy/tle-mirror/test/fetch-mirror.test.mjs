@@ -97,6 +97,19 @@ test('JSON validates known catalogue schemas and minimum counts; unsupported for
   assert.throws(() => validatePayload('apparently valid text', { format: 'mpc-orbit-elements' }), /unsupported_format/)
 })
 
+test('MPC comet and minor-planet one-line catalogues validate orbital fields and reject malformed payloads', () => {
+  const validComet = '    CJ95O010  1997 03 29.0300  0.927215  0.994892  130.7417  281.8180   89.7294  20261120  -2.0  4.0  C/1995 O1 (Hale-Bopp)                                    MPC194091'
+  const validAsteroid = '00001    3.35  0.15 K25BL 231.53975   73.29974   80.24963   10.58789  0.0795763  0.21429712   2.7656157  0 MPO950947  7369 126 1801-2025 0.69 M-v 30k MPC        0000              (1) Ceres'
+  assert.equal(validatePayload(validComet, { format: 'mpc-comet-lines' }), 1)
+  assert.equal(validatePayload(validAsteroid, { format: 'mpc-minor-planet-lines' }), 1)
+  for (const bad of ['', '<!DOCTYPE html><html>error</html>', 'short line', validComet.replace('0.927215', '-0.50000'), validComet.replace('89.7294', '199.000')]) {
+    assert.throws(() => validatePayload(bad, { format: 'mpc-comet-lines' }), /invalid_payload/)
+  }
+  for (const bad of ['', '<!DOCTYPE html><html>error</html>', 'short line', validAsteroid.replace('K25BL', 'ZZZZZ'), validAsteroid.replace('2.7656157', '-1.000000')]) {
+    assert.throws(() => validatePayload(bad, { format: 'mpc-minor-planet-lines' }), /invalid_payload/)
+  }
+})
+
 test('all six bundled JSON catalogue schemas pass without any downloads', async () => {
   for (const [folder, filename, id] of [
     ['Exoplanets', 'exoplanets', 'exoplanets'], ['MeteorShowers', 'MeteorShowers', 'meteor-showers'],

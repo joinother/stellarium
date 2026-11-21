@@ -1,5 +1,28 @@
 > **身份图例**：本文件真机记录中出现的 `com.cnchensh.stellarium` 是**本机调试签名身份**（本机 DevEco 自动生成，非发布身份）；发布身份为 `com.joinother.skyinstrument`。构建脚本 `build-ohos-hap-windows.ps1 -Install` 从产物 `pack.info` 读取实际包名，仓库不写死任何签名身份（见 `docs/harmonyos/release/BUNDLE-IDENTITY-CLEANUP.md`）。
 
+## [2026-11-21] 太阳系小天体阿里云国内 MPC 镜像部署、离线精密历表与千颗彗星库全链路盘活及 SolarSystemEditor 鸿蒙沙盒写盘修复
+
+- **修改文件：** `deploy/tle-mirror/fetch-mirror.mjs`、`deploy/tle-mirror/sources.json`、`deploy/tle-mirror/test/fetch-mirror.test.mjs`、`data/ohos/network-sources.json`、`plugins/SolarSystemEditor/src/SolarSystemEditor.cpp`、`src/StelMainView.cpp`、`harmonyos/ets-source/common/types/StellariumTypes.ets`、`harmonyos/ets-source/state/MinorBodiesStore.ets`、`harmonyos/ets-source/panels/panels/MinorBodiesPanel.ets`、`harmonyos/ets-source/pages/MainWindowNativeNode.ets`、`docs/harmonyos/json/ui-contract-baseline.json`、`scripts/test-ohos-plugin-panels-phase23.mjs`、`docs/harmonyos/CHANGELOG.md`。
+- **核心改动：**
+  1. **阿里云上海节点国内 MPC 实时目录镜像上线（`https://skyinstrument.cn`，节点 `i-uf68vk358s8l58afzswt`）：**
+     - 在 `deploy/tle-mirror/fetch-mirror.mjs` 新增严格格式校验器 `mpc-comet-lines` / `mpc-minor-planet-lines`（保留 MPC 固定列宽首行前导空格）与 `Soft00Bright.txt` 当前年份自动解析；
+     - 在 `deploy/tle-mirror/sources.json` 与 `data/ohos/network-sources.json` 将原占位不可用源 `catalog.mpc` 升级为 4 份每日定时同步、零个人/设备字段外发的纯静态 HTTPS 镜像目录：
+       - `catalog.mpc.comets` → `/v1/catalogs/mpc/comets.txt`（165 KB，974 颗最新可观测彗星）
+       - `catalog.mpc.bright-asteroids` → `/v1/catalogs/mpc/bright-asteroids.txt`（60 KB，314 颗年度冲日亮小行星）
+       - `catalog.mpc.critlist-asteroids` → `/v1/catalogs/mpc/critlist-asteroids.txt`（521 KB，2,845 颗近地与关键小行星）
+       - `catalog.mpc.distant` → `/v1/catalogs/mpc/distant.txt`（764 KB，4,144 颗外海王星与半人马天体）
+     - 严格遵循服务器安全运维规范完成临时维护部署（远端旧配置已备份至 `/var/backups/skyinstrument/mpc-mirror-20261121T053436Z`），以非特权 `tle-mirror` 用户刷新全部 4 路 MPC 镜像并立即关闭 root 会话；巡检确认全站 **59 路镜像源 `unavailable: 0`**（清零历史不可用项），4 路公网 HTTPS 字节长度与 SHA-256 均已实测一致。
+  2. **修复 `SolarSystemEditor` 在 HarmonyOS 沙盒中无法初始化与写盘的根因缺陷 + 批量热重载导入（`SolarSystemEditor.cpp`、`StelMainView.cpp`）：**
+     - 实机联调定位到原 `SolarSystemEditor::cloneSolarSystemConfigurationFile()` 调用 `QFile::copy()` 在 HarmonyOS 沙盒文件系统失败，导致插件初始化提前返回、所有导入/重置均报错；改为与 `copyDefaultConfigFile()` 一致的显式流式读写拷贝 `copySolarSystemFileViaStream()`（自动创建目录并补齐写权限），并在 `appendToSolarSystemConfigurationFile()` / `addFromSolarSystemConfigurationFile()` 写盘前兜底补建用户目录 `ssystem_minor.ini`；
+     - 在 `getMinorBodies` 输出 `precisionAsteroidsAvailable` 确认随包 568 KB `data/asteroid_elements.json`（谷神星/智神星/婚神星/灶神星 1800–2100 年 300 年精密轨道历表）已离线激活；
+     - 在 `importMinorBodies` 新增批量动作 `importMpcText`（经 `QTemporaryFile` 调用 `SolarSystemEditor` 官方 MPC 解析器、按绝对星等 `H` 亮到暗优选截断、原子批量写盘），并在 `importMpcLine` 与 `importMpcText` 写盘成功后立即调用 `SolarSystem::reloadPlanets()` 实现毫秒级星图热重载。
+  3. **鸿蒙「太阳系小天体目录」离线基线 + 阿里云国内镜像双模式（`MinorBodiesStore.ets`、`MinorBodiesPanel.ets`、`MainWindowNativeNode.ets`）：**
+     - 在 `MinorBodiesStore.ets` 实现 `syncMirrorPack()`：先拉取 `https://skyinstrument.cn/v1/manifest.json`，再拉取目标 `/v1/catalogs/mpc/*.txt`，通过 `@kit.CryptoArchitectureKit` 实算 SHA-256 与字节数双校验通过后才写入引擎；严格遵守 `OFFLINE_APPGALLERY_BUILD` 与隐私授权闸门；
+     - 在 `MinorBodiesPanel.ets` 顶部清晰呈现「`✓ 离线精密历表已激活`（568 KB 300 年精密轨道）」、离线「导入千颗彗星（433 KB）」/「MPC 手动导入」/「重置」及 2×2「**阿里云国内镜像 · MPC 实时目录**」同步区与 `InfoTipButton` `ⓘ` 说明。
+- **验证与真机实测（MatePad Mini `192.168.31.234:42713`，`com.joinother.skyinstrument`）：**
+  - 主机验证：`deploy/tle-mirror/test/fetch-mirror.test.mjs`（27/27 通过）、`check-ohos-ui-contract.mjs`、`check-ohos-command-catalog.mjs`、`check-ohos-network-sources.mjs`、`test-ohos-plugin-panels-phase23.mjs`、`test-ohos-media-cultures-landscapes.mjs` 全部通过。
+  - 真机实测：启动确认 `SolarSystemEditor` 零警告完成初始化与 `asteroid_elements.json` 4 颗主带大行星精密历表加载；点击「最新可观测彗星」实测经 `skyinstrument.cn` 完成 SHA-256 校验并 1 秒内热重载写入 974 颗彗星（总目录 `477 → 1355`，彗星 `115 → 990`），重启后持久化保持 `1355` 颗；继续点击「年度冲日亮小行星」实测 1.4 秒内完成 SHA-256 校验与热重载写入 314 颗亮小行星（总目录 `1355 → 1411`，小行星 `344 → 400`），界面清晰无错且 `hilog` 零异常。
+
 ## [2026-11-21] 674 张深空实拍图全量索引、64 套星空文化三段式重构与华为花瓣地图合规改造及 16 套地景实景故事卡片
 
 - **修改文件：** `src/StelMainView.cpp`、`harmonyos/ets-source/capability/ObjectInspectorMediaController.ets`、`harmonyos/ets-source/panels/object/TabletInspectorMedia.ets`、`harmonyos/ets-source/common/types/StellariumTypes.ets`、`harmonyos/ets-source/common/derive/SkyCultureStoriesZh.ts`（新增）、`harmonyos/ets-source/common/derive/SkyCultureRecommender.ts`（新增）、`harmonyos/ets-source/common/derive/LandscapeStoriesZh.ts`（新增）、`harmonyos/ets-source/panels/skyculture/SkyCulturePetalMapCard.ets`（新增）、`harmonyos/ets-source/panels/skyculture/SkyCultureViewTab.ets`、`harmonyos/ets-source/state/SkyCultureSettingsStore.ets`、`harmonyos/ets-source/panels/layers/LayerViewTabs.ets`、`harmonyos/ets-source/panels/panels/LayersPanel.ets`、`harmonyos/ets-source/panels/location/LocationOverviewCard.ets`、`harmonyos/ets-source/pages/MainWindowNativeNode.ets`、`scripts/test-ohos-media-cultures-landscapes.mjs`（新增）、`docs/harmonyos/CHANGELOG.md`。

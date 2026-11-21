@@ -210,6 +210,47 @@ void SolarSystemEditor::updateI18n()
 	solarSystem->updateI18n();
 }
 
+namespace
+{
+bool copySolarSystemFileViaStream(const QString &sourcePath, const QString &destPath)
+{
+	const QString parentDir = QFileInfo(destPath).absolutePath();
+	if (!QDir().mkpath(parentDir))
+	{
+		qWarning() << "SolarSystemEditor: Failed to create directory" << QDir::toNativeSeparators(parentDir);
+		return false;
+	}
+	QFile source(sourcePath);
+	if (!source.open(QIODevice::ReadOnly))
+	{
+		qWarning() << "SolarSystemEditor: Failed to open source" << QDir::toNativeSeparators(sourcePath)
+			   << ":" << source.errorString();
+		return false;
+	}
+	QFile destination(destPath);
+	if (!destination.open(QIODevice::WriteOnly | QIODevice::Truncate))
+	{
+		qWarning() << "SolarSystemEditor: Failed to open destination" << QDir::toNativeSeparators(destPath)
+			   << ":" << destination.errorString();
+		return false;
+	}
+	const QByteArray payload = source.readAll();
+	const qint64 written = destination.write(payload);
+	destination.flush();
+	destination.close();
+	source.close();
+	if (payload.isEmpty() || written != payload.size())
+	{
+		qWarning() << "SolarSystemEditor: Incomplete copy from" << QDir::toNativeSeparators(sourcePath)
+			   << "to" << QDir::toNativeSeparators(destPath)
+			   << "(bytes=" << written << "/" << payload.size() << ")";
+		return false;
+	}
+	QFile::setPermissions(destPath, QFile::permissions(destPath) | QFileDevice::ReadOwner | QFileDevice::WriteOwner);
+	return true;
+}
+} // namespace
+
 bool SolarSystemEditor::cloneSolarSystemConfigurationFile() const
 {
 	QDir userDataDirectory(StelFileMgr::getUserDir());
@@ -230,10 +271,14 @@ bool SolarSystemEditor::cloneSolarSystemConfigurationFile() const
 		return true;
 	}
 
-	if (QFile::exists(defaultSolarSystemFilePath))
+	QString sourcePath = defaultSolarSystemFilePath;
+	if (!QFile::exists(sourcePath))
+		sourcePath = StelFileMgr::findFile("data/ssystem_minor.ini", StelFileMgr::File);
+
+	if (!sourcePath.isEmpty() && QFile::exists(sourcePath))
 	{
 		qInfo() << "Trying to copy ssystem_minor.ini to" << QDir::toNativeSeparators(customSolarSystemFilePath);
-		return QFile::copy(defaultSolarSystemFilePath, customSolarSystemFilePath);
+		return copySolarSystemFileViaStream(sourcePath, customSolarSystemFilePath);
 	}
 	else
 	{
@@ -355,7 +400,7 @@ bool SolarSystemEditor::replaceSolarSystemConfigurationFileWith(const QString &f
 
 	//Copy the new file
 	//If the copy fails, reset to the default configuration
-	if (QFile::copy(filePath, customSolarSystemFilePath))
+	if (copySolarSystemFileViaStream(filePath, customSolarSystemFilePath))
 	{
 		solarSystem->reloadPlanets();
 		emit solarSystemChanged();
@@ -398,6 +443,8 @@ bool SolarSystemEditor::addFromSolarSystemConfigurationFile(const QString &fileP
 	}
 
 	//Process the existing and new files:
+	if (!QFile::exists(customSolarSystemFilePath))
+		cloneSolarSystemConfigurationFile();
 	if (QFile::exists(customSolarSystemFilePath))
 	{
 		QSettings minorBodies(customSolarSystemFilePath, StelIniFormat);
@@ -1330,6 +1377,8 @@ bool SolarSystemEditor::appendToSolarSystemConfigurationFile(const QList<SsoElem
 	}
 
 	//Check if the configuration file exists
+	if (!QFile::exists(customSolarSystemFilePath))
+		cloneSolarSystemConfigurationFile();
 	if (!QFile::exists(customSolarSystemFilePath))
 	{
 		qDebug() << "Can't append object data to ssystem_minor.ini: Unable to find" << QDir::toNativeSeparators(customSolarSystemFilePath);
