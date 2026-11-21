@@ -203,6 +203,8 @@ public:
 	// Methods defined in StelObjectModule class
 	//! Return a list containing the stars located inside the limFov circle around position v
 	QList<StelObjectP > searchAround(const Vec3d& v, double limitFov, const StelCore* core) const override;
+	//! Return a list containing stars brighter than or equal to maxMag inside the limFov circle around position v.
+	QList<StelObjectP > searchAround(const Vec3d& v, double limitFov, const StelCore* core, float maxMag) const;
 
 	//! Return a list containing the stars located inside the region.
 	//! @param hipOnly Only return Hipparcos stars.

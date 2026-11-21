@@ -437,9 +437,6 @@ PickResult TouchPicker::pickAt(const StelCore* core, int xVp, int yVp, int skyW,
 	{
 		if (starMgr->getFlagStars())
 		{
-			const QList<StelObjectP> stars = starMgr->searchAround(tapDirection, fovRadiusDeg, core);
-			result.starSearchCount = stars.size();
-
 			const bool starLabels = starMgr->getFlagLabels();
 			const StelSkyDrawer* drawer = core->getSkyDrawer();
 			const float drawerStarLimit = drawer->getStarLimitMagnitude();
@@ -448,6 +445,11 @@ PickResult TouchPicker::pickAt(const StelCore* core, int xVp, int yVp, int skyW,
 				? qMin(static_cast<float>(drawer->getCustomStarMagnitudeLimit()), drawerStarLimit)
 				: drawerStarLimit;
 			result.starLimit = starLimit;
+			// Pass the visible star magnitude cutoff into StarMgr so deep Gaia catalogs
+			// (stars_3..stars_8) prune invisible stars before 6D projection & heap wrapping.
+			// Extinction only dims stars, so catalog mag <= starLimit + 0.05 is strictly safe.
+			const QList<StelObjectP> stars = starMgr->searchAround(tapDirection, fovRadiusDeg, core, starLimit + 0.05f);
+			result.starSearchCount = stars.size();
 			const double wideFovStarPenalty = (ctx.fov > 80.0)
 				? qMin(1.6, 3.0 * std::log10(ctx.fov / 80.0))
 				: 0.0;

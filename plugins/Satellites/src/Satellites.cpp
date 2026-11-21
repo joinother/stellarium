@@ -4461,11 +4461,19 @@ void Satellites::update(double deltaTime)
 #ifdef Q_OS_OHOS
 	for (const auto& sat : std::as_const(satellites))
 	{
+		const bool wasPreview = sat->orbitPreview;
 		sat->orbitPreview = !selected.isEmpty() && selected.first().data() == sat.data();
 		if (sat->orbitDisplayed)
 			sat->orbitExpandProgress = 1.0f;
 		else if (sat->orbitPreview)
-			sat->orbitExpandProgress = qMin(1.0f, sat->orbitExpandProgress + static_cast<float>(dtSec / 0.45));
+		{
+			// Seed an immediate visual impulse on the first frame of selection so the
+			// orbit arc visibly emerges right away, then sweeps out crisply in ~220ms.
+			const float baseProgress = (!wasPreview && sat->orbitExpandProgress < 0.14f)
+				? 0.14f
+				: sat->orbitExpandProgress;
+			sat->orbitExpandProgress = qMin(1.0f, baseProgress + static_cast<float>(dtSec / 0.24));
+		}
 		else if (sat->orbitExpandProgress > 0.f)
 			sat->orbitExpandProgress = qMax(0.0f, sat->orbitExpandProgress - static_cast<float>(dtSec / 0.38));
 	}

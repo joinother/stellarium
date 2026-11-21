@@ -2690,11 +2690,14 @@ export struct WindowNativeNode {
 
   // Interactive commands (tap-select, search, get-info, move-to) run on the
   // OHOS render pump one frame later and are delivered via a consume-on-read
-  // store on the C++ side, so the first call returns {pending}. Poll fast
-  // (50ms x 40 = 2s) so a single tap/search resolves without a visible delay
-  // and WITHOUT blocking the render thread. onOk receives the FRESH result.
+  // store on the C++ side, so the first call returns {pending}. Delegate to
+  // BridgeClient.requestInteractive (16ms fast frame-cadence phase, then 40ms)
+  // so a single tap/search resolves on the very next frame without blocking.
   private callInteractive(name: string, payload: string, onOk: (r: StellariumBridgeResponse) => void, onFailure?: (r: StellariumBridgeResponse) => void): void {
-    this.callNativeWhenReady(name, payload, onOk, 0, 100, 15, onFailure)
+    BridgeClient.requestInteractive(name, payload, (r: StellariumBridgeResponse) => {
+      this.recordingCtl().recordAcceptedCommand(name, payload)
+      onOk(r)
+    }, onFailure)
   }
 
   private callLongRunningInteractive(name: string, payload: string, onOk: (r: StellariumBridgeResponse) => void, onFailure?: (r: StellariumBridgeResponse) => void, onProgress?: (r: StellariumBridgeResponse) => void, maxAttempts: number = 240, isCancelled?: () => boolean): void {
@@ -5666,8 +5669,10 @@ export struct WindowNativeNode {
       this.applySelectedObject(result, false, '', true)
       if (result.found === true) {
         void this.haptics().selection(this.objectDetailStore.selectedName)
-        // 轻量回包只有名称/类型；星等 / 方位 / 距离等动态值立刻单独补一次（见方法注释）。
-        this.refreshSelectedDynamicValues()
+        // 卫星等重遥测对象在 selectAt 回包里刻意省略动态值；若回包未带星等/高度，立刻补一次轻量刷新。
+        if (result.magnitude === undefined && result.altitude === undefined) {
+          this.refreshSelectedDynamicValues()
+        }
       } else {
         void this.haptics().selection('')
         // 单击空白天区直接静默取消当前选中并重置双击序列，避免后续快速点选附近天体被误判为双击取消，
@@ -6147,6 +6152,9 @@ export struct WindowNativeNode {
     this.detailConnectorCtl().markObjectCardPlacementPending()
     if (!this.objectDetailStore.selectedDetailLoaded) {
       this.requestSelectedDetails(this.objectDetailStore.selectedName)
+    }
+    if (this.objectDetailStore.selectedObjectIsArtificialSatellite()) {
+      this.objectDetailStore.loadSelectedSatellitePasses()
     }
     this.detailConnectorCtl().startObjectDetailConnectorRefresh()
     this.detailConnectorCtl().refreshObjectDetailConnector()
@@ -7349,6 +7357,9 @@ export struct WindowNativeNode {
       } else if (expandFromPillOnRetap) {
         this.infoWindowStore.infoWinExpanded = true
         this.fullInspectorRequested = true
+        if (this.objectDetailStore.selectedObjectIsArtificialSatellite()) {
+          this.objectDetailStore.loadSelectedSatellitePasses()
+        }
       }
       if (!preserveClosedDetail) {
         this.infoWindowStore.infoWinVisible = true
@@ -7369,9 +7380,8 @@ export struct WindowNativeNode {
         this.objectDetailStore.selectedSatellitePasses = []
         this.objectDetailStore.selectedSatellitePassesLoaded = false
         this.objectDetailStore.selectedSatellitePassesRequested = false
-        if (this.objectDetailStore.selectedObjectIsArtificialSatellite()) {
-          this.objectDetailStore.loadSelectedSatellitePasses()
-        }
+        // 不在一阶段胶囊点选时立即触发 48 小时 SGP4 过境预测（会阻塞渲染线程 100ms+ 拖慢卫星轨道展开）；
+        // 仅在展开二阶段大详情卡或主动刷新过境列表时按需加载。
         // Sensor tracking owns the camera. A gyro-mode search selects the
         // target and opens its card, but never starts a safe-area fly-to.
         if (!this.gyroStore.gyroscopeEnabled && !this.sessionToolStore.isObserverPlanetSelection(incomingName)) {

@@ -1809,6 +1809,11 @@ void StarMgr::drawMotionTrails(StelCore* core, StelPainter& sPainter)
 // inside the limFov circle around position vv (in J2000 frame without aberration)
 QList<StelObjectP > StarMgr::searchAround(const Vec3d& vv, double limFov, const StelCore* core) const
 {
+	return searchAround(vv, limFov, core, std::numeric_limits<float>::infinity());
+}
+
+QList<StelObjectP > StarMgr::searchAround(const Vec3d& vv, double limFov, const StelCore* core, float maxMag) const
+{
 	QList<StelObjectP > result;
 	if (!getFlagStars())
 		return result;
@@ -1860,7 +1865,20 @@ QList<StelObjectP > StarMgr::searchAround(const Vec3d& vv, double limFov, const 
 	// touch radius, producing intermittent "no object here" taps in dense
 	// fields even though the stars are visible.
 	SphericalConvexPolygon c(e3, e2, e1, e0);
-	const GeodesicSearchResult* geodesic_search_result = core->getGeodesicGrid(lastMaxSearchLevel)->search(c.getBoundingSphericalCaps(),lastMaxSearchLevel);
+	const bool filterMag = std::isfinite(maxMag);
+	const float maxMilliMag = filterMag ? (maxMag * 1000.0f) : 0.0f;
+	int searchLevel = lastMaxSearchLevel;
+	if (filterMag)
+	{
+		searchLevel = 0;
+		for (const auto* z : gridLevels)
+		{
+			if (z->mag_min <= maxMilliMag)
+				searchLevel = qMax(searchLevel, z->level);
+		}
+		searchLevel = qMin(searchLevel, maxGeodesicGridLevel);
+	}
+	const GeodesicSearchResult* geodesic_search_result = core->getGeodesicGrid(searchLevel)->search(c.getBoundingSphericalCaps(), searchLevel);
 
 	double withParallax = core->getUseParallax() * core->getParallaxFactor();
 	Vec3d diffPos(0., 0., 0.);
@@ -1872,21 +1890,23 @@ QList<StelObjectP > StarMgr::searchAround(const Vec3d& vv, double limFov, const 
 	f = cos(limFov * M_PI/180.);
 	for (auto* z : gridLevels)
 	{
+		if (filterMag && z->mag_min > maxMilliMag)
+			continue;
 		//qDebug() << "search inside(" << it->first << "):";
 		int zone;
 		for (GeodesicSearchInsideIterator it1(*geodesic_search_result,z->level);(zone = it1.next()) >= 0;)
 		{
-			z->searchAround(core, zone, v, withParallax, diffPos, f, result);
+			z->searchAround(core, zone, v, withParallax, diffPos, f, result, maxMag);
 			//qDebug() << " " << zone;
 		}
 		//qDebug() << StelUtils::getEndLineChar() << "search border(" << it->first << "):";
 		for (GeodesicSearchBorderIterator it1(*geodesic_search_result,z->level); (zone = it1.next()) >= 0;)
 		{
-			z->searchAround(core, zone, v, withParallax, diffPos, f, result);
+			z->searchAround(core, zone, v, withParallax, diffPos, f, result, maxMag);
 			//qDebug() << " " << zone;
 		}
 		// always search the last zone because it is a global zone
-		z->searchAround(core, (20<<(z->level<<1)), v, withParallax, diffPos, f, result);
+		z->searchAround(core, (20<<(z->level<<1)), v, withParallax, diffPos, f, result, maxMag);
 	}
 	return result;
 }

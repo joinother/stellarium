@@ -42,10 +42,24 @@ export class BridgeClient {
 
   // Interactive commands (tap-select, search, get-info, move-to) run on the
   // OHOS render pump one frame later and are delivered via a consume-on-read
-  // store on the C++ side, so the first call returns {pending}. Poll fast
-  // (50ms x 40 = 2s) so a single tap/search resolves without a visible delay
-  // and WITHOUT blocking the render thread. onOk receives the FRESH result.
+  // store on the C++ side, so the first call returns {pending}. Poll at frame
+  // cadence (16ms x 10 fast phase, then 40ms x 36 = ~1.6s total) so a single
+  // tap/search resolves on the very next frame without blocking the render thread.
   static requestInteractive(name: string, payload: string, onOk: (r: StellariumBridgeResponse) => void, onFailure?: (r: StellariumBridgeResponse) => void): void {
-    BridgeClient.requestWhenReady(name, payload, onOk, 0, 100, 15, onFailure)
+    BridgeClient.pollInteractive(name, payload, onOk, 0, onFailure)
+  }
+
+  private static pollInteractive(name: string, payload: string, onOk: (r: StellariumBridgeResponse) => void, attempt: number, onFailure?: (r: StellariumBridgeResponse) => void): void {
+    const r = BridgeClient.request(name, payload)
+    if (r.ok === true) {
+      onOk(r)
+      return
+    }
+    if (attempt < 46) {
+      const delayMs = attempt < 10 ? 16 : 40
+      setTimeout(() => BridgeClient.pollInteractive(name, payload, onOk, attempt + 1, onFailure), delayMs)
+    } else if (onFailure) {
+      onFailure(r)
+    }
   }
 }

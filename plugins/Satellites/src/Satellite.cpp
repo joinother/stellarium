@@ -2344,7 +2344,7 @@ void Satellite::drawOrbit(StelCore *core, StelPainter& painter)
 	{
 		if (orbitPreview)
 		{
-			const float inT = qBound(0.f, rawT / 0.35f, 1.f);
+			const float inT = qBound(0.f, rawT / 0.18f, 1.f);
 			orbitFadeAlpha = inT * inT * (3.0f - 2.0f * inT);
 		}
 		else

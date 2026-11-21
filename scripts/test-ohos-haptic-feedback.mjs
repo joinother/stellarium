@@ -86,6 +86,7 @@ function hostFixture(model) {
     callInteractive: (command, payload, callback) => calls.selections.push({ command, payload, callback }),
     applySelectedObject: result => { host.objectDetailStore.selectedName = result.found ? result.name : ''; },
     refreshSelectedDynamicValues() {},
+    skyInputCtl: () => ({ resetSkyTapSequence() {} }),
     lastDockActionPanel: '', lastDockActionAt: 0,
     setPanel: panel => calls.panels.push(panel),
     showFullObjectInspector: () => calls.panels.push('object')

@@ -33,6 +33,7 @@
 #include <QString>
 #include <QFile>
 #include <QDebug>
+#include <limits>
 
 #ifdef __OpenBSD__
 #include <unistd.h>
@@ -96,7 +97,8 @@ public:
 
 	//! Pure virtual method. See subclass implementation.
 	virtual void searchAround(const StelCore* core, int index, const Vec3d &v, const double withParallax, const Vec3d diffPos,
-							  double cosLimFov, QList<StelObjectP > &result) = 0;
+							  double cosLimFov, QList<StelObjectP > &result,
+							  float maxMag = std::numeric_limits<float>::infinity()) = 0;
 	virtual void searchWithin(const StelCore* core, int index, const SphericalRegionP region, const double withParallax, const Vec3d diffPos, const bool hipOnly, const float maxMag,
 							  QList<StelObjectP > &result) const = 0;
 
@@ -192,7 +194,8 @@ protected:
 		  QVector<StarTrailSample>* trailSamples = nullptr) const override;
 
 	void searchAround(const StelCore* core, int index, const Vec3d &v, const double withParallax, 
-					  const Vec3d diffPos, double cosLimFov, QList<StelObjectP > &result) override;
+					  const Vec3d diffPos, double cosLimFov, QList<StelObjectP > &result,
+					  float maxMag = std::numeric_limits<float>::infinity()) override;
 	void searchWithin(const StelCore* core, int index, const SphericalRegionP region, const double withParallax, const Vec3d diffPos, const bool hipOnly, const float maxMag,
 			  QList<StelObjectP > &result) const override;
 	StelObjectP searchGaiaID(int index, const StarId source_id, int& matched) const override;

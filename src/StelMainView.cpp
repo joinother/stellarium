@@ -8853,11 +8853,11 @@ extern "C" __attribute__((visibility("default"))) const char* StellariumOhos_com
 						 static_cast<int>(qRound(pick.elapsedMs)));
 
 			markOhosInteraction();
-			// Keep the tap response lightweight so the selected target can be drawn
-			// immediately. Satellite::getInfoMap() calculates telemetry and
-			// rise/set fields synchronously on the render thread; ArkTS requests
-			// the dynamic values after the selection has been drawn.
-			result = selectedObjectJson(core, false, false);
+			// Satellite::getInfoMap() reads cached live orbital state (~0ms; 48h pass
+			// prediction lives in getSatellitePasses). Return dynamic metrics directly
+			// in selectAt for all selected objects so the Stage 1 pill is populated on
+			// frame 1 without a second bridge round-trip.
+			result = selectedObjectJson(core, false, found);
 			result["ok"] = true;
 			result["found"] = found;
 			result["tapX"] = x;

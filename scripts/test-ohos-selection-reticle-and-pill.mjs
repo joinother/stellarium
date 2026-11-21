@@ -106,3 +106,26 @@ test('Satellite orbit polyline slides without drift on forward/backward time scr
   // drawOrbit falls back to full polyline scan if satellite sits outside local window
   assert.match(sat, /if \(bestDistSq > 1e-6\)[\s\S]{0,60}searchSpan\(0, size - 2, bestDistSq\)/);
 });
+
+test('Tap-to-select prunes faint Gaia catalogs, uses 16ms adaptive polling, returns dynamic metrics immediately, and defers 48h satellite pass scans until card expand', () => {
+  const picker = read('src/core/TouchPicker.cpp');
+  const starMgr = read('src/core/modules/StarMgr.cpp');
+  const zoneArray = read('src/core/modules/ZoneArray.cpp');
+  const mainView = read('src/StelMainView.cpp');
+  const satsCpp = read('plugins/Satellites/src/Satellites.cpp');
+  const satCpp = read('plugins/Satellites/src/Satellite.cpp');
+  const bridge = read('harmonyos/ets-source/bridge/BridgeClient.ets');
+  const host = read('harmonyos/ets-source/pages/MainWindowNativeNode.ets');
+
+  assert.match(picker, /starMgr->searchAround\(tapDirection,\s*fovRadiusDeg,\s*core,\s*starLimit \+ 0\.05f\)/);
+  assert.match(starMgr, /if \(filterMag && z->mag_min > maxMilliMag\)\s*continue;/);
+  assert.match(zoneArray, /if \(filterMag && s->getMag\(\) > maxMilliMag\)/);
+  assert.match(mainView, /result = selectedObjectJson\(core,\s*false,\s*found\);/);
+  assert.match(satsCpp, /dtSec \/ 0\.24/);
+  assert.match(satCpp, /rawT \/ 0\.18f/);
+  assert.match(bridge, /attempt < 10 \? 16 : 40/);
+  assert.match(host, /private callInteractive[\s\S]{0,200}BridgeClient\.requestInteractive\(/);
+  assert.doesNotMatch(host, /private callInteractive[\s\S]{0,120}callNativeWhenReady\(name,\s*payload,\s*onOk,\s*0,\s*100/);
+  assert.match(host, /private expandDetailPill\(\)[\s\S]{0,750}loadSelectedSatellitePasses\(\)/);
+  assert.doesNotMatch(host, /selectedSatellitePassesRequested = false\s+if \(this\.objectDetailStore\.selectedObjectIsArtificialSatellite\(\)\)/);
+});

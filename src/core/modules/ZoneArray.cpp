@@ -595,31 +595,46 @@ void SpecialZoneArray<Star>::draw(StelPainter* sPainter, int index, bool isInsid
 
 template<class Star>
 void SpecialZoneArray<Star>::searchAround(const StelCore* core, int index, const Vec3d &v, const double withParallax, const Vec3d diffPos, 
-										  double cosLimFov, QList<StelObjectP > &result)
+										  double cosLimFov, QList<StelObjectP > &result, float maxMag)
 {
-	const float dyrs = static_cast<float>(core->getJDE()-STAR_CATALOG_JDEPOCH)/365.25;
-	const SpecialZoneData<Star> *const z = getZones()+index;
+	const double jde = core->getJDE();
+	const float dyrs = static_cast<float>(jde - STAR_CATALOG_JDEPOCH) / 365.25f;
+	const SpecialZoneData<Star> *const z = getZones() + index;
+	const bool filterMag = std::isfinite(maxMag);
+	const float maxMilliMag = filterMag ? (maxMag * 1000.0f) : 0.0f;
+	const bool withAberration = core->getUseAberration();
+	const Vec3d vel = withAberration ? core->getAberrationVec(jde) : Vec3d(0.);
 	Vec3d tmp;
 	double RA, DEC, pmra, pmdec, Plx, RadialVel;
-	for (const Star* s=z->getStars();s<z->getStars()+z->size;++s)
+	const Star* const endStar = z->getStars() + z->size;
+	for (const Star* s = z->getStars(); s < endStar; ++s)
 	{
+		if (filterMag && s->getMag() > maxMilliMag)
+		{
+			// Stars in each zone are sorted brightest-first (same invariant as draw()).
+			// Early-exit once catalog magnitude exceeds the picker cutoff so dense Gaia
+			// catalogs (stars_3..stars_8) do not scan hundreds of thousands of invisible stars.
+			if (std::fabs(dyrs) <= 5000.f || !s->isVIP() || !z->isGlobal)
+				break;
+			continue;
+		}
 		s->getFull6DSolution(RA, DEC, Plx, pmra, pmdec, RadialVel, dyrs);
 		StelUtils::spheToRect(RA, DEC, tmp);
-		// s->getJ2000Pos(dyrs, tmp);
 		// in case it is in a binary system
-		s->getBinaryOrbit(core->getJDE(), tmp);
-		s->getPlxEffect(withParallax * Plx, tmp, diffPos);
-		tmp.normalize();
-		if (core->getUseAberration())
+		s->getBinaryOrbit(jde, tmp);
+		if (withParallax != 0.)
 		{
-			const Vec3d vel = core->getAberrationVec(core->getJDE());
-			tmp+=vel;
+			s->getPlxEffect(withParallax * Plx, tmp, diffPos);
+			tmp.normalize();
+		}
+		if (withAberration)
+		{
+			tmp += vel;
 			tmp.normalize();
 		}
 		if (tmp * v >= cosLimFov)
 		{
-			// TODO: do not select stars that are too faint to display
-			result.push_back(s->createStelObject(this,z));
+			result.push_back(s->createStelObject(this, z));
 		}
 	}
 }
