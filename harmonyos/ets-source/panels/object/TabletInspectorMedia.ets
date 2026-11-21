@@ -118,9 +118,11 @@ export struct TabletInspectorModelBlock {
     Column({ space: 8 }) {
       Row({ space: 8 }) {
         Column({ space: 2 }) {
-          Text(this.store.objectInspectorProceduralKind === 'constellation-mesh'
-            ? I18n.t('model_constellation_3d')
-            : (this.store.objectInspectorProceduralKind.length > 0 ? I18n.t('model_schematic') : I18n.t('model_offline'))).fontSize(12).fontWeight(FontWeight.Medium)
+          Text(this.store.objectInspectorProceduralKind === 'body-mesh'
+            ? (this.store.objectInspectorMediaLabel.length > 0 ? this.store.objectInspectorMediaLabel : I18n.t('model_body_3d'))
+            : (this.store.objectInspectorProceduralKind === 'constellation-mesh'
+              ? I18n.t('model_constellation_3d')
+              : (this.store.objectInspectorProceduralKind.length > 0 ? I18n.t('model_schematic') : I18n.t('model_offline')))).fontSize(12).fontWeight(FontWeight.Medium)
             .fontColor(this.c.fourth).width('100%').maxLines(1).textOverflow({ overflow: TextOverflow.Ellipsis })
           Text(I18n.t('model_inline_gesture_hint'))
             .fontSize(11).fontColor(this.store.objectInspectorModelInteracting

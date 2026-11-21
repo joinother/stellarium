@@ -140,6 +140,9 @@ export class ObjectMediaStore {
     if (this.objectInspectorProceduralKind === 'constellation-mesh') {
       return modelDrag(modelIdentity(), -28, -12)
     }
+    if (this.objectInspectorProceduralKind === 'body-mesh') {
+      return modelDrag(modelIdentity(), -24, -18)
+    }
     return modelIdentity()
   }
 

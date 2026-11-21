@@ -324,6 +324,7 @@ export function pluginHostName(panel: string): string {
   if (panel === 'skyCultureMaker') return I18n.t('sky_culture_maker_title')
   if (panel === 'calendars') return I18n.getLanguage().startsWith('zh') ? '世界多历法' : 'World Calendars'
   if (panel === 'minorBodies') return I18n.getLanguage().startsWith('zh') ? '太阳系小天体' : 'Minor Bodies'
+  if (panel === 'nomenclature') return I18n.getLanguage().startsWith('zh') ? '行星地貌图集' : 'Planetary Nomenclature'
   return panel
 }
 
@@ -595,6 +596,9 @@ export function panelTitleFor(activePanel: string, configTab: number, isExpanded
   }
   if (activePanel === 'minorBodies') {
     return I18n.getLanguage().startsWith('zh') ? '太阳系小天体' : 'Minor Bodies'
+  }
+  if (activePanel === 'nomenclature') {
+    return I18n.getLanguage().startsWith('zh') ? '行星地貌图集' : 'Planetary Nomenclature'
   }
   if (activePanel === 'pointerCoordinates') {
     return I18n.t('p_pointer_coordinates')

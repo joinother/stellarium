@@ -83,6 +83,8 @@
 #include "../plugins/SolarSystemEditor/src/SolarSystemEditor.hpp"
 #include "StelScriptMgr.hpp"
 #include "SolarSystem.hpp"
+#include "NomenclatureMgr.hpp"
+#include "NomenclatureItem.hpp"
 #include "ConstellationMgr.hpp"
 #include "Constellation.hpp"
 #include "AsterismMgr.hpp"
@@ -3863,13 +3865,68 @@ QJsonObject objectDetailModelJson(const StelObjectP& object, const QJsonObject& 
 			viewToBody.append(bodyUp[axis]);
 			viewToBody.append(bodyObserver[axis]);
 		}
+		struct OhosBodyMeshEntry {
+			const char* key;
+			const char* tex;
+			const char* credit;
+		};
+		auto matchBodyMesh = [](const QString& en) -> const OhosBodyMeshEntry* {
+			static const OhosBodyMeshEntry kMeshes[] = {
+				{"halley",     "",                     "乔托号实测 3D 彗核"},
+				{"67p",        "",                     "罗塞塔号实测 3D 彗核"},
+				{"vesta",      "models/4vesta.png",    "黎明号实测 3D 地形模型"},
+				{"phobos",     "models/m1phobos.png",  "火星快车实测 3D 形态模型"},
+				{"deimos",     "models/m2deimos.png",  "火星探测实测 3D 形态模型"},
+				{"ida",        "models/243ida.png",    "伽利略号实测 3D 形态模型"},
+				{"gaspra",     "models/951gaspra.png", "伽利略号实测 3D 形态模型"},
+				{"amalthea",   "models/j5amalthea.png","伽利略号实测 3D 形态模型"},
+				{"hyperion",   "models/hyperion.png",  "卡西尼号实测 3D 形态模型"},
+				{"janus",      "models/s10janus.png",  "卡西尼号实测 3D 形态模型"},
+				{"epimetheus", "models/s11epimetheus.png", "卡西尼号实测 3D 形态模型"},
+				{"prometheus", "models/s16prometheus.png", "卡西尼号实测 3D 形态模型"},
+				{"pandora",    "",                     "卡西尼号实测 3D 形态模型"},
+				{"larissa",    "",                     "旅行者 2 号实测 3D 形态模型"},
+				{"proteus",    "models/n8proteus.png", "旅行者 2 号实测 3D 形态模型"},
+			};
+			const QString lower = en.trimmed().toLower();
+			if (lower.contains(QLatin1String("halley"))) return &kMeshes[0];
+			if (lower.contains(QLatin1String("churyumov-gerasimenko")) || lower.startsWith(QLatin1String("67p"))) return &kMeshes[1];
+			if (lower == QLatin1String("vesta") || lower.endsWith(QLatin1String(" vesta"))) return &kMeshes[2];
+			if (lower == QLatin1String("phobos")) return &kMeshes[3];
+			if (lower == QLatin1String("deimos")) return &kMeshes[4];
+			if (lower == QLatin1String("ida") || lower.endsWith(QLatin1String(" ida"))) return &kMeshes[5];
+			if (lower == QLatin1String("gaspra") || lower.endsWith(QLatin1String(" gaspra"))) return &kMeshes[6];
+			if (lower == QLatin1String("amalthea")) return &kMeshes[7];
+			if (lower == QLatin1String("hyperion")) return &kMeshes[8];
+			if (lower == QLatin1String("janus")) return &kMeshes[9];
+			if (lower == QLatin1String("epimetheus")) return &kMeshes[10];
+			if (lower == QLatin1String("prometheus")) return &kMeshes[11];
+			if (lower == QLatin1String("pandora")) return &kMeshes[12];
+			if (lower == QLatin1String("larissa")) return &kMeshes[13];
+			if (lower == QLatin1String("proteus")) return &kMeshes[14];
+			return nullptr;
+		};
+		const OhosBodyMeshEntry* bodyMesh = matchBodyMesh(planet->getEnglishName());
+		const QString sbmRelPath = bodyMesh
+			? QStringLiteral("models/ohos/%1.sbm").arg(QLatin1String(bodyMesh->key))
+			: QString();
+		const bool hasBodySbm = !sbmRelPath.isEmpty() && !StelFileMgr::findFile(sbmRelPath).isEmpty();
 		result["schemaVersion"] = 1;
 		result["state"] = "available";
-		result["format"] = "textured-sphere";
+		result["format"] = hasBodySbm ? QStringLiteral("sbm1") : QStringLiteral("textured-sphere");
 		result["assetKey"] = planet->getEnglishName();
+		if (hasBodySbm)
+		{
+			result["assetPath"] = sbmRelPath;
+			const QString texRel = QString::fromLatin1(bodyMesh->tex);
+			if (!texRel.isEmpty() && !StelFileMgr::findFile(texRel).isEmpty())
+				result["texturePath"] = texRel;
+		}
 		result["offline"] = true;
 		result["coordinateFrame"] = "texture-body; observer local zenith up";
-		result["source"] = "Stellarium ephemeris and planet rotation";
+		result["source"] = hasBodySbm
+			? QString::fromUtf8(bodyMesh->credit)
+			: QStringLiteral("Stellarium ephemeris and planet rotation");
 		result["lighting"] = QJsonObject{{"viewToBody", viewToBody},
 			{"sunDirectionBody", QJsonArray{bodySun[0], bodySun[1], bodySun[2]}},
 			{"jd", core->getJD()}, {"illuminatedFraction", (1. + observer.dot(sunlight)) * 0.5},
@@ -7749,6 +7806,23 @@ extern "C" __attribute__((visibility("default"))) const char* StellariumOhos_com
 								<< "name=" << pair.second->getEnglishName()
 								<< "id=" << pair.second->getID();
 						break;
+					}
+				}
+				if (!found && moduleId == QLatin1String("SolarSystem"))
+				{
+					const QString needle = objectId.section('/', -1).trimmed();
+					for (const auto& pair : objects)
+					{
+						if (!pair.second) continue;
+						const QString en = pair.second->getEnglishName();
+						if (en.contains(objectId, Qt::CaseInsensitive) ||
+						    (!needle.isEmpty() && needle.size() >= 4 && en.contains(needle, Qt::CaseInsensitive)))
+						{
+							found = objectMgr->setSelectedObject(pair.second);
+							query = en;
+							qInfo() << "[StellariumOhos][catalog-select] fuzzy-found=" << found << "name=" << en;
+							break;
+						}
 					}
 				}
 				if (!found)
@@ -16899,6 +16973,360 @@ extern "C" __attribute__((visibility("default"))) const char* StellariumOhos_com
 			}
 			result["ok"] = false;
 			result["error"] = "unknown minor bodies action: " + action;
+			return result;
+		}
+
+		// ========== Planetary Surface Nomenclature Atlas (3.8 MB IAU 行星表面地貌图集) ==========
+		if (commandName == "getPlanetaryNomenclature")
+		{
+			NomenclatureMgr* nMgr = GETSTELMODULE(NomenclatureMgr);
+			if (!nMgr)
+			{
+				result["ok"] = false;
+				result["error"] = "NomenclatureMgr module not loaded";
+				return result;
+			}
+			QJsonDocument doc = QJsonDocument::fromJson(arg.toUtf8());
+			QJsonObject jo = doc.isObject() ? doc.object() : QJsonObject();
+			const QString planetFilter = jo.value("planet").toString("Moon").trimmed();
+			const QString categoryFilter = jo.value("category").toString("all").trimmed().toLower();
+			const QString query = jo.value("query").toString().trimmed().toLower();
+			const int limit = qBound(10, jo.value("limit").toInt(80), 200);
+
+			auto classifyNomenclature = [](NomenclatureItem::NomenclatureItemType t) -> QString {
+				switch (t)
+				{
+					case NomenclatureItem::niCrater:
+					case NomenclatureItem::niSatelliteFeature:
+					case NomenclatureItem::niLargeRingedFeature:
+					case NomenclatureItem::niCatena:
+						return QStringLiteral("crater");
+					case NomenclatureItem::niMare:
+					case NomenclatureItem::niOceanus:
+					case NomenclatureItem::niLacus:
+					case NomenclatureItem::niPalus:
+					case NomenclatureItem::niSinus:
+					case NomenclatureItem::niPlanitia:
+					case NomenclatureItem::niPlanum:
+					case NomenclatureItem::niVastitas:
+					case NomenclatureItem::niTerra:
+					case NomenclatureItem::niRegio:
+						return QStringLiteral("mare");
+					case NomenclatureItem::niMons:
+					case NomenclatureItem::niTholus:
+					case NomenclatureItem::niDorsum:
+					case NomenclatureItem::niCollis:
+					case NomenclatureItem::niMensa:
+					case NomenclatureItem::niPromontorium:
+					case NomenclatureItem::niRupes:
+					case NomenclatureItem::niScopulus:
+					case NomenclatureItem::niPatera:
+					case NomenclatureItem::niEruptiveCenter:
+						return QStringLiteral("mons");
+					case NomenclatureItem::niVallis:
+					case NomenclatureItem::niRima:
+					case NomenclatureItem::niChasma:
+					case NomenclatureItem::niFossa:
+					case NomenclatureItem::niSulcus:
+					case NomenclatureItem::niLinea:
+					case NomenclatureItem::niLabyrinthus:
+					case NomenclatureItem::niChaos:
+						return QStringLiteral("vallis");
+					case NomenclatureItem::niLandingSite:
+						return QStringLiteral("landing");
+					default:
+						return QStringLiteral("other");
+				}
+			};
+
+			struct BodyStat {
+				QString englishName;
+				QString localizedName;
+				int count = 0;
+			};
+			QHash<QString, BodyStat> bodyStats;
+			QList<NomenclatureItemP> matched;
+			int totalAllFeatures = 0;
+			int planetFeatureTotal = 0;
+			QHash<QString, int> catCounts;
+			const auto& allItems = nMgr->getAllNomenclatureItems();
+			for (const auto& item : allItems)
+			{
+				if (!item) continue;
+				const NomenclatureItem::NomenclatureItemType nt = item->getNomenclatureType();
+				if (nt == NomenclatureItem::niUNDEFINED || nt >= NomenclatureItem::niSpecialPointPole) continue;
+				const PlanetP p = item->getPlanet();
+				if (!p) continue;
+				totalAllFeatures++;
+				const QString pEn = p->getEnglishName();
+				auto& bs = bodyStats[pEn];
+				if (bs.englishName.isEmpty())
+				{
+					bs.englishName = pEn;
+					bs.localizedName = p->getNameI18n();
+				}
+				bs.count++;
+
+				if (!planetFilter.isEmpty() && planetFilter.compare(QLatin1String("all"), Qt::CaseInsensitive) != 0 &&
+				    pEn.compare(planetFilter, Qt::CaseInsensitive) != 0)
+					continue;
+
+				planetFeatureTotal++;
+				const QString cat = classifyNomenclature(nt);
+				catCounts[cat] = catCounts.value(cat, 0) + 1;
+
+				if (!categoryFilter.isEmpty() && categoryFilter != QLatin1String("all") && cat != categoryFilter)
+					continue;
+				if (!query.isEmpty())
+				{
+					const QString rawI18n = item->getRawNameI18n().toLower();
+					const QString rawEn = item->getRawEnglishName().toLower();
+					const QString orig = item->getOriginI18n().toLower();
+					if (!rawI18n.contains(query) && !rawEn.contains(query) && !orig.contains(query))
+						continue;
+				}
+				matched.append(item);
+			}
+
+			// 精选地标：优先展示大型主环形山/月海/火山/着陆点（卫星字母坑排后），按直径从大到小排序
+			std::sort(matched.begin(), matched.end(), [](const NomenclatureItemP& a, const NomenclatureItemP& b) {
+				const bool aSat = (a->getNomenclatureType() == NomenclatureItem::niSatelliteFeature);
+				const bool bSat = (b->getNomenclatureType() == NomenclatureItem::niSatelliteFeature);
+				if (aSat != bSat) return !aSat;
+				const bool aLand = (a->getNomenclatureType() == NomenclatureItem::niLandingSite);
+				const bool bLand = (b->getNomenclatureType() == NomenclatureItem::niLandingSite);
+				if (aLand != bLand) return aLand;
+				return a->getSize() > b->getSize();
+			});
+
+			// 组装按地貌数量排序的行星列表（月球、火星等排前）
+			QList<BodyStat> sortedBodies = bodyStats.values();
+			std::sort(sortedBodies.begin(), sortedBodies.end(), [](const BodyStat& a, const BodyStat& b) {
+				return a.count > b.count;
+			});
+			QJsonArray bodiesArr;
+			for (const auto& bs : sortedBodies)
+			{
+				bodiesArr.append(QJsonObject{
+					{"englishName", bs.englishName},
+					{"name", bs.localizedName},
+					{"count", bs.count}
+				});
+			}
+
+			// 为热门天体提供精选一键飞抵地标
+			QHash<QString, QStringList> curatedByBody;
+			curatedByBody[QStringLiteral("Moon")] = {
+				QStringLiteral("Tycho"), QStringLiteral("Copernicus"), QStringLiteral("Clavius"),
+				QStringLiteral("Plato"), QStringLiteral("Mare Tranquillitatis"), QStringLiteral("Mare Imbrium"),
+				QStringLiteral("Oceanus Procellarum"), QStringLiteral("Statio Tianhe"),
+				QStringLiteral("Statio Tranquillitatis"), QStringLiteral("Kepler")
+			};
+			curatedByBody[QStringLiteral("Mars")] = {
+				QStringLiteral("Olympus Mons"), QStringLiteral("Valles Marineris"), QStringLiteral("Gale"),
+				QStringLiteral("Jezero"), QStringLiteral("Utopia Planitia"), QStringLiteral("Hellas Planitia"),
+				QStringLiteral("Syrtis Major Planum"), QStringLiteral("Tharsis Montes")
+			};
+			curatedByBody[QStringLiteral("Mercury")] = {
+				QStringLiteral("Caloris Planitia"), QStringLiteral("Rembrandt"), QStringLiteral("Beethoven"), QStringLiteral("Kuiper")
+			};
+			curatedByBody[QStringLiteral("Venus")] = {
+				QStringLiteral("Maxwell Montes"), QStringLiteral("Ishtar Terra"), QStringLiteral("Aphrodite Terra"), QStringLiteral("Mead")
+			};
+			curatedByBody[QStringLiteral("Vesta")] = {
+				QStringLiteral("Rheasilvia"), QStringLiteral("Veneneia"), QStringLiteral("Marcia")
+			};
+			curatedByBody[QStringLiteral("Ceres")] = {
+				QStringLiteral("Occator"), QStringLiteral("Ahuna Mons"), QStringLiteral("Kerwan")
+			};
+			curatedByBody[QStringLiteral("Phobos")] = {
+				QStringLiteral("Stickney"), QStringLiteral("Hall"), QStringLiteral("Roche")
+			};
+			curatedByBody[QStringLiteral("Pluto")] = {
+				QStringLiteral("Sputnik Planitia"), QStringLiteral("Tombaugh Regio"), QStringLiteral("Norgay Montes")
+			};
+
+			auto serializeFeature = [&](const NomenclatureItemP& it) -> QJsonObject {
+				const PlanetP p = it->getPlanet();
+				return QJsonObject{
+					{"id", it->getID()},
+					{"name", it->getRawNameI18n()},
+					{"englishName", it->getRawEnglishName()},
+					{"fullName", it->getNameI18n()},
+					{"planet", p ? p->getEnglishName() : QString()},
+					{"planetName", p ? p->getNameI18n() : QString()},
+					{"category", classifyNomenclature(it->getNomenclatureType())},
+					{"typeLabel", it->getObjectTypeI18n()},
+					{"latitude", static_cast<double>(it->getLatitude())},
+					{"longitude", static_cast<double>(it->getLongitude())},
+					{"sizeKm", it->getSize()},
+					{"origin", it->getOriginI18n()}
+				};
+			};
+
+			QJsonArray featuredArr;
+			const QStringList curatedKeys = curatedByBody.value(planetFilter);
+			if (!curatedKeys.isEmpty())
+			{
+				for (const QString& wanted : curatedKeys)
+				{
+					for (const auto& it : allItems)
+					{
+						if (!it || !it->getPlanet()) continue;
+						if (it->getPlanet()->getEnglishName().compare(planetFilter, Qt::CaseInsensitive) != 0) continue;
+						if (it->getRawEnglishName().compare(wanted, Qt::CaseInsensitive) == 0)
+						{
+							featuredArr.append(serializeFeature(it));
+							break;
+						}
+					}
+				}
+			}
+
+			QJsonArray itemsArr;
+			const int take = qMin(limit, matched.size());
+			for (int i = 0; i < take; ++i)
+			{
+				itemsArr.append(serializeFeature(matched[i]));
+			}
+
+			result["ok"] = true;
+			result["planet"] = planetFilter;
+			result["totalAllFeatures"] = totalAllFeatures;
+			result["planetFeatureTotal"] = planetFeatureTotal;
+			result["matchedCount"] = matched.size();
+			result["showLabels"] = nMgr->getFlagShowNomenclature();
+			result["outlineCraters"] = nMgr->getFlagOutlineCraters();
+			result["terminatorOnly"] = nMgr->getFlagShowTerminatorZoneOnly();
+			result["hideLocal"] = nMgr->getFlagHideLocalNomenclature();
+			result["counts"] = QJsonObject{
+				{"crater", catCounts.value("crater", 0)},
+				{"mare", catCounts.value("mare", 0)},
+				{"mons", catCounts.value("mons", 0)},
+				{"vallis", catCounts.value("vallis", 0)},
+				{"landing", catCounts.value("landing", 0)}
+			};
+			result["bodies"] = bodiesArr;
+			result["featured"] = featuredArr;
+			result["items"] = itemsArr;
+			return result;
+		}
+		if (commandName == "flyToNomenclature")
+		{
+			NomenclatureMgr* nMgr = GETSTELMODULE(NomenclatureMgr);
+			StelObjectMgr* objMgr = GETSTELMODULE(StelObjectMgr);
+			StelMovementMgr* mvMgr = GETSTELMODULE(StelMovementMgr);
+			if (!nMgr || !objMgr || !mvMgr || !core)
+			{
+				result["ok"] = false;
+				result["error"] = "Nomenclature or movement module unavailable";
+				return result;
+			}
+			QJsonDocument doc = QJsonDocument::fromJson(arg.toUtf8());
+			QJsonObject jo = doc.isObject() ? doc.object() : QJsonObject();
+			const QString planetName = jo.value("planet").toString().trimmed();
+			const QString featureId = jo.value("id").toString().trimmed();
+			const QString englishName = jo.value("englishName").toString().trimmed();
+
+			NomenclatureItemP target;
+			const auto& allItems = nMgr->getAllNomenclatureItems();
+			for (const auto& it : allItems)
+			{
+				if (!it || !it->getPlanet()) continue;
+				if (!planetName.isEmpty() && it->getPlanet()->getEnglishName().compare(planetName, Qt::CaseInsensitive) != 0)
+					continue;
+				if (!featureId.isEmpty() && it->getID() == featureId)
+				{
+					target = it;
+					break;
+				}
+				if (!englishName.isEmpty() &&
+				    (it->getRawEnglishName().compare(englishName, Qt::CaseInsensitive) == 0 ||
+				     it->getEnglishName().compare(englishName, Qt::CaseInsensitive) == 0))
+				{
+					target = it;
+					break;
+				}
+			}
+			if (!target)
+			{
+				result["ok"] = false;
+				result["error"] = QStringLiteral("未找到指定行星地貌");
+				return result;
+			}
+
+			// 自动开启行星地貌标注与环形山轮廓，使飞抵目标后立即可见清晰的地貌标绘
+			nMgr->setFlagShowNomenclature(true);
+			nMgr->setFlagOutlineCraters(true);
+			const PlanetP parentPlanet = target->getPlanet();
+			if (parentPlanet && core->getCurrentPlanet() &&
+			    core->getCurrentPlanet()->getEnglishName() == parentPlanet->getEnglishName())
+			{
+				nMgr->setFlagHideLocalNomenclature(false);
+			}
+
+			objMgr->setSelectedObject(qSharedPointerCast<StelObject>(target), StelModule::ReplaceSelection);
+			mvMgr->setFlagTracking(true);
+			mvMgr->moveToObject(qSharedPointerCast<StelObject>(target), 0.9f);
+
+			const double planetAngDiamDeg = parentPlanet ? (parentPlanet->getAngularRadius(core) * 2.0) : 0.5;
+			const double featAngDiamDeg = target->getAngularRadius(core) * 2.0;
+			double targetFov = 0.35;
+			if (planetAngDiamDeg > 1e-6)
+			{
+				const double desiredFromFeature = featAngDiamDeg > 1e-6 ? (featAngDiamDeg * 5.5) : (planetAngDiamDeg * 0.65);
+				const double minFov = qMax(0.0008, planetAngDiamDeg * 0.16);
+				const double maxFov = qMin(4.0, qMax(minFov * 1.5, planetAngDiamDeg * 1.85));
+				targetFov = qBound(minFov, desiredFromFeature, maxFov);
+			}
+			mvMgr->zoomTo(targetFov, 1.0f);
+
+			bool belowHorizon = false;
+			if (parentPlanet)
+			{
+				const Vec3d altAz = parentPlanet->getAltAzPosAuto(core);
+				double az = 0.0, alt = 0.0;
+				StelUtils::rectToSphe(&az, &alt, altAz);
+				belowHorizon = (alt < 0.0);
+			}
+
+			result["ok"] = true;
+			result["name"] = target->getRawNameI18n();
+			result["englishName"] = target->getRawEnglishName();
+			result["planet"] = parentPlanet ? parentPlanet->getEnglishName() : QString();
+			result["planetName"] = parentPlanet ? parentPlanet->getNameI18n() : QString();
+			result["targetFov"] = targetFov;
+			result["belowHorizon"] = belowHorizon;
+			return result;
+		}
+		if (commandName == "setNomenclatureSetting")
+		{
+			NomenclatureMgr* nMgr = GETSTELMODULE(NomenclatureMgr);
+			if (!nMgr)
+			{
+				result["ok"] = false;
+				result["error"] = "NomenclatureMgr module not loaded";
+				return result;
+			}
+			QJsonDocument doc = QJsonDocument::fromJson(arg.toUtf8());
+			QJsonObject jo = doc.isObject() ? doc.object() : QJsonObject();
+			const QString setting = jo.value("setting").toString().trimmed();
+			const bool value = jo.value("value").toBool(false);
+			if (setting == "showLabels") nMgr->setFlagShowNomenclature(value);
+			else if (setting == "outlineCraters") nMgr->setFlagOutlineCraters(value);
+			else if (setting == "terminatorOnly") nMgr->setFlagShowTerminatorZoneOnly(value);
+			else if (setting == "hideLocal") nMgr->setFlagHideLocalNomenclature(value);
+			else
+			{
+				result["ok"] = false;
+				result["error"] = "unknown nomenclature setting: " + setting;
+				return result;
+			}
+			result["ok"] = true;
+			result["showLabels"] = nMgr->getFlagShowNomenclature();
+			result["outlineCraters"] = nMgr->getFlagOutlineCraters();
+			result["terminatorOnly"] = nMgr->getFlagShowTerminatorZoneOnly();
+			result["hideLocal"] = nMgr->getFlagHideLocalNomenclature();
 			return result;
 		}
 

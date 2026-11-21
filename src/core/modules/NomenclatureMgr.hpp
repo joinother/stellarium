@@ -78,6 +78,8 @@ public:
 
 	QVector<QPair<QString,StelObjectP>> listAllObjects(bool inEnglish) const override;
 	QVector<QPair<QString,StelObjectP>> listAllObjectsByType(const QString& objType, bool inEnglish) const override;
+	//! Direct read-only access to all loaded nomenclature items regardless of current label visibility flag.
+	const QMultiHash<PlanetP, NomenclatureItemP>& getAllNomenclatureItems() const { return nomenclatureItems; }
 	QString getName() const override { return "Geological features"; }
 	QString getStelObjectType() const override { return NomenclatureItem::NOMENCLATURE_TYPE; }
 

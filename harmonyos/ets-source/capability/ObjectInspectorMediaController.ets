@@ -210,33 +210,45 @@ export class ObjectInspectorMediaController {
   }
 
   refreshObjectInspectorMedia(): void {
-    const planetTexturePath = objectInspectorPlanetTexturePath(this.detailStore.selectedEnglishName)
-    const fallbackKind = objectInspectorFallbackVisualKind(this.detailStore.selectedObjectType, this.detailStore.selectedType)
     const detailModel = this.detailStore.selectedDetailModel
-    const constellationScmRelPath = planetTexturePath.length === 0 &&
+    const bodySbmRelPath = detailModel !== undefined && detailModel.state === 'available' &&
+      detailModel.format === 'sbm1' && detailModel.assetPath !== undefined && detailModel.assetPath.length > 0
+      ? detailModel.assetPath : ''
+    const bodySbmFilePath = bodySbmRelPath.length > 0
+      ? this.objectInspectorFilePath(bodySbmRelPath) : ''
+    const hasBodyMesh = bodySbmFilePath.length > 0 && this.mediaPort.readBinaryFile !== undefined
+    const bodyMeshTexRelPath = hasBodyMesh && detailModel?.texturePath !== undefined && detailModel.texturePath.length > 0
+      ? detailModel.texturePath : ''
+    const planetTexturePath = hasBodyMesh ? '' : objectInspectorPlanetTexturePath(this.detailStore.selectedEnglishName)
+    const fallbackKind = objectInspectorFallbackVisualKind(this.detailStore.selectedObjectType, this.detailStore.selectedType)
+    const constellationScmRelPath = !hasBodyMesh && planetTexturePath.length === 0 &&
       detailModel !== undefined && detailModel.state === 'available' &&
       detailModel.format === 'scm1' && detailModel.assetPath !== undefined && detailModel.assetPath.length > 0
       ? detailModel.assetPath : ''
     const constellationScmFilePath = constellationScmRelPath.length > 0
       ? this.objectInspectorFilePath(constellationScmRelPath) : ''
     const hasConstellationMesh = constellationScmFilePath.length > 0 && this.mediaPort.readBinaryFile !== undefined
-    const deepSkyImageName = planetTexturePath.length === 0 && !hasConstellationMesh &&
+    const deepSkyImageName = !hasBodyMesh && planetTexturePath.length === 0 && !hasConstellationMesh &&
       this.detailStore.selectedDetailMediaPath.length === 0
       ? objectInspectorDeepSkyImageName(fallbackKind, this.detailStore.objectInspectorSearchText())
       : ''
-    const requestedPath = planetTexturePath.length > 0
-      ? planetTexturePath
+    const requestedPath = hasBodyMesh
+      ? bodySbmRelPath
+      : (planetTexturePath.length > 0
+        ? planetTexturePath
+        : (hasConstellationMesh
+          ? constellationScmRelPath
+          : (this.detailStore.selectedDetailMediaPath.length > 0
+            ? this.detailStore.selectedDetailMediaPath
+            : (deepSkyImageName.length > 0 ? 'nebulae/default/' + deepSkyImageName : ''))))
+    const proceduralKind = hasBodyMesh
+      ? 'body-mesh'
       : (hasConstellationMesh
-        ? constellationScmRelPath
-        : (this.detailStore.selectedDetailMediaPath.length > 0
-          ? this.detailStore.selectedDetailMediaPath
-          : (deepSkyImageName.length > 0 ? 'nebulae/default/' + deepSkyImageName : '')))
-    const proceduralKind = hasConstellationMesh
-      ? 'constellation-mesh'
-      : (requestedPath.length === 0 || (planetTexturePath.length === 0 &&
-        this.objectInspectorMediaResolutionComplete && this.objectInspectorMediaResolvedRequestPath === requestedPath &&
-        this.objectInspectorMediaResolvedPath.length === 0)
-        ? proceduralModelKind(this.detailStore.selectedObjectType + ' ' + this.detailStore.selectedType) : '')
+        ? 'constellation-mesh'
+        : (requestedPath.length === 0 || (planetTexturePath.length === 0 &&
+          this.objectInspectorMediaResolutionComplete && this.objectInspectorMediaResolvedRequestPath === requestedPath &&
+          this.objectInspectorMediaResolvedPath.length === 0)
+          ? proceduralModelKind(this.detailStore.selectedObjectType + ' ' + this.detailStore.selectedType) : ''))
     const proceduralKey = proceduralKind.length > 0
       ? [proceduralKind, this.detailStore.selectedCatalogId, this.detailStore.selectedEnglishName, this.detailStore.selectedTemperatureK.toString()].join('|') : ''
     if (this.objectInspectorMediaResolvedRequestPath !== requestedPath) {
@@ -250,15 +262,15 @@ export class ObjectInspectorMediaController {
       : requestedPath
     const filePath = resolvedPath.length > 0 ? this.objectInspectorFilePath(resolvedPath) : ''
     const path = filePath.length > 0 ? this.hooks.pathToUri(filePath) : ''
-    const kind = planetTexturePath.length > 0 || proceduralKind.length > 0
+    const kind = hasBodyMesh || planetTexturePath.length > 0 || proceduralKind.length > 0
       ? 'model'
       : (this.detailStore.selectedDetailMediaPath.length > 0
         ? (this.detailStore.selectedDetailMediaKind === 'image' ? 'image' : 'constellation')
         : (deepSkyImageName.length > 0 ? 'image' : 'visual'))
-    const modelRawFilePath = kind === 'model' && !hasConstellationMesh && resolvedPath.length > 0
+    const modelRawFilePath = kind === 'model' && !hasConstellationMesh && !hasBodyMesh && resolvedPath.length > 0
       ? this.objectInspectorFilePath(resolvedPath + '.model.rgba')
       : ''
-    const ringSpec = kind === 'model' && !hasConstellationMesh ? objectInspectorPlanetRingSpec(this.detailStore.selectedEnglishName) : undefined
+    const ringSpec = kind === 'model' && !hasConstellationMesh && !hasBodyMesh ? objectInspectorPlanetRingSpec(this.detailStore.selectedEnglishName) : undefined
     const ringRawFilePath = ringSpec === undefined
       ? ''
       : this.objectInspectorFilePath(ringSpec.texturePath + '.model.rgba')
@@ -287,9 +299,11 @@ export class ObjectInspectorMediaController {
     this.mediaStore.objectInspectorMediaKind = kind
     this.mediaStore.objectInspectorProceduralKind = proceduralKind
     this.objectInspectorProceduralKey = proceduralKey
-    this.objectInspectorProceduralParticles = hasConstellationMesh ? [] : proceduralParticles(proceduralKind, proceduralKey)
+    this.objectInspectorProceduralParticles = (hasConstellationMesh || hasBodyMesh) ? [] : proceduralParticles(proceduralKind, proceduralKey)
     this.mediaStore.objectInspectorMediaLabel = kind === 'model'
-      ? (hasConstellationMesh ? I18n.t('model_constellation_3d') : (proceduralKind.length > 0 ? I18n.t('model_schematic') : I18n.t('model_offline')))
+      ? (hasBodyMesh
+        ? (detailModel?.source !== undefined && detailModel.source.length > 0 ? detailModel.source : '真实 3D 形态模型')
+        : (hasConstellationMesh ? I18n.t('model_constellation_3d') : (proceduralKind.length > 0 ? I18n.t('model_schematic') : I18n.t('model_offline'))))
       : (kind === 'constellation'
         ? this.detailStore.selectedDetailMediaLabel
         : (kind === 'image'
@@ -308,6 +322,28 @@ export class ObjectInspectorMediaController {
     this.mediaStore.objectInspectorMediaNoMatch = false
     this.updateObjectInspectorMediaWarmup(kind)
     this.objectInspectorMediaRequestPath = this.mediaStore.objectInspectorMediaLoading ? requestedPath : ''
+    if (hasBodyMesh) {
+      const expectedSelection = this.detailStore.selectedName + '\n' + this.detailStore.selectedEnglishName + '\n' + this.detailStore.selectedCatalogId
+      const generation = this.objectInspectorMediaDecodeGeneration
+      try {
+        const meshBytes = this.mediaPort.readBinaryFile!(bodySbmFilePath, 2400000, 'minor-body 3D mesh')
+        let texBytes: ArrayBuffer | undefined = undefined
+        if (bodyMeshTexRelPath.length > 0) {
+          const texRawPath = this.objectInspectorFilePath(bodyMeshTexRelPath + '.model.rgba')
+          if (texRawPath.length > 0) {
+            try {
+              texBytes = this.mediaPort.readBinaryFile!(texRawPath, 512 * 256 * 4 + 64, 'minor-body 3D albedo')
+            } catch (_texErr) {
+              texBytes = undefined
+            }
+          }
+        }
+        this.hooks.objectModelRenderer().commitObjectInspectorBodyMeshData(meshBytes, texBytes, generation, expectedSelection, path)
+      } catch (err) {
+        this.hooks.objectModelRenderer().failObjectInspectorModelTexture(generation, describeDecodeError(err as Error))
+      }
+      return
+    }
     if (hasConstellationMesh) {
       const expectedSelection = this.detailStore.selectedName + '\n' + this.detailStore.selectedEnglishName + '\n' + this.detailStore.selectedCatalogId
       const generation = this.objectInspectorMediaDecodeGeneration

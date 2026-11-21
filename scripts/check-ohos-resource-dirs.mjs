@@ -27,7 +27,6 @@ const NON_DATA_DIRS = new Map([
   ['plugins', '插件源码与资源，编译进库'],
   ['doc', '文档，不随包分发'],
   ['po', '翻译源文件，构建期由 build-ohos-official-translations.mjs 生成 .qm'],
-  ['models', '3D 模型源文件，构建期处理后进入 textures/'],
   ['cmake', 'CMake 模块'],
 ])
 

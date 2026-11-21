@@ -86,6 +86,9 @@ function isApprovedDetailMediaPath(relativePath: string): boolean {
   if (DETAIL_MEDIA_TEXTURE_PATH.test(relativePath) || DETAIL_MEDIA_NEBULA_PATH.test(relativePath)) {
     return true;
   }
+  if (/^models\/(?:ohos\/)?[A-Za-z0-9_.-]+\.(?:sbm|png|png\.model\.rgba)$/.test(relativePath)) {
+    return true;
+  }
   if (!relativePath.startsWith('skycultures/')) {
     return false;
   }
@@ -402,6 +405,23 @@ async function refreshDetailModelTextures(
   writeMarker(markerPath);
   hilog.info(LOG_DOMAIN, LOG_TAG,
     `[startup] detail-model textures ready in ${Date.now() - startedAt} ms`);
+}
+
+async function refreshMinorBodyModels(
+  appContext: common.ApplicationContext,
+  installRoot: string,
+): Promise<void> {
+  const modelsRoot = `${installRoot}/models`;
+  const markerPath = `${modelsRoot}/.minor_models_v1`;
+  if (exists(markerPath) && exists(`${modelsRoot}/ohos/manifest.json`) && exists(`${modelsRoot}/4vesta_21_MLfix.obj`)) {
+    return;
+  }
+  const startedAt = Date.now();
+  hilog.info(LOG_DOMAIN, LOG_TAG, '[startup] installing 3D minor-body OBJ/SBM1 models');
+  await extractRawTreeAsync(appContext, `${RAW_ROOT}/models`, modelsRoot);
+  writeMarker(markerPath);
+  hilog.info(LOG_DOMAIN, LOG_TAG,
+    `[startup] 3D minor-body models ready in ${Date.now() - startedAt} ms`);
 }
 
 // Listing a raw path succeeds only for directories and the resource manager has no
@@ -1060,6 +1080,12 @@ export async function prepareStellariumResources(appContext: common.ApplicationC
     await refreshDetailModelTextures(appContext, installRoot);
   } catch (err) {
     hilog.error(LOG_DOMAIN, LOG_TAG, `Failed to refresh detail-model textures: ${JSON.stringify(err)}`);
+  }
+
+  try {
+    await refreshMinorBodyModels(appContext, installRoot);
+  } catch (err) {
+    hilog.error(LOG_DOMAIN, LOG_TAG, `Failed to refresh 3D minor-body models: ${JSON.stringify(err)}`);
   }
 
   // On API 24, Qt can locate default_cfg.ini but QFile::copy() fails when it

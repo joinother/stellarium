@@ -57,7 +57,8 @@ inline QStringList names()
 			"saveSkyCultureMakerDraft,resetSkyCultureMakerDraft,addSkyCultureMakerConstellation,updateSkyCultureMakerConstellation,removeSkyCultureMakerConstellation,"
 			"addSkyCultureMakerLine,addSkyCultureMakerSelectedStar,importSkyCultureMakerArtwork,setSkyCultureMakerArtworkAnchor,removeSkyCultureMakerArtwork,"
 			"undoSkyCultureMakerEdit,validateSkyCultureMakerDraft,exportSkyCultureMaker,importSkyCultureMaker,"
-			"getCalendarsData,setCalendarSetting,getMinorBodies,importMinorBodies").split(',');
+			"getCalendarsData,setCalendarSetting,getMinorBodies,importMinorBodies,"
+			"getPlanetaryNomenclature,flyToNomenclature,setNomenclatureSetting").split(',');
 }
 
 inline QString categoryFor(const QString& name)
@@ -377,6 +378,21 @@ inline QJsonObject item(const QString& name)
 	{
 		value["description"] = QStringLiteral("离线管理太阳系小天体目录：一键导入内置千颗彗星库、解析 MPC 单行轨道根数、移除自定义小天体或恢复默认目录");
 		value["examplePayload"] = "{\"action\":\"importBundledComets\"}";
+	}
+	else if (name == "getPlanetaryNomenclature")
+	{
+		value["description"] = QStringLiteral("离线检索随包 16,000+ IAU 行星表面地貌（月球、火星、水星、金星、谷神星、灶神星、火卫一及木土冥卫星等环形山、月海、火山、峡谷与着陆点）");
+		value["examplePayload"] = "{\"planet\":\"Moon\",\"category\":\"all\",\"query\":\"\",\"limit\":80}";
+	}
+	else if (name == "flyToNomenclature")
+	{
+		value["description"] = QStringLiteral("一键飞抵指定行星表面地貌（自动开启地貌标注与环形山轮廓并缩放至合适望远镜视场）");
+		value["examplePayload"] = "{\"planet\":\"Moon\",\"englishName\":\"Tycho\"}";
+	}
+	else if (name == "setNomenclatureSetting")
+	{
+		value["description"] = QStringLiteral("设置行星表面地貌标注选项（showLabels、outlineCraters、terminatorOnly、hideLocal）");
+		value["examplePayload"] = "{\"setting\":\"outlineCraters\",\"value\":true}";
 	}
 	else if (name == "setPolarScopeOverlay")
 	{

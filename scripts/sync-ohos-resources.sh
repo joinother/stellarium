@@ -50,7 +50,17 @@ node "$SCRIPT_DIR/build-ohos-multilingual-search-index.mjs"
 # it, StelScriptMgr::getScriptList() finds nothing and the Scripts panel is empty.
 # atmosphere/ 是 26.x 新增的物理大气散射模型（params.atmo + .f32 LUT），
 # 缺它时 flag_atmosphere 仍为 true 但天空渲染成全黑（地景和太阳照常显示）。
-DIRS=(data textures landscapes nebulae stars translations skycultures scenery3d scripts atmosphere)
+DIRS=(data textures landscapes nebulae stars translations skycultures scenery3d scripts atmosphere models)
+
+# Runtime 3D spacecraft models for minor bodies & irregular moons (OBJ/MTL/PNG).
+# Exclude Blender authoring files, CMakeLists.txt, and the 7z archive.
+MODELS_INCLUDES=(
+  --include='*.obj'
+  --include='*.obj.gz'
+  --include='*.mtl'
+  --include='*.png'
+  --exclude='*'
+)
 
 # Non-culture files living directly inside skycultures/ (CMake scaffolding).
 # They must not be copied into the rawfile (they would be treated as junk).
@@ -93,6 +103,9 @@ for d in "${DIRS[@]}"; do
     rsync -a --delete --delete-excluded "${NEBULAE_INCLUDES[@]}" "$SRC/" "$DST/$d/"
   elif [ "$d" = "scripts" ]; then
     rsync -a --delete --delete-excluded --no-r --dirs "${SCRIPT_INCLUDES[@]}" "$SRC/" "$DST/$d/"
+  elif [ "$d" = "models" ]; then
+    rsync -a --delete --delete-excluded --no-r --dirs "${MODELS_INCLUDES[@]}" "$SRC/" "$DST/$d/"
+    node "$SCRIPT_DIR/build-ohos-minor-body-meshes.mjs" --out "$DST/models/ohos"
   else
     rsync -a --delete "$SRC/" "$DST/$d/"
   fi
@@ -141,6 +154,16 @@ if [ -n "$FFMPEG_BIN" ]; then
     model_texture_count=$((model_texture_count + 1))
   done
   echo "Detail-model CPU textures: generated $model_texture_count RGBA sidecar file(s)"
+
+  minor_model_tex_count=0
+  for model_png in "$DST"/models/*.png; do
+    [ -f "$model_png" ] || continue
+    "$FFMPEG_BIN" -hide_banner -loglevel error -y -i "$model_png" \
+      -vf 'scale=512:256:flags=lanczos,format=rgba' -frames:v 1 -pix_fmt rgba -f rawvideo \
+      "${model_png}.model.rgba"
+    minor_model_tex_count=$((minor_model_tex_count + 1))
+  done
+  echo "Minor-body 3D textures: generated $minor_model_tex_count RGBA sidecar file(s)"
 
   RING_TEXTURES=(saturn_rings_radial.png uranus_rings.png neptune_rings.png)
   ring_texture_count=0

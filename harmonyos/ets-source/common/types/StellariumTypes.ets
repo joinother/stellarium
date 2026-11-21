@@ -324,6 +324,7 @@ export interface ObjectDetailModel {
   format: string
   assetKey: string
   assetPath?: string
+  texturePath?: string
   registryPath?: string
   fallbackMediaPath?: string
   coordinateFrame?: string
@@ -915,6 +916,37 @@ export interface StellariumBridgeResponse {
   importedName?: string
   importedCount?: number
   totalParsed?: number
+  totalAllFeatures?: number
+  planetFeatureTotal?: number
+  showLabels?: boolean
+  outlineCraters?: boolean
+  terminatorOnly?: boolean
+  hideLocal?: boolean
+  bodies?: PlanetaryNomenclatureBody[]
+  featured?: PlanetaryNomenclatureItem[]
+  targetFov?: number
+  belowHorizon?: boolean
+}
+
+export interface PlanetaryNomenclatureBody {
+  englishName: string
+  name: string
+  count: number
+}
+
+export interface PlanetaryNomenclatureItem {
+  id: string
+  name: string
+  englishName: string
+  fullName?: string
+  planet: string
+  planetName: string
+  category: string
+  typeLabel: string
+  latitude: number
+  longitude: number
+  sizeKm: number
+  origin: string
 }
 
 export interface CalendarRowItem {

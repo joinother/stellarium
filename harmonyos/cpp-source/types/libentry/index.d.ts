@@ -38,3 +38,17 @@ export const renderDetailModelConstellation: (
   scale: number,
   transform: number[],
 ) => ArrayBuffer | undefined;
+export const renderDetailModelBodyMesh: (
+  sbmBuffer: ArrayBuffer,
+  texture: ArrayBuffer | undefined,
+  textureWidth: number,
+  textureHeight: number,
+  textureStride: number,
+  renderSize: number,
+  scale: number,
+  transform: number[],
+  hasLighting: boolean,
+  lightX: number,
+  lightY: number,
+  lightZ: number,
+) => ArrayBuffer | undefined;

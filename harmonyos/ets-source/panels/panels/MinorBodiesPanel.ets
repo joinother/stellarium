@@ -16,6 +16,23 @@ interface MinorCatTab {
   label: string
 }
 
+interface Real3dBodyShowcase {
+  key: string
+  label: string
+  searchName: string
+}
+
+const REAL_3D_BODY_SHOWCASE: Real3dBodyShowcase[] = [
+  { key: 'vesta', label: '灶神星 Vesta', searchName: 'Vesta' },
+  { key: 'phobos', label: '火卫一 Phobos', searchName: 'Phobos' },
+  { key: 'deimos', label: '火卫二 Deimos', searchName: 'Deimos' },
+  { key: 'halley', label: '哈雷彗星', searchName: '1P/Halley (1986)' },
+  { key: '67p', label: '67P 彗星', searchName: '67P/Churyumov-Gerasimenko' },
+  { key: 'ida', label: '爱达 243 Ida', searchName: 'Ida' },
+  { key: 'gaspra', label: '加斯普拉 951', searchName: 'Gaspra' },
+  { key: 'hyperion', label: '土卫七 Hyperion', searchName: 'Hyperion' }
+]
+
 const MINOR_CATS: MinorCatTab[] = [
   { id: 'all', label: '全部' },
   { id: 'comet', label: '彗星' },
@@ -37,6 +54,7 @@ export struct MinorBodiesPanel {
   @State private mpcLineText: string = ''
 
   onLocateObject: (englishName: string) => void = () => {}
+  onInspect3dModel: (englishName: string) => void = () => {}
 
   onWillApplyTheme(theme: Theme): void {
     this.c = slotsFromTheme(theme)
@@ -114,6 +132,49 @@ export struct MinorBodiesPanel {
           .clickEffect({ level: ClickEffectLevel.LIGHT })
           .onClick(() => { this.store.load() })
       }.width('100%').alignItems(VerticalAlign.Center)
+
+      // 真实 3D 探测器形态小天体速览（点击即定位并展开可旋转 3D 实测模型）
+      Column({ space: 6 }) {
+        Row({ space: 6 }) {
+          Text('真实 3D 探测器形态模型 · 旋转查看')
+            .fontSize(this.fs(12))
+            .fontWeight(FontWeight.Medium)
+            .fontColor(this.c.textStrong)
+            .layoutWeight(1)
+          Text('15 颗内置')
+            .fontSize(this.fs(10.5))
+            .fontColor(this.c.accent)
+            .backgroundColor(this.c.accentSoft)
+            .borderRadius(UI_RADIUS_TAG)
+            .padding({ left: 6, right: 6, top: 2, bottom: 2 })
+        }.width('100%').alignItems(VerticalAlign.Center)
+
+        Scroll() {
+          Row({ space: 6 }) {
+            ForEach(REAL_3D_BODY_SHOWCASE, (item: Real3dBodyShowcase) => {
+              Button(item.label)
+                .id('minor-bodies-3d-' + item.key)
+                .fontSize(this.fs(11))
+                .fontColor(this.c.accent)
+                .backgroundColor(this.c.accentSoft)
+                .border({ width: 0.6, color: this.c.accent })
+                .borderRadius(UI_RADIUS_PILL)
+                .constraintSize({ minHeight: this.ch(30) })
+                .padding({ left: 10, right: 10 })
+                .clickEffect({ level: ClickEffectLevel.LIGHT })
+                .onClick(() => { this.onInspect3dModel(item.searchName) })
+            }, (item: Real3dBodyShowcase) => item.key)
+          }
+        }
+        .scrollable(ScrollDirection.Horizontal)
+        .scrollBar(BarState.Off)
+        .width('100%')
+      }
+      .width('100%')
+      .padding(10)
+      .backgroundColor(this.c.rowBg)
+      .border({ width: 0.6, color: this.c.border })
+      .borderRadius(UI_RADIUS_CARD)
 
       // 离线导入与管理工具卡
       Column({ space: 8 }) {

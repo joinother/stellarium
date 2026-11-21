@@ -201,6 +201,14 @@ public:
 	float getLatitude(void) const {return static_cast<float>(latitude);}
 	//! get longitude [degrees]
 	float getLongitude(void) const {return static_cast<float>(longitude);}
+	//! get feature diameter/linear size [km]
+	double getSize(void) const {return size;}
+	//! get localized origin of feature name
+	QString getOriginI18n(void) const {return originI18n;}
+	//! get raw localized name (without parent planet suffix)
+	QString getRawNameI18n(void) const {return nameI18n;}
+	//! get raw English/Latin name (without parent planet suffix)
+	QString getRawEnglishName(void) const {return englishName;}
 	//! return solar altitude in degrees (Meeus, Astr.Alg.1998 53.3)
 	double getSolarAltitude(const StelCore *core) const;
 

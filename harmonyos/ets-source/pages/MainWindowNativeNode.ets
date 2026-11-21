@@ -132,6 +132,8 @@ import { CalendarsStore } from '../state/CalendarsStore'
 import { CalendarsPanel } from '../panels/panels/CalendarsPanel'
 import { MinorBodiesStore } from '../state/MinorBodiesStore'
 import { MinorBodiesPanel } from '../panels/panels/MinorBodiesPanel'
+import { NomenclatureStore } from '../state/NomenclatureStore'
+import { NomenclaturePanel } from '../panels/panels/NomenclaturePanel'
 import { SearchStore } from '../state/SearchStore'
 import { ObjectDetailStore } from '../state/ObjectDetailStore'
 import { GyroStore } from '../state/GyroStore'
@@ -1481,6 +1483,7 @@ export struct WindowNativeNode {
   @State private archaeoStore: ArchaeoStore = new ArchaeoStore()
   @State private calendarsStore: CalendarsStore = new CalendarsStore()
   @State private minorBodiesStore: MinorBodiesStore = new MinorBodiesStore()
+  @State private nomenclatureStore: NomenclatureStore = new NomenclatureStore()
   // 卫星（Satellites）
   // SatellitesPanel 改为 @ObjectLink 订阅该 store，刷新粒度不再落在宿主整棵树上。
   // 下面两个"资源目录健康"字段与星表域共用、且不是卫星面板的入参，故仍由宿主持有。
@@ -1914,6 +1917,7 @@ export struct WindowNativeNode {
     this.archaeoStore.attachPort(hostPort, () => {})
     this.calendarsStore.bind(hostPort, (msg: string) => { this.flashHint(msg) }, () => { this.refreshState() })
     this.minorBodiesStore.bind(hostPort, (msg: string) => { this.flashHint(msg) })
+    this.nomenclatureStore.bind(hostPort, (msg: string) => { this.flashHint(msg) }, () => { this.refreshState() })
     // 插件管理 / 命令控制台 / 均时差 / 星云贴图四域复用同一实例。其消费方均为
     // @ObjectLink，字段赋值即刷新，四个域都无 publish* 发布点，故 onChanged 传空实现。
     this.pluginStore.attachPort(hostPort, () => {})
@@ -4993,6 +4997,8 @@ export struct WindowNativeNode {
         this.pluginFeatureCtl().ensurePluginLoaded('Calendars', () => { this.calendarsStore.load() })
       } else if (panel === 'minorBodies') {
         this.pluginFeatureCtl().ensurePluginLoaded('SolarSystemEditor', () => { this.minorBodiesStore.load() })
+      } else if (panel === 'nomenclature') {
+        this.nomenclatureStore.load()
       } else if (panel === 'skyCultureMaker') {
         this.skyCultureMakerStore.loadSkyCultureMakerDraft()
       } else if (panel === 'pointerCoordinates') {
@@ -10625,7 +10631,15 @@ export struct WindowNativeNode {
       MinorBodiesPanel({
         store: this.minorBodiesStore,
         onlineMirrorAllowed: !OFFLINE_APPGALLERY_BUILD && this.privacyNativeStartupAllowed && hasCurrentPrivacyConsent(),
-        onLocateObject: (englishName: string) => { this.searchObject(englishName, '', '', 'center') }
+        onLocateObject: (englishName: string) => { this.searchObject(englishName, 'SolarSystem', '', 'center') },
+        onInspect3dModel: (englishName: string) => {
+          this.objectDetailStore.bottomCardIndex = 2
+          this.searchObject(englishName, 'SolarSystem', '', 'center')
+        }
+      })
+    } else if (this.activePanel === 'nomenclature') {
+      NomenclaturePanel({
+        store: this.nomenclatureStore
       })
     } else if (this.activePanel === 'scripts') {
       ScriptsPanel({

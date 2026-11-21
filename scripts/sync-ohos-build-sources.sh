@@ -214,6 +214,7 @@ if [ "${OHOS_SYNC_RESOURCES:-auto}" != "0" ]; then
   if [ "${OHOS_SYNC_RESOURCES:-auto}" = "1" ] || \
     ! cmp -s "$REPO_ROOT/data/ohos/catalog-manifest.json" "$RAWFILE_ROOT/data/ohos/catalog-manifest.json" || \
     ! cmp -s "$REPO_ROOT/skycultures/modern/models/manifest.json" "$RAWFILE_ROOT/skycultures/modern/models/manifest.json" || \
+    [ ! -f "$RAWFILE_ROOT/models/ohos/manifest.json" ] || \
     [ "$MISSING_SKYCULTURES" -gt 0 ]; then
     RESOURCE_SYNC_REQUIRED=1
   fi

@@ -239,6 +239,40 @@ export class ObjectModelRenderer {
     this.requestObjectInspectorModelRender(true)
   }
 
+  // 提交真实探测器小天体/不规则卫星三维网格（SBM1 二进制缓冲 + 可选 UV 反照率贴图）并触发渲染。
+  commitObjectInspectorBodyMeshData(
+    meshData: ArrayBuffer,
+    texture: ArrayBuffer | undefined,
+    mediaGeneration: number,
+    expectedSelection: string,
+    expectedPath: string,
+  ): void {
+    const currentSelection = this.selectionKey()
+    if (currentSelection !== expectedSelection || this.mediaStore.objectInspectorMediaPath !== expectedPath ||
+      mediaGeneration !== this.hooks.mediaDecodeGeneration()) {
+      return
+    }
+    this.objectInspectorModelMeshData = meshData
+    if (texture !== undefined && texture.byteLength >= 512 * 256 * 4) {
+      this.objectInspectorModelTexturePixels = texture
+      this.objectInspectorModelTextureWidth = 512
+      this.objectInspectorModelTextureHeight = 256
+      this.objectInspectorModelTextureStride = 512 * 4
+    } else {
+      this.objectInspectorModelTexturePixels = undefined
+      this.objectInspectorModelTextureWidth = 0
+      this.objectInspectorModelTextureHeight = 0
+      this.objectInspectorModelTextureStride = 0
+    }
+    this.mediaStore.objectInspectorMediaLoading = false
+    this.mediaStore.objectInspectorMediaDecoding = true
+    this.mediaStore.objectInspectorMediaLoadFailed = false
+    hilog.info(0x0000, 'StellariumArkUI',
+      '[detail-model] SBM1 minor-body 3D mesh ready uri=%{public}s bytes=%{public}s textured=%{public}s',
+      expectedPath, meshData.byteLength.toString(), String(this.objectInspectorModelTexturePixels !== undefined))
+    this.requestObjectInspectorModelRender(true)
+  }
+
   // 从 PNG 侧车文件解码模型纹理（可选环纹理），解码与读回经 MediaPort。
   decodeObjectInspectorModelTextureFromPng(
     pngFilePath: string,
@@ -412,7 +446,8 @@ export class ObjectModelRenderer {
         lighting: lighting, renderSize: renderSize, renderedAt: this.objectInspectorModelLastRenderTime,
         kind: this.mediaStore.objectInspectorProceduralKind || 'textured-sphere',
         schematic: this.mediaStore.objectInspectorProceduralKind.length > 0 &&
-          this.mediaStore.objectInspectorProceduralKind !== 'constellation-mesh',
+          this.mediaStore.objectInspectorProceduralKind !== 'constellation-mesh' &&
+          this.mediaStore.objectInspectorProceduralKind !== 'body-mesh',
         temperatureK: this.detailStore.selectedTemperatureK > 0 ? this.detailStore.selectedTemperatureK : null,
         immersive: immersive, renderer: 'worker', computeMs: computeMs,
         uiPulseCount: uiPulseCount, uiMaxDelayMs: uiMaxDelayMs,

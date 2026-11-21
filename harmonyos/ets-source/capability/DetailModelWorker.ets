@@ -28,6 +28,23 @@ function flattenParticles(particles: number[][]): Float32Array {
 function renderWithNative(res: DetailModelResources, request: DetailModelRequest): ArrayBuffer | undefined {
   const frame = request.frame
   try {
+    if (res.kind === 'body-mesh' && res.meshData !== undefined) {
+      const lighting = frame.lighting
+      return nativeEntry.renderDetailModelBodyMesh(
+        res.meshData,
+        res.texture,
+        res.textureWidth,
+        res.textureHeight,
+        res.textureStride,
+        frame.renderSize,
+        frame.scale,
+        frame.transform,
+        lighting !== undefined,
+        lighting?.sunDirectionBody[0] ?? -0.45,
+        lighting?.sunDirectionBody[1] ?? 0.42,
+        lighting?.sunDirectionBody[2] ?? 0.79
+      )
+    }
     if (res.kind === 'constellation-mesh' && res.meshData !== undefined) {
       return nativeEntry.renderDetailModelConstellation(
         res.meshData,
@@ -61,7 +78,7 @@ function renderWithNative(res: DetailModelResources, request: DetailModelRequest
         lighting?.sunDirectionBody[2] ?? 1
       )
     }
-    if (res.kind.length > 0 && res.kind !== 'constellation-mesh') {
+    if (res.kind.length > 0 && res.kind !== 'constellation-mesh' && res.kind !== 'body-mesh') {
       return nativeEntry.renderDetailModelProcedural(
         res.kind,
         res.temperature,

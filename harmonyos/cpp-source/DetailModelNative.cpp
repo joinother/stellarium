@@ -792,6 +792,282 @@ napi_value RenderDetailModelConstellation(napi_env env, napi_callback_info info)
     return resultAb;
 }
 
+// ---------------------------------------------------------------------------
+// 4. Real Spacecraft 3D Minor-Body / Irregular Moon Mesh (SBM1 + Optional UV Texture)
+// ---------------------------------------------------------------------------
+struct CachedSbmMesh {
+    uint32_t vertexCount = 0;
+    uint32_t indexCount = 0;
+    bool hasUV = false;
+    float baseColor[3] = {0.72f, 0.70f, 0.68f};
+    size_t byteLength = 0;
+    uint64_t fingerprint = 0;
+    std::vector<float> vertices; // [px, py, pz, nx, ny, nz, u, v] * vertexCount
+    std::vector<uint32_t> indices;
+};
+
+bool parseSbmMesh(const uint8_t* data, size_t len, CachedSbmMesh& cache) {
+    if (!data || len < 28) return false;
+    if (data[0] != 'S' || data[1] != 'B' || data[2] != 'M' || data[3] != '1') return false;
+
+    uint64_t fp = static_cast<uint64_t>(len) * 1469598103934665603ULL;
+    const size_t step = std::max<size_t>(1, len / 64);
+    for (size_t i = 0; i < len; i += step) {
+        fp = (fp ^ data[i]) * 1099511628211ULL;
+    }
+    if (cache.byteLength == len && cache.fingerprint == fp && cache.vertexCount > 0) {
+        return true;
+    }
+
+    uint32_t vc = 0, ic = 0, flags = 0;
+    float bc[3] = {0.72f, 0.70f, 0.68f};
+    std::memcpy(&vc, data + 4, 4);
+    std::memcpy(&ic, data + 8, 4);
+    std::memcpy(&flags, data + 12, 4);
+    std::memcpy(bc, data + 16, 12);
+    if (vc < 3 || vc > 120000 || ic < 3 || ic > 600000 || (ic % 3) != 0) return false;
+
+    const size_t expectedSize = 28 + static_cast<size_t>(vc) * 32 + static_cast<size_t>(ic) * 4;
+    if (len != expectedSize) return false;
+
+    cache.vertices.resize(static_cast<size_t>(vc) * 8);
+    std::memcpy(cache.vertices.data(), data + 28, static_cast<size_t>(vc) * 32);
+    cache.indices.resize(ic);
+    std::memcpy(cache.indices.data(), data + 28 + static_cast<size_t>(vc) * 32, static_cast<size_t>(ic) * 4);
+    for (uint32_t idx : cache.indices) {
+        if (idx >= vc) return false;
+    }
+
+    cache.vertexCount = vc;
+    cache.indexCount = ic;
+    cache.hasUV = (flags & 1U) != 0;
+    cache.baseColor[0] = std::max(0.05f, std::min(1.0f, bc[0]));
+    cache.baseColor[1] = std::max(0.05f, std::min(1.0f, bc[1]));
+    cache.baseColor[2] = std::max(0.05f, std::min(1.0f, bc[2]));
+    cache.byteLength = len;
+    cache.fingerprint = fp;
+    return true;
+}
+
+// Args (12):
+// 0: sbmBuffer (ArrayBuffer)
+// 1: texture (ArrayBuffer | undefined)
+// 2: textureWidth (int)
+// 3: textureHeight (int)
+// 4: textureStride (int)
+// 5: renderSize (int)
+// 6: scale (double)
+// 7: transform (number[9])
+// 8: hasLighting (bool)
+// 9: lightX (double)
+// 10: lightY (double)
+// 11: lightZ (double)
+napi_value RenderDetailModelBodyMesh(napi_env env, napi_callback_info info) {
+    size_t argc = 12;
+    napi_value args[12];
+    if (napi_get_cb_info(env, info, &argc, args, nullptr, nullptr) != napi_ok || argc < 12) {
+        napi_value undef = nullptr;
+        napi_get_undefined(env, &undef);
+        return undef;
+    }
+
+    const uint8_t* sbmData = nullptr;
+    size_t sbmLen = 0;
+    const uint8_t* texData = nullptr;
+    size_t texLen = 0;
+    int32_t texW = 0, texH = 0, texStride = 0, renderSize = 0;
+    double scale = 1.0;
+    double t[9];
+    bool hasLighting = false;
+    double lightX = -0.45, lightY = 0.45, lightZ = 0.77;
+
+    if (!readOptionalArrayBuffer(env, args[0], sbmData, sbmLen) || sbmData == nullptr ||
+        !readOptionalArrayBuffer(env, args[1], texData, texLen) ||
+        !readIntArg(env, args[2], texW) || !readIntArg(env, args[3], texH) || !readIntArg(env, args[4], texStride) ||
+        !readIntArg(env, args[5], renderSize) || !readDoubleArg(env, args[6], scale) ||
+        !readTransform9(env, args[7], t) || !readBoolArg(env, args[8], hasLighting) ||
+        !readDoubleArg(env, args[9], lightX) || !readDoubleArg(env, args[10], lightY) || !readDoubleArg(env, args[11], lightZ) ||
+        renderSize < 16 || renderSize > 1024) {
+        napi_value undef = nullptr;
+        napi_get_undefined(env, &undef);
+        return undef;
+    }
+
+    thread_local CachedSbmMesh meshCache;
+    if (!parseSbmMesh(sbmData, sbmLen, meshCache)) {
+        napi_value undef = nullptr;
+        napi_get_undefined(env, &undef);
+        return undef;
+    }
+
+    const bool useTexture = meshCache.hasUV && texData != nullptr && texW > 0 && texH > 0 &&
+                            texStride >= texW * 4 && texLen >= static_cast<size_t>(texStride) * static_cast<size_t>(texH);
+
+    uint8_t* output = nullptr;
+    napi_value resultAb = createOutputArrayBuffer(env, renderSize, output);
+    if (!resultAb || !output) return nullptr;
+
+    const float center = (renderSize - 1) * 0.5f;
+    const float radius = static_cast<float>(renderSize * 0.43 * scale);
+    const float t0 = static_cast<float>(t[0]), t1 = static_cast<float>(t[1]), t2 = static_cast<float>(t[2]);
+    const float t3 = static_cast<float>(t[3]), t4 = static_cast<float>(t[4]), t5 = static_cast<float>(t[5]);
+    const float t6 = static_cast<float>(t[6]), t7 = static_cast<float>(t[7]), t8 = static_cast<float>(t[8]);
+
+    // Transform solar illumination vector into view space (or use crisp 3/4 studio key light)
+    float lx = -0.45f, ly = 0.42f, lz = 0.788f;
+    if (hasLighting) {
+        const float slx = static_cast<float>(lightX);
+        const float sly = static_cast<float>(lightY);
+        const float slz = static_cast<float>(lightZ);
+        float vlx = t0 * slx + t3 * sly + t6 * slz;
+        float vly = t1 * slx + t4 * sly + t7 * slz;
+        float vlz = t2 * slx + t5 * sly + t8 * slz;
+        const float ll = std::sqrt(vlx * vlx + vly * vly + vlz * vlz);
+        if (ll > 1e-4f) {
+            // Blend 75% real solar phase with 25% front key so dark silhouettes stay sculpturally legible
+            vlx = vlx / ll * 0.78f + (-0.30f) * 0.22f;
+            vly = vly / ll * 0.78f + (0.28f) * 0.22f;
+            vlz = vlz / ll * 0.78f + (0.91f) * 0.22f;
+            const float bl = std::sqrt(vlx * vlx + vly * vly + vlz * vlz);
+            if (bl > 1e-4f) {
+                lx = vlx / bl; ly = vly / bl; lz = vlz / bl;
+            }
+        }
+    }
+
+    struct BodyScreenVertex {
+        float sx, sy, sz;
+        float u, v;
+        float shade;
+        float rim;
+    };
+    thread_local std::vector<BodyScreenVertex> screenVerts;
+    screenVerts.resize(meshCache.vertexCount);
+
+    const float* vData = meshCache.vertices.data();
+    for (uint32_t i = 0; i < meshCache.vertexCount; ++i) {
+        const float* v = vData + i * 8;
+        const float bx = v[0], by = v[1], bz = v[2];
+        const float nx = v[3], ny = v[4], nz = v[5];
+
+        const float vx = t0 * bx + t3 * by + t6 * bz;
+        const float vy = t1 * bx + t4 * by + t7 * bz;
+        const float vz = t2 * bx + t5 * by + t8 * bz;
+
+        const float persp = 3.4f / (3.4f - vz * 0.65f);
+        const float sx = center + vx * radius * persp;
+        const float sy = center - vy * radius * persp;
+
+        float vnx = t0 * nx + t3 * ny + t6 * nz;
+        float vny = t1 * nx + t4 * ny + t7 * nz;
+        float vnz = t2 * nx + t5 * ny + t8 * nz;
+        const float nlen = std::sqrt(vnx * vnx + vny * vny + vnz * vnz);
+        if (nlen > 1e-4f) {
+            const float inv = 1.0f / nlen;
+            vnx *= inv; vny *= inv; vnz *= inv;
+        }
+        if (vnz < 0.0f) {
+            vnx = -vnx; vny = -vny; vnz = -vnz;
+        }
+
+        // Lommel-Seeliger + Lambert rocky regolith shading for realistic asteroids & comets
+        const float ndotl = std::max(0.0f, vnx * lx + vny * ly + vnz * lz);
+        const float ndotv = std::max(0.05f, vnz);
+        const float lommel = ndotl / (ndotl + ndotv + 0.16f);
+        const float fill = std::max(0.0f, vnx * 0.45f - vny * 0.35f + vnz * 0.82f) * 0.14f;
+        const float shade = 0.16f + 0.64f * ndotl + 0.44f * lommel + fill;
+        const float rim = std::pow(1.0f - std::min(1.0f, vnz), 2.4f) * (0.12f + 0.24f * ndotl);
+
+        screenVerts[i] = {sx, sy, vz, v[6], v[7], shade, rim};
+    }
+
+    const size_t pixelCount = static_cast<size_t>(renderSize) * static_cast<size_t>(renderSize);
+    thread_local std::vector<float> zbuf;
+    zbuf.assign(pixelCount, -1e9f);
+
+    const float baseR = meshCache.baseColor[0] * 255.0f;
+    const float baseG = meshCache.baseColor[1] * 255.0f;
+    const float baseB = meshCache.baseColor[2] * 255.0f;
+
+    const uint32_t* indices = meshCache.indices.data();
+    const uint32_t ic = meshCache.indexCount;
+    for (uint32_t i = 0; i + 2 < ic; i += 3) {
+        const BodyScreenVertex& v0 = screenVerts[indices[i]];
+        const BodyScreenVertex& v1 = screenVerts[indices[i + 1]];
+        const BodyScreenVertex& v2 = screenVerts[indices[i + 2]];
+
+        const float area = (v1.sx - v0.sx) * (v2.sy - v0.sy) - (v2.sx - v0.sx) * (v1.sy - v0.sy);
+        if (std::abs(area) < 1e-4f) continue;
+
+        const float minXf = std::min({v0.sx, v1.sx, v2.sx});
+        const float maxXf = std::max({v0.sx, v1.sx, v2.sx});
+        const float minYf = std::min({v0.sy, v1.sy, v2.sy});
+        const float maxYf = std::max({v0.sy, v1.sy, v2.sy});
+
+        const int x0 = std::max(0, static_cast<int>(std::floor(minXf)));
+        const int x1 = std::min(renderSize - 1, static_cast<int>(std::ceil(maxXf)));
+        const int y0 = std::max(0, static_cast<int>(std::floor(minYf)));
+        const int y1 = std::min(renderSize - 1, static_cast<int>(std::ceil(maxYf)));
+        if (x0 > x1 || y0 > y1) continue;
+
+        const float invArea = 1.0f / area;
+        const float e01_dx = v1.sx - v0.sx, e01_dy = v1.sy - v0.sy;
+        const float e12_dx = v2.sx - v1.sx, e12_dy = v2.sy - v1.sy;
+        const float e20_dx = v0.sx - v2.sx, e20_dy = v0.sy - v2.sy;
+
+        for (int py = y0; py <= y1; ++py) {
+            const float fy = static_cast<float>(py) + 0.5f;
+            float* zRow = zbuf.data() + static_cast<size_t>(py) * static_cast<size_t>(renderSize);
+            uint8_t* outRow = output + static_cast<size_t>(py) * static_cast<size_t>(renderSize) * 4;
+
+            for (int px = x0; px <= x1; ++px) {
+                const float fx = static_cast<float>(px) + 0.5f;
+                const float w0 = (e12_dx * (fy - v1.sy) - e12_dy * (fx - v1.sx)) * invArea;
+                if (w0 < -1e-4f) continue;
+                const float w1 = (e20_dx * (fy - v2.sy) - e20_dy * (fx - v2.sx)) * invArea;
+                if (w1 < -1e-4f) continue;
+                const float w2 = 1.0f - w0 - w1;
+                if (w2 < -1e-4f) continue;
+
+                const float z = w0 * v0.sz + w1 * v1.sz + w2 * v2.sz;
+                if (z <= zRow[px]) continue;
+                zRow[px] = z;
+
+                const float shade = w0 * v0.shade + w1 * v1.shade + w2 * v2.shade;
+                const float rim = w0 * v0.rim + w1 * v1.rim + w2 * v2.rim;
+
+                float tr = baseR, tg = baseG, tb = baseB;
+                if (useTexture) {
+                    float u = w0 * v0.u + w1 * v1.u + w2 * v2.u;
+                    float v = w0 * v0.v + w1 * v1.v + w2 * v2.v;
+                    u = u - std::floor(u);
+                    v = std::max(0.0f, std::min(0.9999f, v));
+                    const int tx = std::min(texW - 1, std::max(0, static_cast<int>(u * texW)));
+                    const int ty = std::min(texH - 1, std::max(0, static_cast<int>(v * texH)));
+                    const uint8_t* texPx = texData + static_cast<size_t>(ty) * static_cast<size_t>(texStride) + static_cast<size_t>(tx) * 4;
+                    tr = static_cast<float>(texPx[0]);
+                    tg = static_cast<float>(texPx[1]);
+                    tb = static_cast<float>(texPx[2]);
+                    // Fill un-imaged spacecraft polar gaps (e.g. Dawn Vesta winter pole) with subtle rocky base albedo
+                    if (tr + tg + tb < 12.0f) {
+                        tr = baseR * 0.58f;
+                        tg = baseG * 0.58f;
+                        tb = baseB * 0.58f;
+                    }
+                }
+
+                uint8_t* dst = outRow + px * 4;
+                dst[0] = static_cast<uint8_t>(clampByteF(tr * shade + rim * 165.0f));
+                dst[1] = static_cast<uint8_t>(clampByteF(tg * shade + rim * 175.0f));
+                dst[2] = static_cast<uint8_t>(clampByteF(tb * shade + rim * 195.0f));
+                dst[3] = 255;
+            }
+        }
+    }
+
+    return resultAb;
+}
+
 } // namespace
 
 void registerDetailModelNapi(napi_env env, napi_value exports) {
@@ -799,6 +1075,7 @@ void registerDetailModelNapi(napi_env env, napi_value exports) {
         { "renderDetailModelSphere", nullptr, RenderDetailModelSphere, nullptr, nullptr, nullptr, napi_default, nullptr },
         { "renderDetailModelProcedural", nullptr, RenderDetailModelProcedural, nullptr, nullptr, nullptr, napi_default, nullptr },
         { "renderDetailModelConstellation", nullptr, RenderDetailModelConstellation, nullptr, nullptr, nullptr, napi_default, nullptr },
+        { "renderDetailModelBodyMesh", nullptr, RenderDetailModelBodyMesh, nullptr, nullptr, nullptr, napi_default, nullptr },
     };
     napi_define_properties(env, exports, sizeof(desc) / sizeof(desc[0]), desc);
 }

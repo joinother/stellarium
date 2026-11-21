@@ -62,6 +62,7 @@ export function skyDataHubActions(): ShellAction[] {
     { label: I18n.t('i0274'), icon: 'orbit', panel: 'astro' },
     { label: I18n.getLanguage().startsWith('zh') ? '世界多历法' : 'World calendars', icon: 'clock', panel: 'calendars' },
     { label: I18n.getLanguage().startsWith('zh') ? '小天体目录' : 'Minor bodies', icon: 'orbit', panel: 'minorBodies' },
+    { label: I18n.getLanguage().startsWith('zh') ? '行星地貌图集' : 'Planetary nomenclature', icon: 'location', panel: 'nomenclature' },
     { label: I18n.t('panel_satellites'), icon: 'satellite', panel: 'satellites' },
     { label: I18n.t('panel_meteorshowers'), icon: 'meteor', panel: 'meteorshowers' },
     { label: I18n.pluginName('Scenery3d'), icon: 'scenery3d', panel: 'scenery3d' },
