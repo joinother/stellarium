@@ -237,7 +237,7 @@ export class SkyInputController {
   private isSkyDoubleTap(x: number, y: number): boolean {
     const now = Date.now()
     const tapInterval = this.lastSkyTapAt > 0 ? now - this.lastSkyTapAt : 0
-    const withinTime = this.lastSkyTapAt > 0 && tapInterval <= 800
+    const withinTime = this.lastSkyTapAt > 0 && tapInterval <= 360
     const withinDistance = distance(x, y, this.lastSkyTapX, this.lastSkyTapY) <= 28
     if (this.lastSkyTapAt > 0) {
       hilog.info(0x0000, 'StellariumArkUI', 'sky tap interval=' + tapInterval.toString() +

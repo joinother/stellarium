@@ -5656,8 +5656,9 @@ export struct WindowNativeNode {
         this.refreshSelectedDynamicValues()
       } else {
         void this.haptics().selection('')
-        // 「已选中 XX」是纯状态播报，观测时反复点选会刷屏（用户要求去掉）；点了空处仍提示一次。
-        this.flashHint(I18n.t('i0075'))
+        // 单击空白天区直接静默取消当前选中并重置双击序列，避免后续快速点选附近天体被误判为双击取消，
+        // 也不再弹出打断观测的「这里没有天体」提示。
+        this.skyInputCtl().resetSkyTapSequence()
       }
     })
   }

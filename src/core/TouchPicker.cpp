@@ -166,15 +166,16 @@ double visualRadiusForObject(const StelCore* core, const ViewContext& ctx, const
 	if (type == QLatin1String("Star"))
 	{
 		RCMag rc;
-		const float mag = object->getVMagnitudeWithExtinction(core);
-		if (!core->getSkyDrawer()->computeRCMag(mag, &rc) || rc.radius <= 0.f)
+		const float mag = object->getVMagnitudeWithVisualExtinction(core);
+		if (!core->getSkyDrawer()->computeStarRCMag(mag, &rc) || rc.radius <= 0.f)
 			return 0.0;
 		return rc.radius / ctx.dpr;
 	}
 	if (type == QLatin1String("Planet"))
 	{
 		const PlanetP planet = qSharedPointerCast<Planet>(object);
-		return qMax(4.0, angularRadiusToVp(core, ctx, planet->getSpheroidAngularRadius(core)));
+		const double minRadiusVp = (planet && planet->getPlanetType() >= Planet::isAsteroid) ? 2.5 : 4.0;
+		return qMax(minRadiusVp, angularRadiusToVp(core, ctx, planet->getSpheroidAngularRadius(core)));
 	}
 	if (type == QLatin1String("Nebula"))
 	{
@@ -199,7 +200,7 @@ QString objectName(const StelObjectP& object)
 
 double magnitudeForObject(const StelCore* core, const StelObjectP& object, bool& hasMagnitude)
 {
-	const float mag = object->getVMagnitudeWithExtinction(core);
+	const float mag = object->getVMagnitudeWithVisualExtinction(core);
 	hasMagnitude = std::isfinite(mag) && mag < 90.f;
 	return hasMagnitude ? static_cast<double>(mag) : 99.0;
 }
@@ -441,46 +442,43 @@ PickResult TouchPicker::pickAt(const StelCore* core, int xVp, int yVp, int skyW,
 
 			const bool starLabels = starMgr->getFlagLabels();
 			const StelSkyDrawer* drawer = core->getSkyDrawer();
+			const float drawerStarLimit = drawer->getStarLimitMagnitude();
 			result.customStarLimit = drawer->getFlagStarMagnitudeLimit();
 			const float starLimit = result.customStarLimit
-				? static_cast<float>(drawer->getCustomStarMagnitudeLimit())
-				: drawer->getLimitMagnitude();
+				? qMin(static_cast<float>(drawer->getCustomStarMagnitudeLimit()), drawerStarLimit)
+				: drawerStarLimit;
 			result.starLimit = starLimit;
 			const double wideFovStarPenalty = (ctx.fov > 80.0)
 				? qMin(1.6, 3.0 * std::log10(ctx.fov / 80.0))
 				: 0.0;
-			const double labelLimitMag = (drawer->getLimitMagnitude() - 6.5) * 0.7
+			const double labelLimitMag = (drawerStarLimit - 6.5) * 0.7
 				+ starMgr->getLabelsAmount() * 1.2 - 2.0 - wideFovStarPenalty;
+			const float clearSkyScale = core->getFlagClearSky() ? 1.0f : 0.6f;
+			const float minPickLuminance = core->isBrightDaylight() ? 0.30f : 0.18f;
 
 			for (const StelObjectP& star : std::as_const(stars))
 			{
-				const float mag = star->getVMagnitudeWithExtinction(core);
-				// StarMgr::draw() culls stars beyond the current magnitude limit;
-				// computeRCMag() alone would still admit a catalog star that is
-				// not actually on screen.
+				const float mag = star->getVMagnitudeWithVisualExtinction(core);
+				// StarMgr::draw() / ZoneArray::draw() cull stars beyond the combined
+				// star magnitude limit and render using computeStarRCMag() so daytime
+				// visible stars (when realistic star visibility is off) stay in sync.
 				if (mag > starLimit)
 				{
 					++result.starMagnitudeFiltered;
 					continue;
 				}
 				RCMag rc;
-				if (!drawer->computeRCMag(mag, &rc) || rc.radius <= 0.f)
+				if (!drawer->computeStarRCMag(mag, &rc) || rc.radius <= 0.f)
 				{
 					++result.starRadiusFiltered;
 					continue;
 				}
-				const double rVp = rc.radius / ctx.dpr;
+				const float effectiveLum = rc.luminance * clearSkyScale;
+				const double rVp = (rc.radius * clearSkyScale) / ctx.dpr;
 
 				QPointF screenVp;
 				Vec3d screenDevice;
 				if (!projectToVp(ctx, star->getJ2000EquatorialPos(core), screenVp, screenDevice))
-				{
-					++result.starDistanceFiltered;
-					continue;
-				}
-				const double starDistanceVp = std::hypot(screenVp.x() - ctx.tapVp.x(),
-					screenVp.y() - ctx.tapVp.y());
-				if (starDistanceVp > effectiveRadiusVp + rVp + 24.0)
 				{
 					++result.starDistanceFiltered;
 					continue;
@@ -495,8 +493,36 @@ PickResult TouchPicker::pickAt(const StelCore* core, int xVp, int yVp, int skyW,
 					{
 						label.present = true;
 						label.rect = labelRectUpRight(labelMetrics, text, screenVp,
-							(rc.radius * 0.7) / ctx.dpr, ctx.dpr);
+							(rc.radius * clearSkyScale * 0.7) / ctx.dpr, ctx.dpr);
 					}
+				}
+				const bool labelHit = label.present && label.rect.contains(ctx.tapVp);
+
+				// Reject sub-threshold barely-perceptible star specks that are not
+				// visibly standing out on screen so tapping empty sky cancels selection
+				// instead of grabbing an invisible background star.
+				if (!labelHit && effectiveLum < minPickLuminance)
+				{
+					++result.starRadiusFiltered;
+					continue;
+				}
+
+				const double starDistanceVp = std::hypot(screenVp.x() - ctx.tapVp.x(),
+					screenVp.y() - ctx.tapVp.y());
+				double starAcceptVp = effectiveRadiusVp;
+				if (profile.touch)
+				{
+					if (mag <= 2.5f || rVp >= 2.2)
+						starAcceptVp = qMin(effectiveRadiusVp, 34.0);
+					else if (effectiveLum >= 0.65f || mag <= 4.2f)
+						starAcceptVp = qMin(effectiveRadiusVp, 24.0);
+					else
+						starAcceptVp = qMin(effectiveRadiusVp, 14.0);
+				}
+				if (!labelHit && starDistanceVp > starAcceptVp + rVp)
+				{
+					++result.starDistanceFiltered;
+					continue;
 				}
 
 				bool hasMagnitude = false;
@@ -516,8 +542,8 @@ PickResult TouchPicker::pickAt(const StelCore* core, int xVp, int yVp, int skyW,
 			const QList<StelObjectP> planets = solarSystem->searchAround(tapDirection, fovRadiusDeg, core);
 			for (const StelObjectP& planet : planets)
 			{
-				// Planet::draw() culls hidden objects and planets beyond the
-				// optional hard magnitude limit. Keep the picker in sync.
+				// Planet::draw() culls hidden objects, dim minor bodies, and planets
+				// without any visible disc, halo, label or marker. Keep picker in sync.
 				if (!planet->getPickState(core).pickable)
 					continue;
 				QPointF screenVp;
@@ -536,6 +562,17 @@ PickResult TouchPicker::pickAt(const StelCore* core, int xVp, int yVp, int skyW,
 						label.rect = labelRectUpRight(labelMetrics, text, screenVp, qMax(7.0, rVp * 0.7), ctx.dpr);
 					}
 				}
+				const bool labelHit = label.present && label.rect.contains(ctx.tapVp);
+				const double planetDistVp = std::hypot(screenVp.x() - ctx.tapVp.x(),
+					screenVp.y() - ctx.tapVp.y());
+				const PlanetP planetObj = qSharedPointerCast<Planet>(planet);
+				const bool minorBody = planetObj && planetObj->getPlanetType() >= Planet::isAsteroid;
+				const double planetAcceptVp = profile.touch
+					? qMin(effectiveRadiusVp, minorBody ? 22.0 : 38.0)
+					: effectiveRadiusVp;
+				if (!labelHit && planetDistVp > planetAcceptVp + rVp)
+					continue;
+
 				bool hasMagnitude = false;
 				const double magnitude = magnitudeForObject(core, planet, hasMagnitude);
 				addCandidate(candidates, ctx, core, planet, screenVp, rVp, magnitude, hasMagnitude,
@@ -590,6 +627,14 @@ PickResult TouchPicker::pickAt(const StelCore* core, int xVp, int yVp, int skyW,
 						label.rect = labelRectUpRight(labelMetrics, text, screenVp, 15.0 / ctx.dpr, ctx.dpr);
 					}
 				}
+				const bool labelHit = label.present && label.rect.contains(ctx.tapVp);
+				const double dsoDistVp = std::hypot(screenVp.x() - ctx.tapVp.x(),
+					screenVp.y() - ctx.tapVp.y());
+				const double dsoAcceptVp = profile.touch
+					? qMin(effectiveRadiusVp, 28.0)
+					: effectiveRadiusVp;
+				if (!labelHit && dsoDistVp > dsoAcceptVp + rVp)
+					continue;
 
 				bool hasMagnitude = false;
 				const double magnitude = magnitudeForObject(core, nebula, hasMagnitude);
@@ -839,6 +884,14 @@ PickResult TouchPicker::pickAt(const StelCore* core, int xVp, int yVp, int skyW,
 						label.rect = labelRectUpRight(labelMetrics, text, screenVp, 10.0 / ctx.dpr, ctx.dpr);
 					}
 				}
+				const bool labelHit = label.present && label.rect.contains(ctx.tapVp);
+				const double satDistVp = std::hypot(screenVp.x() - ctx.tapVp.x(),
+					screenVp.y() - ctx.tapVp.y());
+				const double satAcceptVp = profile.touch
+					? qMin(effectiveRadiusVp, 40.0)
+					: effectiveRadiusVp;
+				if (!labelHit && satDistVp > satAcceptVp + rVp)
+					continue;
 
 				SatellitePickDiagnostics diagnostics;
 				diagnostics.landscapeVisible = state.landscapeVisible;
@@ -923,7 +976,7 @@ PickResult TouchPicker::pickAt(const StelCore* core, int xVp, int yVp, int skyW,
 				|| candidate.visualRadiusVp >= 1.8;
 			const bool isMedium = candidate.hasMagnitude && candidate.magnitude <= 4.5;
 			if (isVertexOrBright)
-				priorityRadiusVp = profile.touch ? 16.0 : 7.0;
+				priorityRadiusVp = profile.touch ? 22.0 : 7.0;
 			else if (isMedium)
 				priorityRadiusVp = profile.touch ? 9.0 : 4.0;
 			else if (hasConstellationModelHit)

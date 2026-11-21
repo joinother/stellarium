@@ -2473,7 +2473,7 @@ float Planet::getSelectPriority(const StelCore* core) const
 StelObjectPickState Planet::getPickState(const StelCore* core) const
 {
 	StelObjectPickState state = StelObject::getPickState(core);
-	if (hidden)
+	if (hidden || !core)
 	{
 		state.pickable = false;
 		state.pointDrawn = false;
@@ -2481,15 +2481,77 @@ StelObjectPickState Planet::getPickState(const StelCore* core) const
 		return state;
 	}
 
-	// Planet::draw() applies this hard limit before drawing the disc, label or
-	// marker. Mirror it here so an invisible faint planet cannot be picked.
-	if (core && core->getSkyDrawer()->getFlagPlanetMagnitudeLimit()
-		&& getVMagnitude(core) > static_cast<float>(core->getSkyDrawer()->getCustomPlanetMagnitudeLimit()))
+	// Never pick the observer's own planet body from the sky canvas.
+	if (core->getCurrentPlanet().data() == this)
 	{
 		state.pickable = false;
 		state.pointDrawn = false;
 		state.visualRadiusRad = 0.0;
+		return state;
 	}
+
+	const StelSkyDrawer* drawer = core->getSkyDrawer();
+	const float vMag = getVMagnitude(core);
+	// Planet::draw() applies this hard limit before drawing the disc, label or
+	// marker. Mirror it here so an invisible faint planet cannot be picked.
+	if (drawer && drawer->getFlagPlanetMagnitudeLimit()
+		&& vMag > static_cast<float>(drawer->getCustomPlanetMagnitudeLimit()))
+	{
+		state.pickable = false;
+		state.pointDrawn = false;
+		state.visualRadiusRad = 0.0;
+		return state;
+	}
+
+	static SolarSystem* ss = GETSTELMODULE(SolarSystem);
+	const bool isMinor = pType >= Planet::isAsteroid;
+	const float limitMag = drawer ? drawer->getLimitMagnitude() : 99.f;
+	const bool cutDimObjects = ((vMag - 5.0f) > limitMag) && isMinor;
+	if (isMinor && ss && vMag > ss->getMarkerMagThreshold())
+	{
+		state.pickable = false;
+		state.pointDrawn = false;
+		state.visualRadiusRad = 0.0;
+		return state;
+	}
+	if (ss && ss->getMarkerValue() == 0. && cutDimObjects
+		&& !core->getCurrentLocation().planetName.contains("Observer", Qt::CaseInsensitive))
+	{
+		state.pickable = false;
+		state.pointDrawn = false;
+		state.visualRadiusRad = 0.0;
+		return state;
+	}
+
+	// Mirror what Planet::draw() / draw3dModel() / drawHints() / drawAsteroidMarker()
+	// actually paint on screen so completely invisible asteroids, comets, dwarf planets
+	// and faint moons cannot steal empty-sky taps.
+	const float vMagVis = getVMagnitudeWithVisualExtinction(core, vMag);
+	const bool isSunOrMoon = ss && (ss->getSun().data() == this || ss->getMoon().data() == this);
+	double screenRd = 0.0;
+	if (const StelProjectorP prj = core->getProjection(StelCore::FrameJ2000))
+		screenRd = getAngularRadius(core) * M_PI_180 * static_cast<double>(prj->getPixelPerRadAtCenter());
+	const bool discVisible = isSunOrMoon || (!cutDimObjects && screenRd > 1.0);
+	const bool labelVisible = core->getFlagClearSky() && labelsFader.getInterstate() > 0.05f;
+	const bool markerVisible = core->getFlagClearSky() && isMinor && ss
+		&& ss->getMarkerValue() > 0.05f && vMag <= ss->getMarkerMagThreshold();
+	RCMag rc;
+	const bool haloVisible = !cutDimObjects && halo && drawer
+		&& drawer->computeRCMag(vMagVis, &rc) && rc.radius > 0.f && rc.luminance >= 0.12f;
+	const bool cometVisible = (pType == Planet::isComet) && !cutDimObjects
+		&& vMagVis <= limitMag + 1.0f;
+
+	if (!discVisible && !labelVisible && !markerVisible && !haloVisible && !cometVisible)
+	{
+		state.pickable = false;
+		state.pointDrawn = false;
+		state.visualRadiusRad = 0.0;
+		return state;
+	}
+
+	state.pointDrawn = discVisible || haloVisible || cometVisible;
+	state.labelDrawn = labelVisible;
+	state.iconDrawn = markerVisible;
 	return state;
 }
 
