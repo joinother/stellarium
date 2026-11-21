@@ -168,6 +168,12 @@ export class TimeController {
     this.timeStore.timeSpeedIndex = nearestIndex
   }
 
+  /** Reset simulation rate to live 1x without changing simulation JD. */
+  resetRateToRealTime(): void {
+    this.applySpeedStep(TIME_SPEED_IDX_REALTIME)
+    this.timeStore.timeRateText = '1x'
+  }
+
   /** Speed up one step. */
   speedUp(): void {
     this.applySpeedStep(this.timeStore.timeSpeedIndex + 1)

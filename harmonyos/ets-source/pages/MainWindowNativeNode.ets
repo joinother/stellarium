@@ -12,6 +12,7 @@ import { HapticFeedback, DEFAULT_HAPTIC_ENABLED, DEFAULT_HAPTIC_INTENSITY } from
 import { createHapticFeedback } from '../capability/HarmonyHapticFeedback'
 import { AstronomyCalendarController, AstronomyCalendarHostHooks, AstronomyCalendarReminderResult } from '../capability/AstronomyCalendarController'
 import { AstronomyCalendarStore } from '../state/AstronomyCalendarStore'
+import { AstronomyCalendarCache } from '../state/AstronomyCalendarCache'
 import { AstronomyCalendarEvent } from '../state/AstronomyCalendarEvent'
 import { CalendarObserverContext } from '../state/AstronomyCalendarText'
 import { AstronomyCalendarPanel } from '../panels/panels/AstronomyCalendarPanel'
@@ -301,6 +302,13 @@ import {
 // textures are still loading. A view that keeps reporting pending textures far
 // beyond any plausible load is escalated to an actionable retry state instead of
 // a silent hide, so the note can never stick forever without an affordance.
+
+interface DockPanelMemoryEntry {
+  activePanel: string
+  stack: string[]
+  viewTab: number
+  configTab: number
+}
 
 // 使域 store 能在不 import NAPI 的前提下调用桥；行为与直接调用宿主方法完全一致
 // （callNativeWhenReady 仍走宿主的录制记录，默认重试参数 200ms × 60 显式传入）。
@@ -1147,6 +1155,8 @@ export struct WindowNativeNode {
   @State private landingBannerSource: string = ''
   @State private landingBannerTarget: string = ''
   @State private landingBannerHasTimeShift: boolean = false
+  @State private landingTimeResetConfirmed: boolean = false
+  private landingTimeResetTimer: number = 0
   @State private landingBannerEventId: string = ''
   @State private landingBannerEventAt: string = ''
   // 作为 .cat「打开方式」被拉起时由 QAbility 写入；此处消费并导入（见 handleOpenCatalogUri）。
@@ -1177,6 +1187,12 @@ export struct WindowNativeNode {
   @Watch('publishBackConsumable') @State private panelVisible: boolean = false
   @State private panelNavigationDepth: number = 0
   private panelNavigationStack: string[] = []
+  // 记录每个底部 Dock 入口关闭前的页面路径（子面板 + 返回栈 + 页签）与滚动偏移，
+  // 再次点进同一菜单入口时直接恢复到上次停留的同一位置。
+  private dockPanelMemory: Map<string, DockPanelMemoryEntry> = new Map<string, DockPanelMemoryEntry>()
+  private panelScrollOffsets: Map<string, number> = new Map<string, number>()
+  private pendingScrollRestoreOffsetY: number = -1
+  private restoringPanelScroll: boolean = false
   // 系统返回请求令牌：ApplicationRoot.onBackPress 置为 Date.now()，此处 @Watch 执行应用内返回。
   @StorageLink('stellariumRequestBack') @Watch('onRequestBack') private requestBackToken: number = 0
   private lastPanelBackAt: number = 0
@@ -2778,7 +2794,7 @@ export struct WindowNativeNode {
           setScriptMetadata: (raw: Object | undefined): void => { this.scriptPlaybackCtl().setScriptMetadata(raw) },
           reloadConfigurationSettings: (): void => { this.settingsCtl().loadConfigurationSettings() },
           // 引擎启动确认后由 StartupBridge 调用；立即读引擎状态，不排队、不延时。
-          refreshRuntimeState: (): void => { this.engineReady = true; this.refreshStateNow(); this.callInteractive('setTouchPickRadius', this.viewSettingsStore.touchPickRadiusVp.toString(), () => {}); this.syncStarBrightnessFromEngine(); this.consumeCardRoute(); void this.notificationCtl().refreshSubscriptions(); this.scheduleCardSnapshotSync(1800) },
+          refreshRuntimeState: (): void => { this.engineReady = true; this.refreshStateNow(); this.callInteractive('setTouchPickRadius', this.viewSettingsStore.touchPickRadiusVp.toString(), () => {}); this.syncStarBrightnessFromEngine(); this.consumeCardRoute(); void this.notificationCtl().refreshSubscriptions(); this.scheduleCardSnapshotSync(1800); setTimeout(() => { this.ensureCalendarPreviewLoaded() }, 600) },
           // Startbridge 的「引擎就绪」以 StelApp::isInitialized() 为准：
           // 出帧就绪可能早于 init 完成，提前投放查询会在 init 期间堆积重试链。
           enginePresentationReady: (): boolean => isEngineReady()
@@ -3048,19 +3064,65 @@ export struct WindowNativeNode {
   }
 
   private calendarCtl(): AstronomyCalendarController {
+    const dir = this.stellariumFilesDir()
+    if (dir.length > 0) {
+      AstronomyCalendarCache.getInstance().initDir(dir)
+    }
     if (this.calendarController === undefined) {
       const hooks: AstronomyCalendarHostHooks = {
         viewSky: (event: AstronomyCalendarEvent): void => {
           this.setPanel('', true, true)
+          const isSat = event.kind === 'satellite-pass'
+          const isMeteor = event.kind === 'meteor-peak'
+          const isSolarSystemKind = event.kind === 'moon-phase'
+            || event.kind === 'solar-term'
+            || event.kind === 'planetary-event'
+            || event.kind === 'solar-eclipse'
+            || event.kind === 'lunar-eclipse'
+            || event.kind === 'companion-phase'
+            || event.kind === 'companion-eclipse'
+            || event.kind === 'planetary-season'
+          const satId = event.satCatalogId?.trim() ?? ''
+          const showerCode = event.showerCode?.trim() ?? ''
+          const rawTarget = event.target?.trim() ?? ''
+          let searchArg = rawTarget
+          if (isSat && satId.length > 0) {
+            searchArg = `object|Satellite|${satId}`
+          } else if (isMeteor && showerCode.length > 0) {
+            searchArg = `object|MeteorShower|${showerCode}`
+          } else if (isSolarSystemKind && rawTarget.length > 0) {
+            searchArg = `object|Planet|${rawTarget}`
+          }
+          if (isSat) {
+            this.satelliteCtl().setSatelliteFlag('hints', true)
+            if (!this.satelliteStore.satOrbitLines) {
+              this.satelliteCtl().setSatelliteFlag('orbitLines', true)
+            }
+          } else if (isMeteor) {
+            this.commandPort().fire('setMeteorShowersFlag', 'enabled|1')
+            this.commandPort().fire('setMeteorShowersFlag', 'marker|1')
+          }
           const runJump = (): void => {
-            this.timeTransitionCtl().animate(event.jd, event.title, () => {
-              if (event.target.length > 0) {
-                this.callInteractive('searchObject', event.target, (response: StellariumBridgeResponse) => {
-                  this.applySelectedObject(response)
-                  this.refreshState()
+            // 直接切换至事件时刻（不做耗时数秒的时间旋转过渡），随后选中并居中锁定目标星体。
+            this.callInteractive('setJD', event.jd.toString(), () => {
+              this.refreshDockClock()
+              this.syncSimulatedDateLabel(event.jd)
+              if (searchArg.length > 0) {
+                this.callInteractive('searchObject', searchArg, (response: StellariumBridgeResponse) => {
+                  this.applySelectedObject(response, false, '', true)
+                  if (!this.gyroStore.gyroscopeEnabled && response.found !== false) {
+                    this.callInteractive('moveToSelected', '', () => { this.refreshState() })
+                  } else {
+                    this.refreshState()
+                  }
                 })
-              } else this.refreshState()
+              } else {
+                this.refreshState()
+              }
             })
+            if (Number.isFinite(event.at) && event.at > 0) {
+              this.showLandingBanner(event.title, 'calendar', event.target, true, event.id, new Date(event.at).toISOString())
+            }
           }
           const targetPlanet = event.observerPlanet?.trim() ?? ''
           const currentPlanet = this.sessionToolStore.observerPlanet?.trim() || 'Earth'
@@ -3085,9 +3147,21 @@ export struct WindowNativeNode {
               ? '未找到通知对应的天象事件，请查看事件列表。' : 'The event from this notification was not found. Please check the event list.'
             this.pendingCalendarEvent = ''
           }
+          // 搜索页「日历 ›」横滑条至少展示 4 场未来天象：若月末余量不足，自动补载下月一次。
+          if (this.panelVisible && this.activePanel === 'search' && this.calendarStore.loaded &&
+            !this.calendarStore.loading && !this.calendarStore.loadingMore &&
+            this.calendarStore.throughYear === this.calendarStore.year &&
+            this.calendarStore.throughMonth === this.calendarStore.month) {
+            const upcomingCount = events.filter((ev: AstronomyCalendarEvent) =>
+              ev.kind !== 'satellite-pass' && ev.at >= Date.now() - 3600000).length
+            if (upcomingCount < 4) {
+              this.calendarCtl().loadMore()
+            }
+          }
         },
         observerContext: (): CalendarObserverContext => ({
           latitude: this.observerLatitude,
+          longitude: this.locationPickerStore.locationPickerLongitude,
           bortleScale: this.layerViewStore.bortleScale,
           observerPlanet: this.sessionToolStore.observerPlanet
         }),
@@ -4484,8 +4558,8 @@ export struct WindowNativeNode {
     })
   }
 
-  // 通知/卡片时间跃迁预览条：仅在落地切换了仿真时刻时轻量展示「预报预览 · HH:mm」与「回到此刻」按钮，
-  // 避免与底部 ObjectSelectionPill（自带天体名称与详情入口）及右上角陀螺仪开关重复。
+  // 时间变更顶部悬浮胶囊：仅在日历查看/通知跳转更改了仿真时间后展示「时间已更改 + 日期」，
+  // 轻点整枚胶囊即可一键恢复实时时间并短暂反馈「已重新设置时间」后自动淡出。
   private showLandingBanner(
     title: string,
     source: string,
@@ -4494,11 +4568,16 @@ export struct WindowNativeNode {
     eventId: string,
     eventAt: string
   ): void {
+    if (this.landingTimeResetTimer !== 0) {
+      clearTimeout(this.landingTimeResetTimer)
+      this.landingTimeResetTimer = 0
+    }
     const cleanTitle = title.trim()
     this.landingBannerTitle = cleanTitle.length > 0 ? cleanTitle : (target.length > 0 ? zhNameOf(target) : '星穹定位')
     this.landingBannerSource = source
     this.landingBannerTarget = target
     this.landingBannerHasTimeShift = hasTimeShift
+    this.landingTimeResetConfirmed = false
     this.landingBannerEventId = eventId
     this.landingBannerEventAt = eventAt
     this.landingBannerVisible = hasTimeShift
@@ -4507,37 +4586,65 @@ export struct WindowNativeNode {
     }
   }
 
-  private landingTimePreviewLabel(): string {
+  private landingChangedDateLabel(): string {
     const zh = I18n.getLanguage().startsWith('zh')
     const ms = Date.parse(this.landingBannerEventAt)
     if (!Number.isFinite(ms)) {
-      return zh ? '预报时刻预览' : 'Pass Preview'
+      return zh ? '点击恢复实时时间' : 'Tap to reset to live time'
     }
     const d = new Date(ms)
     const now = new Date()
+    const y = d.getFullYear()
+    const mo = d.getMonth() + 1
+    const da = d.getDate()
     const hh = d.getHours().toString().padStart(2, '0')
     const mm = d.getMinutes().toString().padStart(2, '0')
-    const sameDay = d.getFullYear() === now.getFullYear() &&
-      d.getMonth() === now.getMonth() &&
-      d.getDate() === now.getDate()
+    const sameDay = y === now.getFullYear() && d.getMonth() === now.getMonth() && da === now.getDate()
     if (sameDay) {
-      return (zh ? '预报预览 · ' : 'Preview · ') + hh + ':' + mm
+      return zh ? `${y}年${mo}月${da}日 ${hh}:${mm}` : `${y}-${mo.toString().padStart(2, '0')}-${da.toString().padStart(2, '0')} ${hh}:${mm}`
     }
-    const mo = (d.getMonth() + 1).toString().padStart(2, '0')
-    const da = d.getDate().toString().padStart(2, '0')
-    return (zh ? '预报预览 · ' : 'Preview · ') + mo + '-' + da + ' ' + hh + ':' + mm
+    return zh ? `${y}年${mo}月${da}日` : `${y}-${mo.toString().padStart(2, '0')}-${da.toString().padStart(2, '0')}`
   }
 
   private dismissLandingBanner(): void {
+    if (this.landingTimeResetTimer !== 0) {
+      clearTimeout(this.landingTimeResetTimer)
+      this.landingTimeResetTimer = 0
+    }
     this.landingBannerVisible = false
+    this.landingTimeResetConfirmed = false
+  }
+
+  private landingTimePillY(): number {
+    if (this.isExpandedLayout || this.isFoldHoverLayout) {
+      return 52
+    }
+    return (this.infoWindowStore.infoWinVisible && !this.infoWindowStore.infoWinExpanded)
+      ? (this.selectionPillY() + this.selectionPillHeight() + 10)
+      : 52
   }
 
   private returnToNowFromLanding(): void {
-    this.callInteractive('setTimeNow', '', () => {
+    if (this.landingTimeResetConfirmed) {
+      return
+    }
+    this.cancelSelectedObjectUiChange()
+    this.callInteractive('triggerAction', 'actionReturn_To_Current_Time', () => {
+      this.timeCtl().resetRateToRealTime()
       this.landingBannerHasTimeShift = false
-      this.landingBannerVisible = false
+      this.landingTimeResetConfirmed = true
+      this.landingBannerVisible = true
+      this.refreshDockClock()
       this.refreshState()
-      this.flashHint(I18n.getLanguage().startsWith('zh') ? '已回到实时星穹' : 'Returned to live sky')
+      this.refreshSelectedObject()
+      if (this.landingTimeResetTimer !== 0) {
+        clearTimeout(this.landingTimeResetTimer)
+      }
+      this.landingTimeResetTimer = setTimeout(() => {
+        this.landingTimeResetTimer = 0
+        this.landingBannerVisible = false
+        this.landingTimeResetConfirmed = false
+      }, 1400) as number
     })
   }
 
@@ -4625,14 +4732,16 @@ export struct WindowNativeNode {
         AppStorage.setOrCreate('stellariumCardRoute', '')
         return
       }
+      const hasValidTargetJd = Number.isFinite(targetJd) && targetJd > 0
       if (panel === 'sky' || (panel === 'satellites' && kind === 'satellite-pass' && target.length > 0)) {
         this.pendingCalendarEvent = ''
         this.setPanel('', true, true)
         const eventId = typeof route['eventId'] === 'string' ? String(route['eventId']).trim() : ''
         const satMatch = /^(?:satellite-pass-|pass:)(\d+)(?:[-:]|$)/.exec(eventId)
         const satId = satMatch ? satMatch[1] : (/^\d+$/.test(target) ? target : '')
-        const searchArg = (panel === 'satellites' && satId.length > 0) ? `object|Satellite|${satId}` : target
-        if (panel === 'satellites') {
+        const isSatelliteLanding = panel === 'satellites' || kind === 'satellite-pass'
+        const searchArg = (isSatelliteLanding && satId.length > 0) ? `object|Satellite|${satId}` : target
+        if (isSatelliteLanding) {
           this.satelliteCtl().setSatelliteFlag('hints', true)
           if (this.satelliteStore !== undefined && !this.satelliteStore.satOrbitLines) {
             this.satelliteCtl().setSatelliteFlag('orbitLines', true)
@@ -4641,9 +4750,9 @@ export struct WindowNativeNode {
         const focusTarget = (): void => {
           if (searchArg.length > 0) {
             this.callInteractive('searchObject', searchArg, (response: StellariumBridgeResponse) => {
-              this.applySelectedObject(response)
+              this.applySelectedObject(response, false, '', true)
               // 若着陆横幅标题仍是纯 NORAD 编号（如桌面卡片路由 target=20580），回填本地化卫星名。
-              if (panel === 'satellites' && landingTitle.length === 0 && typeof response.name === 'string' && response.name.trim().length > 0) {
+              if (isSatelliteLanding && landingTitle.length === 0 && typeof response.name === 'string' && response.name.trim().length > 0) {
                 this.landingBannerTitle = '卫星过境 · ' + response.name.trim()
               }
               if (kind === 'find') {
@@ -4652,10 +4761,10 @@ export struct WindowNativeNode {
               } else {
                 const gyroActive = this.gyroStore !== undefined && this.gyroStore.gyroscopeEnabled === true
                 if (!gyroActive && response.found !== false) {
-                  // 通知/卡片落地主动把目标平滑居中聚焦到画面中心；不调用 setTracking(1)，
-                  // 以保留鸿蒙版默认的「固定星体」（s_viewLock）在居中动画结束后自动锁定卫星位置。
+                  // 通知/卡片/日历天象落地主动把相关星体平滑居中聚焦到画面中心；不调用 setTracking(1)，
+                  // 以保留鸿蒙版默认的「固定星体」（s_viewLock）在居中动画结束后自动锁定目标位置。
                   this.callInteractive('moveToSelected', '', () => {
-                    if (panel === 'satellites' && response.aboveHorizon === false && this.flashHint !== undefined) {
+                    if (isSatelliteLanding && response.aboveHorizon === false && this.flashHint !== undefined) {
                       this.flashHint(I18n.getLanguage().startsWith('zh')
                         ? '该卫星当前位于地平线以下，可点击下方详情预演下次过境'
                         : 'Satellite is currently below the horizon; open details to preview its next pass')
@@ -4672,22 +4781,39 @@ export struct WindowNativeNode {
             this.refreshState()
           }
         }
-        const hasTimeShift = Number.isFinite(targetJd) && targetJd > 0
-        if (hasTimeShift) {
-          const transitionLabel = landingTitle.length > 0 ? landingTitle : (target.length > 0 ? target : panel)
-          this.timeTransitionCtl().animate(targetJd, transitionLabel, focusTarget)
+        const runSkyLanding = (): void => {
+          if (hasValidTargetJd) {
+            // 直接跳转至事件时刻，不做缓慢的时间旋转动画，随后立即选中并平滑居中目标星体。
+            this.callInteractive('setJD', targetJd.toString(), () => {
+              if (this.refreshDockClock !== undefined) this.refreshDockClock()
+              if (this.syncSimulatedDateLabel !== undefined) this.syncSimulatedDateLabel(targetJd)
+              focusTarget()
+            })
+          } else {
+            focusTarget()
+          }
+        }
+        const targetPlanet = typeof route['observerPlanet'] === 'string' ? String(route['observerPlanet']).trim() : ''
+        const currentPlanet = this.sessionToolStore !== undefined ? (this.sessionToolStore.observerPlanet?.trim() || 'Earth') : 'Earth'
+        if (targetPlanet.length > 0 && targetPlanet.toLowerCase() !== currentPlanet.toLowerCase()) {
+          this.callInteractive('setObserverPlanet', targetPlanet, () => {
+            if (this.sessionToolStore !== undefined) {
+              this.sessionToolStore.observerPlanet = targetPlanet
+            }
+            runSkyLanding()
+          })
         } else {
-          focusTarget()
+          runSkyLanding()
         }
         if (this.showLandingBanner !== undefined) {
           const fallbackTitle = landingTitle.length > 0
             ? landingTitle
-            : (panel === 'satellites' ? ('卫星过境 · ' + target) : target)
+            : (isSatelliteLanding ? ('卫星过境 · ' + target) : target)
           this.showLandingBanner(
             fallbackTitle,
-            landingSource.length > 0 ? landingSource : (panel === 'satellites' ? 'reminder' : 'card'),
+            landingSource.length > 0 ? landingSource : (isSatelliteLanding ? 'reminder' : 'card'),
             target,
-            hasTimeShift,
+            hasValidTargetJd,
             eventId,
             eventAtIso
           )
@@ -4879,6 +5005,7 @@ export struct WindowNativeNode {
     this.astroCalcCtl().stopAstroCalcContextTimer()
     this.telescopeCtl().stopTelescopeLivePosition(false)
     if (!nextVisible) {
+      this.saveCurrentDockPanelMemory()
       this.schedulePanelDataLoad(panel, false)
       const closeSerial = ++this.panelContentKey
       const closeDirection = this.panelRouteDirection
@@ -5024,6 +5151,7 @@ export struct WindowNativeNode {
       if (panel === 'search') {
         this.catalogStore.loadObjectCatalogCategories(this.languageStore.languageRefreshSerial)
         if (this.searchStore.categoryObjects.length === 0) this.searchStore.loadCategoryObjects(this.searchStore.searchCategory)
+        this.ensureCalendarPreviewLoaded()
       }
       if (panel === 'settings') {
         this.syncRemoteControlState()
@@ -5126,7 +5254,7 @@ export struct WindowNativeNode {
     if (serial <= 0) return
     setTimeout(() => {
       if (this.panelContentKey !== serial) return
-      this.resetPanelScroll(this.isExpandedLayout ? this.widePanelScroller : this.compactPanelScroller)
+      this.applyPanelScrollPosition(this.isExpandedLayout ? this.widePanelScroller : this.compactPanelScroller)
       this.getUIContext().animateTo({ duration: 320, curve: curves.springMotion(0.46, 0.86) }, () => {
         if (this.panelContentKey !== serial) return
         this.panelRouteOpacity = 1
@@ -5136,6 +5264,142 @@ export struct WindowNativeNode {
         hilog.info(0x0000, 'StellariumArkUI', '[panel-transition] finish serial=%{public}d panel=%{public}s', serial, this.activePanel)
       })
     }, 16)
+  }
+
+  private currentPanelScrollKey(panel: string = this.activePanel): string {
+    if (panel === 'calendar') {
+      return this.calendarStore.selectedEventId.length > 0
+        ? ('calendar:detail:' + this.calendarStore.selectedEventId)
+        : 'calendar:list'
+    }
+    return panel
+  }
+
+  private currentDockRootOwner(): string {
+    if (this.panelNavigationStack.length > 0) {
+      const rootEntry = this.panelNavigationStack[0].split('#')[0]
+      if (rootEntry === 'search' || rootEntry === 'time' || rootEntry === 'quick' || rootEntry === 'layers' || rootEntry === 'more') {
+        return rootEntry
+      }
+    }
+    return panelRouteRoot(this.activePanel)
+  }
+
+  private dockActivePanel(): string {
+    return this.panelVisible ? this.currentDockRootOwner() : this.activePanel
+  }
+
+  private activePanelScroller(): Scroller {
+    return this.isExpandedLayout ? this.widePanelScroller : this.compactPanelScroller
+  }
+
+  private recordPanelScrollOffset(yOffset: number): void {
+    if (!this.panelVisible || this.restoringPanelScroll || this.pendingScrollRestoreOffsetY >= 0 || this.panelRouteOpacity < 0.5) {
+      return
+    }
+    const key = this.currentPanelScrollKey()
+    if (key.length > 0 && Number.isFinite(yOffset) && yOffset >= 0) {
+      this.panelScrollOffsets.set(key, yOffset)
+    }
+  }
+
+  private captureCurrentPanelScroll(): void {
+    if (!this.panelVisible || this.activePanel.length === 0) return
+    const key = this.currentPanelScrollKey()
+    if (key.length === 0) return
+    try {
+      const y = this.activePanelScroller().currentOffset()?.yOffset ?? 0
+      if (Number.isFinite(y) && y >= 0) {
+        this.panelScrollOffsets.set(key, y)
+      }
+    } catch (_) {}
+  }
+
+  private saveCurrentDockPanelMemory(): void {
+    if (!this.panelVisible || this.activePanel.length === 0) return
+    this.captureCurrentPanelScroll()
+    const owner = this.currentDockRootOwner()
+    if (owner.length === 0) return
+    this.dockPanelMemory.set(owner, {
+      activePanel: this.activePanel,
+      stack: this.panelNavigationStack.slice(),
+      viewTab: this.viewTab,
+      configTab: this.configTab
+    })
+  }
+
+  private applyPanelScrollPosition(scroller: Scroller): void {
+    const targetY = this.pendingScrollRestoreOffsetY >= 0 ? this.pendingScrollRestoreOffsetY : 0
+    this.pendingScrollRestoreOffsetY = -1
+    if (targetY <= 0.5) {
+      this.resetPanelScroll(scroller)
+      return
+    }
+    this.restoringPanelScroll = true
+    this.updatePanelScrollBlur(targetY)
+    const doScroll = (): void => {
+      try {
+        scroller.scrollTo({ xOffset: 0, yOffset: targetY, animation: false })
+        this.updatePanelScrollBlur(targetY)
+      } catch (error) {
+        hilog.warn(0x0000, 'StellariumArkUI', 'restore panel scroll failed: %{public}s', String(error))
+      }
+    }
+    doScroll()
+    setTimeout(() => {
+      doScroll()
+      this.restoringPanelScroll = false
+    }, 48)
+  }
+
+  private restoreScrollKeyAsync(key: string, delayMs: number = 32): void {
+    const targetY = this.panelScrollOffsets.get(key) ?? 0
+    this.restoringPanelScroll = true
+    setTimeout(() => {
+      const scroller = this.activePanelScroller()
+      try {
+        scroller.scrollTo({ xOffset: 0, yOffset: targetY, animation: false })
+        this.updatePanelScrollBlur(targetY)
+      } catch (_) {}
+      setTimeout(() => { this.restoringPanelScroll = false }, 36)
+    }, delayMs)
+  }
+
+  private ensureCalendarPreviewLoaded(): void {
+    if (this.calendarStore.loading) return
+    const activePlanet = this.sessionToolStore.observerPlanet?.trim() || 'Earth'
+    if (!this.calendarStore.loaded || this.calendarStore.observerPlanet.toLowerCase() !== activePlanet.toLowerCase()) {
+      this.calendarCtl().goToCurrentMonth()
+      return
+    }
+    if (!this.calendarStore.loadingMore &&
+      this.calendarStore.throughYear === this.calendarStore.year &&
+      this.calendarStore.throughMonth === this.calendarStore.month) {
+      const upcomingCount = this.calendarStore.events.filter((ev: AstronomyCalendarEvent) =>
+        ev.kind !== 'satellite-pass' && ev.at >= Date.now() - 3600000).length
+      if (upcomingCount < 4) {
+        this.calendarCtl().loadMore()
+      }
+    }
+  }
+
+  private maybeAutoLoadCalendarMore(): void {
+    if (!this.panelVisible || this.activePanel !== 'calendar') return
+    if (this.calendarStore.selectedEventId.length > 0 || this.calendarStore.selectedDay !== 0) return
+    if (this.calendarStore.loading || this.calendarStore.loadingMore || !this.calendarStore.loaded) return
+    this.calendarCtl().loadMore()
+  }
+
+  private openCalendarFromSearch(eventId: string): void {
+    this.captureCurrentPanelScroll()
+    if (eventId.length > 0) {
+      this.calendarCtl().selectEvent(eventId)
+      this.pendingScrollRestoreOffsetY = 0
+    } else {
+      this.calendarCtl().showMonthEvents()
+      this.pendingScrollRestoreOffsetY = this.panelScrollOffsets.get('calendar:list') ?? 0
+    }
+    this.openSubPanel('calendar')
   }
 
   // 设置页所有标签共用宿主面板 Scroll；切换标签时回到顶部。
@@ -5243,6 +5507,13 @@ export struct WindowNativeNode {
       this.quickPanelStore.discardEdit()
       return
     }
+    // 天文日历处于单条天象详情时，顶栏返回先回到日历事件列表（并恢复列表滚动位置），再点一次才回到上级菜单。
+    if (this.activePanel === 'calendar' && this.calendarStore.selectedEventId.length > 0) {
+      this.captureCurrentPanelScroll()
+      this.calendarCtl().showMonthEvents()
+      this.restoreScrollKeyAsync('calendar:list', 32)
+      return
+    }
     hilog.info(0x0000, 'StellariumArkUI', '[panel-back] panel=%{public}s stack=%{public}d parent=%{public}s',
       this.activePanel, this.panelNavigationStack.length, panelRouteParent(this.activePanel))
     this.goBackPanel()
@@ -5277,6 +5548,7 @@ export struct WindowNativeNode {
       }
       return
     }
+    this.pendingScrollRestoreOffsetY = this.panelScrollOffsets.get(this.currentPanelScrollKey(targetPanel)) ?? 0
     this.setPanel(targetPanel, true, true, -1)
     if (parts.length >= 3) {
       const v = Number(parts[1])
@@ -5295,6 +5567,8 @@ export struct WindowNativeNode {
       this.polarScopeCtl().closePolarScope()
       return
     }
+    // 关闭前保存当前 Dock 入口的页面路径与滚动偏移，再点同一菜单时无缝恢复原位。
+    this.saveCurrentDockPanelMemory()
     // 关面板即丢弃未提交的快捷面板自定义（点面板外 / 关按钮 / 切路由都会走到这里）。
     this.quickPanelStore.discardEdit()
     // 关面板时停掉时间面板定时器，避免后台空转
@@ -5494,6 +5768,16 @@ export struct WindowNativeNode {
         return true
       }
       if (this.isCompactMorePoint(x, y)) {
+        return true
+      }
+    }
+    if (this.landingBannerVisible && (this.landingBannerHasTimeShift || this.landingTimeResetConfirmed) &&
+      !this.panelVisible && !this.locationMapFullscreen) {
+      const pillW = 224
+      const pillH = 56
+      const pillX = (this.skyWidth - pillW) / 2
+      const pillY = this.landingTimePillY()
+      if (x >= pillX - 10 && x <= pillX + pillW + 10 && y >= pillY - 6 && y <= pillY + pillH + 6) {
         return true
       }
     }
@@ -5943,14 +6227,31 @@ export struct WindowNativeNode {
     this.lastDockActionPanel = item.panel
     this.lastDockActionAt = now
     void this.haptics().menu()
-    if (item.panel === 'more') {
-      this.setPanel('more')
-      return
-    }
     if (item.panel === 'object') {
       this.showFullObjectInspector()
       return
     }
+    // 再次点击当前已打开的同一 Dock 入口：保存当前页面/滚动状态并收起面板。
+    if (this.panelVisible && this.currentDockRootOwner() === item.panel) {
+      this.closePanel(true)
+      return
+    }
+    // 切换到另一个 Dock 入口前，先保留原入口的页面位置。
+    if (this.panelVisible) {
+      this.saveCurrentDockPanelMemory()
+    }
+    const saved = this.dockPanelMemory.get(item.panel)
+    if (saved !== undefined && saved.activePanel.length > 0) {
+      this.panelNavigationStack = saved.stack.slice()
+      this.panelNavigationDepth = saved.stack.length
+      this.viewTab = saved.viewTab
+      this.configTab = saved.configTab
+      const scrollKey = this.currentPanelScrollKey(saved.activePanel)
+      this.pendingScrollRestoreOffsetY = this.panelScrollOffsets.get(scrollKey) ?? 0
+      this.setPanel(saved.activePanel, true, true)
+      return
+    }
+    this.pendingScrollRestoreOffsetY = this.panelScrollOffsets.get(this.currentPanelScrollKey(item.panel)) ?? 0
     this.setPanel(item.panel)
   }
 
@@ -9275,7 +9576,7 @@ export struct WindowNativeNode {
                 panelIdleGlass: this.panelIdleGlass,
                 panelVisible: this.panelVisible,
                 isExpandedLayout: this.isExpandedLayout,
-                activePanel: this.activePanel,
+                activePanel: this.dockActivePanel(),
                 languageRevision: this.languageStore.languageRevision,
                 actions: this.canonicalDockActions(),
                 chromeOpacity: this.phoneChromeOpacity(),
@@ -9383,7 +9684,7 @@ export struct WindowNativeNode {
                 expandedUiAllowed: this.expandedUiAllowed(),
                 panelVisible: this.panelVisible,
                 isExpandedLayout: this.isExpandedLayout,
-                activePanel: this.activePanel,
+                activePanel: this.dockActivePanel(),
                 languageRevision: this.languageStore.languageRevision,
                 actions: this.canonicalDockActions(),
                 chromeOpacity: this.phoneChromeOpacity(),
@@ -9522,7 +9823,7 @@ export struct WindowNativeNode {
                 panelVisible: this.panelVisible,
                 isExpandedLayout: this.isExpandedLayout,
                 polarScopeVisible: this.polarScopeStore.polarScopeVisible,
-                activePanel: this.activePanel,
+                activePanel: this.dockActivePanel(),
                 languageRevision: this.languageStore.languageRevision,
                 actions: this.canonicalDockActions(),
                 chromeOpacity: this.phoneChromeOpacity(),
@@ -9755,52 +10056,64 @@ export struct WindowNativeNode {
         }
       }
 
-      if (this.landingBannerVisible && this.landingBannerHasTimeShift && !this.panelVisible && !this.locationMapFullscreen) {
-        Row({ space: 8 }) {
-          Row()
-            .width(6)
-            .height(6)
-            .borderRadius(3)
-            .backgroundColor(this.hostSlots().accent)
-          Text(this.landingTimePreviewLabel())
-            .fontSize(12)
-            .fontWeight(FontWeight.Medium)
-            .fontColor(this.hostSlots().textStrong)
-            .maxLines(1)
-            .textOverflow({ overflow: TextOverflow.Ellipsis })
-          Text(I18n.getLanguage().startsWith('zh') ? '回到此刻' : 'Live')
-            .fontSize(11)
-            .fontWeight(FontWeight.Medium)
-            .fontColor(this.hostSlots().accent)
-            .padding({ left: 10, right: 10, top: 4, bottom: 4 })
-            .backgroundColor(this.hostSlots().soft)
+      if (this.landingBannerVisible && (this.landingBannerHasTimeShift || this.landingTimeResetConfirmed) && !this.panelVisible && !this.locationMapFullscreen) {
+        if (this.landingTimeResetConfirmed) {
+          Row() {
+            Text(I18n.getLanguage().startsWith('zh') ? '已重新设置时间' : 'Time Reset')
+              .fontSize(14)
+              .fontWeight(FontWeight.Medium)
+              .fontColor(this.hostSlots().textStrong)
+              .maxLines(1)
+          }
+            .alignItems(VerticalAlign.Center)
+            .justifyContent(FlexAlign.Center)
+            .padding({ left: 22, right: 22, top: 10, bottom: 10 })
+            .backgroundColor(this.hostSlots().panelGlassStrong)
+            .backdropBlur(24)
+            .border({ width: 0.7, color: this.hostSlots().border })
+            .borderRadius(UI_RADIUS_PILL)
+            .position({
+              x: '50%',
+              y: this.landingTimePillY()
+            })
+            .markAnchor({ x: '50%', y: 0 })
+            .zIndex(93)
+            .transition(TransitionEffect.OPACITY.animation({ duration: 200, curve: Curve.EaseOut }))
+        } else {
+          Row({ space: 12 }) {
+            Image($r('app.media.ic_time_reset'))
+              .width(22)
+              .height(22)
+              .fillColor(this.hostSlots().textStrong)
+            Column({ space: 2 }) {
+              Text(I18n.getLanguage().startsWith('zh') ? '时间已更改' : 'Time Changed')
+                .fontSize(14)
+                .fontWeight(FontWeight.Medium)
+                .fontColor(this.hostSlots().textStrong)
+                .maxLines(1)
+              Text(this.landingChangedDateLabel())
+                .fontSize(12)
+                .fontColor(this.hostSlots().sub)
+                .maxLines(1)
+            }
+              .alignItems(HorizontalAlign.Start)
+          }
+            .alignItems(VerticalAlign.Center)
+            .padding({ left: 18, right: 22, top: 9, bottom: 9 })
+            .backgroundColor(this.hostSlots().panelGlassStrong)
+            .backdropBlur(24)
+            .border({ width: 0.7, color: this.hostSlots().border })
             .borderRadius(UI_RADIUS_PILL)
             .clickEffect({ level: ClickEffectLevel.LIGHT })
             .onClick(() => { this.returnToNowFromLanding() })
-          Text('✕')
-            .fontSize(12)
-            .fontColor(this.hostSlots().sub)
-            .textAlign(TextAlign.Center)
-            .width(24)
-            .height(24)
-            .borderRadius(12)
-            .clickEffect({ level: ClickEffectLevel.LIGHT })
-            .onClick(() => { this.dismissLandingBanner() })
+            .position({
+              x: '50%',
+              y: this.landingTimePillY()
+            })
+            .markAnchor({ x: '50%', y: 0 })
+            .zIndex(93)
+            .transition(TransitionEffect.OPACITY.animation({ duration: 200, curve: Curve.EaseOut }))
         }
-          .alignItems(VerticalAlign.Center)
-          .height(36)
-          .padding({ left: 12, right: 8 })
-          .backgroundColor(this.hostSlots().panelGlassStrong)
-          .backdropBlur(20)
-          .border({ width: 0.7, color: this.hostSlots().border })
-          .borderRadius(UI_RADIUS_PILL)
-          .position({
-            x: '50%',
-            y: (this.isExpandedLayout || this.isFoldHoverLayout) ? 54 : Math.max(120, this.dockTop() - 48)
-          })
-          .markAnchor({ x: '50%', y: 0 })
-          .zIndex(93)
-          .transition(TransitionEffect.OPACITY.animation({ duration: 200, curve: Curve.EaseOut }))
       }
 
       if (this.tools.skyTextureStatusVisible) {
@@ -9972,14 +10285,20 @@ export struct WindowNativeNode {
         .scrollBar(BarState.Off)
         .edgeEffect(EdgeEffect.Spring)
         .onDidScroll(() => {
-          this.updatePanelScrollBlur(this.widePanelScroller.currentOffset().yOffset)
+          const offsetY = this.widePanelScroller.currentOffset().yOffset
+          this.updatePanelScrollBlur(offsetY)
+          this.recordPanelScrollOffset(offsetY)
         })
         .onScrollStart(() => { if (!this.panelScrolling) this.panelScrolling = true })
         .onScrollStop(() => {
           this.panelScrolling = false
-          this.updatePanelScrollBlur(this.widePanelScroller.currentOffset().yOffset)
+          const offsetY = this.widePanelScroller.currentOffset().yOffset
+          this.updatePanelScrollBlur(offsetY)
+          this.recordPanelScrollOffset(offsetY)
+          if (this.widePanelScroller.isAtEnd()) this.maybeAutoLoadCalendarMore()
         })
-        .onAppear(() => { this.resetPanelScroll(this.widePanelScroller) })
+        .onReachEnd(() => { this.maybeAutoLoadCalendarMore() })
+        .onAppear(() => { this.applyPanelScrollPosition(this.widePanelScroller) })
 
       // 华为 HarmonyOS 标题栏滚动渐进模糊层：内容上滑穿过标题栏下方时，柔和毛玻璃背板与极细底边随距离渐现。
       Stack({ alignContent: Alignment.Top }) {
@@ -10082,14 +10401,20 @@ export struct WindowNativeNode {
         .scrollBar(BarState.Off)
         .edgeEffect(EdgeEffect.Spring)
         .onDidScroll(() => {
-          this.updatePanelScrollBlur(this.compactPanelScroller.currentOffset().yOffset)
+          const offsetY = this.compactPanelScroller.currentOffset().yOffset
+          this.updatePanelScrollBlur(offsetY)
+          this.recordPanelScrollOffset(offsetY)
         })
         .onScrollStart(() => { if (!this.panelScrolling) this.panelScrolling = true })
         .onScrollStop(() => {
           this.panelScrolling = false
-          this.updatePanelScrollBlur(this.compactPanelScroller.currentOffset().yOffset)
+          const offsetY = this.compactPanelScroller.currentOffset().yOffset
+          this.updatePanelScrollBlur(offsetY)
+          this.recordPanelScrollOffset(offsetY)
+          if (this.compactPanelScroller.isAtEnd()) this.maybeAutoLoadCalendarMore()
         })
-        .onAppear(() => { this.resetPanelScroll(this.compactPanelScroller) })
+        .onReachEnd(() => { this.maybeAutoLoadCalendarMore() })
+        .onAppear(() => { this.applyPanelScrollPosition(this.compactPanelScroller) })
 
       // 紧凑态（手机/半折）同步启用华为标题栏渐进式动态模糊。
       Stack({ alignContent: Alignment.Top }) {
@@ -10471,6 +10796,8 @@ export struct WindowNativeNode {
     } else if (this.activePanel === 'search') {
       SearchPanel({
         store: this.searchStore,
+        calendarStore: this.calendarStore,
+        language: this.i18nLang,
         languageRevision: this.languageStore.languageRevision,
         visibilityLabel: this.searchStore.searchVisibilityLabel(),
         instrumentLabel: this.searchStore.searchInstrumentLabel(),
@@ -10518,7 +10845,9 @@ export struct WindowNativeNode {
         },
         onClearVisibility: () => { this.searchCtl().selectSearchVisibilityFilter('all') },
         onClearInstrument: () => { this.searchCtl().selectSearchInstrumentFilter('all') },
-        onGoCoordinates: () => { this.goToCoordinates() }
+        onGoCoordinates: () => { this.goToCoordinates() },
+        onOpenCalendar: () => { this.openCalendarFromSearch('') },
+        onOpenCalendarEvent: (id: string) => { this.openCalendarFromSearch(id) }
       })
     } else if (this.activePanel === 'settings') {
       SettingsPanel({
@@ -10677,12 +11006,23 @@ export struct WindowNativeNode {
         remindedEventIds: this.notificationStore.remindedEventIds,
         notificationTimingMode: this.notificationStore.timingMode,
         notificationPassLeadMinutes: this.notificationStore.passLeadMinutes,
+        observerLatitude: this.locationPickerStore.locationPickerLatitude,
+        observerLongitude: this.locationPickerStore.locationPickerLongitude,
+        earthMapUri: this.stellariumFilesDir().length > 0 ? ('file://' + this.stellariumFilesDir() + '/stellarium/textures/earth_cmap.png') : '',
         host: {
           previousMonth: () => this.calendarCtl().previousMonth(),
           nextMonth: () => this.calendarCtl().nextMonth(),
           selectDay: (day: number) => this.calendarCtl().selectDay(day),
-          selectEvent: (id: string) => this.calendarCtl().selectEvent(id),
-          showMonthEvents: () => this.calendarCtl().showMonthEvents(),
+          selectEvent: (id: string) => {
+            this.captureCurrentPanelScroll()
+            this.calendarCtl().selectEvent(id)
+            this.restoreScrollKeyAsync('calendar:detail:' + id, 28)
+          },
+          showMonthEvents: () => {
+            this.captureCurrentPanelScroll()
+            this.calendarCtl().showMonthEvents()
+            this.restoreScrollKeyAsync('calendar:list', 32)
+          },
           viewSky: (id: string) => this.calendarCtl().viewSky(id),
           remind: (id: string) => this.calendarCtl().remind(id),
           reload: () => this.calendarCtl().reload(),

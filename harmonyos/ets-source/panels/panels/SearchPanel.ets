@@ -3,10 +3,12 @@ import { DEFAULT_SLOTS, ThemeSlots, slotsFromTheme } from '../../state/Stellariu
 import { I18n } from '../../pages/I18n'
 import { CatOption, NameItem, SearchSug } from '../../pages/StellariumTypes'
 import { SearchStore } from '../../state/SearchStore'
+import { AstronomyCalendarStore } from '../../state/AstronomyCalendarStore'
 import { SearchBar } from '../search/SearchBar'
 import { SearchSuggestions } from '../search/SearchSuggestions'
 import { SearchFilterMenu } from '../search/SearchFilterMenu'
 import { SearchCategoryBrowse } from '../search/SearchCategoryBrowse'
+import { SearchCalendarStrip } from '../search/SearchCalendarStrip'
 import { SearchCoordinateInput } from '../search/SearchCoordinateInput'
 
 // 搜索面板，对应 `activePanel === 'search'`。
@@ -18,6 +20,8 @@ import { SearchCoordinateInput } from '../search/SearchCoordinateInput'
 @Component
 export struct SearchPanel {
   @ObjectLink store: SearchStore
+  @ObjectLink calendarStore: AstronomyCalendarStore
+  @Prop language: string = 'zh'
   @Prop languageRevision: number
   @Prop visibilityLabel: string
   @Prop instrumentLabel: string
@@ -46,6 +50,8 @@ export struct SearchPanel {
   onClearVisibility: () => void = () => {}
   onClearInstrument: () => void = () => {}
   onGoCoordinates: () => void = () => {}
+  onOpenCalendar: () => void = () => {}
+  onOpenCalendarEvent: (id: string) => void = () => {}
 
   onWillApplyTheme(theme: Theme): void { this.c = slotsFromTheme(theme) }
 
@@ -83,6 +89,12 @@ export struct SearchPanel {
             onSelect: (item: SearchSug) => { this.onSelectSuggestion(item) }
           })
         } else {
+          SearchCalendarStrip({
+            calendarStore: this.calendarStore,
+            language: this.language,
+            onOpenCalendar: () => { this.onOpenCalendar() },
+            onSelectEvent: (id: string) => { this.onOpenCalendarEvent(id) }
+          })
           SearchCategoryBrowse({
             store: this.store,
             categoryIconKey: this.categoryIconKey,

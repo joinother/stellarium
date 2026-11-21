@@ -1,5 +1,6 @@
 export interface CalendarObserverContext {
   latitude?: number
+  longitude?: number
   bortleScale?: number
   observerPlanet?: string
 }
@@ -41,7 +42,8 @@ export function calendarPlanetName(language: string, englishName: string): strin
     Saturn: '土星', Titan: '土卫六', Enceladus: '土卫二', Rhea: '土卫五',
     Uranus: '天王星', Titania: '天卫三',
     Neptune: '海王星', Triton: '海卫一',
-    Pluto: '冥王星', Charon: '冥卫一'
+    Pluto: '冥王星', Charon: '冥卫一',
+    Regulus: '轩辕十四', Aldebaran: '毕宿五', Spica: '角宿一', Antares: '心宿二'
   }
   return language.toLowerCase().startsWith('zh') ? (map[englishName] ?? englishName) : englishName
 }
@@ -346,6 +348,121 @@ export function calendarMoonPhaseBody(
     `Last quarter occurs at ${clock}${distNoteEn}. Evening skies remain dark for deep-sky observing before moonrise after midnight reveals dramatic crater relief toward dawn.`)
 }
 
+export interface PlanetaryElongationMetrics {
+  magnitude?: number
+  twilightAltDeg?: number
+  planetSetRiseAt?: number
+  twilightOffsetMin?: number
+  eventAt?: number
+}
+
+export interface CalendarEclipseTextParams {
+  kind: 'solar-eclipse' | 'lunar-eclipse'
+  subtype?: string
+  atMs: number
+  eclipseMagnitude?: number
+  umbralMagnitude?: number
+  localVisible?: boolean
+  localFullVisible?: boolean
+  localDaytime?: boolean
+  localMagnitude?: number
+  localMaxAlt?: number
+  eclipseStartAt?: number
+  eclipseEndAt?: number
+}
+
+function formatDurationZhEn(language: string, minutes: number): string {
+  const safe = Math.max(1, Math.round(minutes))
+  const h = Math.floor(safe / 60)
+  const m = safe % 60
+  if (language.toLowerCase().startsWith('zh')) {
+    if (h > 0 && m > 0) return `${h}小时${m}分钟`
+    if (h > 0) return `${h}小时`
+    return `${m}分钟`
+  }
+  if (h > 0 && m > 0) return `${h}h ${m}m`
+  if (h > 0) return `${h}h`
+  return `${m}m`
+}
+
+export function calendarEclipseBody(language: string, p: CalendarEclipseTextParams): string {
+  const date = new Date(p.atMs)
+  const dateZh = `${date.getMonth() + 1}月${date.getDate()}日`
+  const dateEn = `${date.getMonth() + 1}/${date.getDate()}`
+  const clock = calendarClockText(p.atMs)
+  const startClock = p.eclipseStartAt !== undefined && p.eclipseStartAt > 0 ? calendarClockText(p.eclipseStartAt) : ''
+  const endClock = p.eclipseEndAt !== undefined && p.eclipseEndAt > 0 ? calendarClockText(p.eclipseEndAt) : ''
+
+  if (p.kind === 'lunar-eclipse') {
+    const labelZh = p.subtype === 'total' ? '月全食' : (p.subtype === 'partial' ? '月偏食' : '半影月食')
+    const labelEn = p.subtype === 'total' ? 'total lunar eclipse' : (p.subtype === 'partial' ? 'partial lunar eclipse' : 'penumbral lunar eclipse')
+    let localLineZh: string
+    let localLineEn: string
+    if (p.localVisible === true) {
+      const spanZh = startClock.length > 0 && endClock.length > 0 ? `（${startClock}–${endClock}，食甚 ${clock}）` : `（食甚 ${clock}）`
+      const spanEn = startClock.length > 0 && endClock.length > 0 ? ` (${startClock}–${endClock}, maximum at ${clock})` : ` (maximum at ${clock})`
+      localLineZh = p.localFullVisible === true
+        ? `${labelZh}将于 ${dateZh} 精彩上演${spanZh}，您当前所在地点全程可见。`
+        : `${labelZh}将于 ${dateZh} 上演${spanZh}，您当前所在地点可见部分食程（月出或月落带食）。`
+      localLineEn = p.localFullVisible === true
+        ? `This ${labelEn} unfolds on ${dateEn}${spanEn} and is visible in full from your location.`
+        : `This ${labelEn} unfolds on ${dateEn}${spanEn}, partially visible during moonrise or moonset from your location.`
+    } else if (p.localDaytime === true) {
+      localLineZh = `${labelZh}将于 ${dateZh} ${clock} 达到食甚。真不巧，此次天文现象出现在当地白天，因此您当前所在地点无法观看。下方地图展示全球各地可观察到月食的具体位置。`
+      localLineEn = `This ${labelEn} peaks on ${dateEn} at ${clock}, occurring during local daytime so it is not visible from your location. See the global visibility map below.`
+    } else {
+      localLineZh = `${labelZh}将于 ${dateZh} ${clock} 达到食甚。不过此次月食期间月球位于您当前地平线以下，无法本地观看。下方地图展示全球各地可观察到月食的具体位置。`
+      localLineEn = `This ${labelEn} peaks on ${dateEn} at ${clock}, while the Moon is below your horizon. Check the global visibility map below for viewing regions.`
+    }
+    return calendarText(language, localLineZh, localLineEn)
+  }
+
+  // Solar eclipse
+  const labelZh = p.subtype === 'total' ? '日全食'
+    : (p.subtype === 'annular' ? '日环食' : (p.subtype === 'hybrid' ? '全环食' : '日偏食'))
+  const labelEn = p.subtype === 'total' ? 'total solar eclipse'
+    : (p.subtype === 'annular' ? 'annular solar eclipse' : (p.subtype === 'hybrid' ? 'hybrid solar eclipse' : 'partial solar eclipse'))
+  let localLineZh: string
+  let localLineEn: string
+  if (p.localVisible === true) {
+    const magPct = p.localMagnitude !== undefined && p.localMagnitude > 0 ? `（当地最大食分 ${p.localMagnitude.toFixed(2)}）` : ''
+    const spanZh = startClock.length > 0 && endClock.length > 0 ? `，初亏 ${startClock}、食甚 ${clock}、复圆 ${endClock}` : `，食甚 ${clock}`
+    localLineZh = `${dateZh}，${labelZh}将在您所在地点可见${magPct}${spanZh}。查看下方地图了解全球食带与偏食覆盖区域。`
+    localLineEn = `On ${dateEn}, this ${labelEn} is visible from your location (local maximum at ${clock}). Explore the global path map below.`
+  } else {
+    localLineZh = `${dateZh} ${clock}，${labelZh}现象即将拉开序幕。不过，您当前所在位置无法观察此次${labelZh}，需要前往食带内观赏。查看下方地图，了解此次日食的所有可观测地点。`
+    localLineEn = `On ${dateEn} at ${clock}, this ${labelEn} begins, though it is not visible from your current location. Check the global map below for all viewing regions.`
+  }
+  return calendarText(language, localLineZh, localLineEn)
+}
+
+export function calendarEclipseScienceNote(language: string, kind: 'solar-eclipse' | 'lunar-eclipse', subtype?: string): string {
+  if (kind === 'lunar-eclipse') {
+    return calendarText(language,
+      '红色最深的区域代表可看到整个月食过程的地方，浅红色区域代表月食过程中月亮升起或落下的区域。当太阳、地球、月球排成一条直线、月球步入地球阴影时，月食随之出现。本影是太阳光被地球完全挡住的阴影内部，而在半影区，太阳光仅被部分遮挡。',
+      'The deepest red region sees the entire lunar eclipse; lighter bands see it at moonrise or moonset. Lunar eclipses occur when Earth passes directly between the Sun and Moon, casting its dark umbra and softer penumbra across the lunar surface.')
+  }
+  if (subtype === 'annular') {
+    return calendarText(language,
+      '若地球、月球、太阳成一条直线，但月球处于轨道较远段、视直径略小于太阳而无法完全遮挡日面，太阳边缘便会露出一圈明亮的“火环”，这就是日环食现象。深色细线为环食中心带，灰色覆盖区域可见日偏食。',
+      'When the Moon aligns directly with the Sun near apogee, its apparent disk is slightly smaller than the Sun, leaving a glowing ring of sunlight—an annular solar eclipse. The dark line traces annularity; gray zones experience a partial eclipse.')
+  }
+  if (subtype === 'total') {
+    return calendarText(language,
+      '当月球本影扫过地球表面、将耀眼日面完全遮挡时，白昼瞬间化作暮色，平常难以目睹的银白色日冕将清晰舒展在太阳四周。深色曲线为全食带，灰色覆盖区域可见日偏食。',
+      'Where the Moon’s dark umbra sweeps across Earth, the solar disk is completely covered and the pearly solar corona blooms into view. The dark curve marks totality; gray regions see a partial solar eclipse.')
+  }
+  return calendarText(language,
+    '当太阳、月球与地球近似成一直线时，月球半影扫过地球部分区域，使太阳呈现缺口般的日偏食奇观。灰色覆盖区域均可看到不同程度的偏食。',
+    'When Earth passes through the Moon’s penumbra, part of the solar disk is obscured in a partial solar eclipse across the shaded region.')
+}
+
+export function calendarSolarEclipseSafetyNote(language: string): string {
+  return calendarText(language,
+    '切勿用肉眼、普通墨镜、双筒或未加专业巴德膜/太阳滤镜的望远镜直视太阳（除全食食既至生光阶段外），以免造成永久性视力损伤。请务必佩戴符合 ISO 12312-2 标准的专业日食眼镜。',
+    'Never look directly at the Sun without ISO 12312-2 certified solar eclipse glasses or a proper solar filter (except during the brief total phase of a total solar eclipse).')
+}
+
 export function calendarPlanetaryBody(
   language: string,
   primary: string | undefined,
@@ -353,7 +470,8 @@ export function calendarPlanetaryBody(
   subtype: string | undefined,
   direction: string | undefined,
   alignment: string | undefined,
-  separationDegrees?: number
+  separationDegrees?: number,
+  elongation?: PlanetaryElongationMetrics
 ): string {
   const pZh = primary ? calendarPlanetName('zh', primary) : '该行星'
   const pEn = primary ?? 'This planet'
@@ -364,20 +482,58 @@ export function calendarPlanetaryBody(
       `${pZh}迎来冲日，步入本年度最理想的整夜观测窗口！此时${pZh}与太阳分居地球两侧，日落时自东方升起、午夜高悬中天、整夜可见，且距地球最近、亮度与视直径均处于全年高位。`,
       `${pEn} reaches opposition — its finest observing window of the year! Opposite the Sun in Earth’s sky, it rises at sunset, climbs highest around midnight, and shines at peak brightness and apparent size all night.`)
   }
-  if (subtype === 'greatest-elongation' && direction === 'east') {
-    return calendarText(language,
-      `${pZh}到达东大距，与太阳的傍晚角距拉开至本轮极大，是近期黄昏赏星的理想窗口。日落后不久面向西方低空即可寻觅它的身影；切勿在太阳尚未完全落山时将望远镜指向太阳附近。`,
-      `${pEn} reaches greatest eastern elongation, its best evening apparition of this cycle. Look low in the western sky shortly after sunset; never aim binoculars or an unfiltered telescope near the Sun before it sets.`)
-  }
-  if (subtype === 'greatest-elongation' && direction === 'west') {
-    return calendarText(language,
-      `${pZh}到达西大距，与太阳的清晨角距拉开至本轮极大，是近期晨曦观测的理想窗口。日出前的一小段时间内面向东方低空即可轻松寻找；切勿在日出后用望远镜直视太阳附近天区。`,
-      `${pEn} reaches greatest western elongation, its best morning apparition of this cycle. Look low in the eastern sky shortly before sunrise; never aim binoculars or an unfiltered telescope near the Sun once it rises.`)
+  if (subtype === 'greatest-elongation' && (direction === 'east' || direction === 'west')) {
+    const isEast = direction === 'east'
+    const sepStr = separationDegrees !== undefined && Number.isFinite(separationDegrees) ? `${Math.round(separationDegrees)}°` : ''
+    const dateObj = elongation?.eventAt !== undefined ? new Date(elongation.eventAt) : undefined
+    const dateZh = dateObj !== undefined ? `${dateObj.getMonth() + 1}月${dateObj.getDate()}日` : '今日'
+    const dateEn = dateObj !== undefined ? `${dateObj.getMonth() + 1}/${dateObj.getDate()}` : 'today'
+    const magStr = elongation?.magnitude !== undefined && Number.isFinite(elongation.magnitude)
+      ? `${elongation.magnitude >= 0 ? '+' : ''}${elongation.magnitude.toFixed(1)}` : ''
+    const altStr = elongation?.twilightAltDeg !== undefined && Number.isFinite(elongation.twilightAltDeg) && elongation.twilightAltDeg > 0
+      ? `${Math.round(elongation.twilightAltDeg)}°` : ''
+    const setRiseClock = elongation?.planetSetRiseAt !== undefined && elongation.planetSetRiseAt > 0
+      ? calendarClockText(elongation.planetSetRiseAt) : ''
+    const offsetStrZh = elongation?.twilightOffsetMin !== undefined && elongation.twilightOffsetMin > 0
+      ? formatDurationZhEn('zh', elongation.twilightOffsetMin) : ''
+    const offsetStrEn = elongation?.twilightOffsetMin !== undefined && elongation.twilightOffsetMin > 0
+      ? formatDurationZhEn('en', elongation.twilightOffsetMin) : ''
+
+    if (isEast) {
+      const leadZh = `${pZh}在 ${dateZh}达到其最大东距角${sepStr.length > 0 ? `：${sepStr}` : ''}。在此夜前后一周的晚间，${magStr.length > 0 ? `${pZh}的星等达到 ${magStr}，` : ''}形成本轮最佳傍晚观测时机。`
+      const localZh = altStr.length > 0
+        ? `当天日落时，${pZh}将位于西方地平线以上约 ${altStr}，并自逐渐变暗的天空中慢慢显现${setRiseClock.length > 0 && offsetStrZh.length > 0 ? `，并于 ${setRiseClock}（日落后 ${offsetStrZh}）落下。` : '。'}`
+        : `日落后不久面向西方低空即可寻觅它的身影。`
+      const orbitZh = `${pZh}的轨道在地球轨道之内，大多数时候紧随太阳升起、落下，仅在达到最大东距角前后才会在天黑后依然留在西方地平线之上。`
+      const leadEn = `${pEn} reaches greatest eastern elongation${sepStr.length > 0 ? ` (${sepStr})` : ''} on ${dateEn}${magStr.length > 0 ? `, shining around mag ${magStr}` : ''} for its best evening apparition.`
+      const localEn = altStr.length > 0
+        ? ` At sunset it stands ~${altStr} above the western horizon${setRiseClock.length > 0 && offsetStrEn.length > 0 ? `, setting at ${setRiseClock} (${offsetStrEn} after sunset).` : '.'}`
+        : ' Look low in the west shortly after sunset.'
+      return calendarText(language, leadZh + localZh + orbitZh, leadEn + localEn)
+    } else {
+      const leadZh = `${pZh}在 ${dateZh}达到其最大西距角${sepStr.length > 0 ? `：${sepStr}` : ''}。在此夜前后一周的清晨，${magStr.length > 0 ? `${pZh}的星等达到 ${magStr}，` : ''}形成本轮最佳黎明观测时机。`
+      const localZh = altStr.length > 0
+        ? `当天日出时，${pZh}将升至东方地平线以上约 ${altStr}${setRiseClock.length > 0 && offsetStrZh.length > 0 ? `，早于日出 ${offsetStrZh}（${setRiseClock}）便已从东方升起。` : '。'}`
+        : `日出前的一小段时间内面向东方低空即可轻松寻找。`
+      const orbitZh = `${pZh}作为地内行星平时紧邻太阳，只有在最大西距角前后才会在黎明前的东方晨空中高悬可见。`
+      const leadEn = `${pEn} reaches greatest western elongation${sepStr.length > 0 ? ` (${sepStr})` : ''} on ${dateEn}${magStr.length > 0 ? `, shining around mag ${magStr}` : ''} for its finest morning apparition.`
+      const localEn = altStr.length > 0
+        ? ` At sunrise it climbs to ~${altStr} above the eastern horizon${setRiseClock.length > 0 && offsetStrEn.length > 0 ? `, rising at ${setRiseClock} (${offsetStrEn} before sunrise).` : '.'}`
+        : ' Look low in the east before sunrise.'
+      return calendarText(language, leadZh + localZh + orbitZh, leadEn + localEn)
+    }
   }
   if (subtype === 'conjunction' && secondary && secondary !== 'Sun') {
     const sepValid = separationDegrees !== undefined && Number.isFinite(separationDegrees) && separationDegrees >= 0
     const sepZh = sepValid ? `（最近角距约 ${separationDegrees.toFixed(1)}°）` : ''
     const sepEn = sepValid ? ` (closest separation ~${separationDegrees.toFixed(1)}°)` : ''
+    const isStarPair = secondary === 'Regulus' || secondary === 'Aldebaran' || secondary === 'Spica' || secondary === 'Antares'
+    const isMoonPair = primary === 'Moon'
+    if (isMoonPair || isStarPair) {
+      return calendarText(language,
+        `${pZh}与${sZh}在夜空中近距离相合${sepZh}，两者在黄经上彼此擦肩而过、同框辉映。肉眼与双筒望远镜皆宜观赏，具体可观测时段请结合当地升落时间。`,
+        `${pEn} and ${sEn} make a close pairing in the sky${sepEn}, ideal for naked-eye or binocular viewing. Check local rise and set times for the best window.`)
+    }
     return calendarText(language,
       `${pZh}与${sZh}上演行星相合${sepZh}，两颗行星在黄经上彼此擦肩而过、同框闪耀夜空。双筒或低倍广角目镜尤宜同场观赏；具体可观测时段请结合当地两星的升落时间。`,
       `${pEn} and ${sEn} meet in conjunction${sepEn}, passing closely in ecliptic longitude for a striking pairing in binoculars or wide-field views. Check local rise and set times for the optimal window.`)

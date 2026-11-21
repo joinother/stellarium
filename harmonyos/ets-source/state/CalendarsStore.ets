@@ -87,7 +87,7 @@ export class CalendarsStore {
 
   jumpToNow(): void {
     if (this.port === null) return
-    this.port.requestInteractive('setTimeToNow', '', () => {
+    this.port.requestInteractive('triggerAction', 'actionReturn_To_Current_Time', () => {
       this.onTimeChanged()
       this.load()
       this.onFlashHint('已回到当前实时时间')

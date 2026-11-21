@@ -84,9 +84,55 @@ namespace
 
 QString normalizeSatelliteSearch(const QString& value)
 {
-	QString normalized = value.normalized(QString::NormalizationForm_KC).toCaseFolded();
-	normalized.remove(QRegularExpression(QStringLiteral("[\\p{P}\\p{S}\\s]+")));
+	const QString folded = value.normalized(QString::NormalizationForm_KC).toCaseFolded();
+	QString normalized;
+	normalized.reserve(folded.size());
+	for (const QChar ch : folded)
+	{
+		if (ch.isPunct() || ch.isSymbol() || ch.isSpace())
+			continue;
+		normalized.append(ch);
+	}
 	return normalized;
+}
+
+bool satelliteMatchesExactNormalized(const Satellite& satellite, const QString& normalizedQuery)
+{
+	if (normalizedQuery.isEmpty())
+		return false;
+
+	if (normalizeSatelliteSearch(satellite.getID()) == normalizedQuery
+		|| normalizeSatelliteSearch(satellite.getEnglishName()) == normalizedQuery
+		|| normalizeSatelliteSearch(satellite.getNameI18n()) == normalizedQuery)
+		return true;
+	if (satellite.isStationComplexPrimary() && !satellite.getStationComplexName().isEmpty()
+		&& normalizeSatelliteSearch(satellite.getStationComplexName()) == normalizedQuery)
+		return true;
+
+	const QString englishName = satellite.getEnglishName().toUpper();
+	if (satellite.isStationComplexPrimary()
+		&& (englishName.startsWith(QStringLiteral("ISS")) || englishName.contains(QStringLiteral("ZARYA"))))
+	{
+		if (normalizedQuery == QStringLiteral("iss")
+			|| normalizedQuery == QStringLiteral("国际空间站")
+			|| normalizedQuery == QStringLiteral("internationalspacestation")
+			|| normalizedQuery == QStringLiteral("国际太空站"))
+			return true;
+	}
+	if (satellite.isStationComplexPrimary()
+		&& (englishName.startsWith(QStringLiteral("CSS (")) || englishName.startsWith(QStringLiteral("CSS-"))
+			|| englishName == QLatin1String("CSS") || englishName.contains(QStringLiteral("TIANGONG"))
+			|| englishName.contains(QStringLiteral("TIANHE"))))
+	{
+		if (normalizedQuery == QStringLiteral("天宫")
+			|| normalizedQuery == QStringLiteral("中国空间站")
+			|| normalizedQuery == QStringLiteral("css")
+			|| normalizedQuery == QStringLiteral("tiangong")
+			|| normalizedQuery == QStringLiteral("chinaspacestation")
+			|| normalizedQuery == QStringLiteral("tianhe"))
+			return true;
+	}
+	return false;
 }
 
 bool satelliteMatchesSearch(const Satellite& satellite, const QString& query)
@@ -132,7 +178,7 @@ bool satelliteMatchesSearch(const Satellite& satellite, const QString& query)
 			|| normalizedQuery.contains(QStringLiteral("问天"))
 			|| normalizedQuery.contains(QStringLiteral("梦天"));
 	}
-	const QList<QPair<QString, QString>> localizedAliases = {
+	static const QList<QPair<QString, QString>> localizedAliases = {
 		{QStringLiteral("STARLINK"), QStringLiteral("星链")},
 		{QStringLiteral("BEIDOU"), QStringLiteral("北斗")},
 		{QStringLiteral("TIANLIAN"), QStringLiteral("天链")},
@@ -157,7 +203,7 @@ bool satelliteMatchesSearch(const Satellite& satellite, const QString& query)
 	{
 		if (!englishName.contains(alias.first))
 			continue;
-		const QString normalizedAlias = normalizeSatelliteSearch(alias.second);
+		const QString& normalizedAlias = alias.second;
 		if (normalizedQuery == normalizedAlias)
 			return true;
 		if (normalizedQuery.startsWith(normalizedAlias)
@@ -1044,11 +1090,28 @@ StelObjectP Satellites::searchByNameI18n(const QString& nameI18n) const
 	if (result)
 		return result;
 
+	// Fast zero-allocation exact match pass first (prevents scanning 18k+ satellites
+	// with normalization and guarantees exact names never lose to aliases).
 	for (const auto& sat : satellites)
 	{
 		if (sat->initialized && sat->displayed)
 		{
-			if (satelliteMatchesSearch(*sat, nameI18n))
+			if (sat->getNameI18n().compare(nameI18n, Qt::CaseInsensitive) == 0
+				|| sat->getEnglishName().compare(nameI18n, Qt::CaseInsensitive) == 0
+				|| (sat->isStationComplexPrimary() && !sat->getStationComplexName().isEmpty()
+					&& sat->getStationComplexName().compare(nameI18n, Qt::CaseInsensitive) == 0))
+				return qSharedPointerCast<StelObject>(sat);
+		}
+	}
+
+	const QString normalizedQuery = normalizeSatelliteSearch(nameI18n);
+	if (normalizedQuery.isEmpty())
+		return nullptr;
+	for (const auto& sat : satellites)
+	{
+		if (sat->initialized && sat->displayed)
+		{
+			if (satelliteMatchesExactNormalized(*sat, normalizedQuery))
 				return qSharedPointerCast<StelObject>(sat);
 		}
 	}
@@ -1083,7 +1146,22 @@ StelObjectP Satellites::searchByName(const QString& englishName) const
 	{
 		if (sat->initialized && sat->displayed)
 		{
-			if (satelliteMatchesSearch(*sat, englishName))
+			if (sat->getEnglishName().compare(englishName, Qt::CaseInsensitive) == 0
+				|| sat->getNameI18n().compare(englishName, Qt::CaseInsensitive) == 0
+				|| (sat->isStationComplexPrimary() && !sat->getStationComplexName().isEmpty()
+					&& sat->getStationComplexName().compare(englishName, Qt::CaseInsensitive) == 0))
+				return qSharedPointerCast<StelObject>(sat);
+		}
+	}
+
+	const QString normalizedQuery = normalizeSatelliteSearch(englishName);
+	if (normalizedQuery.isEmpty())
+		return nullptr;
+	for (const auto& sat : satellites)
+	{
+		if (sat->initialized && sat->displayed)
+		{
+			if (satelliteMatchesExactNormalized(*sat, normalizedQuery))
 				return qSharedPointerCast<StelObject>(sat);
 		}
 	}

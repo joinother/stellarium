@@ -14,7 +14,7 @@ const read = (rel) => readFileSync(new URL('../' + rel, import.meta.url), 'utf8'
 
 test('Earth and off-Earth worlds expose appropriate calendar filter categories', () => {
   const earthCats = calendarCategoriesForPlanet('Earth').map(c => c.id);
-  assert.deepEqual(earthCats, ['moon', 'planet', 'meteor', 'solar', 'satellite']);
+  assert.deepEqual(earthCats, ['eclipse', 'moon', 'planet', 'meteor', 'solar', 'satellite']);
 
   const marsCats = calendarCategoriesForPlanet('Mars').map(c => c.id);
   assert.deepEqual(marsCats, ['planet', 'companion', 'eclipse', 'season']);
@@ -116,6 +116,25 @@ test('monthOverlapsSatelliteWindow detects current 48h TLE forecast window accur
   // End of Nov overlaps Dec within 48h!
   const endNov = new Date(2026, 10, 30, 12, 0, 0).getTime();
   assert.equal(monthOverlapsSatelliteWindow(2026, 12, endNov), true);
+});
+
+test('all 44 MeteorShowers.json showers have Chinese translations and eclipse/cache/infinite-scroll wiring is intact', () => {
+  const showersJson = JSON.parse(read('plugins/MeteorShowers/resources/MeteorShowers.json'));
+  const eventTs = read('harmonyos/ets-source/state/AstronomyCalendarEvent.ts');
+  for (const code of Object.keys(showersJson.showers)) {
+    assert.match(eventTs, new RegExp(`\\b${code}:\\s*'[^']+'`), `Missing Chinese meteor shower mapping for ${code}`);
+  }
+  assert.match(eventTs, /item\.kind === 'solar-eclipse' \|\| item\.kind === 'lunar-eclipse'/);
+  const ctrl = read('harmonyos/ets-source/capability/AstronomyCalendarController.ets');
+  assert.match(ctrl, /AstronomyCalendarCache\.getInstance\(\)\.get/);
+  assert.match(ctrl, /AstronomyCalendarCache\.getInstance\(\)\.put/);
+  assert.match(ctrl, /prefetchAheadMonths/);
+  const panel = read('harmonyos/ets-source/panels/panels/AstronomyCalendarPanel.ets');
+  assert.match(panel, /CalendarEclipseMapCard\(\{/);
+  assert.match(panel, /CalendarElongationOrbitCard\(\{/);
+  assert.match(panel, /安全观看提示/);
+  const mainNode = read('harmonyos/ets-source/pages/MainWindowNativeNode.ets');
+  assert.match(mainNode, /\.onReachEnd\(\(\) => \{ this\.maybeAutoLoadCalendarMore\(\) \}\)/);
 });
 
 test('Calendar panel, controller, store, and SettingsRepository wire filter persistence and satellite passes', () => {

@@ -1,4 +1,23 @@
-import { CalendarObserverContext, calendarText, calendarSolarTermTitle, calendarMoonPhaseTitle, calendarSolarTermBody, calendarMoonPhaseBody, calendarMeteorShowerBody, calendarPlanetaryBody } from './AstronomyCalendarText'
+import {
+  CalendarObserverContext,
+  calendarText,
+  calendarSolarTermTitle,
+  calendarMoonPhaseTitle,
+  calendarSolarTermBody,
+  calendarMoonPhaseBody,
+  calendarMeteorShowerBody,
+  calendarPlanetaryBody,
+  calendarEclipseBody
+} from './AstronomyCalendarText'
+
+export interface CalendarEclipseMapData {
+  kind: 'solar' | 'lunar'
+  cols?: number
+  rows?: number
+  grid?: string
+  centralPath?: number[][]
+  subLunarPoints?: number[][]
+}
 
 export interface AstronomyCalendarEvent {
   id: string
@@ -21,12 +40,33 @@ export interface AstronomyCalendarEvent {
   alignment?: string
   separationDegrees?: number
   observerPlanet?: string
+  showerCode?: string
   satCatalogId?: string
   satArchetype?: string
   satMaxAlt?: number
   satVisible?: boolean
   satDurationSec?: number
   satAzimuthSummary?: string
+  // Eclipse & greatest-elongation enrichment
+  eclipseMagnitude?: number
+  umbralMagnitude?: number
+  penumbralMagnitude?: number
+  localVisible?: boolean
+  localFullVisible?: boolean
+  localDaytime?: boolean
+  localMagnitude?: number
+  localMaxAlt?: number
+  eclipseStartAt?: number
+  eclipseEndAt?: number
+  eclipseMap?: CalendarEclipseMapData
+  magnitude?: number
+  twilightAltDeg?: number
+  twilightAt?: number
+  planetSetRiseAt?: number
+  twilightOffsetMin?: number
+  earthHelioLonDeg?: number
+  planetHelioLonDeg?: number
+  orbitRatio?: number
 }
 
 export interface CalendarNativeEvent {
@@ -48,6 +88,73 @@ export interface CalendarNativeEvent {
   distanceKm?: number
   isSupermoon?: boolean
   observerPlanet?: string
+  eclipseMagnitude?: number
+  umbralMagnitude?: number
+  penumbralMagnitude?: number
+  localVisible?: boolean
+  localFullVisible?: boolean
+  localDaytime?: boolean
+  localMagnitude?: number
+  localMaxAlt?: number
+  eclipseStartAt?: number
+  eclipseEndAt?: number
+  eclipseMap?: CalendarEclipseMapData
+  magnitude?: number
+  twilightAltDeg?: number
+  twilightAt?: number
+  planetSetRiseAt?: number
+  twilightOffsetMin?: number
+  earthHelioLonDeg?: number
+  planetHelioLonDeg?: number
+  orbitRatio?: number
+}
+
+// 44/44 全量流星雨标准中文译名（覆盖内置 MeteorShowers.json 全部流星群，杜绝任何英文残余）
+export const METEOR_SHOWER_NAMES_ZH: Record<string, string> = {
+  ANT: '反太阳源',
+  ARI: '白昼白羊座',
+  DSX: '白昼六分仪座',
+  NOO: '十一月猎户座',
+  ACE: '半人马座α',
+  AMO: '麒麟座α',
+  AND: '仙女座',
+  AUR: '御夫座',
+  CAP: '摩羯座α',
+  COM: '后发座',
+  DAU: '十月御夫座δ',
+  DLM: '十二月小狮座',
+  DRA: '天龙座',
+  EGE: '双子座ε',
+  ELY: '天琴座η',
+  ETA: '宝瓶座η',
+  GEM: '双子座',
+  GNO: '矩尺座γ',
+  HYD: '长蛇座σ',
+  JBO: '六月牧夫座',
+  KCG: '天鹅座κ',
+  LEO: '狮子座',
+  LMI: '小狮座',
+  LYR: '四月天琴座',
+  MON: '十二月麒麟座',
+  NIA: '北宝瓶座ι',
+  NTA: '金牛座北',
+  ORI: '猎户座',
+  PAU: '南鱼座',
+  PER: '英仙座',
+  PHO: '凤凰座',
+  PPU: '船尾座π',
+  PUP: '船尾-船帆座',
+  QUA: '象限仪座',
+  SDA: '宝瓶座δ南',
+  SPE: '九月英仙座ε',
+  STA: '金牛座南',
+  TAH: '武仙座τ',
+  URS: '小熊座',
+  ERI: '波江座η',
+  GUM: '小熊座γ',
+  JPE: '七月飞马座',
+  GDR: '七月天龙座γ',
+  OCT: '十月鹿豹座'
 }
 
 export interface CalendarNativeResponse {
@@ -171,6 +278,55 @@ export function calendarNativeEvents(
     const eventPlanet = typeof item.observerPlanet === 'string' && item.observerPlanet.trim().length > 0
       ? item.observerPlanet.trim() : responsePlanet
     const isOffEarth = eventPlanet !== undefined && eventPlanet.toLowerCase() !== 'earth'
+    if (item.kind === 'solar-eclipse' || item.kind === 'lunar-eclipse') {
+      if (!Number.isFinite(item.jd) || typeof item.id !== 'string' || !item.id.trim() ||
+        typeof item.title !== 'string' || !item.title.trim() || typeof item.titleEn !== 'string') {
+        throw new Error('Invalid calendar event')
+      }
+      const at = calendarAt(item.jd)
+      if (seen.has(item.id) || at < month.start || at >= month.end) continue
+      seen.add(item.id)
+      const isSolar = item.kind === 'solar-eclipse'
+      const body = calendarEclipseBody(language, {
+        kind: isSolar ? 'solar-eclipse' : 'lunar-eclipse',
+        subtype: item.subtype,
+        atMs: at,
+        eclipseMagnitude: item.eclipseMagnitude,
+        umbralMagnitude: item.umbralMagnitude,
+        localVisible: item.localVisible,
+        localFullVisible: item.localFullVisible,
+        localDaytime: item.localDaytime,
+        localMagnitude: item.localMagnitude,
+        localMaxAlt: item.localMaxAlt,
+        eclipseStartAt: item.eclipseStartAt,
+        eclipseEndAt: item.eclipseEndAt
+      })
+      events.push({
+        id: item.id,
+        kind: item.kind,
+        title: calendarText(language, item.title, item.titleEn),
+        at: at,
+        jd: item.jd,
+        body: body,
+        target: isSolar ? 'Sun' : 'Moon',
+        panel: 'astro',
+        tab: 7,
+        timeScale: 'UT',
+        subtype: item.subtype,
+        eclipseMagnitude: item.eclipseMagnitude,
+        umbralMagnitude: item.umbralMagnitude,
+        penumbralMagnitude: item.penumbralMagnitude,
+        localVisible: item.localVisible,
+        localFullVisible: item.localFullVisible,
+        localDaytime: item.localDaytime,
+        localMagnitude: item.localMagnitude,
+        localMaxAlt: item.localMaxAlt,
+        eclipseStartAt: item.eclipseStartAt,
+        eclipseEndAt: item.eclipseEndAt,
+        eclipseMap: item.eclipseMap
+      })
+      continue
+    }
     if (item.kind === 'meteor-peak' || item.kind === 'planetary-event' ||
       item.kind === 'companion-phase' || item.kind === 'companion-eclipse' || item.kind === 'planetary-season') {
       if (!Number.isFinite(item.jd) || typeof item.id !== 'string' || !item.id.trim() ||
@@ -180,12 +336,10 @@ export function calendarNativeEvents(
       if (seen.has(item.id) || at < month.start || at >= month.end) continue
       seen.add(item.id)
       const meteor = item.kind === 'meteor-peak'
-      const meteorNames: Record<string, string> = { QUA: '象限仪座', LYR: '天琴座',
-        ETA: '宝瓶座η', SDA: '宝瓶座δ南', PER: '英仙座', ORI: '猎户座', STA: '金牛座南', NTA: '金牛座北',
-        LEO: '狮子座', GEM: '双子座', URS: '小熊座', DRA: '天龙座', AND: '仙女座',
-        AMO: '麒麟座α', NOO: '十一月猎户座' }
-      const titleZh = meteor && meteorNames[item.showerCode ?? ''] ?
-        meteorNames[item.showerCode ?? ''] + '流星雨极大' : item.title
+      const codeKey = item.showerCode ?? ''
+      const titleZh = meteor && METEOR_SHOWER_NAMES_ZH[codeKey]
+        ? (METEOR_SHOWER_NAMES_ZH[codeKey] + '流星雨极大')
+        : item.title
       const sepDeg = typeof item.separationDegrees === 'number' && Number.isFinite(item.separationDegrees) && item.separationDegrees >= 0
         ? item.separationDegrees : undefined
       const nativeBody = typeof item.body === 'string' && item.body.trim().length > 0 ? item.body.trim() : ''
@@ -195,14 +349,29 @@ export function calendarNativeEvents(
           ? (language.toLowerCase().startsWith('zh') && nativeBody.length > 0
             ? nativeBody
             : calendarText(language, nativeBody || titleZh, `${item.titleEn} (observed from ${eventPlanet ?? 'Earth'}; times use device time zone).`))
-          : calendarPlanetaryBody(language, item.primary, item.secondary, item.subtype, item.direction, item.alignment, sepDeg)
+          : calendarPlanetaryBody(language, item.primary, item.secondary, item.subtype, item.direction, item.alignment, sepDeg, {
+            magnitude: item.magnitude,
+            twilightAltDeg: item.twilightAltDeg,
+            planetSetRiseAt: item.planetSetRiseAt,
+            twilightOffsetMin: item.twilightOffsetMin,
+            eventAt: at
+          })
       const parsed: AstronomyCalendarEvent = { id: item.id, kind: item.kind, title: calendarText(language, titleZh, item.titleEn),
         at: at, jd: item.jd, body: body, target: item.target,
         panel: meteor ? 'meteorshowers' : 'astro', tab: 0, timeScale: 'UT',
         phaseIndex: item.kind === 'companion-phase' && Number.isInteger(item.index) ? item.index : undefined,
         subtype: item.subtype, direction: item.direction,
         primary: item.primary, secondary: item.secondary, alignment: item.alignment,
-        separationDegrees: sepDeg }
+        separationDegrees: sepDeg,
+        showerCode: typeof item.showerCode === 'string' && item.showerCode.trim().length > 0 ? item.showerCode.trim() : undefined,
+        magnitude: item.magnitude,
+        twilightAltDeg: item.twilightAltDeg,
+        twilightAt: item.twilightAt,
+        planetSetRiseAt: item.planetSetRiseAt,
+        twilightOffsetMin: item.twilightOffsetMin,
+        earthHelioLonDeg: item.earthHelioLonDeg,
+        planetHelioLonDeg: item.planetHelioLonDeg,
+        orbitRatio: item.orbitRatio }
       if (isOffEarth) parsed.observerPlanet = eventPlanet
       events.push(parsed)
       continue

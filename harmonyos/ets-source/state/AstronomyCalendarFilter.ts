@@ -110,6 +110,7 @@ export interface NativeSatellitePassRecord {
 }
 
 export const EARTH_CALENDAR_CATEGORIES: CalendarFilterCategoryMeta[] = [
+  { id: 'eclipse', labelZh: '日月食', labelEn: 'Eclipses', dotHex: '#FF7043' },
   { id: 'moon', labelZh: '月相', labelEn: 'Moon', dotHex: '#E0E6F2' },
   { id: 'planet', labelZh: '行星', labelEn: 'Planets', dotHex: '#FFB74D' },
   { id: 'meteor', labelZh: '流星雨', labelEn: 'Meteors', dotHex: '#64B5F6' },
@@ -134,18 +135,19 @@ export function calendarCategoriesForPlanet(observerPlanet: string): CalendarFil
 }
 
 export function calendarCategoryOfKind(kind: string): CalendarFilterCategory {
+  if (kind === 'solar-eclipse' || kind === 'lunar-eclipse' || kind === 'companion-eclipse') return 'eclipse'
   if (kind === 'moon-phase') return 'moon'
   if (kind === 'meteor-peak') return 'meteor'
   if (kind === 'solar-term') return 'solar'
   if (kind === 'satellite-pass') return 'satellite'
   if (kind === 'companion-phase') return 'companion'
-  if (kind === 'companion-eclipse') return 'eclipse'
   if (kind === 'planetary-season') return 'season'
   return 'planet'
 }
 
 export function isHighlightCalendarEvent(event: CalendarFilterableEvent): boolean {
-  if (event.kind === 'meteor-peak' || event.kind === 'companion-eclipse') return true
+  if (event.kind === 'solar-eclipse' || event.kind === 'lunar-eclipse' ||
+    event.kind === 'meteor-peak' || event.kind === 'companion-eclipse') return true
   if (event.kind === 'moon-phase' || event.kind === 'companion-phase') return event.isSupermoon === true
   if (event.kind === 'planetary-event') {
     const sub = (event.subtype ?? '').toLowerCase()

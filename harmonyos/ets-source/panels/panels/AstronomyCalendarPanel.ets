@@ -2,7 +2,8 @@ import { Theme } from '@kit.ArkUI'
 import { DEFAULT_SLOTS, ThemeSlots, slotsFromTheme } from '../../state/StellariumTheme'
 import { AstronomyCalendarStore } from '../../state/AstronomyCalendarStore'
 import { AstronomyCalendarEvent, CalendarDay, calendarEventTime, calendarDayEvents } from '../../state/AstronomyCalendarEvent'
-import { calendarText, calendarMonthTitle } from '../../state/AstronomyCalendarText'
+import { calendarText, calendarMonthTitle, calendarEclipseScienceNote, calendarSolarEclipseSafetyNote } from '../../state/AstronomyCalendarText'
+import { CalendarEclipseMapCard, CalendarElongationOrbitCard } from '../calendar/CalendarEventVisuals'
 import {
   CALENDAR_QUICK_PRESETS,
   CalendarFilterCategoryMeta,
@@ -83,6 +84,9 @@ export struct AstronomyCalendarPanel {
   @Prop remindedEventIds: string[] = []
   @Prop notificationTimingMode: string = 'smart'
   @Prop notificationPassLeadMinutes: number = 10
+  @Prop observerLatitude: number = 39.9
+  @Prop observerLongitude: number = 116.4
+  @Prop earthMapUri: string = ''
   @State private c: ThemeSlots = DEFAULT_SLOTS
   @State private viewMode: 'list' | 'grid' = 'list'
   @State private transitionDir: number = 1
@@ -124,6 +128,7 @@ export struct AstronomyCalendarPanel {
   }
 
   private eventPriority(event: AstronomyCalendarEvent): number {
+    if (event.kind === 'solar-eclipse' || event.kind === 'lunar-eclipse') return 0
     if (event.kind === 'meteor-peak' || event.kind === 'companion-eclipse') return 0
     if (event.kind === 'satellite-pass') return event.satVisible === true ? 0 : 1
     if (event.kind === 'planetary-event') return 1
@@ -143,8 +148,8 @@ export struct AstronomyCalendarPanel {
 
   private eventDotColor(event: AstronomyCalendarEvent): ResourceColor {
     if (this.c.isNight) return this.c.accent
+    if (event.kind === 'solar-eclipse' || event.kind === 'lunar-eclipse' || event.kind === 'companion-eclipse') return '#FF7043'
     if (event.kind === 'satellite-pass') return '#4DD0E1'
-    if (event.kind === 'companion-eclipse') return '#FF8A65'
     if (event.kind === 'meteor-peak') return '#64B5F6'
     if (event.kind === 'planetary-event') return '#FFB74D'
     if (event.kind === 'moon-phase' || event.kind === 'companion-phase') return event.isSupermoon === true ? '#FFE082' : '#E0E6F2'
@@ -514,6 +519,12 @@ export struct AstronomyCalendarPanel {
   }
 
   private art(event: AstronomyCalendarEvent, detail: boolean): Resource {
+    if (event.kind === 'solar-eclipse') {
+      return detail ? $r('app.media.calendar_solar_eclipse_detail') : $r('app.media.calendar_solar_eclipse')
+    }
+    if (event.kind === 'lunar-eclipse') {
+      return detail ? $r('app.media.calendar_lunar_eclipse_detail') : $r('app.media.calendar_lunar_eclipse')
+    }
     if (event.kind === 'moon-phase') {
       if (event.phaseIndex === 0) return detail ? $r('app.media.calendar_moon_0_detail') : $r('app.media.calendar_moon_0')
       if (event.phaseIndex === 1) return detail ? $r('app.media.calendar_moon_1_detail') : $r('app.media.calendar_moon_1')
@@ -535,13 +546,17 @@ export struct AstronomyCalendarPanel {
 
   private date(event: AstronomyCalendarEvent): string {
     const date = new Date(event.at)
+    const y = date.getFullYear()
+    const m = date.getMonth() + 1
+    const d = date.getDate()
+    const prefixZh = y !== this.calendarStore.year ? `${y}年` : ''
+    const prefixEn = y !== this.calendarStore.year ? `${y}-` : ''
     if (event.kind === 'satellite-pass') {
       const hh = String(date.getHours()).padStart(2, '0')
       const mm = String(date.getMinutes()).padStart(2, '0')
-      return this.t(`${date.getMonth() + 1}月${date.getDate()}日 ${hh}:${mm}`,
-        `${date.getMonth() + 1}/${date.getDate()} ${hh}:${mm}`)
+      return this.t(`${prefixZh}${m}月${d}日 ${hh}:${mm}`, `${prefixEn}${m}/${d} ${hh}:${mm}`)
     }
-    return this.t(`${date.getMonth() + 1}月${date.getDate()}日`, `${date.getMonth() + 1}/${date.getDate()}`)
+    return this.t(`${prefixZh}${m}月${d}日`, `${prefixEn}${m}/${d}`)
   }
 
   @Builder
@@ -729,12 +744,21 @@ export struct AstronomyCalendarPanel {
               }.width('100%').padding({ top: 4, bottom: 4 })
             }
             if (this.calendarStore.selectedDay === 0) {
-              Button(this.t('更多天象', 'More events'), { type: ButtonType.Normal })
-                .height(44).width('100%').fontSize(this.panelFontSize).fontColor(this.c.text)
-                .backgroundColor(this.c.softStrong).borderRadius(UI_RADIUS_CONTROL)
-                .clickEffect({ level: ClickEffectLevel.LIGHT })
-                .enabled(!(this.calendarStore.throughYear === 3000 && this.calendarStore.throughMonth === 12))
-                .onClick(() => { this.animateAction(1, () => { this.host.loadMore() }) })
+              Row({ space: 8 }) {
+                Text(this.t(
+                  `已载入至 ${this.calendarStore.throughYear} 年 ${this.calendarStore.throughMonth} 月 · 下滑自动加载`,
+                  `Loaded through ${this.calendarStore.throughYear}-${String(this.calendarStore.throughMonth).padStart(2, '0')} · Scroll for more`
+                ))
+                  .fontSize(this.panelFontSize - 2)
+                  .fontColor(this.c.sub)
+                  .layoutWeight(1)
+                Button(this.t('加载更多', 'Load more'), { type: ButtonType.Normal })
+                  .height(34).padding({ left: 12, right: 12 }).fontSize(this.panelFontSize - 2).fontColor(this.c.text)
+                  .backgroundColor(this.c.softStrong).borderRadius(UI_RADIUS_CONTROL)
+                  .clickEffect({ level: ClickEffectLevel.LIGHT })
+                  .enabled(!(this.calendarStore.throughYear === 3000 && this.calendarStore.throughMonth === 12))
+                  .onClick(() => { this.host.loadMore() })
+              }.width('100%').alignItems(VerticalAlign.Center).padding({ top: 4, bottom: 4 })
             }
           }
         }.width('100%').transition(uiSlideTransition(-1))
@@ -784,6 +808,49 @@ export struct AstronomyCalendarPanel {
             }
             Text(event.body).fontSize(this.panelFontSize + 1).lineHeight(this.panelFontSize * 1.8)
               .fontColor(this.c.text).width('100%')
+            if ((event.kind === 'solar-eclipse' || event.kind === 'lunar-eclipse') && event.eclipseMap !== undefined) {
+              CalendarEclipseMapCard({
+                event: event,
+                mapData: event.eclipseMap,
+                language: this.language,
+                observerLat: this.observerLatitude,
+                observerLon: this.observerLongitude,
+                earthMapUri: this.earthMapUri
+              })
+              Text(calendarEclipseScienceNote(this.language, event.kind === 'solar-eclipse' ? 'solar-eclipse' : 'lunar-eclipse', event.subtype))
+                .fontSize(this.panelFontSize - 1)
+                .lineHeight(this.panelFontSize * 1.65)
+                .fontColor(this.c.sub)
+                .width('100%')
+            }
+            if (event.kind === 'solar-eclipse') {
+              Column({ space: 6 }) {
+                Text(this.t('安全观看提示', 'Safe Viewing Notice'))
+                  .fontSize(this.panelFontSize)
+                  .fontWeight(FontWeight.Bold)
+                  .fontColor(this.c.isNight ? this.c.text : '#FFD180')
+                Text(calendarSolarEclipseSafetyNote(this.language))
+                  .fontSize(this.panelFontSize - 1)
+                  .lineHeight(this.panelFontSize * 1.65)
+                  .fontColor(this.c.text)
+                  .width('100%')
+              }
+                .width('100%')
+                .alignItems(HorizontalAlign.Start)
+                .padding(12)
+                .backgroundColor(this.c.soft)
+                .border({ width: 0.8, color: this.c.isNight ? this.c.border : 'rgba(255,209,128,0.28)' })
+                .borderRadius(UI_RADIUS_CARD)
+            }
+            if (event.kind === 'planetary-event' && event.subtype === 'greatest-elongation') {
+              CalendarElongationOrbitCard({
+                planetName: event.primary ?? event.target,
+                elongationDirection: event.direction ?? 'east',
+                separationDegrees: event.separationDegrees ?? 22,
+                orbitRatio: event.orbitRatio ?? (event.target === 'Venus' ? 0.723 : 0.387),
+                language: this.language
+              })
+            }
           }, (event: AstronomyCalendarEvent) => `${event.id}:${event.title}:${this.isEventReminded(event.id) ? 1 : 0}:${this.calendarStore.regionId}`)
         }.width('100%').alignItems(HorizontalAlign.Start).transition(uiSlideTransition(1))
       }

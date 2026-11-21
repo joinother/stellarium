@@ -1,6 +1,7 @@
 import { CommandPort } from '../bridge/CommandPort'
 import { StellariumBridgeResponse } from '../pages/StellariumTypes'
 import { AstronomyCalendarStore } from '../state/AstronomyCalendarStore'
+import { AstronomyCalendarCache } from '../state/AstronomyCalendarCache'
 import { AstronomyCalendarEvent, CalendarNativeResponse, calendarMonth, calendarDays, calendarQuery, calendarNativeEvents } from '../state/AstronomyCalendarEvent'
 import { CalendarObserverContext, calendarPlanetName, calendarText } from '../state/AstronomyCalendarText'
 import {
@@ -115,6 +116,22 @@ export class AstronomyCalendarController {
     }
   }
 
+  private cacheKeyFor(year: number, month: number, planet: string): string {
+    const ctx = this.effectiveObserverContext()
+    return AstronomyCalendarCache.makeKey(planet, year, month, ctx?.latitude, ctx?.longitude)
+  }
+
+  private prefetchAheadMonths(sequence: number, remaining: number): void {
+    if (this.disposed || sequence !== this.sequence || remaining <= 0) return
+    if (this.store.loading || this.store.loadingMore || !this.store.loaded) return
+    if (this.store.throughYear === 3000 && this.store.throughMonth === 12) return
+    this.loadMore(() => {
+      if (!this.disposed && sequence === this.sequence && remaining > 1) {
+        setTimeout(() => { this.prefetchAheadMonths(sequence, remaining - 1) }, 60)
+      }
+    })
+  }
+
   loadMonth(year: number, month: number): void {
     if (this.disposed) return
     const range = calendarMonth(year, month)
@@ -131,15 +148,40 @@ export class AstronomyCalendarController {
     this.store.satellitePassesLoading = false
     this.store.selectedDay = 0
     this.store.selectedEventId = ''
+    this.store.error = ''
+    this.store.actionMessage = ''
+    this.response = undefined
+
+    const applyLoaded = (native: CalendarNativeResponse, fromCache: boolean): void => {
+      const events = calendarNativeEvents(native, range, this.language, this.effectiveObserverContext())
+      this.response = native
+      this.store.sourceYear = year
+      this.store.events = events
+      this.recomputeMonthDays()
+      this.store.loading = false
+      this.store.loaded = true
+      this.updateCoverage()
+      this.hooks.feedChanged(events.slice())
+      this.fetchSatellitePassesIfApplicable(sequence, year, month, planet)
+      // 首月就绪后顺滑预载后续 2 个月（已缓存则 0ms 秒出），确保滚动与搜索卡片流持续连贯。
+      setTimeout(() => { this.prefetchAheadMonths(sequence, fromCache ? 3 : 2) }, fromCache ? 16 : 90)
+    }
+
+    const cacheKey = this.cacheKeyFor(year, month, planet)
+    const cached = AstronomyCalendarCache.getInstance().get(cacheKey)
+    if (cached !== undefined) {
+      try {
+        applyLoaded(cached, true)
+        return
+      } catch (_) {}
+    }
+
     this.store.events = []
     this.store.days = calendarDays(range, [])
-    this.store.error = ''
     this.store.coverage = ''
-    this.store.actionMessage = ''
     this.store.sourceYear = 0
     this.store.loading = true
     this.store.loaded = false
-    this.response = undefined
     this.hooks.feedChanged([])
     const fail = (): void => {
       if (this.disposed || sequence !== this.sequence) return
@@ -151,16 +193,8 @@ export class AstronomyCalendarController {
         if (this.disposed || sequence !== this.sequence) return
         try {
           const native = response as CalendarNativeResponse
-          const events = calendarNativeEvents(native, range, this.language, this.effectiveObserverContext())
-          this.response = native
-          this.store.sourceYear = year
-          this.store.events = events
-          this.recomputeMonthDays()
-          this.store.loading = false
-          this.store.loaded = true
-          this.updateCoverage()
-          this.hooks.feedChanged(events.slice())
-          this.fetchSatellitePassesIfApplicable(sequence, year, month, planet)
+          AstronomyCalendarCache.getInstance().put(cacheKey, native)
+          applyLoaded(native, false)
         } catch (_) {
           fail()
         }
@@ -179,11 +213,11 @@ export class AstronomyCalendarController {
         `Loaded local planetary alignments, companion phases, and seasonal events from ${label}; times use the device time zone (Earth meteors & satellites excluded).`)
       return
     }
-    this.store.coverage = calendarText(this.language, '已载入节气、主要月相、流星雨预计极大、行星事件及近 48 小时卫星过境；按设备时区显示。',
-      'Solar terms, principal lunar phases, estimated meteor peaks, planetary events and 48h satellite passes loaded; times use the device time zone.')
+    this.store.coverage = calendarText(this.language, '已载入日月食、节气、主要月相、流星雨极大、行星/亮星合相及近 48 小时卫星过境；按设备时区显示。',
+      'Eclipses, solar terms, lunar phases, meteor peaks, planetary/star alignments and 48h satellite passes loaded; times use the device time zone.')
   }
 
-  loadMore(): void {
+  loadMore(onDone?: () => void): void {
     if (this.disposed || this.store.loading || this.store.loadingMore || !this.store.loaded ||
       (this.store.throughYear === 3000 && this.store.throughMonth === 12)) return
     const year = this.store.throughMonth === 12 ? this.store.throughYear + 1 : this.store.throughYear
@@ -191,6 +225,27 @@ export class AstronomyCalendarController {
     const range = calendarMonth(year, month)
     const planet = this.store.observerPlanet || 'Earth'
     const sequence = this.sequence
+    const appendNative = (native: CalendarNativeResponse): void => {
+      const events = calendarNativeEvents(native, range, this.language, this.effectiveObserverContext())
+      this.extraResponses.push(native)
+      this.store.throughYear = year
+      this.store.throughMonth = month
+      const nonSat = this.store.events.filter((ev: AstronomyCalendarEvent) => ev.kind !== 'satellite-pass').concat(events)
+      this.store.events = this.mergeEventsWithSatellites(nonSat)
+      this.store.loadingMore = false
+      this.hooks.feedChanged(this.store.events.slice())
+      if (onDone !== undefined) onDone()
+    }
+
+    const cacheKey = this.cacheKeyFor(year, month, planet)
+    const cached = AstronomyCalendarCache.getInstance().get(cacheKey)
+    if (cached !== undefined) {
+      try {
+        appendNative(cached)
+        return
+      } catch (_) {}
+    }
+
     this.store.loadingMore = true
     this.store.error = ''
     const fail = (): void => {
@@ -203,14 +258,8 @@ export class AstronomyCalendarController {
         if (this.disposed || sequence !== this.sequence) return
         try {
           const native = response as CalendarNativeResponse
-          const events = calendarNativeEvents(native, range, this.language, this.effectiveObserverContext())
-          this.extraResponses.push(native)
-          this.store.throughYear = year
-          this.store.throughMonth = month
-          const nonSat = this.store.events.filter((ev: AstronomyCalendarEvent) => ev.kind !== 'satellite-pass').concat(events)
-          this.store.events = this.mergeEventsWithSatellites(nonSat)
-          this.store.loadingMore = false
-          this.hooks.feedChanged(this.store.events.slice())
+          AstronomyCalendarCache.getInstance().put(cacheKey, native)
+          appendNative(native)
         } catch (_) { fail() }
       }, fail, undefined, 240, (): boolean => this.disposed || sequence !== this.sequence)
     } catch (_) { fail() }
