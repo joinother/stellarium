@@ -29,6 +29,30 @@
   - 主机验证：新增 `scripts/test-ohos-nomenclature-and-3d-models.mjs`，连同 `check-ohos-resource-dirs.mjs`（10/10 目录）、`check-ohos-command-catalog.mjs`（438 命令）、`check-ohos-ui-contract.mjs`（40 面板）、`check-ohos-network-sources.mjs`、`fetch-mirror.test.mjs`、`test-ohos-plugin-panels-phase23.mjs`、`test-ohos-media-cultures-landscapes.mjs` 全部通过。
   - 真机实拍验收：实测「行星地貌图集」完整加载 16,079 处 IAU 地貌（月球 9,081 / 火星 2,052），点击第谷与奥林波斯山均精准望远镜缩放飞抵并清晰绘制中文标注与绿色环形山轮廓；实测灶神星（黎明号实测 3D 地形模型 + OpenGL 实景戴瓦利亚槽沟群）、火卫一（火星快车 3D 形态模型）、哈雷彗星（乔托号 3D 花生形彗核）、67P/Churyumov-Gerasimenko（罗塞塔号 3D 双瓣彗核）均秒级加载、流畅手势旋转、文案与排版零截断。
 
+## [2026-11-21] 双向地点分享（花瓣地图精确打开 + 地图分享注入观测点）
+
+- **修改文件：** `harmonyos/ets-source/common/location/LocationShareLink.ets`（新增）、`harmonyos/ets-source/qability/QAbility.ets`、`harmonyos/module.json5`、`harmonyos/ets-source/pages/MainWindowNativeNode.ets`、`harmonyos/ets-source/panels/panels/PlacePanel.ets`、`harmonyos/ets-source/panels/location/LocationFullScreenMap.ets`、`harmonyos/ets-source/panels/location/CityChipsRow.ets`、`harmonyos/ets-source/common/ui/ShellIcons.ets`、`harmonyos/ets-source/capability/I18n.ets`、`harmonyos/ets-source/resources/base/media/ic_map_navigate.svg`（新增）、`scripts/test-ohos-location-share.mjs`（新增）、`docs/harmonyos/json/ui-contract-baseline.json`、`docs/harmonyos/NETWORK-INVENTORY.md`、`docs/harmonyos/CHANGELOG.md`。
+- **核心改动：**
+  1. **地图 → 星象仪（地点注入）：**
+     - `LocationShareLink.ets` 新增纯函数解析器，支持 `skyinstrument://location`、标准 `geo:LAT,LON?q=LAT,LON(NAME)`、地图网页链接（`ll` / `q` / `location` / `@lat,lon` / `!3d..!4d..`）以及纯文本坐标；重点补齐**花瓣地图真实分享协议**：`https://www.petalmaps.com/place/?...&marker=lat,lng...`、`petalmaps://poidetail?marker=lat,lng...` 与 `maps://locationInfo?...`。花瓣 `marker`/`center` 为纬度在前，未写 `coordinateType` 时按 GCJ02，仅 `coordinateType=0` 为 WGS84；
+     - 新增标准 GCJ02→WGS84 迭代纠偏（含中国境外恒等判断），保证花瓣分享进入星象仪后仍以 WGS84 写入观测点；坐标范围、海拔 -500–9000 m、名称 80 字上限保持不变；
+     - `QAbility` 在 `onCreate` / `onNewWant` 处理系统分享文本/链接（`systemShare.getSharedData`）与 `skyinstrument` 深链；`module.json5` 显式注册 `skyinstrument` viewData 深链，并保留 `general.text` / `general.hyperlink` 分享目标；
+     - 宿主在引擎就绪且隐私已同意后消费 payload：关闭面板与全屏地图，调用 `LocationController.setLocation(..., 'Earth', false, 'share')` 完成“切回地球 + 应用坐标”，刷新今晚天象与推荐；无坐标时提示“未找到可用坐标”。
+  2. **星象仪 → 花瓣地图（精确打开地点，不自动导航）：**
+     - 使用 Map Kit `petalMaps.openMapPoiDetail`，显式 `CoordinateType.WGS84`，只打开精确坐标的地点详情/标靶，不传路线、不规划路线、不进入导航；真机已验证“外滩”精确标靶；
+     - **高德、百度暂不接入**。系统 `startAbilityByType` 不作为本功能的实现：`sceneType: 3` 只接收地点名称（会落到街道/搜索结果层级），`sceneType: 4` 本机三家地图均未声明 `DetailLocation`，`sceneType: 1/2` 会进入路线规划/导航；
+     - 位置面板坐标行新增地图图标入口（仅地球观测点）；已保存地点长按操作行新增「在地图中打开」（仅地球地点）；全屏选点卡片新增「在地图中打开」。
+- **验证结果：**
+  - `node --test scripts/test-ohos-location-share.mjs` 8 项通过（含花瓣真实分享格式、默认 GCJ02→WGS84、`coordinateType=0`、`petalmaps://` 深链、坐标范围/无效内容拒绝）；
+  - `check-ohos-ui-contract.mjs`、`check-ohos-i18n.mjs`、`check-ohos-command-catalog.mjs`（435 命令）通过；
+  - `build-ohos-hap-windows.ps1 -Release -SkipEngine -SkipResources -Install` BUILD SUCCESSFUL（release signed HAP 799.4 MB）；
+  - 真机实测（MatePad Mini `192.168.3.95:36717`）：
+    - 花瓣分享链接 `https://www.petalmaps.com/place/?z=17&marker=31.22845773757727,121.47822305927693&placeId=...&utm_campaign=poi_share#/` 注入后，`getObserverInfo` 返回 `31.2304 / 121.4737`（GCJ02→WGS84 纠偏正确），名称为“分享位置”；
+    - `skyinstrument://location?...` 与 `geo:0,0?q=31.2304,121.4737(外滩)` 均正确注入；
+    - 点击位置面板地图图标后直接拉起花瓣地图并显示精确标靶（无三选一菜单、未进入导航）。
+  - 花瓣真实分享若使用短链或不含 `marker` 的链接，仍需拿到原始分享内容再补充分支；高德、百度本轮未接入。
+
+
 ## [2026-11-21] 快速面板红光手电（扩展列候选 + 全屏红光 + 亮度调节）
 
 - **修改文件：** `harmonyos/ets-source/common/derive/quickActions.ets`、`harmonyos/ets-source/common/ui/ShellIcons.ets`、`harmonyos/ets-source/pages/MainWindowNativeNode.ets`、`harmonyos/ets-source/capability/I18n.ets`、`harmonyos/ets-source/resources/base/media/ic_red_light.svg`（新增）、`scripts/test-ohos-quick-red-light.mjs`（新增）、`docs/harmonyos/json/ui-contract-baseline.json`、`docs/harmonyos/research/QUICK-ACTIONS-PANEL-PLAN.md`、`docs/harmonyos/specs/OBJECT-DETAIL-OBSERVE-MODE.md`、`docs/harmonyos/CHANGELOG.md`。

@@ -72,6 +72,7 @@
     "common/derive/media.ets",
     "common/derive/quickActions.ets",
     "common/derive/skycult.ets",
+    "common/location/LocationShareLink.ets",
     "common/location/ReverseGeocodeName.ets",
     "common/media/ImageDecoder.ets",
     "common/platform/Clipboard.ets",
@@ -393,6 +394,9 @@
     "calendars-refresh-btn",
     "guide-content",
     "guide-stop",
+    "loc-open-map-current",
+    "loc-open-map-saved",
+    "loc-open-map-selected",
     "minor-bodies-import-comets-btn",
     "minor-bodies-mpc-toggle-btn",
     "minor-bodies-refresh-btn",
@@ -470,11 +474,11 @@
     "satellites-",
     "search-category-"
   ],
-  "totalIdAnchors": 84,
+  "totalIdAnchors": 87,
   "count": {
     "panels": 41,
-    "staticIds": 52,
+    "staticIds": 55,
     "dynamicIdPrefixes": 29,
-    "totalIdAnchors": 84
+    "totalIdAnchors": 87
   }
 }

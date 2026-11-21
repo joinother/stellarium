@@ -25,6 +25,8 @@ export struct CityChipsRow {
   onSaveCurrent: () => void = () => {}
   onApplyLocation: (name: string, lat: number, lon: number, alt: number, planet: string) => void = () => {}
   onDeleteLocation: (key: string) => void = () => {}
+  // 已保存地点在地图应用中打开（仅地球地点；外星地点没有对应的外部地图）。
+  onNavigateLocation: (name: string, lat: number, lon: number) => void = () => {}
 
   onWillApplyTheme(theme: Theme): void {
     this.c = slotsFromTheme(theme)
@@ -45,6 +47,16 @@ export struct CityChipsRow {
     this.actionKey = key
     this.renamingKey = ''
     this.renameError = ''
+  }
+
+  private actionTarget(): SavedLocation | undefined {
+    return this.store.savedLocations.find((s: SavedLocation) =>
+      this.store.savedLocationKey(s) === this.actionKey)
+  }
+
+  private actionTargetIsEarth(): boolean {
+    const target = this.actionTarget()
+    return target !== undefined && target.planet === 'Earth'
   }
 
   private startRename(item: SavedLocation, key: string): void {
@@ -213,7 +225,19 @@ export struct CityChipsRow {
             }
           } else {
             Row({ space: 6 }) {
-              Text(I18n.t('loc_more_actions')).fontSize(10).fontColor(this.c.tertiary).layoutWeight(1)
+              // 四个按钮在地球地点行会占满宽度，说明文字让位给操作本身。
+              Blank()
+              if (this.actionTargetIsEarth()) {
+                Button(I18n.t('loc_open_in_map'))
+                  .fontSize(10).height(28).fontColor(this.c.text).backgroundColor(this.c.softStrong)
+                  .borderRadius(UI_RADIUS_CONTROL)
+                  .id('loc-open-map-saved')
+                  .onClick(() => {
+                    const target = this.actionTarget()
+                    if (target !== undefined) this.onNavigateLocation(target.name, target.lat, target.lon)
+                    this.actionKey = ''
+                  })
+              }
               Button(I18n.t('loc_rename'))
                 .fontSize(10).height(28).fontColor(this.c.text).backgroundColor(this.c.softStrong)
                 .borderRadius(UI_RADIUS_CONTROL)

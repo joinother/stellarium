@@ -33,10 +33,12 @@ test('red light is a candidate-only quick action and keeps the 12-slot default g
   assert.equal(quick.quickCandidateSlotsFor(defaults).length, 6);
 });
 
-test('the quick cell resolves the new red-light icon', () => {
+test('the quick cell resolves the new red-light and map-navigation icons', () => {
   const icons = read('common/ui/ShellIcons.ets');
   assert.match(icons, /'red_light': \$r\('app\.media\.ic_red_light'\)/);
+  assert.match(icons, /'map_navigate': \$r\('app\.media\.ic_map_navigate'\)/);
   assert.ok(existsSync(new URL('harmonyos/ets-source/resources/base/media/ic_red_light.svg', root)));
+  assert.ok(existsSync(new URL('harmonyos/ets-source/resources/base/media/ic_map_navigate.svg', root)));
 });
 
 test('the host owns red-light state, dispatches it and renders a full-screen overlay', () => {

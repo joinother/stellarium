@@ -70,6 +70,11 @@
               },
               {
                 "scheme": "file",
+                "utd": "general.hyperlink",
+                "maxFileSupported": 1
+              },
+              {
+                "scheme": "file",
                 "utd": "general.png",
                 "maxFileSupported": 10
               },
@@ -77,6 +82,19 @@
                 "scheme": "file",
                 "utd": "general.jpeg",
                 "maxFileSupported": 10
+              }
+            ]
+          },
+          {
+            "entities": [
+              "entity.system.browsable"
+            ],
+            "actions": [
+              "ohos.want.action.viewData"
+            ],
+            "uris": [
+              {
+                "scheme": "skyinstrument"
               }
             ]
           },

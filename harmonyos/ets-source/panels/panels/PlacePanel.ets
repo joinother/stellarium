@@ -8,6 +8,7 @@ import { LocationStore } from '../../state/LocationStore'
 import { LocationPickerStore } from '../../state/LocationPickerStore'
 import { SessionToolStore } from '../../state/SessionToolStore'
 import { UI_RADIUS_CONTROL, UI_RADIUS_PILL } from '../../common/ui/UiTokens'
+import { tintMatrixFor } from '../../common/ui/IconTint'
 import { CityChipsRow } from '../location/CityChipsRow'
 import { LocationPickerPanel } from '../location/LocationPickerPanel'
 import { PlaceEnvironmentSection } from '../location/PlaceEnvironmentSection'
@@ -53,6 +54,9 @@ export struct PlacePanel {
   onSaveCurrent: () => void = () => {}
   onApplyLocation: (name: string, lat: number, lon: number, alt: number, planet: string) => void = () => {}
   onDeleteLocation: (key: string) => void = () => {}
+  // 星象仪 → 地图：当前观测点 / 已保存地点交给外部地图应用打开（不自动导航）。
+  onNavigateCurrent: () => void = () => {}
+  onNavigateLocation: (name: string, lat: number, lon: number) => void = () => {}
   onSelectPlanet: (name: string) => void = () => {}
   onApplyEnvironment: (pressure: number, temperature: number) => void = () => {}
   // 进入位置面板时从引擎回读已持久化的大气参数，避免显示 store 默认值。
@@ -127,7 +131,21 @@ export struct PlacePanel {
         Text(this.coordinateText + (this.altitudeText.length > 0 ? ' · ' + this.altitudeText : ''))
           .fontSize(14).fontColor(this.c.text).layoutWeight(1)
           .maxLines(1).textOverflow({ overflow: TextOverflow.Ellipsis })
-      }.height(28).width('100%').padding({ left: 10, right: 10 })
+        // 外星球坐标无法用外部地图打开，只有地球观测点显示入口。
+        if (this.sessionToolStore.observerPlanet === 'Earth') {
+          Button() {
+            Image($r('app.media.ic_map_navigate')).width(15).height(15)
+              .supportSvg2(true).colorFilter(tintMatrixFor(this.c.sub))
+          }
+            .width(28).height(28).padding(0)
+            .backgroundColor(Color.Transparent)
+            .borderRadius(UI_RADIUS_CONTROL)
+            .clickEffect({ level: ClickEffectLevel.LIGHT })
+            .id('loc-open-map-current')
+            .accessibilityText(I18n.t('loc_open_current_in_map'))
+            .onClick(() => { this.onNavigateCurrent() })
+        }
+      }.height(28).width('100%').padding({ left: 10, right: 4 })
       ObserverPlanetSection({ store: this.sessionToolStore, planetLabel: (en: string) => this.planetLabel(en), onSelectPlanet: (name: string) => { this.onSelectPlanet(name) } })
       if (this.fixedObserverPoint) {
         this.fixedObserverPreview()
@@ -175,7 +193,8 @@ export struct PlacePanel {
         observerPlanet: this.sessionToolStore.observerPlanet,
         onSaveCurrent: () => { this.onSaveCurrent() },
         onApplyLocation: (name: string, lat: number, lon: number, alt: number, planet: string) => { this.onApplyLocation(name, lat, lon, alt, planet) },
-        onDeleteLocation: (key: string) => { this.onDeleteLocation(key) }
+        onDeleteLocation: (key: string) => { this.onDeleteLocation(key) },
+        onNavigateLocation: (name: string, lat: number, lon: number) => { this.onNavigateLocation(name, lat, lon) }
       })
       }
       // Tonight's events stay here; the virtual pointer test and watch gyro

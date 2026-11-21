@@ -60,8 +60,9 @@ export function getIcon(icon: string, isActive: boolean): Resource {
     'bt_cardinal_points': $r('app.media.bt_cardinal_points'),
     'bt_nebula': $r('app.media.bt_nebula'),
     'bt_night_view': $r('app.media.bt_night_view'),
-    // 红光手电（自研 SVG）。
+    // 红光手电（自研 SVG）与地点面板的外部地图导航。
     'red_light': $r('app.media.ic_red_light'),
+    'map_navigate': $r('app.media.ic_map_navigate'),
     // 二期新增：4 枚官方图标（赤道仪 / 左右镜像 / 观测列表 / 极简信息面板）+ 1 枚自研 SVG（自定义入口）。
     'bt_equatorial_mount': $r('app.media.bt_equatorial_mount'),
     'bt_flip_horizontal': $r('app.media.bt_flip_horizontal'),

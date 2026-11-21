@@ -34,7 +34,7 @@ import { writeClipboardText } from '../qability/ClipboardService'
 import { fileIo, fileUri, picker } from '@kit.CoreFileKit'
 import { util } from '@kit.ArkTS'
 import { image } from '@kit.ImageKit'
-import { map, mapCommon, site } from '@kit.MapKit'
+import { map, mapCommon, petalMaps, site } from '@kit.MapKit'
 import hilog from '@ohos.hilog'
 import display from '@ohos.display'
 import preferences from '@ohos.data.preferences'
@@ -1163,6 +1163,13 @@ export struct WindowNativeNode {
   @Watch('onCardRouteChanged')
   @StorageLink('stellariumCardRoute')
   private cardRoute: string = ''
+  // 地图应用分享进来的观测点：QAbility 写入 AppStorage，引擎就绪后由宿主消费。
+  @Watch('onSharedLocationChanged')
+  @StorageLink('stellariumLocationShare')
+  private sharedLocation: string = ''
+  // 观测点桥命令仍在飞时的重试计数（payload 保留在 AppStorage 里，不丢分享）。
+  private sharedLocationRetries: number = 0
+  private sharedLocationRetryTimer: number = -1
   // 快速面板「红光手电」：全屏纯红叠层 + 可调应用窗口亮度 + 常亮。
   @State private redLightOn: boolean = false
   @State private redLightBrightness: number = 1.0
@@ -2635,6 +2642,10 @@ export struct WindowNativeNode {
       clearTimeout(this.redLightBrightnessTimer)
       this.redLightBrightnessTimer = -1
     }
+    if (this.sharedLocationRetryTimer >= 0) {
+      clearTimeout(this.sharedLocationRetryTimer)
+      this.sharedLocationRetryTimer = -1
+    }
     this.calendarController?.dispose()
     this.calendarController = undefined
     this.liveViewControllerImpl?.dispose()
@@ -2878,7 +2889,7 @@ export struct WindowNativeNode {
           setScriptMetadata: (raw: Object | undefined): void => { this.scriptPlaybackCtl().setScriptMetadata(raw) },
           reloadConfigurationSettings: (): void => { this.settingsCtl().loadConfigurationSettings() },
           // 引擎启动确认后由 StartupBridge 调用；立即读引擎状态，不排队、不延时。
-          refreshRuntimeState: (): void => { this.engineReady = true; this.arCtl().restoreInterruptedArSkyStateIfNeeded(); this.refreshStateNow(); this.callInteractive('setTouchPickRadius', this.viewSettingsStore.touchPickRadiusVp.toString(), () => {}); this.syncStarBrightnessFromEngine(); this.consumeCardRoute(); void this.notificationCtl().refreshSubscriptions(); this.scheduleCardSnapshotSync(1800); setTimeout(() => { this.ensureCalendarPreviewLoaded(); this.syncRemoteCalendarFeed(false) }, 600) },
+          refreshRuntimeState: (): void => { this.engineReady = true; this.arCtl().restoreInterruptedArSkyStateIfNeeded(); this.refreshStateNow(); this.callInteractive('setTouchPickRadius', this.viewSettingsStore.touchPickRadiusVp.toString(), () => {}); this.syncStarBrightnessFromEngine(); this.consumeCardRoute(); this.consumeSharedLocation(); void this.notificationCtl().refreshSubscriptions(); this.scheduleCardSnapshotSync(1800); setTimeout(() => { this.ensureCalendarPreviewLoaded(); this.syncRemoteCalendarFeed(false) }, 600) },
           // Startbridge 的「引擎就绪」以 StelApp::isInitialized() 为准：
           // 出帧就绪可能早于 init 完成，提前投放查询会在 init 期间堆积重试链。
           enginePresentationReady: (): boolean => isEngineReady()
@@ -5341,6 +5352,95 @@ export struct WindowNativeNode {
     } catch (error) {
       hilog.warn(0x0000, 'StellariumArkUI', '[form-route] ignored malformed route')
     }
+  }
+
+  private onSharedLocationChanged(): void {
+    this.consumeSharedLocation()
+  }
+
+  // 地图 → 星象仪：消费 QAbility 解析出的观测点，直接切到地球并注入星图。
+  // 与卡片路由一样，冷启动时若引擎/隐私门禁未就绪则保留 payload，待引擎就绪后再消费。
+  private consumeSharedLocation(): void {
+    if (this.sharedLocation.length === 0 || !this.engineReady || !hasCurrentPrivacyConsent()) return
+    // 上一次观测点命令仍在桥队列里时 setLocation 会拒绝新请求；保留 payload
+    // 短暂重试，避免分享的坐标被静默丢弃。
+    if (this.sessionToolStore.observerPlanetPending) {
+      if (this.sharedLocationRetries >= 8) {
+        this.sharedLocationRetries = 0
+        AppStorage.setOrCreate('stellariumLocationShare', '')
+        this.flashHint(I18n.t('loc_share_busy'))
+        return
+      }
+      this.sharedLocationRetries += 1
+      if (this.sharedLocationRetryTimer >= 0) clearTimeout(this.sharedLocationRetryTimer)
+      this.sharedLocationRetryTimer = setTimeout(() => {
+        this.sharedLocationRetryTimer = -1
+        this.consumeSharedLocation()
+      }, 350) as number
+      return
+    }
+    this.sharedLocationRetries = 0
+    if (this.sharedLocationRetryTimer >= 0) {
+      clearTimeout(this.sharedLocationRetryTimer)
+      this.sharedLocationRetryTimer = -1
+    }
+    const raw = this.sharedLocation
+    AppStorage.setOrCreate('stellariumLocationShare', '')
+    try {
+      const route = JSON.parse(raw) as Record<string, Object>
+      if (route['ok'] === false) {
+        this.flashHint(I18n.t('loc_share_unrecognized'))
+        return
+      }
+      const latitude = Number(route['latitude'])
+      const longitude = Number(route['longitude'])
+      if (!Number.isFinite(latitude) || !Number.isFinite(longitude) ||
+        latitude < -90 || latitude > 90 || longitude < -180 || longitude > 180) {
+        this.flashHint(I18n.t('loc_share_unrecognized'))
+        return
+      }
+      const rawName = typeof route['name'] === 'string' ? String(route['name']).trim() : ''
+      const name = rawName.length > 0 ? rawName : I18n.t('loc_shared_point')
+      const rawAltitude = Number(route['altitude'])
+      const altitude = Number.isFinite(rawAltitude) ? rawAltitude : 0
+      this.locationMapFullscreen = false
+      this.setPanel('', true, true)
+      // setLocation 的桥命令同时携带目标星球；若当前停在外星观测点，
+      // 这一条命令会把观测星球切回地球并应用分享坐标。
+      this.locationCtl().setLocation(name, latitude, longitude, altitude, 'Earth', false, 'share')
+      setTimeout(() => { this.scheduleSpacetimeCultureSuggest('location') }, 450)
+    } catch (error) {
+      this.flashHint(I18n.t('loc_share_unrecognized'))
+    }
+  }
+
+  // 星象仪 → 花瓣地图：精确打开该坐标，不规划路线、不进入导航。
+  // 高德/百度暂不接入；花瓣使用 Map Kit 的地点详情接口（WGS84，真机已验证精确标靶）。
+  private openLocationInExternalMap(name: string, latitude: number, longitude: number): void {
+    if (!Number.isFinite(latitude) || !Number.isFinite(longitude) ||
+      latitude < -90 || latitude > 90 || longitude < -180 || longitude > 180) return
+    this.launchPetalPlace(this.locationMapLabel(name), latitude, longitude)
+  }
+
+  private locationMapLabel(name: string): string {
+    const trimmed = name.trim()
+    if (trimmed.length > 0 && trimmed !== I18n.t('loc_shared_point') &&
+      trimmed !== I18n.t('custom_location')) return trimmed
+    return I18n.t('loc_shared_point')
+  }
+
+  private launchPetalPlace(name: string, latitude: number, longitude: number): void {
+    const context = this.getUIContext().getHostContext() as common.UIAbilityContext
+    petalMaps.openMapPoiDetail(context, {
+      destinationPosition: { latitude: latitude, longitude: longitude },
+      destinationName: name,
+      coordinateType: mapCommon.CoordinateType.WGS84
+    }).then((): void => {
+      hilog.info(0x0000, 'StellariumArkUI', '[location-map] opened Petal Maps place')
+    }).catch((error: Error): void => {
+      hilog.warn(0x0000, 'StellariumArkUI', `[location-map] Petal Maps unavailable: ${error.message}`)
+      this.flashHint(I18n.t('loc_map_unavailable'))
+    })
   }
 
   // 红光手电：纯红全屏叠层 + 可调窗口亮度 + 屏幕常亮；关闭时恢复系统亮度。
@@ -10827,6 +10927,9 @@ export struct WindowNativeNode {
             this.locationCtl().applyPickerLocation()
             setTimeout(() => { this.scheduleSpacetimeCultureSuggest('location') }, 450)
           },
+          onNavigate: (latitude: number, longitude: number, name: string) => {
+            this.openLocationInExternalMap(name, latitude, longitude)
+          },
           onClose: () => { this.locationMapFullscreen = false }
         })
           .width('100%').height('100%').zIndex(200)
@@ -11351,6 +11454,11 @@ export struct WindowNativeNode {
         onSaveCurrent: () => { this.locationStore.saveCurrentLocation() },
         onApplyLocation: (name: string, lat: number, lon: number, alt: number, planet: string) => { this.locationCtl().setLocation(name, lat, lon, alt, planet) },
         onDeleteLocation: (key: string) => { this.locationStore.deleteSavedLocation(key) },
+        onNavigateCurrent: () => {
+          this.openLocationInExternalMap(this.locationPickerStore.locationPickerName,
+            this.locationPickerStore.locationPickerLatitude, this.locationPickerStore.locationPickerLongitude)
+        },
+        onNavigateLocation: (name: string, lat: number, lon: number) => { this.openLocationInExternalMap(name, lat, lon) },
         onSelectPlanet: (name: string) => { this.locationCtl().setObserverPlanet(name) },
         onApplyEnvironment: (pressure: number, temperature: number) => {
           this.astroCalcCtl().applyAtmosphere(pressure, temperature, this.atmosphereStore.atmoExtinction)

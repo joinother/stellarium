@@ -8,6 +8,7 @@ import hilog from '@ohos.hilog';
 import deviceInfo from '@ohos.deviceInfo';
 import preferences from '@ohos.data.preferences';
 import { fileIo } from '@kit.CoreFileKit';
+import { systemShare } from '@kit.ShareKit';
 import BuildProfile from 'BuildProfile';
 import qpa from 'libqohos.so';
 import { command } from 'libentry.so';
@@ -26,6 +27,7 @@ import { readAstronomyCard, publishAstronomyCard } from './AstronomyCardService'
 import { CardTonightData } from '../form/AstronomyCardData';
 import { CollaborationSessionOptions, collaborationNativeState, collaborationPreview, createCollaborationSession } from './CollaborationSessionService';
 import { NIGHT_MODE_STORE } from '../common/types/MainWindowModels';
+import { parseSharedLocationText, SharedLocationPoint } from '../common/location/LocationShareLink';
 
 interface AstronomyReminderResponse {
   ok: boolean;
@@ -1049,6 +1051,70 @@ export default class QAbility extends UIAbility {
     hilog.info(LOG_DOMAIN, LOG_TAG, '[catalog-open] received .cat open-with want');
   }
 
+  // 地点分享：地图应用通过系统分享面板或 `skyinstrument:` 深链发来观测点
+  //（同时兼容分享文本中的 `geo:` 链接）。解析成功后写入 AppStorage；
+  // ArkUI 在引擎就绪且已同意隐私后消费并注入观测点。
+  private publishSharedLocation(point: SharedLocationPoint | null): void {
+    const route: Record<string, Object> = {};
+    route['routeId'] = Date.now().toString();
+    if (point !== null) {
+      route['name'] = point.name;
+      route['latitude'] = point.latitude;
+      route['longitude'] = point.longitude;
+      route['altitude'] = point.altitude;
+      route['planet'] = point.planet;
+      route['source'] = point.source;
+      AppStorage.setOrCreate('stellariumLocationShare', JSON.stringify(route));
+      hilog.info(LOG_DOMAIN, LOG_TAG, '[location-share] accepted shared point');
+      return;
+    }
+    route['ok'] = false;
+    route['error'] = 'unrecognized';
+    AppStorage.setOrCreate('stellariumLocationShare', JSON.stringify(route));
+    hilog.info(LOG_DOMAIN, LOG_TAG, '[location-share] shared content has no usable coordinates');
+  }
+
+  private queueLocationShareWant(want: Want): void {
+    const uri = want.uri ?? '';
+    const direct = parseSharedLocationText(uri);
+    if (direct !== null) {
+      this.publishSharedLocation(direct);
+      return;
+    }
+    const action = want.action ?? '';
+    if (action !== 'ohos.want.action.sendData') {
+      const lower = uri.toLowerCase();
+      if (lower.startsWith('skyinstrument://') || lower.startsWith('geo:')) this.publishSharedLocation(null);
+      return;
+    }
+    systemShare.getSharedData(want).then((data: systemShare.SharedData) => {
+      const records = data.getRecords();
+      let sawText = false;
+      for (let i = 0; i < records.length; i++) {
+        const record = records[i];
+        const utd = record.utd.toLowerCase();
+        if (utd.indexOf('text') >= 0 || utd.indexOf('url') >= 0 || utd.indexOf('link') >= 0) sawText = true;
+        const content = record.content ?? '';
+        const parsedContent = parseSharedLocationText(content);
+        if (parsedContent !== null) {
+          this.publishSharedLocation(parsedContent);
+          return;
+        }
+        const recordUri = record.uri ?? '';
+        const parsedUri = parseSharedLocationText(recordUri);
+        if (parsedUri !== null) {
+          this.publishSharedLocation(parsedUri);
+          return;
+        }
+      }
+      // Image/file shares are registered for other flows; only text/links get
+      // the "no coordinates" feedback, so unrelated shares stay silent.
+      if (sawText) this.publishSharedLocation(null);
+    }).catch((error: Error) => {
+      hilog.warn(LOG_DOMAIN, LOG_TAG, `[location-share] getSharedData failed: ${error.message}`);
+    });
+  }
+
   private publishSystemFontScale(rawScale: number | undefined): void {
     const valid = typeof rawScale === 'number' && Number.isFinite(rawScale) && rawScale > 0 ? rawScale : 1.0;
     const clamped = Math.max(0.85, Math.min(1.45, valid));
@@ -1080,6 +1146,7 @@ export default class QAbility extends UIAbility {
     this.queueCliRequest(want);
     this.routeCardWant(want);
     this.queueOpenCatalogWant(want);
+    this.queueLocationShareWant(want);
   }
 
   private async readEarlyNightMode(): Promise<void> {
@@ -1177,6 +1244,7 @@ export default class QAbility extends UIAbility {
     this.queueCliRequest(want);
     this.routeCardWant(want);
     this.queueOpenCatalogWant(want);
+    this.queueLocationShareWant(want);
     if (this.qtAbilityCreated) {
       qpa.handleAbilityOnNewWant(this, want, launchParam);
       this.drainCliRequests();
