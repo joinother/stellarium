@@ -38,6 +38,13 @@ export interface NotificationPreferenceSnapshot {
   dndStartMinutes: number
   dndEndMinutes: number
   passLeadMinutes: number
+  topicMeteor?: boolean
+  topicPlanet?: boolean
+  topicMoon?: boolean
+  topicSolarTerm?: boolean
+  highlightOnly?: boolean
+  timingMode?: string
+  regionId?: string
 }
 
 export function validNotificationPreferences(value: unknown): value is NotificationPreferenceSnapshot {
@@ -45,6 +52,13 @@ export function validNotificationPreferences(value: unknown): value is Notificat
     (value.satellitePassEnabled === undefined || typeof value.satellitePassEnabled === 'boolean') &&
     (value.digestEnabled === undefined || typeof value.digestEnabled === 'boolean') &&
     (value.dndSatelliteOnly === undefined || typeof value.dndSatelliteOnly === 'boolean') &&
+    (value.topicMeteor === undefined || typeof value.topicMeteor === 'boolean') &&
+    (value.topicPlanet === undefined || typeof value.topicPlanet === 'boolean') &&
+    (value.topicMoon === undefined || typeof value.topicMoon === 'boolean') &&
+    (value.topicSolarTerm === undefined || typeof value.topicSolarTerm === 'boolean') &&
+    (value.highlightOnly === undefined || typeof value.highlightOnly === 'boolean') &&
+    (value.timingMode === undefined || value.timingMode === 'smart' || value.timingMode === 'day_before' || value.timingMode === 'just_in_time') &&
+    (value.regionId === undefined || (typeof value.regionId === 'string' && value.regionId.length <= 64)) &&
     (value.subscriptionsVersion === undefined || value.subscriptionsVersion === 1) &&
     integer(value.dndStartMinutes, 0, 1439) && integer(value.dndEndMinutes, 0, 1439) && integer(value.passLeadMinutes, 0, 60)
 }

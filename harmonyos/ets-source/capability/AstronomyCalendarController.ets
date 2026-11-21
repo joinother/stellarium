@@ -4,11 +4,13 @@ import { AstronomyCalendarStore } from '../state/AstronomyCalendarStore'
 import { AstronomyCalendarEvent, CalendarNativeResponse, calendarMonth, calendarDays, calendarQuery, calendarNativeEvents } from '../state/AstronomyCalendarEvent'
 import { CalendarObserverContext, calendarPlanetName, calendarText } from '../state/AstronomyCalendarText'
 import {
+  CALENDAR_QUICK_PRESETS,
   NativeSatellitePassRecord,
   isEarthCalendarPlanet,
   monthOverlapsSatelliteWindow,
   parseTonightSatellitePassesToCalendarEvents
 } from '../state/AstronomyCalendarFilter'
+import { findObserverRegionPreset, normalizeObserverRegionId } from '../state/ObserverRegionScope'
 import { AstronomyReminderResult } from '../qability/AstronomyReminderService'
 
 export interface AstronomyCalendarReminderResult extends AstronomyReminderResult {
@@ -43,6 +45,19 @@ export class AstronomyCalendarController {
   private currentObserverPlanet(): string {
     const raw = this.hooks.observerContext?.()?.observerPlanet?.trim() ?? ''
     return raw.length > 0 ? raw : 'Earth'
+  }
+
+  private effectiveObserverContext(): CalendarObserverContext | undefined {
+    const base = this.hooks.observerContext?.()
+    const preset = findObserverRegionPreset(this.store.regionId)
+    if (preset !== undefined && isEarthCalendarPlanet(this.store.observerPlanet)) {
+      return {
+        latitude: preset.latitude,
+        bortleScale: preset.bortleHint,
+        observerPlanet: base?.observerPlanet ?? 'Earth'
+      }
+    }
+    return base
   }
 
   private recomputeMonthDays(): void {
@@ -136,7 +151,7 @@ export class AstronomyCalendarController {
         if (this.disposed || sequence !== this.sequence) return
         try {
           const native = response as CalendarNativeResponse
-          const events = calendarNativeEvents(native, range, this.language, this.hooks.observerContext?.())
+          const events = calendarNativeEvents(native, range, this.language, this.effectiveObserverContext())
           this.response = native
           this.store.sourceYear = year
           this.store.events = events
@@ -188,7 +203,7 @@ export class AstronomyCalendarController {
         if (this.disposed || sequence !== this.sequence) return
         try {
           const native = response as CalendarNativeResponse
-          const events = calendarNativeEvents(native, range, this.language, this.hooks.observerContext?.())
+          const events = calendarNativeEvents(native, range, this.language, this.effectiveObserverContext())
           this.extraResponses.push(native)
           this.store.throughYear = year
           this.store.throughMonth = month
@@ -210,7 +225,7 @@ export class AstronomyCalendarController {
     if (this.response !== undefined) {
       try {
         const range = calendarMonth(this.store.year, this.store.month)
-        const ctx = this.hooks.observerContext?.()
+        const ctx = this.effectiveObserverContext()
         let rebuilt = calendarNativeEvents(this.response, range, language, ctx)
         for (const response of this.extraResponses) {
           rebuilt = rebuilt.concat(calendarNativeEvents(response,
@@ -224,6 +239,51 @@ export class AstronomyCalendarController {
         this.reload()
       }
     }
+  }
+
+  setRegionId(regionId: string): void {
+    if (this.disposed) return
+    const safe = normalizeObserverRegionId(regionId)
+    if (this.store.regionId === safe) return
+    this.store.regionId = safe
+    this.store.filterRevision += 1
+    if (this.response !== undefined) {
+      this.setLanguage(this.language)
+    }
+    this.hooks.onFilterChanged?.()
+  }
+
+  setSearchQuery(query: string): void {
+    if (this.disposed || this.store.searchQuery === query) return
+    this.store.searchQuery = query
+    this.store.selectedDay = 0
+    this.store.filterRevision += 1
+    this.recomputeMonthDays()
+  }
+
+  applyQuickPreset(presetId: string): void {
+    if (this.disposed) return
+    const preset = CALENDAR_QUICK_PRESETS.find((p) => p.id === presetId)
+    if (preset === undefined) return
+    this.store.selectedCategories = preset.categories.slice()
+    this.store.satelliteSubFilter = preset.satelliteSubFilter
+    this.store.highlightOnly = preset.highlightOnly
+    this.store.selectedDay = 0
+    this.store.filterRevision += 1
+    this.recomputeMonthDays()
+    this.hooks.onFilterChanged?.()
+  }
+
+  clearFilters(): void {
+    if (this.disposed) return
+    this.store.selectedCategories = []
+    this.store.satelliteSubFilter = 'all'
+    this.store.highlightOnly = false
+    this.store.searchQuery = ''
+    this.store.selectedDay = 0
+    this.store.filterRevision += 1
+    this.recomputeMonthDays()
+    this.hooks.onFilterChanged?.()
   }
 
   toggleCategory(category: string): void {
@@ -253,17 +313,6 @@ export class AstronomyCalendarController {
   setHighlightOnly(enabled: boolean): void {
     if (this.disposed || this.store.highlightOnly === enabled) return
     this.store.highlightOnly = enabled
-    this.store.selectedDay = 0
-    this.store.filterRevision += 1
-    this.recomputeMonthDays()
-    this.hooks.onFilterChanged?.()
-  }
-
-  clearFilters(): void {
-    if (this.disposed) return
-    this.store.selectedCategories = []
-    this.store.satelliteSubFilter = 'all'
-    this.store.highlightOnly = false
     this.store.selectedDay = 0
     this.store.filterRevision += 1
     this.recomputeMonthDays()

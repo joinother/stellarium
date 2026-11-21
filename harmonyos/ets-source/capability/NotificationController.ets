@@ -9,13 +9,34 @@ import { NotificationStore } from '../state/NotificationStore'
 import { AstronomyCalendarEvent } from '../state/AstronomyCalendarEvent'
 import { AstronomyCalendarReminderResult } from './AstronomyCalendarController'
 import { AstronomySubscriptionCategory, AstronomySubscriptionFeed, subscriptionCandidates } from '../qability/AstronomySubscriptionPolicy'
+import {
+  NotificationTimingMode,
+  NotificationTopicId,
+  SUBSCRIPTION_PRESETS,
+  SubscriptionPresetId,
+  SubscriptionTopicFlags,
+  hasAnyAstronomyTopic,
+  normalizeCanonicalEventId,
+  normalizeTimingMode,
+  resolveReminderTimingPlan
+} from '../qability/AstronomyNotificationTiming'
+import { normalizeObserverRegionId } from '../state/ObserverRegionScope'
+import { CalendarSubscriptionMapping } from '../state/AstronomyCalendarFilter'
 import { MoonPhaseItem, SeasonEvent } from '../common/types/StellariumTypes'
 import { MeteorShowerItem } from '../common/types/MainWindowModels'
+
+export interface SyncedWidgetReminderEntry {
+  eventId: string
+  reminderId: number
+  source?: string
+}
 
 export interface NotificationHostHooks {
   loadSubscriptionEvents?(category: AstronomySubscriptionCategory, from: number, until: number): Promise<AstronomySubscriptionFeed>
   canInteract?(): boolean
   openCalendar?(): void
+  syncWidgetReminders?(activeEntries: SyncedWidgetReminderEntry[]): void
+  readWidgetRemindedEntries?(): SyncedWidgetReminderEntry[]
   flashHint(text: ResourceStr): void
   hostContext(): common.UIAbilityContext
   almanacSolarTerms(): SeasonEvent[]
@@ -57,7 +78,14 @@ export class NotificationController {
       satellitePassEnabled: this.store.satellitePassEnabled, digestEnabled: this.store.digestEnabled,
       subscriptionsVersion: 1,
       dndStartMinutes: this.store.dndStartMinutes, dndEndMinutes: this.store.dndEndMinutes,
-      passLeadMinutes: this.store.passLeadMinutes
+      passLeadMinutes: this.store.passLeadMinutes,
+      topicMeteor: this.store.topicMeteor,
+      topicPlanet: this.store.topicPlanet,
+      topicMoon: this.store.topicMoon,
+      topicSolarTerm: this.store.topicSolarTerm,
+      highlightOnly: this.store.subscriptionHighlightOnly,
+      timingMode: normalizeTimingMode(this.store.timingMode),
+      regionId: normalizeObserverRegionId(this.store.regionId)
     }
   }
 
@@ -65,6 +93,13 @@ export class NotificationController {
     this.store.astronomyEventsEnabled = value.astronomyEventsEnabled
     this.store.satellitePassEnabled = value.satellitePassEnabled === true
     this.store.digestEnabled = value.digestEnabled === true
+    this.store.topicMeteor = value.topicMeteor !== undefined ? value.topicMeteor : value.astronomyEventsEnabled
+    this.store.topicPlanet = value.topicPlanet !== undefined ? value.topicPlanet : value.astronomyEventsEnabled
+    this.store.topicMoon = value.topicMoon !== undefined ? value.topicMoon : value.astronomyEventsEnabled
+    this.store.topicSolarTerm = value.topicSolarTerm !== undefined ? value.topicSolarTerm : value.astronomyEventsEnabled
+    this.store.subscriptionHighlightOnly = value.highlightOnly === true
+    this.store.timingMode = normalizeTimingMode(value.timingMode)
+    this.store.regionId = normalizeObserverRegionId(value.regionId)
     this.store.dndEnabled = value.dndEnabled
     this.store.dndSatelliteOnly = value.dndSatelliteOnly !== false
     this.store.dndStartMinutes = value.dndStartMinutes
@@ -145,12 +180,97 @@ export class NotificationController {
 
   setAstronomyEventsEnabled(enabled: boolean): void {
     this.store.astronomyEventsEnabled = enabled
+    if (enabled && !this.store.topicMeteor && !this.store.topicPlanet && !this.store.topicMoon && !this.store.topicSolarTerm) {
+      this.store.topicMeteor = true
+      this.store.topicPlanet = true
+      this.store.topicMoon = true
+      this.store.topicSolarTerm = true
+    } else if (!enabled) {
+      this.store.topicMeteor = false
+      this.store.topicPlanet = false
+      this.store.topicMoon = false
+      this.store.topicSolarTerm = false
+    }
     this.persistPreferences()
   }
 
   setSatellitePassEnabled(enabled: boolean): void {
     this.store.satellitePassEnabled = enabled
     this.persistPreferences()
+  }
+
+  setTopicEnabled(topic: NotificationTopicId, enabled: boolean): void {
+    if (topic === 'satellite') {
+      this.setSatellitePassEnabled(enabled)
+      return
+    }
+    if (topic === 'meteor') this.store.topicMeteor = enabled
+    else if (topic === 'planet') this.store.topicPlanet = enabled
+    else if (topic === 'moon') this.store.topicMoon = enabled
+    else if (topic === 'solar_term') this.store.topicSolarTerm = enabled
+    const flags: SubscriptionTopicFlags = {
+      meteor: this.store.topicMeteor,
+      planet: this.store.topicPlanet,
+      moon: this.store.topicMoon,
+      solarTerm: this.store.topicSolarTerm,
+      satellite: this.store.satellitePassEnabled,
+      highlightOnly: this.store.subscriptionHighlightOnly
+    }
+    this.store.astronomyEventsEnabled = hasAnyAstronomyTopic(flags)
+    this.persistPreferences()
+  }
+
+  setSubscriptionHighlightOnly(enabled: boolean): void {
+    this.store.subscriptionHighlightOnly = enabled
+    this.persistPreferences()
+  }
+
+  setTimingMode(mode: string): void {
+    this.store.timingMode = normalizeTimingMode(mode)
+    this.persistPreferences()
+  }
+
+  setRegionId(regionId: string): void {
+    this.store.regionId = normalizeObserverRegionId(regionId)
+    this.persistPreferences()
+  }
+
+  setPassLeadMinutes(minutes: number): void {
+    this.store.passLeadMinutes = Math.min(60, Math.max(0, Math.round(minutes)))
+    this.persistPreferences()
+  }
+
+  applySubscriptionPreset(presetId: SubscriptionPresetId): void {
+    const preset = SUBSCRIPTION_PRESETS.find((item) => item.id === presetId)
+    if (preset === undefined) return
+    this.store.topicMeteor = preset.flags.meteor
+    this.store.topicPlanet = preset.flags.planet
+    this.store.topicMoon = preset.flags.moon
+    this.store.topicSolarTerm = preset.flags.solarTerm
+    this.store.satellitePassEnabled = preset.flags.satellite
+    this.store.subscriptionHighlightOnly = preset.flags.highlightOnly
+    this.store.astronomyEventsEnabled = hasAnyAstronomyTopic(preset.flags)
+    this.store.timingMode = preset.timingMode
+    this.store.passLeadMinutes = preset.passLeadMinutes
+    this.store.dndEnabled = preset.dndEnabled
+    this.store.dndSatelliteOnly = preset.dndSatelliteOnly
+    this.persistPreferences()
+    this.report(notificationText('已应用订阅方案：') + preset.labelZh)
+  }
+
+  subscribeFromCalendarFilter(mapping: CalendarSubscriptionMapping, regionId?: string): void {
+    this.store.topicMeteor = mapping.meteor
+    this.store.topicPlanet = mapping.planet
+    this.store.topicMoon = mapping.moon
+    this.store.topicSolarTerm = mapping.solarTerm
+    this.store.satellitePassEnabled = mapping.satellite
+    this.store.subscriptionHighlightOnly = mapping.highlightOnly
+    this.store.astronomyEventsEnabled = mapping.meteor || mapping.planet || mapping.moon || mapping.solarTerm
+    if (regionId !== undefined) {
+      this.store.regionId = normalizeObserverRegionId(regionId)
+    }
+    this.persistPreferences()
+    this.report(notificationText('已按当前日历筛选同步通知订阅。'))
   }
 
   public refreshSubscriptions(): Promise<void> {
@@ -306,12 +426,24 @@ export class NotificationController {
       let scheduled = 0
       for (const event of candidates) {
         if (!current()) return
-        const leadMinutes = category === 'satellite' ? snapshot.passLeadMinutes : 0
+        const timingPlan = resolveReminderTimingPlan(event, {
+          nowMs: Date.now(),
+          timingMode: normalizeTimingMode(snapshot.timingMode),
+          passLeadMinutes: snapshot.passLeadMinutes,
+          regionId: snapshot.regionId,
+          observerLatitude: this.hooks.observerLatitude ? this.hooks.observerLatitude() : undefined,
+          bortleScale: this.hooks.bortleScale ? this.hooks.bortleScale() : undefined,
+          dndEnabled: snapshot.dndEnabled,
+          dndSatelliteOnly: snapshot.dndSatelliteOnly,
+          dndStartMinutes: snapshot.dndStartMinutes,
+          dndEndMinutes: snapshot.dndEndMinutes
+        })
+        const leadMinutes = timingPlan.leadMinutes
         const payload: AstronomyReminderRequest = {
           subscription: category, eventAt: new Date(event.at).toISOString(), jd: event.jd,
           title: notificationText('星象仪 · ') + event.title,
-          content: this.eventReminderContent(event, category, leadMinutes),
-          eventId: event.id, kind: event.kind, target: event.target,
+          content: timingPlan.contentZh,
+          eventId: normalizeCanonicalEventId(event.id), kind: event.kind, target: event.target,
           panel: category === 'astronomy' ? 'calendar' : event.panel, tab: event.tab,
           leadMinutes: leadMinutes
         }
@@ -403,8 +535,41 @@ export class NotificationController {
   private async refreshReminders(): Promise<void> {
     const result = await AstronomyReminderService.list()
     if (result.ok && result.items !== undefined) {
-      this.store.astronomyReminders = result.items
-      this.store.astronomyReminderCount = result.items.length
+      // Merge system reminders with widget-booked entries so desktop widget bookings appear seamlessly in-app
+      const widgetEntries = this.hooks.readWidgetRemindedEntries ? this.hooks.readWidgetRemindedEntries() : []
+      const widgetByReminderId = new Map<number, SyncedWidgetReminderEntry>()
+      for (let i = 0; i < widgetEntries.length; i++) {
+        widgetByReminderId.set(widgetEntries[i].reminderId, widgetEntries[i])
+      }
+      const enriched = result.items.map((item) => {
+        if (item.eventId.length === 0 && widgetByReminderId.has(item.reminderId)) {
+          const w = widgetByReminderId.get(item.reminderId)!
+          item.eventId = normalizeCanonicalEventId(w.eventId)
+          if (item.subscription === undefined) item.subscription = w.source ?? 'widget'
+        } else if (item.eventId.length > 0) {
+          item.eventId = normalizeCanonicalEventId(item.eventId)
+        }
+        return item
+      })
+      this.store.astronomyReminders = enriched
+      this.store.astronomyReminderCount = enriched.length
+      const ids: string[] = []
+      const syncedForWidgets: SyncedWidgetReminderEntry[] = []
+      for (let i = 0; i < enriched.length; i++) {
+        const evId = normalizeCanonicalEventId(enriched[i].eventId)
+        if (evId.length > 0) {
+          if (!ids.includes(evId)) ids.push(evId)
+          syncedForWidgets.push({
+            eventId: evId,
+            reminderId: enriched[i].reminderId,
+            source: enriched[i].subscription ?? 'calendar'
+          })
+        }
+      }
+      this.store.remindedEventIds = ids
+      if (this.hooks.syncWidgetReminders !== undefined) {
+        try { this.hooks.syncWidgetReminders(syncedForWidgets) } catch (_) {}
+      }
       this.store.astronomyReminderListLoaded = true
       this.store.astronomyReminderListError = ''
     } else {
@@ -645,13 +810,84 @@ export class NotificationController {
     const titlePrefix = isOffEarth
       ? notificationText('星象仪 · 【' + planetLabel + '】')
       : notificationText('星象仪 · ')
+    const canonicalId = normalizeCanonicalEventId(event.id)
+    const timingPlan = resolveReminderTimingPlan(event, {
+      nowMs: Date.now(),
+      timingMode: normalizeTimingMode(this.store.timingMode),
+      passLeadMinutes: this.store.passLeadMinutes,
+      regionId: this.store.regionId,
+      observerLatitude: this.hooks.observerLatitude ? this.hooks.observerLatitude() : undefined,
+      bortleScale: this.hooks.bortleScale ? this.hooks.bortleScale() : undefined,
+      dndEnabled: this.store.dndEnabled,
+      dndSatelliteOnly: this.store.dndSatelliteOnly,
+      dndStartMinutes: this.store.dndStartMinutes,
+      dndEndMinutes: this.store.dndEndMinutes
+    })
     const req: AstronomyReminderRequest = {
       eventAt: new Date(event.at).toISOString(), title: titlePrefix + event.title,
-      content: this.eventReminderContent(event, event.kind === 'satellite-pass' ? 'satellite' : 'astronomy', this.store.passLeadMinutes),
-      eventId: event.id, kind: event.kind, jd: event.jd, target: event.target, panel: 'calendar', tab: event.tab
+      content: timingPlan.contentZh,
+      eventId: canonicalId, kind: event.kind, jd: event.jd, target: event.target, panel: 'calendar', tab: event.tab,
+      leadMinutes: timingPlan.leadMinutes
     }
     if (isOffEarth) req.observerPlanet = rawPlanet
-    return this.scheduleOne(req, true)
+    // Manual single-event booking should succeed even if bulk auto-subscriptions are off, while still honoring DND.
+    return this.scheduleManualOne(req)
+  }
+
+  private async scheduleManualOne(payload: AstronomyReminderRequest): Promise<AstronomyCalendarReminderResult> {
+    if (this.store.astronomyNotificationBusy) return {
+      ok: false, reason: 'busy', error: notificationText('正在处理提醒，请稍后重试。')
+    }
+    this.store.astronomyNotificationBusy = true
+    try {
+      await this.preferenceQueue
+      await this.loadPreferences()
+      if (!this.canInteract()) return this.reportReminderResult({
+        ok: false, reason: 'interaction-unavailable', error: notificationText('请回到前台后重新添加提醒。')
+      })
+      if (!this.store.notificationPreferencesLoaded || this.store.notificationPreferencesError.length > 0) {
+        return this.reportReminderResult({ ok: false, reason: 'preferences-unavailable',
+          error: this.store.notificationPreferencesError || notificationText('提醒偏好尚未就绪。') })
+      }
+      if (!hasCurrentPrivacyConsent()) return this.reportReminderResult({
+        ok: false, reason: 'privacy-required', error: notificationText('请先同意当前隐私协议。')
+      })
+      const manualPrefs: AstronomyReminderPreferences = {
+        dndEnabled: this.store.dndEnabled,
+        dndSatelliteOnly: this.store.dndSatelliteOnly,
+        dndStartMinutes: this.store.dndStartMinutes,
+        dndEndMinutes: this.store.dndEndMinutes
+      }
+      const result = await AstronomyReminderService.schedule(payload, this.hooks.hostContext().abilityInfo.bundleName,
+        manualPrefs, (): boolean => this.canInteract())
+      try {
+        await this.refreshReminders()
+      } catch (error) {
+        this.store.astronomyReminderListError = notificationText('提醒列表读取失败。')
+      }
+      return this.reportReminderResult(result)
+    } catch (error) {
+      return this.reportReminderResult({ ok: false, reason: 'scheduling-error',
+        error: notificationText('提醒添加失败，请刷新列表后重试。') })
+    } finally {
+      this.store.astronomyNotificationBusy = false
+      this.resumePendingSubscriptions()
+    }
+  }
+
+  public isEventReminded(eventId: string): boolean {
+    const norm = normalizeCanonicalEventId(eventId)
+    return norm.length > 0 && this.store.remindedEventIds.includes(norm)
+  }
+
+  public async toggleEventReminder(event: AstronomyCalendarEvent): Promise<AstronomyCalendarReminderResult> {
+    const norm = normalizeCanonicalEventId(event.id)
+    const existing = this.store.astronomyReminders.find((item) => normalizeCanonicalEventId(item.eventId) === norm)
+    if (existing !== undefined) {
+      await this.cancelAction(existing.reminderId)
+      return { ok: true, reminderId: existing.reminderId, message: notificationText('已取消该天象提醒。') }
+    }
+    return this.scheduleEvent(event)
   }
 
   private openCalendarPicker(): void {

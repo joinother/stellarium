@@ -24,6 +24,7 @@ import { LanguageRow, DeviceSection } from '../settings/DeviceAndLanguageRows'
 import { AboutSection } from '../settings/AboutSection'
 import { NotificationSection } from '../settings/NotificationSection'
 import { AstronomyReminderItem } from '../../qability/AstronomyReminderService'
+import { NotificationTopicId, SubscriptionPresetId } from '../../qability/AstronomyNotificationTiming'
 import { HapticSection } from '../settings/HapticSection'
 import { KeyboardShortcutSection } from '../settings/KeyboardShortcutSection'
 import { KeyboardShortcutStore } from '../../state/KeyboardShortcutStore'
@@ -168,6 +169,14 @@ export struct SettingsPanel {
   toggleAstronomyEvents: (enabled: boolean) => void = () => {}
   toggleSatellitePass: (enabled: boolean) => void = () => {}
   toggleDigest: (enabled: boolean) => void = () => {}
+  toggleNotificationTopic: (topic: NotificationTopicId, enabled: boolean) => void = () => {}
+  toggleNotificationHighlightOnly: (enabled: boolean) => void = () => {}
+  applyNotificationPreset: (presetId: SubscriptionPresetId) => void = () => {}
+  setNotificationTimingMode: (mode: string) => void = () => {}
+  setNotificationRegionId: (regionId: string) => void = () => {}
+  setPassLeadMinutes: (minutes: number) => void = () => {}
+  openWidgetStudio: () => void = () => {}
+  @Prop followLocationName: string = ''
   toggleNotificationDnd: (enabled: boolean) => void = () => {}
   toggleNotificationDndSatelliteOnly: (enabled: boolean) => void = () => {}
   setNotificationDndStart: (minutes: number) => void = () => {}
@@ -372,6 +381,14 @@ export struct SettingsPanel {
               astronomyEventsEnabled: this.notificationStore.astronomyEventsEnabled,
               satellitePassEnabled: this.notificationStore.satellitePassEnabled,
               digestEnabled: this.notificationStore.digestEnabled,
+              topicMeteor: this.notificationStore.topicMeteor,
+              topicPlanet: this.notificationStore.topicPlanet,
+              topicMoon: this.notificationStore.topicMoon,
+              topicSolarTerm: this.notificationStore.topicSolarTerm,
+              subscriptionHighlightOnly: this.notificationStore.subscriptionHighlightOnly,
+              timingMode: this.notificationStore.timingMode,
+              regionId: this.notificationStore.regionId,
+              followLocationName: this.followLocationName,
               dndEnabled: this.notificationStore.dndEnabled,
               dndSatelliteOnly: this.notificationStore.dndSatelliteOnly,
               dndStartMinutes: this.notificationStore.dndStartMinutes,
@@ -380,6 +397,13 @@ export struct SettingsPanel {
               onToggleAstronomyEvents: (v: boolean) => { this.toggleAstronomyEvents(v) },
               onToggleSatellitePass: (v: boolean) => { this.toggleSatellitePass(v) },
               onToggleDigest: (v: boolean) => { this.toggleDigest(v) },
+              onToggleTopic: (topic: NotificationTopicId, v: boolean) => { this.toggleNotificationTopic(topic, v) },
+              onToggleHighlightOnly: (v: boolean) => { this.toggleNotificationHighlightOnly(v) },
+              onApplyPreset: (presetId: SubscriptionPresetId) => { this.applyNotificationPreset(presetId) },
+              onTimingModeChange: (mode: string) => { this.setNotificationTimingMode(mode) },
+              onRegionChange: (regionId: string) => { this.setNotificationRegionId(regionId) },
+              onSetLeadMinutes: (minutes: number) => { this.setPassLeadMinutes(minutes) },
+              onOpenWidgetStudio: () => { this.openWidgetStudio() },
               onToggleDnd: (v: boolean) => { this.toggleNotificationDnd(v) },
               onToggleDndSatelliteOnly: (v: boolean) => { this.toggleNotificationDndSatelliteOnly(v) },
               onDndStartChange: (m: number) => { this.setNotificationDndStart(m) },

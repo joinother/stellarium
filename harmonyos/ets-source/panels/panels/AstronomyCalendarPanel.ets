@@ -4,17 +4,30 @@ import { AstronomyCalendarStore } from '../../state/AstronomyCalendarStore'
 import { AstronomyCalendarEvent, CalendarDay, calendarEventTime, calendarDayEvents } from '../../state/AstronomyCalendarEvent'
 import { calendarText, calendarMonthTitle } from '../../state/AstronomyCalendarText'
 import {
+  CALENDAR_QUICK_PRESETS,
   CalendarFilterCategoryMeta,
+  CalendarQuickPreset,
   calendarCategoriesForPlanet,
+  calendarFilterToSubscriptionMapping,
   countCalendarEventsByCategory,
   hasActiveCalendarFilter,
   isEarthCalendarPlanet,
   monthOverlapsSatelliteWindow
 } from '../../state/AstronomyCalendarFilter'
 import { AstronomyCalendarReminderResult } from '../../capability/AstronomyCalendarController'
+import {
+  normalizeCanonicalEventId,
+  normalizeTimingMode,
+  resolveReminderTimingPlan
+} from '../../qability/AstronomyNotificationTiming'
+import {
+  findObserverRegionPreset,
+  formatRegionDateTime
+} from '../../state/ObserverRegionScope'
 import { UI_MOTION_STANDARD_MS, UI_OPTION_ANIMATION_MS, UI_RADIUS_CARD, UI_RADIUS_CONTROL, UI_RADIUS_PILL } from '../../common/ui/UiTokens'
 import { uiFadeUpTransition, uiSlideTransition } from '../../common/ui/UiMotion'
 import { InfoTipButton } from '../../common/ui/InfoTipButton'
+import { RegionScopePicker } from '../../common/ui/RegionScopePicker'
 
 export interface AstronomyCalendarPanelHost {
   previousMonth(): void
@@ -29,6 +42,10 @@ export interface AstronomyCalendarPanelHost {
   toggleCategory?(category: string): void
   setSatelliteSubFilter?(mode: string): void
   setHighlightOnly?(enabled: boolean): void
+  setSearchQuery?(query: string): void
+  applyQuickPreset?(presetId: string): void
+  setRegionId?(regionId: string): void
+  subscribeCurrentFilter?(): void
   clearFilters?(): void
   goToCurrentMonth?(): void
 }
@@ -62,6 +79,10 @@ export struct AstronomyCalendarPanel {
   @Prop secondaryColor: ResourceColor = '#B7C3D9'
   @Prop accentColor: ResourceColor = '#344E79'
   @Prop cardColor: ResourceColor = '#182235'
+  @Prop followLocationName: string = ''
+  @Prop remindedEventIds: string[] = []
+  @Prop notificationTimingMode: string = 'smart'
+  @Prop notificationPassLeadMinutes: number = 10
   @State private c: ThemeSlots = DEFAULT_SLOTS
   @State private viewMode: 'list' | 'grid' = 'list'
   @State private transitionDir: number = 1
@@ -140,7 +161,33 @@ export struct AstronomyCalendarPanel {
 
   private advancedFilterActive(): boolean {
     return this.calendarStore.highlightOnly ||
+      this.calendarStore.searchQuery.trim().length > 0 ||
       (isEarthCalendarPlanet(this.calendarStore.observerPlanet) && this.calendarStore.satelliteSubFilter !== 'all')
+  }
+
+  private isEventReminded(eventId: string): boolean {
+    const norm = normalizeCanonicalEventId(eventId)
+    return norm.length > 0 && this.remindedEventIds.includes(norm)
+  }
+
+  private eventDisplayTime(event: AstronomyCalendarEvent): string {
+    const preset = isEarthCalendarPlanet(this.calendarStore.observerPlanet)
+      ? findObserverRegionPreset(this.calendarStore.regionId) : undefined
+    if (preset !== undefined) {
+      const timeStr = formatRegionDateTime(event.at, preset.utcOffsetMinutes, this.isZh())
+      return `${timeStr} (${this.isZh() ? preset.tzLabelZh : preset.tzLabelEn})`
+    }
+    return calendarEventTime(event)
+  }
+
+  private timingPreviewForEvent(event: AstronomyCalendarEvent): string {
+    const plan = resolveReminderTimingPlan(event, {
+      nowMs: Date.now(),
+      timingMode: normalizeTimingMode(this.notificationTimingMode),
+      passLeadMinutes: this.notificationPassLeadMinutes,
+      regionId: this.calendarStore.regionId
+    })
+    return this.isZh() ? plan.summaryZh : plan.summaryEn
   }
 
   private satelliteFilterSelectedOutsideWindow(): boolean {
@@ -245,6 +292,52 @@ export struct AstronomyCalendarPanel {
 
       if (this.filterDrawerOpen) {
         Column({ space: 10 }) {
+          // 快速关键词搜索框
+          Row({ space: 6 }) {
+            TextInput({
+              text: this.calendarStore.searchQuery,
+              placeholder: this.t('搜索行星、流星雨、超级满月或空间站…', 'Search planet, meteor, supermoon or ISS…')
+            })
+              .height(34)
+              .layoutWeight(1)
+              .fontSize(this.panelFontSize - 2)
+              .fontColor(this.c.text)
+              .placeholderColor(this.c.sub)
+              .backgroundColor(this.c.bg)
+              .borderRadius(UI_RADIUS_CONTROL)
+              .padding({ left: 10, right: 10 })
+              .onChange((val: string) => {
+                this.host.setSearchQuery?.(val)
+              })
+            if (this.calendarStore.searchQuery.length > 0) {
+              Button(this.t('清空', 'Clear'), { type: ButtonType.Normal })
+                .height(34).padding({ left: 10, right: 10 }).fontSize(this.panelFontSize - 3)
+                .fontColor(this.c.sub).backgroundColor(this.c.bg).borderRadius(UI_RADIUS_CONTROL)
+                .onClick(() => this.host.setSearchQuery?.(''))
+            }
+          }.width('100%')
+
+          // 一键快捷筛选场景
+          if (isEarthCalendarPlanet(this.calendarStore.observerPlanet)) {
+            Row({ space: 6 }) {
+              ForEach(CALENDAR_QUICK_PRESETS, (preset: CalendarQuickPreset) => {
+                Text(this.isZh() ? preset.labelZh : preset.labelEn)
+                  .fontSize(this.panelFontSize - 3)
+                  .fontColor(this.c.text)
+                  .textAlign(TextAlign.Center)
+                  .layoutWeight(1)
+                  .padding({ left: 6, right: 6, top: 6, bottom: 6 })
+                  .backgroundColor(this.c.bg)
+                  .border({ width: 1, color: this.c.dividerSoft })
+                  .borderRadius(UI_RADIUS_CONTROL)
+                  .clickEffect({ level: ClickEffectLevel.LIGHT })
+                  .onClick(() => {
+                    this.animateAction(0, () => { this.host.applyQuickPreset?.(preset.id) })
+                  })
+              }, (preset: CalendarQuickPreset) => preset.id + ':' + this.language)
+            }.width('100%')
+          }
+
           // 仅看重磅 / 高可见开关
           Row({ space: 6 }) {
             Row({ space: 2 }) {
@@ -300,22 +393,22 @@ export struct AstronomyCalendarPanel {
             }.width('100%')
           }
 
-          if (this.filterActive()) {
-            Row() {
-              Text(this.t(`已筛选出 ${this.calendarStore.filteredEvents().length} 项天象`,
-                `${this.calendarStore.filteredEvents().length} matching events`))
-                .fontSize(this.panelFontSize - 3)
-                .fontColor(this.c.sub)
-                .layoutWeight(1)
+          Row({ space: 8 }) {
+            Button(this.t('按当前筛选订阅通知', 'Subscribe to Filter'), { type: ButtonType.Normal })
+              .height(32).layoutWeight(1).fontSize(this.panelFontSize - 3)
+              .fontColor(this.c.onAccent).backgroundColor(this.c.accent).borderRadius(UI_RADIUS_CONTROL)
+              .clickEffect({ level: ClickEffectLevel.LIGHT })
+              .onClick(() => { this.host.subscribeCurrentFilter?.() })
+            if (this.filterActive()) {
               Button(this.t('重置筛选', 'Reset'), { type: ButtonType.Normal })
-                .height(30).padding({ left: 12, right: 12 }).fontSize(this.panelFontSize - 3)
+                .height(32).padding({ left: 12, right: 12 }).fontSize(this.panelFontSize - 3)
                 .fontColor(this.c.text).backgroundColor(this.c.softStrong).borderRadius(UI_RADIUS_CONTROL)
                 .clickEffect({ level: ClickEffectLevel.LIGHT })
                 .onClick(() => {
                   this.animateAction(0, () => { this.host.clearFilters?.() })
                 })
-            }.width('100%').alignItems(VerticalAlign.Center)
-          }
+            }
+          }.width('100%').alignItems(VerticalAlign.Center)
         }
           .width('100%')
           .padding(12)
@@ -587,6 +680,17 @@ export struct AstronomyCalendarPanel {
               })
           }.width('100%')
 
+          // 地理区域选择器（地球视角下支持跟随星图位置或独立选区）
+          if (isEarthCalendarPlanet(this.calendarStore.observerPlanet)) {
+            RegionScopePicker({
+              title: this.t('日历地理区域', 'Calendar Region'),
+              regionId: this.calendarStore.regionId,
+              followLocationName: this.followLocationName,
+              language: this.language,
+              onSelectRegion: (rid: string) => { this.host.setRegionId?.(rid) }
+            })
+          }
+
           // 天象分类与条件筛选栏（自动适配地球 / 外星视角，实时同步列表与月历圆点）
           this.filterBar()
 
@@ -645,18 +749,20 @@ export struct AstronomyCalendarPanel {
             this.eventCard(event, true)
             Row({ space: 8 }) {
               Row({ space: 2 }) {
-                Text(calendarEventTime(event)).fontSize(this.panelFontSize - 1).fontColor(this.c.sub)
+                Text(this.eventDisplayTime(event)).fontSize(this.panelFontSize - 1).fontColor(this.c.sub)
                 InfoTipButton({
                   title: this.t('观测说明', 'Observation Note'),
-                  tip: this.t('时间为设备当地时间。点击「查看」，星图将前往事件时刻；是否可见取决于观测地点和天气。图案为示意。',
-                    'Times use your device time zone. View sky goes to the event time; visibility depends on your location and weather. Artwork is illustrative.')
+                  tip: this.t('时间按所选地理区域时区显示。点击「查看」，星图将前往事件时刻；是否可见取决于观测地点和天气。图案为示意。',
+                    'Times follow the selected region timezone. View sky goes to the event instant; visibility depends on location and weather.')
                 })
               }.layoutWeight(1).alignItems(VerticalAlign.Center)
-              Button(this.t('添加提醒', 'Remind'), { type: ButtonType.Capsule })
+              Button(this.isEventReminded(event.id) ? this.t('✓ 已预约', '✓ Booked') : this.t('预约提醒', 'Remind'),
+                { type: ButtonType.Capsule })
                 .height(42).padding({ left: 14, right: 14 }).fontSize(this.panelFontSize - 1)
-                .backgroundColor(this.c.softStrong).fontColor(this.c.text)
+                .backgroundColor(this.isEventReminded(event.id) ? this.c.accent : this.c.softStrong)
+                .fontColor(this.isEventReminded(event.id) ? this.c.onAccent : this.c.text)
                 .clickEffect({ level: ClickEffectLevel.LIGHT })
-                .enabled(this.calendarStore.reminderPendingId === '' && event.at > Date.now())
+                .enabled(this.calendarStore.reminderPendingId === '' && (event.at > Date.now() || this.isEventReminded(event.id)))
                 .onClick(() => { void this.host.remind(event.id) })
               Button(this.t('查看', 'View sky'), { type: ButtonType.Capsule })
                 .height(42).padding({ left: 18, right: 18 }).fontSize(this.panelFontSize - 1)
@@ -664,9 +770,21 @@ export struct AstronomyCalendarPanel {
                 .clickEffect({ level: ClickEffectLevel.LIGHT })
                 .onClick(() => this.host.viewSky(event.id))
             }.width('100%')
+            if (event.at > Date.now()) {
+              Row({ space: 6 }) {
+                Text(this.t('智能提醒时机：', 'Smart alert: ') + this.timingPreviewForEvent(event))
+                  .fontSize(this.panelFontSize - 2)
+                  .fontColor(this.c.sub)
+                  .layoutWeight(1)
+              }
+                .width('100%')
+                .padding({ left: 10, right: 10, top: 7, bottom: 7 })
+                .backgroundColor(this.c.soft)
+                .borderRadius(UI_RADIUS_CONTROL)
+            }
             Text(event.body).fontSize(this.panelFontSize + 1).lineHeight(this.panelFontSize * 1.8)
               .fontColor(this.c.text).width('100%')
-          }, (event: AstronomyCalendarEvent) => `${event.id}:${event.title}`)
+          }, (event: AstronomyCalendarEvent) => `${event.id}:${event.title}:${this.isEventReminded(event.id) ? 1 : 0}:${this.calendarStore.regionId}`)
         }.width('100%').alignItems(HorizontalAlign.Start).transition(uiSlideTransition(1))
       }
       if (this.calendarStore.error !== '') {

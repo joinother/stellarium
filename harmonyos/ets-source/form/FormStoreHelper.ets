@@ -29,6 +29,8 @@ const FORM_ORRERY_DAYS_PREFIX: string = 'formOrreryDays_'
 const FORM_ORRERY_INNER_PREFIX: string = 'formOrreryInner_'
 const FORM_SAT_PASS_IDX_PREFIX: string = 'formSatPassIdx_'
 const FORM_CALENDAR_MONTH_OFFSET_PREFIX: string = 'formCalMonthOffset_'
+const WIDGET_REGION_ID_KEY: string = 'widgetRegionId'
+const GLOBAL_WIDGET_CONFIG_KEY: string = 'globalWidgetConfig'
 const REMINDED_EVENTS_KEY: string = 'widgetRemindedEvents'
 const DOMAIN: number = 0xD003
 const TAG: string = 'SkyFormStore'
@@ -36,6 +38,7 @@ const TAG: string = 'SkyFormStore'
 export interface WidgetRemindedEntry {
   eventId: string
   reminderId: number
+  source?: string
 }
 
 function planetSnapshotKey(planet: string): string {
@@ -61,14 +64,62 @@ export function openFreshCardStore(context: common.Context): preferences.Prefere
 }
 
 export function readFormConfig(context: common.Context, formId: string): CardInstanceConfig {
-  if (formId.length === 0) return defaultCardConfig()
+  if (formId.length === 0) return readGlobalWidgetConfig(context)
   const store = openFreshCardStore(context)
   if (store === undefined) return defaultCardConfig()
   try {
     const raw = store.getSync(FORM_CONFIG_PREFIX + formId, '')
+    if (typeof raw === 'string' && raw.length > 0) {
+      return normalizeCardConfig(raw)
+    }
+    return readGlobalWidgetConfig(context)
+  } catch (_) {
+    return defaultCardConfig()
+  }
+}
+
+export function readGlobalWidgetConfig(context: common.Context): CardInstanceConfig {
+  const store = openFreshCardStore(context)
+  if (store === undefined) return defaultCardConfig()
+  try {
+    const raw = store.getSync(GLOBAL_WIDGET_CONFIG_KEY, '')
     return normalizeCardConfig(typeof raw === 'string' ? raw : '')
   } catch (_) {
     return defaultCardConfig()
+  }
+}
+
+export function writeGlobalWidgetConfig(context: common.Context, config: CardInstanceConfig): void {
+  const store = openFreshCardStore(context)
+  if (store === undefined) return
+  try {
+    store.putSync(GLOBAL_WIDGET_CONFIG_KEY, JSON.stringify(config))
+    store.flushSync()
+  } catch (error) {
+    hilog.warn(DOMAIN, TAG, 'writeGlobalWidgetConfig failed: %{public}s', String(error))
+  }
+}
+
+export function readWidgetRegionId(context: common.Context): string {
+  const store = openFreshCardStore(context)
+  if (store === undefined) return 'follow'
+  try {
+    const raw = store.getSync(WIDGET_REGION_ID_KEY, 'follow')
+    return typeof raw === 'string' && raw.trim().length > 0 ? raw.trim() : 'follow'
+  } catch (_) {
+    return 'follow'
+  }
+}
+
+export function writeWidgetRegionId(context: common.Context, regionId: string): void {
+  const store = openFreshCardStore(context)
+  if (store === undefined) return
+  try {
+    const safe = regionId.trim().length > 0 ? regionId.trim() : 'follow'
+    store.putSync(WIDGET_REGION_ID_KEY, safe)
+    store.flushSync()
+  } catch (error) {
+    hilog.warn(DOMAIN, TAG, 'writeWidgetRegionId failed: %{public}s', String(error))
   }
 }
 
@@ -251,6 +302,37 @@ export function readRemindedEventIds(context: common.Context): string[] {
   return out
 }
 
+export function upsertWidgetRemindedEntry(
+  context: common.Context,
+  eventId: string,
+  reminderId: number,
+  source: string = 'app'
+): void {
+  if (eventId.length === 0) return
+  const entries = readRemindedEntries(context)
+  const next: WidgetRemindedEntry[] = []
+  for (let i = 0; i < entries.length; i++) {
+    if (entries[i].eventId !== eventId && entries[i].reminderId !== reminderId) {
+      next.push(entries[i])
+    }
+  }
+  next.push({ eventId: eventId, reminderId: reminderId, source: source })
+  writeRemindedEntries(context, next)
+}
+
+export function removeWidgetRemindedByReminderId(context: common.Context, reminderId: number): void {
+  const entries = readRemindedEntries(context)
+  const next: WidgetRemindedEntry[] = []
+  for (let i = 0; i < entries.length; i++) {
+    if (entries[i].reminderId !== reminderId) next.push(entries[i])
+  }
+  writeRemindedEntries(context, next)
+}
+
+export function syncWidgetRemindedEntries(context: common.Context, activeEntries: WidgetRemindedEntry[]): void {
+  writeRemindedEntries(context, activeEntries)
+}
+
 export function writeFormKind(context: common.Context, formId: string, formName: string): void {
   if (formId.length === 0 || formName.length === 0) return
   const store = openFreshCardStore(context)
@@ -426,6 +508,7 @@ export function resolveCardDataForForm(context: common.Context, formId: string, 
   card['orreryInnerOnly'] = readFormOrreryInner(context, formId) ? '1' : '0'
   card['satPassIndex'] = String(readFormSatPassIndex(context, formId))
   card['calendarMonthOffset'] = String(readFormCalendarMonthOffset(context, formId))
+  card['widgetRegionId'] = readWidgetRegionId(context)
   const savedColor = readFormTextColor(context, formId)
   if (savedColor.length > 0) {
     card['textColor'] = savedColor

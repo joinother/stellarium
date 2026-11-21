@@ -91,6 +91,7 @@
     "common/ui/MosaicCameraMetric.ets",
     "common/ui/NavStarsToggleRow.ets",
     "common/ui/QuickChipRow.ets",
+    "common/ui/RegionScopePicker.ets",
     "common/ui/SettingsChoiceButton.ets",
     "common/ui/SettingsSwitchRow.ets",
     "common/ui/ShellIcons.ets",
@@ -98,6 +99,7 @@
     "common/ui/UiMotion.ets",
     "common/ui/UiTokens.ets",
     "common/ui/UiTypography.ets",
+    "form/AstronomyCalendarCard.ets",
     "form/CelestialEventsCard.ets",
     "form/CompanionArcCard.ets",
     "form/FloatingOrbCard.ets",
@@ -201,6 +203,7 @@
     "panels/panels/SettingsQuickLegacyPanel.ets",
     "panels/panels/TelescopePanel.ets",
     "panels/panels/TimePanel.ets",
+    "panels/panels/WidgetStudioPanel.ets",
     "panels/quick/QuickActionCell.ets",
     "panels/quick/QuickActionGrid.ets",
     "panels/satellite/SatelliteGroupSelector.ets",
@@ -379,7 +382,8 @@
     "skyCultureMaker",
     "telescope",
     "time",
-    "tools"
+    "tools",
+    "widgets"
   ],
   "staticIds": [
     "astro-content",
@@ -466,7 +470,7 @@
   ],
   "totalIdAnchors": 82,
   "count": {
-    "panels": 40,
+    "panels": 41,
     "staticIds": 51,
     "dynamicIdPrefixes": 28,
     "totalIdAnchors": 82

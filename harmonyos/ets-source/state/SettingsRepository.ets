@@ -36,6 +36,7 @@ export interface UiSettings {
   calendarFilterCategories: string
   calendarHighlightOnly: boolean
   calendarSatSubFilter: string
+  calendarRegionId: string
 }
 
 export function defaultUiSettings(): UiSettings {
@@ -64,7 +65,8 @@ export function defaultUiSettings(): UiSettings {
     uiFontScaleMode: 'system',
     calendarFilterCategories: '',
     calendarHighlightOnly: false,
-    calendarSatSubFilter: 'all'
+    calendarSatSubFilter: 'all',
+    calendarRegionId: 'follow'
   }
 }
 
@@ -156,6 +158,7 @@ export function migrateUiSettings(raw: string): UiSettings {
   out.calendarSatSubFilter = (rawSatSub === 'all' || rawSatSub === 'stations' || rawSatSub === 'visible' || rawSatSub === 'high_alt')
     ? rawSatSub
     : defaults.calendarSatSubFilter
+  out.calendarRegionId = strOf(obj['calendarRegionId'], defaults.calendarRegionId)
   return out
 }
 

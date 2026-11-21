@@ -1,5 +1,6 @@
 import { formBindingData, FormExtensionAbility, formInfo, formProvider } from '@kit.FormKit'
 import { Want } from '@kit.AbilityKit'
+import { preferences } from '@kit.ArkData'
 import { reminderAgentManager } from '@kit.BackgroundTasksKit'
 import { notificationManager } from '@kit.NotificationKit'
 import { BusinessError } from '@kit.BasicServicesKit'
@@ -15,8 +16,14 @@ import {
   planetZhName,
   routePlanetForCard
 } from './AstronomyCardData'
-import { AstronomyRoute } from '../qability/AstronomyNotificationPolicy'
+import { AstronomyRoute, NotificationPreferenceSnapshot } from '../qability/AstronomyNotificationPolicy'
 import { reminderRouteUri } from '../qability/AstronomyReminderMetadata'
+import {
+  TimingEventInput,
+  normalizeCanonicalEventId,
+  normalizeTimingMode,
+  resolveReminderTimingPlan
+} from '../qability/AstronomyNotificationTiming'
 import {
   WidgetRemindedEntry,
   readFormCalendarMonthOffset,
@@ -26,6 +33,7 @@ import {
   readFormSatPassIndex,
   readFormTimeOffset,
   readRemindedEntries,
+  readWidgetRegionId,
   removeFormMetadata,
   resolveCardDataForForm,
   writeFormCalendarMonthOffset,
@@ -211,8 +219,20 @@ export default class SkyInstrumentFormAbility extends FormExtensionAbility {
     })
   }
 
+  private readNotificationPreferencesSync(): NotificationPreferenceSnapshot | undefined {
+    try {
+      const store = preferences.getPreferencesSync(this.context, { name: 'stellarium_astronomy_reminders' })
+      const raw = store.getSync('manual_preferences_v1', '')
+      if (typeof raw !== 'string' || raw.length === 0) return undefined
+      return JSON.parse(raw) as NotificationPreferenceSnapshot
+    } catch (_) {
+      return undefined
+    }
+  }
+
   private async handleToggleEventReminder(formId: string, params: Record<string, Object>): Promise<void> {
-    const eventId = typeof params['eventId'] === 'string' ? String(params['eventId']).trim() : ''
+    const rawEventId = typeof params['eventId'] === 'string' ? String(params['eventId']).trim() : ''
+    const eventId = normalizeCanonicalEventId(rawEventId)
     const title = typeof params['title'] === 'string' ? String(params['title']).trim() : '天象提醒'
     const target = typeof params['target'] === 'string' ? String(params['target']).trim() : ''
     const observerPlanet = typeof params['observerPlanet'] === 'string' && String(params['observerPlanet']).trim().length > 0
@@ -224,7 +244,7 @@ export default class SkyInstrumentFormAbility extends FormExtensionAbility {
     const entries = readRemindedEntries(this.context)
     let existingIndex = -1
     for (let i = 0; i < entries.length; i++) {
-      if (entries[i].eventId === eventId) {
+      if (normalizeCanonicalEventId(entries[i].eventId) === eventId) {
         existingIndex = i
         break
       }
@@ -248,13 +268,41 @@ export default class SkyInstrumentFormAbility extends FormExtensionAbility {
     } else {
       try {
         const now = Date.now()
-        const eventKind = typeof params['kind'] === 'string' && String(params['kind']).trim().length > 0
+        const rawKind = typeof params['kind'] === 'string' && String(params['kind']).trim().length > 0
           ? String(params['kind']).trim() : 'astronomy'
+        const eventKind = rawKind === 'meteor' ? 'meteor-peak'
+          : (rawKind === 'moon' ? 'moon-phase'
+            : (rawKind === 'solar' ? 'solar-term'
+              : (rawKind === 'planet' ? 'planetary-event'
+                : (rawKind === 'eclipse' ? 'lunar-eclipse'
+                  : (rawKind === 'satellite' ? 'satellite-pass' : rawKind)))))
         const isSatPass = eventKind === 'satellite-pass'
-        const leadMinutes = isSatPass ? 10 : 30
-        const triggerMs = Number.isFinite(eventAt) && eventAt > now + (leadMinutes + 3) * 60000
-          ? eventAt - leadMinutes * 60000
-          : Math.max(now + 90000, Number.isFinite(eventAt) ? eventAt : now + 90000)
+        const savedPrefs = this.readNotificationPreferencesSync()
+        const widgetRegion = readWidgetRegionId(this.context)
+        const effectiveRegion = (savedPrefs?.regionId && savedPrefs.regionId !== 'follow')
+          ? savedPrefs.regionId
+          : widgetRegion
+        const safeEventAt = Number.isFinite(eventAt) && eventAt > now + 60000 ? eventAt : (now + 120000)
+        const safeJd = Number.isFinite(jd) && jd > 0 ? jd : Math.round((safeEventAt / 86400000 + 2440587.5) * 10000) / 10000
+        const timingInput: TimingEventInput = {
+          id: eventId,
+          kind: eventKind,
+          title: title,
+          at: safeEventAt,
+          jd: safeJd,
+          observerPlanet: observerPlanet
+        }
+        const plan = resolveReminderTimingPlan(timingInput, {
+          nowMs: now,
+          timingMode: normalizeTimingMode(savedPrefs?.timingMode),
+          passLeadMinutes: savedPrefs?.passLeadMinutes ?? 10,
+          regionId: effectiveRegion,
+          dndEnabled: savedPrefs?.dndEnabled === true,
+          dndSatelliteOnly: savedPrefs?.dndSatelliteOnly !== false,
+          dndStartMinutes: savedPrefs?.dndStartMinutes ?? 1350,
+          dndEndMinutes: savedPrefs?.dndEndMinutes ?? 390
+        })
+        const triggerMs = plan.fireAt > now + 35000 ? plan.fireAt : (now + 90000)
         const triggerDate = new Date(triggerMs)
         const isOffEarth = observerPlanet.toLowerCase() !== 'earth'
         const badgeTitle = isSatPass
@@ -263,10 +311,7 @@ export default class SkyInstrumentFormAbility extends FormExtensionAbility {
             ? ('星象仪 · 【' + planetZhName(observerPlanet) + '】' + title)
             : ('星象仪 · ' + title))
         const obsPlanet = routePlanetForCard(observerPlanet)
-        const eventAtIso = Number.isFinite(eventAt) && eventAt > 0
-          ? new Date(Math.round(eventAt)).toISOString()
-          : triggerDate.toISOString()
-        const safeJd = Number.isFinite(jd) && jd > 0 ? jd : Math.round((eventAt / 86400000 + 2440587.5) * 10000) / 10000
+        const eventAtIso = new Date(Math.round(safeEventAt)).toISOString()
         const route: AstronomyRoute = {
           panel: isSatPass ? 'satellites' : (target.length > 0 ? 'sky' : 'calendar'),
           eventId: eventId,
@@ -300,11 +345,7 @@ export default class SkyInstrumentFormAbility extends FormExtensionAbility {
             second: 0
           },
           title: badgeTitle,
-          content: isSatPass
-            ? '10 分钟后过境 · 抬头追踪飞行轨迹，轻触直达星图定位'
-            : (isOffEarth
-              ? (planetZhName(obsPlanet) + '观测视角 · 轻触直达星图并定位该天象')
-              : '天象临近 · 轻触直达星图并定位观测时机'),
+          content: plan.contentZh,
           slotType: notificationManager.SlotType.CONTENT_INFORMATION,
           wantAgent: {
             pkgName: 'com.joinother.skyinstrument',
@@ -317,11 +358,11 @@ export default class SkyInstrumentFormAbility extends FormExtensionAbility {
           ]
         }
         const reminderId = await reminderAgentManager.publishReminder(req)
-        entries.push({ eventId: eventId, reminderId: reminderId })
+        entries.push({ eventId: eventId, reminderId: reminderId, source: 'widget' })
         writeRemindedEntries(this.context, entries)
-        toast = '已预约提醒'
-        hilog.info(DOMAIN, TAG, 'widget reminder published: eventId=%{public}s id=%{public}d jd=%{public}s target=%{public}s',
-          eventId, reminderId, String(Math.round(jd)), target)
+        toast = '已约 · ' + plan.timingTagZh
+        hilog.info(DOMAIN, TAG, 'widget reminder published: eventId=%{public}s id=%{public}d lead=%{public}d tag=%{public}s',
+          eventId, reminderId, plan.leadMinutes, plan.timingTagZh)
       } catch (error) {
         const err = error as BusinessError
         hilog.warn(DOMAIN, TAG, 'widget publishReminder failed: code=%{public}d msg=%{public}s', err?.code ?? -1, err?.message ?? String(error))

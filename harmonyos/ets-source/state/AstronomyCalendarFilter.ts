@@ -31,6 +31,57 @@ export interface CalendarFilterState {
   selectedCategories: string[]
   satelliteSubFilter: string
   highlightOnly: boolean
+  searchQuery?: string
+}
+
+export interface CalendarQuickPreset {
+  id: string
+  labelZh: string
+  labelEn: string
+  categories: string[]
+  satelliteSubFilter: string
+  highlightOnly: boolean
+}
+
+export const CALENDAR_QUICK_PRESETS: CalendarQuickPreset[] = [
+  { id: 'highlights', labelZh: '重磅奇观', labelEn: 'Highlights', categories: [], satelliteSubFilter: 'all', highlightOnly: true },
+  { id: 'stations', labelZh: '空间站过境', labelEn: 'Stations', categories: ['satellite'], satelliteSubFilter: 'stations', highlightOnly: false },
+  { id: 'dark_sky', labelZh: '暗夜观星', labelEn: 'Dark Sky', categories: ['meteor', 'moon', 'planet'], satelliteSubFilter: 'all', highlightOnly: false }
+]
+
+export interface CalendarSubscriptionMapping {
+  meteor: boolean
+  planet: boolean
+  moon: boolean
+  solarTerm: boolean
+  satellite: boolean
+  highlightOnly: boolean
+}
+
+export function calendarFilterToSubscriptionMapping(
+  filter: CalendarFilterState,
+  observerPlanet: string = 'Earth'
+): CalendarSubscriptionMapping {
+  const validCategories = calendarCategoriesForPlanet(observerPlanet).map((c: CalendarFilterCategoryMeta) => c.id)
+  const active = filter.selectedCategories.filter((cat: string) => validCategories.includes(cat as CalendarFilterCategory))
+  if (active.length === 0) {
+    return {
+      meteor: true,
+      planet: true,
+      moon: true,
+      solarTerm: !filter.highlightOnly,
+      satellite: isEarthCalendarPlanet(observerPlanet),
+      highlightOnly: filter.highlightOnly
+    }
+  }
+  return {
+    meteor: active.includes('meteor'),
+    planet: active.includes('planet') || active.includes('eclipse'),
+    moon: active.includes('moon') || active.includes('companion'),
+    solarTerm: active.includes('solar') || active.includes('season'),
+    satellite: active.includes('satellite'),
+    highlightOnly: filter.highlightOnly
+  }
 }
 
 export interface CalendarFilterCategoryMeta {
@@ -138,6 +189,11 @@ export function eventMatchesCalendarFilter(
     if (filter.satelliteSubFilter === 'visible' && event.satVisible !== true) return false
     if (filter.satelliteSubFilter === 'high_alt' && (event.satMaxAlt ?? 0) < 30) return false
   }
+  const query = (filter.searchQuery ?? '').trim().toLowerCase()
+  if (query.length > 0) {
+    const hay = (event.title + ' ' + event.target + ' ' + event.body + ' ' + (event.satCatalogId ?? '')).toLowerCase()
+    if (!hay.includes(query)) return false
+  }
   return true
 }
 
@@ -162,7 +218,8 @@ export function hasActiveCalendarFilter(filter: CalendarFilterState, observerPla
   const validIds = calendarCategoriesForPlanet(observerPlanet).map((c: CalendarFilterCategoryMeta) => c.id)
   const hasCat = filter.selectedCategories.some((cat: string) => validIds.includes(cat as CalendarFilterCategory))
   const hasSatSub = isEarthCalendarPlanet(observerPlanet) && filter.satelliteSubFilter !== 'all'
-  return hasCat || filter.highlightOnly || hasSatSub
+  const hasQuery = (filter.searchQuery ?? '').trim().length > 0
+  return hasCat || filter.highlightOnly || hasSatSub || hasQuery
 }
 
 export function monthOverlapsSatelliteWindow(year: number, month: number, nowMs: number = Date.now()): boolean {
@@ -237,7 +294,7 @@ export function parseTonightSatellitePassesToCalendarEvents(
     const endAt = typeof item.endAt === 'number' && Number.isFinite(item.endAt) ? Math.round(item.endAt) : peakAt
     const peakJd = typeof item.peakJd === 'number' && Number.isFinite(item.peakJd) && item.peakJd > 0
       ? item.peakJd : (peakAt / 86400000 + 2440587.5)
-    const id = `satellite-pass-${catalogId}-${Math.floor(peakAt / 1000)}`
+    const id = `satellite-pass-${catalogId}-${Math.round(peakAt / 60000)}`
     if (seen.has(id)) continue
     seen.add(id)
 

@@ -20,9 +20,12 @@ export class AstronomyCalendarStore {
   throughMonth: number = this.month
   loadingMore: boolean = false
   observerPlanet: string = 'Earth'
+  // 地理区域作用域：'follow' 跟随当前星图位置，或独立地理区域 ID（如 'beijing' / 'sydney'）
+  regionId: string = 'follow'
   selectedCategories: string[] = []
   satelliteSubFilter: string = 'all'
   highlightOnly: boolean = false
+  searchQuery: string = ''
   satellitePassesLoading: boolean = false
   filterRevision: number = 0
 
@@ -30,7 +33,8 @@ export class AstronomyCalendarStore {
     return {
       selectedCategories: this.selectedCategories,
       satelliteSubFilter: this.satelliteSubFilter,
-      highlightOnly: this.highlightOnly
+      highlightOnly: this.highlightOnly,
+      searchQuery: this.searchQuery
     }
   }
 

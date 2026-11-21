@@ -1,6 +1,12 @@
 import { AstronomyCalendarEvent } from '../state/AstronomyCalendarEvent'
 import { NotificationPreferenceSnapshot, isQuietMinute } from './AstronomyNotificationPolicy'
 import { ContentNotice, validContentNotice } from '../state/OnlineContentContract'
+import {
+  SubscriptionTopicFlags,
+  eventMatchesTopicFlags,
+  normalizeTimingMode,
+  resolveReminderTimingPlan
+} from './AstronomyNotificationTiming'
 
 export type AstronomySubscriptionCategory = 'astronomy' | 'satellite'
 
@@ -8,6 +14,18 @@ export interface AstronomySubscriptionFeed {
   events: AstronomyCalendarEvent[]
   generatedAt: number
   observerKey?: string
+}
+
+export function topicFlagsFromPreferences(preferences: NotificationPreferenceSnapshot): SubscriptionTopicFlags {
+  const astroOn = preferences.astronomyEventsEnabled
+  return {
+    meteor: preferences.topicMeteor !== undefined ? preferences.topicMeteor : astroOn,
+    planet: preferences.topicPlanet !== undefined ? preferences.topicPlanet : astroOn,
+    moon: preferences.topicMoon !== undefined ? preferences.topicMoon : astroOn,
+    solarTerm: preferences.topicSolarTerm !== undefined ? preferences.topicSolarTerm : astroOn,
+    satellite: preferences.satellitePassEnabled === true,
+    highlightOnly: preferences.highlightOnly === true
+  }
 }
 
 export function acceptsRemoteAstronomyMessage(message: ContentNotice, preferences: NotificationPreferenceSnapshot,
@@ -27,6 +45,8 @@ export function subscriptionCandidates(feed: AstronomySubscriptionFeed, category
     (category === 'satellite' && (typeof feed.observerKey !== 'string' || !feed.observerKey.trim()))) {
     throw new Error('订阅数据不可用，请检查观测地点与本地数据。')
   }
+  const flags = topicFlagsFromPreferences(preferences)
+  const timingMode = normalizeTimingMode(preferences.timingMode)
   const seen = new Set<string>()
   const selected: AstronomyCalendarEvent[] = []
   for (const event of feed.events) {
@@ -36,13 +56,19 @@ export function subscriptionCandidates(feed: AstronomySubscriptionFeed, category
       (category === 'satellite' ? event.kind !== 'satellite-pass' : event.kind === 'satellite-pass' || event.kind === 'digest')) {
       throw new Error('订阅数据不可用，请检查观测地点与本地数据。')
     }
-    const lead = category === 'satellite' ? preferences.passLeadMinutes : 0
-    const fireAt = event.at - lead * 60000
-    if (fireAt <= now + 30000 || event.at >= until) continue
-    const date = new Date(fireAt)
-    const applyQuietHours = preferences.dndEnabled && (category === 'satellite' || preferences.dndSatelliteOnly !== true)
-    if (applyQuietHours && isQuietMinute(date.getHours() * 60 + date.getMinutes(),
-      preferences.dndStartMinutes, preferences.dndEndMinutes)) continue
+    if (category === 'astronomy' && !eventMatchesTopicFlags(event, flags)) continue
+    const plan = resolveReminderTimingPlan(event, {
+      nowMs: now,
+      timingMode: timingMode,
+      passLeadMinutes: preferences.passLeadMinutes,
+      regionId: preferences.regionId,
+      dndEnabled: preferences.dndEnabled,
+      dndSatelliteOnly: preferences.dndSatelliteOnly,
+      dndStartMinutes: preferences.dndStartMinutes,
+      dndEndMinutes: preferences.dndEndMinutes
+    })
+    if (plan.skippedByQuietHours) continue
+    if (plan.fireAt <= now + 30000 || event.at >= until) continue
     const key = event.kind + ':' + event.id + ':' + Math.floor(event.at / 1000)
     if (seen.has(key)) continue
     seen.add(key)

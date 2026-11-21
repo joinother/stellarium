@@ -25,6 +25,7 @@ export function moreActions(): ShellAction[] {
     { label: I18n.t('dock_place'), icon: 'location', panel: 'place', section: I18n.t('more_section_workspace') },
     { label: I18n.t('more_sky_data'), icon: 'satellite', panel: 'dataHub', section: I18n.t('more_section_data') },
     { label: I18n.t('more_automation'), icon: 'script', panel: 'automationHub', section: I18n.t('more_section_automation') },
+    { label: I18n.getLanguage().startsWith('zh') ? '桌面小组件' : 'Desktop widgets', icon: 'layers', panel: 'widgets', section: I18n.t('more_section_system') },
     { label: I18n.t('dock_settings'), icon: 'settings', panel: 'settings', section: I18n.t('more_section_system') },
     { label: I18n.t('panel_tools_data'), icon: 'tools', panel: 'tools', section: I18n.t('more_section_system') },
     { icon: 'help', label: I18n.t('c_help'), panel: 'help', section: I18n.t('more_section_system') }
@@ -59,6 +60,7 @@ export function observingHubActions(): ShellAction[] {
 export function skyDataHubActions(): ShellAction[] {
   return [
     { label: I18n.getLanguage().startsWith('zh') ? '天象日历' : 'Astronomy calendar', icon: 'clock', panel: 'calendar' },
+    { label: I18n.getLanguage().startsWith('zh') ? '桌面小组件' : 'Desktop widgets', icon: 'layers', panel: 'widgets' },
     { label: I18n.t('i0274'), icon: 'orbit', panel: 'astro' },
     { label: I18n.getLanguage().startsWith('zh') ? '世界多历法' : 'World calendars', icon: 'clock', panel: 'calendars' },
     { label: I18n.getLanguage().startsWith('zh') ? '小天体目录' : 'Minor bodies', icon: 'orbit', panel: 'minorBodies' },

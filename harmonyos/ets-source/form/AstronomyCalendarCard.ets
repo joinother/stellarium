@@ -5,6 +5,7 @@ import {
   buildAstronomyMonthGrid,
   clampCalendarMonthOffset,
   moonPhaseNameFromAge,
+  parseRemindedEventIds,
   routePlanetForCard
 } from './AstronomyCardData'
 import {
@@ -28,6 +29,8 @@ struct AstronomyCalendarCard {
   @LocalStorageProp('moonAge') moonAge: string = '10.0'
   @LocalStorageProp('upcomingEventsJson') upcomingEventsJson: string = '[]'
   @LocalStorageProp('calendarMonthOffset') calendarMonthOffsetRaw: string = '0'
+  @LocalStorageProp('remindedEventIds') remindedEventIds: string = '[]'
+  @LocalStorageProp('reminderToast') reminderToast: string = ''
   @LocalStorageProp('skyHexTop') skyHexTop: string = '#070D1D'
   @LocalStorageProp('skyHexHorizon') skyHexHorizon: string = '#152442'
   @LocalStorageProp('cardThemeStyle') cardThemeStyle: string = 'sky'
@@ -112,6 +115,34 @@ struct AstronomyCalendarCard {
         message: 'cyclePlanet',
         formName: 'astronomy_calendar_card',
         currentPlanet: this.observerPlanet
+      }
+    })
+  }
+
+  private highlightReminderId(hl: CalendarMonthHighlight): string {
+    return hl.eventId.length > 0 ? hl.eventId : ('cal-hl-' + hl.key)
+  }
+
+  private isHighlightReminded(hl: CalendarMonthHighlight): boolean {
+    const id = this.highlightReminderId(hl)
+    return parseRemindedEventIds(this.remindedEventIds).includes(id)
+  }
+
+  private toggleHighlightReminder(hl: CalendarMonthHighlight): void {
+    const atMs = Math.round((hl.jd - 2440587.5) * 86400000)
+    postCardAction(this, {
+      action: 'message',
+      abilityName: 'SkyInstrumentFormAbility',
+      params: {
+        message: 'toggleEventReminder',
+        formName: 'astronomy_calendar_card',
+        eventId: this.highlightReminderId(hl),
+        title: hl.title,
+        kind: hl.kind,
+        target: hl.target,
+        at: atMs,
+        jd: hl.jd,
+        observerPlanet: routePlanetForCard(this.observerPlanet)
       }
     })
   }
@@ -401,7 +432,7 @@ struct AstronomyCalendarCard {
           .layoutWeight(1)
           .justifyContent(FlexAlign.SpaceEvenly)
 
-          // Bottom Month Highlights Strip (up to 2 key sky events in this month)
+          // Bottom Month Highlights Strip (up to 2 key sky events in this month, with direct one-tap reminder pill)
           if (this.plan().highlights.length > 0) {
             Row({ space: 6 }) {
               ForEach(this.plan().highlights.slice(0, 2), (hl: CalendarMonthHighlight) => {
@@ -417,15 +448,27 @@ struct AstronomyCalendarCard {
                     .maxLines(1)
                     .textOverflow({ overflow: TextOverflow.Ellipsis })
                     .layoutWeight(1)
+                  if ((hl.jd - 2440587.5) * 86400000 > Date.now() + 60000) {
+                    Text(this.isHighlightReminded(hl) ? '★' : '约')
+                      .fontSize(9.5)
+                      .fontWeight(FontWeight.Medium)
+                      .fontColor(this.isHighlightReminded(hl) ? '#1B1404' : '#DCEEFF')
+                      .textAlign(TextAlign.Center)
+                      .width(20)
+                      .height(18)
+                      .backgroundColor(this.isHighlightReminded(hl) ? '#FFD166' : '#32FFFFFF')
+                      .borderRadius(WIDGET_RADIUS_PILL)
+                      .onClick(() => this.toggleHighlightReminder(hl))
+                  }
                 }
                 .layoutWeight(1)
-                .height(24)
-                .padding({ left: 7, right: 7 })
+                .height(26)
+                .padding({ left: 7, right: 5 })
                 .backgroundColor('#1EFFFFFF')
                 .borderRadius(WIDGET_RADIUS_ROW)
                 .alignItems(VerticalAlign.Center)
                 .onClick(() => this.openCalendarAt(hl.jd, hl.target, hl.eventId))
-              }, (hl: CalendarMonthHighlight) => hl.key)
+              }, (hl: CalendarMonthHighlight) => hl.key + '_' + (this.isHighlightReminded(hl) ? '1' : '0'))
             }
             .width('100%')
           } else {

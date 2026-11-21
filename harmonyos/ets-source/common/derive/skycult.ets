@@ -13,8 +13,9 @@ export function isCliPanelName(panel: string): boolean {
   return [
     'search', 'time', 'quick', 'place', 'layers', 'more', 'observeHub', 'dataHub', 'automationHub',
     'observing', 'bookmarks', 'oculars', 'angleMeasure', 'navStars', 'polarScope', 'telescope',
-    'astro', 'calendar', 'satellites', 'meteorshowers', 'scenery3d', 'catalogs', 'settings', 'tools',
+    'astro', 'calendar', 'widgets', 'satellites', 'meteorshowers', 'scenery3d', 'catalogs', 'settings', 'tools',
     'scripts', 'commands', 'audio', 'skyCultureMaker', 'mosaicCamera', 'nebulaTextures', 'help',
+    'minorBodies', 'nomenclature',
     'settingsInformation', 'settingsExtra', 'settingsTime', 'settingsPrivacy', 'ar'
   ].includes(panel)
 }

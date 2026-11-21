@@ -15,6 +15,16 @@ import { AstronomyCalendarStore } from '../state/AstronomyCalendarStore'
 import { AstronomyCalendarEvent } from '../state/AstronomyCalendarEvent'
 import { CalendarObserverContext } from '../state/AstronomyCalendarText'
 import { AstronomyCalendarPanel } from '../panels/panels/AstronomyCalendarPanel'
+import { WidgetStudioPanel } from '../panels/panels/WidgetStudioPanel'
+import { calendarFilterToSubscriptionMapping } from '../state/AstronomyCalendarFilter'
+import { NotificationTopicId, SubscriptionPresetId } from '../qability/AstronomyNotificationTiming'
+import { formBindingData, formProvider } from '@kit.FormKit'
+import {
+  WidgetRemindedEntry,
+  readRemindedEntries,
+  resolveCardDataForForm,
+  syncWidgetRemindedEntries
+} from '../form/FormStoreHelper'
 import { AstronomyReminderItem } from '../qability/AstronomyReminderService'
 import { isEngineReady } from 'libentry.so'
 import { writeClipboardText } from '../qability/ClipboardService'
@@ -69,7 +79,7 @@ import { saveScreenshot, exportScreenshotToUserStorage } from '../common/platfor
 import { speakSelectedObject } from '../common/SpeechService'
 import { StartupBridge, StartupHooks } from '../capability/StartupBridge'
 import { SensorController, GyroGuideLayout, SensorHostHooks } from '../capability/SensorController'
-import { NotificationController, NotificationHostHooks } from '../capability/NotificationController'
+import { NotificationController, NotificationHostHooks, SyncedWidgetReminderEntry } from '../capability/NotificationController'
 import { AstronomyQuietHours } from '../qability/AstronomyNotificationPolicy'
 import { AstronomySubscriptionFeedLoader, SubscriptionNativeResponse, SubscriptionObserver, decodeSubscriptionNativeResponse } from '../capability/AstronomySubscriptionFeed'
 import { PushTokenFetcher, PushTokenResult } from '../capability/PushTokenFetcher'
@@ -2857,6 +2867,33 @@ export struct WindowNativeNode {
         loadSubscriptionEvents: (category, from, until) => loader.load(category, from, until),
         canInteract: (): boolean => this.applicationInForeground && hasCurrentPrivacyConsent(),
         openCalendar: (): void => this.openSubPanel('calendar'),
+        readWidgetRemindedEntries: (): SyncedWidgetReminderEntry[] => {
+          try {
+            const ctx = this.getUIContext().getHostContext() as common.UIAbilityContext
+            return readRemindedEntries(ctx)
+          } catch (_) {
+            return []
+          }
+        },
+        syncWidgetReminders: (activeEntries: SyncedWidgetReminderEntry[]): void => {
+          try {
+            const ctx = this.getUIContext().getHostContext() as common.UIAbilityContext
+            const mapped: WidgetRemindedEntry[] = activeEntries.map((e: SyncedWidgetReminderEntry): WidgetRemindedEntry => ({
+              eventId: e.eventId,
+              reminderId: e.reminderId,
+              source: e.source
+            }))
+            syncWidgetRemindedEntries(ctx, mapped)
+            void formProvider.getPublishedRunningFormInfos().then((forms) => {
+              const now = Date.now()
+              for (let i = 0; i < forms.length; i++) {
+                if (forms[i].bundleName !== 'com.joinother.skyinstrument') continue
+                const data = resolveCardDataForForm(ctx, forms[i].formId, now)
+                void formProvider.updateForm(forms[i].formId, formBindingData.createFormBindingData(data)).catch(() => {})
+              }
+            }).catch(() => {})
+          } catch (_) {}
+        },
         flashHint: (text: ResourceStr): void => this.flashHint(text),
         hostContext: (): common.UIAbilityContext => this.getUIContext().getHostContext() as common.UIAbilityContext,
         almanacSolarTerms: (): SeasonEvent[] => this.astroStore.almanacSolarTerms,
@@ -3034,7 +3071,7 @@ export struct WindowNativeNode {
             runJump()
           }
         },
-        remind: (event: AstronomyCalendarEvent): Promise<AstronomyCalendarReminderResult> => this.notificationCtl().scheduleEvent(event),
+        remind: (event: AstronomyCalendarEvent): Promise<AstronomyCalendarReminderResult> => this.notificationCtl().toggleEventReminder(event),
         feedChanged: (events: AstronomyCalendarEvent[]): void => {
           if (this.pendingCalendarEvent.length > 0 && this.calendarStore.loaded && !this.calendarStore.loading) {
             const pending = JSON.parse(this.pendingCalendarEvent) as Record<string, Object>
@@ -4105,7 +4142,8 @@ export struct WindowNativeNode {
       uiFontScaleMode: this.uiFontScaleMode,
       calendarFilterCategories: this.calendarStore.selectedCategories.join(','),
       calendarHighlightOnly: this.calendarStore.highlightOnly,
-      calendarSatSubFilter: this.calendarStore.satelliteSubFilter
+      calendarSatSubFilter: this.calendarStore.satelliteSubFilter,
+      calendarRegionId: this.calendarStore.regionId
     }
     return next
   }
@@ -4238,6 +4276,7 @@ export struct WindowNativeNode {
       : []
     this.calendarStore.highlightOnly = settings.calendarHighlightOnly
     this.calendarStore.satelliteSubFilter = settings.calendarSatSubFilter
+    this.calendarStore.regionId = settings.calendarRegionId
     this.syncUiTypographyScale()
     this.callInteractive('setTouchPickRadius', settings.touchPickRadiusVp.toString(), () => {})
     if (this.startupBridgeImpl !== null) {
@@ -4946,10 +4985,14 @@ export struct WindowNativeNode {
       }
       if (panel === 'calendar' && !this.calendarStore.loading) {
         this.refreshState()
+        void this.notificationCtl().refreshStatus()
         const activePlanet = this.sessionToolStore.observerPlanet?.trim() || 'Earth'
         if (!this.calendarStore.loaded || this.calendarStore.observerPlanet.toLowerCase() !== activePlanet.toLowerCase()) {
           this.calendarCtl().reload()
         }
+      } else if (panel === 'widgets') {
+        this.refreshState()
+        void this.notificationCtl().refreshStatus()
       }
       if (panel === 'astro') {
         this.publishAstroPanelState()
@@ -10301,6 +10344,14 @@ export struct WindowNativeNode {
         toggleAstronomyEvents: (v: boolean) => { void this.changeSubscriptionFromUi('astronomy', v) },
         toggleSatellitePass: (v: boolean) => { void this.changeSubscriptionFromUi('satellite', v) },
         toggleDigest: (v: boolean) => { this.notificationStore.digestEnabled = v },
+        toggleNotificationTopic: (topic: NotificationTopicId, v: boolean) => { this.notificationCtl().setTopicEnabled(topic, v) },
+        toggleNotificationHighlightOnly: (v: boolean) => { this.notificationCtl().setSubscriptionHighlightOnly(v) },
+        applyNotificationPreset: (presetId: SubscriptionPresetId) => { this.notificationCtl().applySubscriptionPreset(presetId) },
+        setNotificationTimingMode: (mode: string) => { this.notificationCtl().setTimingMode(mode) },
+        setNotificationRegionId: (regionId: string) => { this.notificationCtl().setRegionId(regionId) },
+        setPassLeadMinutes: (minutes: number) => { this.notificationCtl().setPassLeadMinutes(minutes) },
+        openWidgetStudio: () => { this.openSubPanel('widgets') },
+        followLocationName: this.locationPickerStore.locationPickerName,
         toggleNotificationDnd: (v: boolean) => { this.notificationStore.dndEnabled = v; this.notificationCtl().persistPreferences() },
         toggleNotificationDndSatelliteOnly: (v: boolean) => { this.notificationCtl().setDndSatelliteOnly(v) },
         setNotificationDndStart: (m: number) => { this.notificationStore.dndStartMinutes = m; this.notificationCtl().persistPreferences() },
@@ -10333,6 +10384,10 @@ export struct WindowNativeNode {
         panelFontSize: this.isExpandedLayout ? 16 : 14,
         textColor: this.hostSlots().text, secondaryColor: this.hostSlots().sub,
         accentColor: this.hostSlots().accent, cardColor: this.hostSlots().softStrong,
+        followLocationName: this.locationPickerStore.locationPickerName,
+        remindedEventIds: this.notificationStore.remindedEventIds,
+        notificationTimingMode: this.notificationStore.timingMode,
+        notificationPassLeadMinutes: this.notificationStore.passLeadMinutes,
         host: {
           previousMonth: () => this.calendarCtl().previousMonth(),
           nextMonth: () => this.calendarCtl().nextMonth(),
@@ -10346,9 +10401,28 @@ export struct WindowNativeNode {
           toggleCategory: (category: string) => this.calendarCtl().toggleCategory(category),
           setSatelliteSubFilter: (mode: string) => this.calendarCtl().setSatelliteSubFilter(mode),
           setHighlightOnly: (enabled: boolean) => this.calendarCtl().setHighlightOnly(enabled),
+          setSearchQuery: (query: string) => this.calendarCtl().setSearchQuery(query),
+          applyQuickPreset: (presetId: string) => this.calendarCtl().applyQuickPreset(presetId),
+          setRegionId: (regionId: string) => this.calendarCtl().setRegionId(regionId),
+          subscribeCurrentFilter: () => {
+            const mapping = calendarFilterToSubscriptionMapping(this.calendarStore.filterState(), this.calendarStore.observerPlanet)
+            this.notificationCtl().subscribeFromCalendarFilter(mapping, this.calendarStore.regionId)
+          },
           clearFilters: () => this.calendarCtl().clearFilters(),
           goToCurrentMonth: () => this.calendarCtl().goToCurrentMonth()
         }
+      })
+    } else if (this.activePanel === 'widgets') {
+      WidgetStudioPanel({
+        language: this.i18nLang,
+        followLocationName: this.locationPickerStore.locationPickerName,
+        remindedCount: this.notificationStore.astronomyReminderCount,
+        onSyncAllWidgets: () => { this.scheduleCardSnapshotSync(100) },
+        onOpenNotifications: () => {
+          this.configTab = -1
+          this.openSubPanel('settings')
+        },
+        onFlashHint: (msg: string) => { this.flashHint(msg) }
       })
     } else if (this.activePanel === 'astro') {
       AstroPanel({
