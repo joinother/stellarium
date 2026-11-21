@@ -279,6 +279,16 @@ QString Satellite::getNameI18n() const
 			return traditional ? QStringLiteral("國際空間站（曙光號）") : QStringLiteral("国际空间站（曙光号）");
 		if (upper == QLatin1String("ISS (NAUKA)"))
 			return traditional ? QStringLiteral("國際空間站（科學號）") : QStringLiteral("国际空间站（科学号）");
+		if (upper == QLatin1String("POISK"))
+			return traditional ? QStringLiteral("探索號氣閘艙（Poisk）") : QStringLiteral("探索号气闸舱（Poisk）");
+		if (upper == QLatin1String("ZVEZDA") || upper == QLatin1String("ISS (ZVEZDA)"))
+			return traditional ? QStringLiteral("國際空間站（星辰號服務艙）") : QStringLiteral("国际空间站（星辰号服务舱）");
+		if (upper == QLatin1String("ISS (UNITY)"))
+			return traditional ? QStringLiteral("國際空間站（團結號節點艙）") : QStringLiteral("国际空间站（团结号节点舱）");
+		if (upper == QLatin1String("ISS (DESTINY)"))
+			return traditional ? QStringLiteral("國際空間站（命運號實驗艙）") : QStringLiteral("国际空间站（命运号实验舱）");
+		if (upper.startsWith(QLatin1String("DRAGON CRS-")) || upper.startsWith(QLatin1String("DRAGON CRS ")))
+			return (traditional ? QStringLiteral("貨運龍飛船 ") : QStringLiteral("货运龙飞船 ")) + trimmed.mid(7).trimmed();
 		if (upper == QLatin1String("HST"))
 			return traditional ? QStringLiteral("哈伯太空望遠鏡") : QStringLiteral("哈勃空间望远镜");
 		if (upper == QLatin1String("TIANGONG 1") || upper == QLatin1String("TIANGONG-1"))
@@ -288,6 +298,19 @@ QString Satellite::getNameI18n() const
 
 		struct SatPrefixRule { const char* token; const char* zhCN; const char* zhTW; };
 		static const SatPrefixRule rules[] = {
+			{"SHENZHOU-",       "神舟-",     "神舟-"},
+			{"SHENZHOU ",       "神舟 ",     "神舟 "},
+			{"TIANZHOU-",       "天舟-",     "天舟-"},
+			{"TIANZHOU ",       "天舟 ",     "天舟 "},
+			{"SOYUZ-MS ",       "联盟号 MS-", "聯盟號 MS-"},
+			{"SOYUZ-MS",        "联盟号 MS",  "聯盟號 MS"},
+			{"PROGRESS-MS ",    "进步号 MS-", "進步號 MS-"},
+			{"PROGRESS-MS",     "进步号 MS",  "進步號 MS"},
+			{"CREW DRAGON ",    "载人龙飞船 ", "載人龍飛船 "},
+			{"CREW DRAGON",     "载人龙飞船",  "載人龍飛船"},
+			{"CYGNUS ",         "天鹅座货运飞船 ", "天鵝座貨運飛船 "},
+			{"STARLINER",       "星际客机",   "星際客機"},
+			{"HTV-",            "鹳号货运飞船-", "鸛號貨運飛船-"},
 			{"STARLINK",        "星链",     "星鏈"},
 			{"BEIDOU",          "北斗",     "北斗"},
 			{"QIANFAN",         "千帆",     "千帆"},
@@ -1921,6 +1944,12 @@ SatelliteRenderState Satellite::getRenderState(const StelCore* core, const StelP
 	st.afterLaunch = (ctx ? ctx->currentJD : core->getJD()) >= jdLaunchYearJan1;
 	st.visibility = visibility;
 	if (!st.displayed || !st.orbitValid || !st.dateRangeOk || !st.timeRateOk || !st.afterLaunch)
+		return st;
+
+	// Deduplicate docked station modules & co-orbiting visiting spacecraft into their primary
+	// station complex on the sky (both rendering and touch picking), unless explicitly selected.
+	const bool isSelectedForComplex = orbitPreview || (ctx && !ctx->selectedId.isEmpty() && ctx->selectedId == id);
+	if (isStationComplexMember() && !isSelectedForComplex)
 		return st;
 
 	st.altitudeFilterPass = !flagVFAltitude || (minVFAltitude <= height && height <= maxVFAltitude);

@@ -2,6 +2,7 @@
 import { DEFAULT_SLOTS, ThemeSlots, slotsFromTheme } from '../../state/StellariumTheme'
 import { I18n } from '../../pages/I18n'
 import { SatelliteListItem, SatelliteSource, SatelliteUpdateSettings, CatalogHealthEntry, OFFLINE_APPGALLERY_BUILD } from '../../pages/MainWindowModels'
+import { StationComplexMember } from '../../pages/StellariumTypes'
 import { SatelliteGroupSelector } from '../satellite/SatelliteGroupSelector'
 import { UI_RADIUS_CONTROL, UI_RADIUS_MEDIA } from '../../common/ui/UiTokens'
 import { SatelliteStore } from '../../state/SatelliteStore'
@@ -19,6 +20,7 @@ export struct SatellitesPanel {
   @ObjectLink satelliteStore: SatelliteStore
   @State private c: ThemeSlots = DEFAULT_SLOTS
   @State private sectionDirection: number = 1
+  @State private expandedComplexIds: string[] = []
   panelScroller: Scroller = new Scroller()
   groupScroller: Scroller = new Scroller()
   onPublishState: () => void = () => {}
@@ -55,6 +57,38 @@ export struct SatellitesPanel {
 
   aboutToAppear(): void { this.satelliteStore.observePanel(true) }
   aboutToDisappear(): void { this.satelliteStore.observePanel(false) }
+
+  private isComplexExpanded(id: string): boolean {
+    return this.expandedComplexIds.includes(id)
+  }
+
+  private toggleComplexExpanded(id: string): void {
+    this.getUIContext().animateTo({ duration: 180, curve: Curve.EaseOut }, () => {
+      if (this.expandedComplexIds.includes(id)) {
+        this.expandedComplexIds = this.expandedComplexIds.filter((existing: string) => existing !== id)
+      } else {
+        this.expandedComplexIds = this.expandedComplexIds.concat([id])
+      }
+    })
+  }
+
+  private dockedMembersOf(item: SatelliteListItem): StationComplexMember[] {
+    if (item.complexMembers === undefined) return []
+    return item.complexMembers.filter((m: StationComplexMember) => !m.isPrimary)
+  }
+
+  private memberToListItem(member: StationComplexMember, fallbackHeightKm: number): SatelliteListItem {
+    return {
+      id: member.id,
+      name: member.name,
+      englishName: member.englishName,
+      displayed: member.displayed ?? true,
+      outdated: member.outdated ?? false,
+      tleEpoch: '',
+      lastUpdated: '',
+      heightKm: fallbackHeightKm
+    }
+  }
 
   // 倒计时文本（mm:ss / h:mm:ss）
   private countdownText(): string {
@@ -330,40 +364,118 @@ export struct SatellitesPanel {
         if (this.satelliteStore.satItems.length > 0) {
           Text('匹配卫星 ' + this.satelliteStore.satMatchedCount.toString() + ' 颗').fontSize(12).fontColor(this.c.sub).width('100%').padding({ left: 2 })
           ForEach(this.satelliteStore.satItems, (item: SatelliteListItem) => {
-            Row({ space: 10 }) {
-              Stack({ alignContent: Alignment.Center }) {
-                Circle()
-                  .width(34)
-                  .height(34)
-                  .fill(satelliteVisualProfile(classifySatelliteArchetype(item.englishName + ' ' + item.name, item.id, this.satelliteStore.activeSatGroup)).glowHex)
-                  .opacity(0.28)
-                Image(satelliteIconResource(classifySatelliteArchetype(item.englishName + ' ' + item.name, item.id, this.satelliteStore.activeSatGroup)))
-                  .width(26)
-                  .height(26)
-                  .objectFit(ImageFit.Contain)
-                  .draggable(false)
-              }
-              .width(34)
-              .height(34)
+            Column({ space: 6 }) {
+              Row({ space: 10 }) {
+                Stack({ alignContent: Alignment.Center }) {
+                  Circle()
+                    .width(34)
+                    .height(34)
+                    .fill(satelliteVisualProfile(classifySatelliteArchetype(item.englishName + ' ' + item.name, item.id, this.satelliteStore.activeSatGroup)).glowHex)
+                    .opacity(0.28)
+                  Image(satelliteIconResource(classifySatelliteArchetype(item.englishName + ' ' + item.name, item.id, this.satelliteStore.activeSatGroup)))
+                    .width(26)
+                    .height(26)
+                    .objectFit(ImageFit.Contain)
+                    .draggable(false)
+                }
+                .width(34)
+                .height(34)
 
-              Column({ space: 3 }) {
-                Row({ space: 6 }) {
-                  Text(item.name).fontSize(13).fontColor(this.c.text).fontWeight(FontWeight.Medium).maxLines(1).textOverflow({ overflow: TextOverflow.Ellipsis }).layoutWeight(1)
-                  Text(satelliteVisualProfile(classifySatelliteArchetype(item.englishName + ' ' + item.name, item.id, this.satelliteStore.activeSatGroup)).categoryLabelZh)
-                    .fontSize(9.5)
-                    .fontColor(satelliteVisualProfile(classifySatelliteArchetype(item.englishName + ' ' + item.name, item.id, this.satelliteStore.activeSatGroup)).accentHex)
-                    .padding({ left: 6, right: 6, top: 2, bottom: 2 })
-                    .backgroundColor(this.c.input)
-                    .borderRadius(UI_RADIUS_MEDIA)
-                  if (item.outdated) {
-                    Text('历元过期').fontSize(10).fontColor(this.c.warning)
+                Column({ space: 3 }) {
+                  Row({ space: 6 }) {
+                    Text(item.name).fontSize(13).fontColor(this.c.text).fontWeight(FontWeight.Medium).maxLines(1).textOverflow({ overflow: TextOverflow.Ellipsis }).layoutWeight(1)
+                    Text(satelliteVisualProfile(classifySatelliteArchetype(item.englishName + ' ' + item.name, item.id, this.satelliteStore.activeSatGroup)).categoryLabelZh)
+                      .fontSize(9.5)
+                      .fontColor(satelliteVisualProfile(classifySatelliteArchetype(item.englishName + ' ' + item.name, item.id, this.satelliteStore.activeSatGroup)).accentHex)
+                      .padding({ left: 6, right: 6, top: 2, bottom: 2 })
+                      .backgroundColor(this.c.input)
+                      .borderRadius(UI_RADIUS_MEDIA)
+                    if (item.outdated) {
+                      Text('历元过期').fontSize(10).fontColor(this.c.warning)
+                    }
+                  }.width('100%')
+                  Text('NORAD ' + item.id + (item.heightKm > 0 ? ' · 高度 ' + item.heightKm.toFixed(0) + ' km' : '') + (item.englishName !== item.name ? (' · ' + item.englishName) : ''))
+                    .fontSize(10).fontColor(this.c.sub).maxLines(1).textOverflow({ overflow: TextOverflow.Ellipsis })
+                  if ((item.complexParentName ?? '').length > 0) {
+                    Text('对接于 · ' + (item.complexParentName ?? '') + ((item.complexRole ?? '').length > 0 ? ' · ' + (item.complexRole ?? '') : ''))
+                      .fontSize(10)
+                      .fontColor(this.c.accent)
+                      .maxLines(1)
+                      .textOverflow({ overflow: TextOverflow.Ellipsis })
                   }
-                }.width('100%')
-                Text('NORAD ' + item.id + (item.heightKm > 0 ? ' · 高度 ' + item.heightKm.toFixed(0) + ' km' : '') + (item.englishName !== item.name ? (' · ' + item.englishName) : ''))
-                  .fontSize(10).fontColor(this.c.sub).maxLines(1).textOverflow({ overflow: TextOverflow.Ellipsis })
-              }.alignItems(HorizontalAlign.Start).layoutWeight(1)
-            }.width('100%').padding({ left: 10, right: 10, top: 8, bottom: 8 }).backgroundColor(this.c.bg).borderRadius(UI_RADIUS_CONTROL)
-              .onClick(() => { this.onSearchObject(item) })
+                }.alignItems(HorizontalAlign.Start).layoutWeight(1)
+              }.width('100%').onClick(() => { this.onSearchObject(item) })
+
+              if (item.complexMembers !== undefined && item.complexMembers.length > 1) {
+                Row({ space: 6 }) {
+                  Text((item.complexName ?? '空间站组合体') + ' · 共 ' + (item.complexCount ?? item.complexMembers.length).toString() + ' 个在轨舱段/飞船')
+                    .fontSize(10.5)
+                    .fontColor(this.c.accent)
+                    .maxLines(1)
+                    .textOverflow({ overflow: TextOverflow.Ellipsis })
+                    .layoutWeight(1)
+                  Text(this.isComplexExpanded(item.id) ? '收起 ▴' : '展开舱段 ▾')
+                    .fontSize(10.5)
+                    .fontWeight(FontWeight.Medium)
+                    .fontColor(this.c.accent)
+                }
+                  .id('sat-complex-toggle-' + item.id)
+                  .width('100%')
+                  .padding({ left: 10, right: 10, top: 6, bottom: 6 })
+                  .backgroundColor(this.c.softStrong)
+                  .border({ width: 0.5, color: this.c.border })
+                  .borderRadius(UI_RADIUS_CONTROL)
+                  .onClick(() => { this.toggleComplexExpanded(item.id) })
+
+                if (this.isComplexExpanded(item.id)) {
+                  Column({ space: 5 }) {
+                    ForEach(this.dockedMembersOf(item), (member: StationComplexMember) => {
+                      Row({ space: 8 }) {
+                        Column()
+                          .width(2)
+                          .height(26)
+                          .backgroundColor(this.c.accent)
+                          .opacity(0.45)
+                          .borderRadius(1)
+                        Column({ space: 2 }) {
+                          Row({ space: 6 }) {
+                            Text(member.name)
+                              .fontSize(12)
+                              .fontColor(this.c.text)
+                              .maxLines(1)
+                              .textOverflow({ overflow: TextOverflow.Ellipsis })
+                              .layoutWeight(1)
+                            Text(member.roleLabel)
+                              .fontSize(9.5)
+                              .fontColor(this.c.sub)
+                              .padding({ left: 6, right: 6, top: 1.5, bottom: 1.5 })
+                              .backgroundColor(this.c.input)
+                              .borderRadius(UI_RADIUS_MEDIA)
+                          }.width('100%').alignItems(VerticalAlign.Center)
+                          Text('NORAD ' + member.id + (member.englishName !== member.name ? ' · ' + member.englishName : ''))
+                            .fontSize(9.5)
+                            .fontColor(this.c.sub)
+                            .maxLines(1)
+                            .textOverflow({ overflow: TextOverflow.Ellipsis })
+                        }.layoutWeight(1).alignItems(HorizontalAlign.Start)
+                        Text('›').fontSize(13).fontColor(this.c.sub)
+                      }
+                        .width('100%')
+                        .padding({ left: 8, right: 8, top: 6, bottom: 6 })
+                        .backgroundColor(this.c.soft)
+                        .borderRadius(UI_RADIUS_CONTROL)
+                        .onClick(() => { this.onSearchObject(this.memberToListItem(member, item.heightKm)) })
+                    }, (member: StationComplexMember) => item.id + '-member-' + member.id)
+                  }
+                    .width('100%')
+                    .padding({ left: 4, top: 2 })
+                }
+              }
+            }
+              .width('100%')
+              .padding({ left: 10, right: 10, top: 8, bottom: 8 })
+              .backgroundColor(this.c.bg)
+              .borderRadius(UI_RADIUS_CONTROL)
           }, (item: SatelliteListItem) => item.id)
         } else if (this.satelliteStore.satQuery.length > 0) {
           Text('未找到匹配的内置卫星').fontSize(12).fontColor(this.c.sub).width('100%').padding({ left: 4, top: 4, bottom: 4 })

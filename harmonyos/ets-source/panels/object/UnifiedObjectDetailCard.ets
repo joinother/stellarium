@@ -4,7 +4,7 @@ import { getIcon } from '../../common/ui/ShellIcons'
 import { tintMatrixFor } from '../../common/ui/IconTint'
 import { ObjectDetailStore } from '../../state/ObjectDetailStore'
 import { ObjectMediaStore } from '../../state/ObjectMediaStore'
-import { SatellitePass } from '../../pages/StellariumTypes'
+import { SatellitePass, StationComplexMember } from '../../pages/StellariumTypes'
 import { ObjectDetailCardHeader, ObjectDetailCardTabs } from './ObjectDetailCardChrome'
 import { ObjectDetailObserveTab, ObjectDetailCoordinateTab, ObjectDetailDataTab } from './ObjectDetailTabs'
 import { ObjectDetailActionsTab } from './ObjectDetailActionsTab'
@@ -60,6 +60,7 @@ export struct UnifiedObjectDetailCard {
   onSelectTab: (index: number) => void = () => {}
   onLoadPasses: () => void = () => {}
   onJumpToPass: (pass: SatellitePass) => void = () => {}
+  onSelectComplexMember: (member: StationComplexMember) => void = () => {}
   onMediaOpen: () => void = () => {}
   onMediaRetry: () => void = () => {}
   onModelExpand: () => void = () => {}
@@ -119,6 +120,7 @@ export struct UnifiedObjectDetailCard {
                 resolve: this.resolve,
                 onLoadPasses: () => { this.onLoadPasses() },
                 onJumpToPass: (pass: SatellitePass) => { this.onJumpToPass(pass) },
+                onSelectComplexMember: (member: StationComplexMember) => { this.onSelectComplexMember(member) },
                 onMediaOpen: () => { this.onMediaOpen() },
                 onMediaRetry: () => { this.onMediaRetry() }, onModelExpand: () => { this.onModelExpand() },
                 onModelTouch: (event: TouchEvent) => { this.onModelTouch(event) }

@@ -92,3 +92,37 @@ test('satellites render subtle zoom-adaptive micro-markers, readable shadow labe
   assert.match(mainViewCpp, /selectedObj->getType\(\) == QLatin1String\("Satellite"\)/);
   assert.match(satCtlEts, /const target = 44/);
 });
+
+test('dynamic space station complexes deduplicate sky rendering, group catalog rows, and expose docked member switching', () => {
+  const satPanelEts = readFileSync(new URL('../harmonyos/ets-source/panels/panels/SatellitesPanel.ets', import.meta.url), 'utf8');
+  const detailStoreEts = readFileSync(new URL('../harmonyos/ets-source/state/ObjectDetailStore.ets', import.meta.url), 'utf8');
+  // Satellite complex metadata + sky/pick deduplication unless explicitly selected
+  assert.match(satHpp, /bool isStationComplexMember\(\) const/);
+  assert.match(satHpp, /bool isStationComplexPrimary\(\) const/);
+  assert.match(satCpp, /isStationComplexMember\(\) && !isSelectedForComplex/);
+  assert.match(satCpp, /神舟/);
+  assert.match(satCpp, /天舟/);
+  assert.match(satCpp, /探索号气闸舱/);
+  // Satellites manager orbital-element complex classification & exclusion of debris/cubesats
+  assert.match(satsCpp, /void Satellites::refreshStationComplexes\(\)/);
+  assert.match(satsCpp, /isStationComplexExcludedName/);
+  assert.match(satsCpp, /QVariantMap Satellites::getStationComplexInfo\(const QString& satId\) const/);
+  assert.match(satsCpp, /天宫空间站组合体/);
+  assert.match(satsCpp, /国际空间站组合体/);
+  assert.match(satsCpp, /sat->isStationComplexMember\(\) && sat->id != selectedId/);
+  assert.match(satsCpp, /activePrimaries\.contains\(satellite->stationComplexParentId\)/);
+  // Bridge payload + Search -> Satellites browse list cleanup
+  assert.match(mainViewCpp, /result\[QStringLiteral\("stationComplex"\)\]/);
+  assert.match(mainViewCpp, /appendField\(QStringLiteral\("stationComplex"\)/);
+  assert.match(mainViewCpp, /if \(sat && sat->isStationComplexMember\(\)\)\s*\n\s*continue;/);
+  // ArkUI detail card complex roster + collapsible SatellitesPanel rows
+  assert.match(detailStoreEts, /selectedStationComplex:\s*StationComplexInfo \| undefined = undefined/);
+  assert.match(structRowsEts, /case 'stationComplex': return '所属组合体'/);
+  assert.match(passDetailsEts, /export struct StationComplexSection/);
+  assert.match(passDetailsEts, /this\.onSelectMember\(member\)/);
+  assert.match(satPanelEts, /@State private expandedComplexIds: string\[\] = \[\]/);
+  assert.match(satPanelEts, /sat-complex-toggle-/);
+  assert.match(satPanelEts, /对接于 · /);
+  assert.match(mainNodeEts, /this\.objectDetailStore\.selectedStationComplex = result\.stationComplex/);
+  assert.match(mainNodeEts, /onSelectComplexMember:\s*\(member: StationComplexMember\)/);
+});

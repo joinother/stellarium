@@ -465,14 +465,15 @@
     "plugin-feature-",
     "quick-action-",
     "recording-share-",
+    "sat-complex-toggle-",
     "satellites-",
     "search-category-"
   ],
-  "totalIdAnchors": 82,
+  "totalIdAnchors": 83,
   "count": {
     "panels": 41,
     "staticIds": 51,
-    "dynamicIdPrefixes": 28,
-    "totalIdAnchors": 82
+    "dynamicIdPrefixes": 29,
+    "totalIdAnchors": 83
   }
 }

@@ -10,7 +10,8 @@ import { ObjectDataRow, DetailSectionTitle } from '../object/DetailRows'
 import { StructuredDetailRows } from '../object/StructuredDetailRows'
 import { SelectedCoordinateRows } from '../object/DetailLiveRows'
 import { TabletInspectorMediaGroup } from '../object/TabletInspectorMediaGroup'
-import { SatellitePassDetails } from '../object/SatellitePassDetails'
+import { SatellitePass, StationComplexMember } from '../../pages/StellariumTypes'
+import { SatellitePassDetails, StationComplexSection } from '../object/SatellitePassDetails'
 import { Lx200ObjectControls } from '../telescope/Lx200ObjectControls'
 import { QuickChipRow } from '../../common/ui/QuickChipRow'
 import { UI_RADIUS_CONTROL, UI_RADIUS_PILL } from '../../common/ui/UiTokens'
@@ -56,6 +57,8 @@ export struct ObjectPanel {
   onModelExpand: () => void = () => {}
   onModelTouch: (event: TouchEvent) => void = () => {}
   onLoadSatPasses: () => void = () => {}
+  onJumpToPass: (pass: SatellitePass) => void = () => {}
+  onSelectComplexMember: (member: StationComplexMember) => void = () => {}
   onGoto: () => void = () => {}
   onSync: () => void = () => {}
   onAbort: () => void = () => {}
@@ -150,7 +153,15 @@ export struct ObjectPanel {
             onModelExpand: () => { this.onModelExpand() },
             onModelTouch: (event: TouchEvent) => { this.onModelTouch(event) }
           })
-          SatellitePassDetails({ store: this.objectDetailStore, tablet: true, visible: this.satVisible, tleEpoch: this.tleEpoch, onLoad: () => { this.onLoadSatPasses() } })
+          StationComplexSection({
+            store: this.objectDetailStore, tablet: true,
+            onSelectMember: (member: StationComplexMember) => { this.onSelectComplexMember(member) }
+          })
+          SatellitePassDetails({
+            store: this.objectDetailStore, tablet: true, visible: this.satVisible, tleEpoch: this.tleEpoch,
+            onLoad: () => { this.onLoadSatPasses() },
+            onJumpToPass: (pass: SatellitePass) => { this.onJumpToPass(pass) }
+          })
           DetailSectionTitle({ title: '坐标参考', tablet: true })
           SelectedCoordinateRows({ store: this.objectDetailStore, tablet: true })
           DetailSectionTitle({ title: '实时观测', tablet: true })

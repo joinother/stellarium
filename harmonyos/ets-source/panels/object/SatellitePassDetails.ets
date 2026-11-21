@@ -1,7 +1,7 @@
 import { I18n } from '../../pages/I18n'
-import { UI_RADIUS_CONTROL } from '../../common/ui/UiTokens'
+import { UI_RADIUS_CONTROL, UI_RADIUS_MEDIA } from '../../common/ui/UiTokens'
 import { ObjectDetailStore } from '../../state/ObjectDetailStore'
-import { SatellitePass } from '../../pages/StellariumTypes'
+import { SatellitePass, StationComplexMember } from '../../pages/StellariumTypes'
 import { Theme, curves } from '@kit.ArkUI'
 import { DEFAULT_SLOTS, ThemeSlots, slotsFromTheme } from '../../state/StellariumTheme'
 
@@ -142,6 +142,101 @@ export struct SatellitePassCard {
       .backgroundColor(this.c.soft)
       .border({ width: 0.5, color: this.c.border })
       .borderRadius(UI_RADIUS_CONTROL)
+  }
+}
+
+@Component
+export struct StationComplexSection {
+  @ObjectLink store: ObjectDetailStore
+  @Prop tablet: boolean
+  @State private c: ThemeSlots = DEFAULT_SLOTS
+  onSelectMember: (member: StationComplexMember) => void = () => {}
+
+  onWillApplyTheme(theme: Theme) { this.c = slotsFromTheme(theme) }
+
+  private isCurrentMember(member: StationComplexMember): boolean {
+    if (this.store.selectedEnglishName.length > 0 && member.englishName === this.store.selectedEnglishName) {
+      return true
+    }
+    return this.store.selectedName.length > 0 && member.name === this.store.selectedName
+  }
+
+  build() {
+    if (this.store.selectedStationComplex !== undefined && this.store.selectedStationComplex.members.length > 1) {
+      Column({ space: 7 }) {
+        Row({ space: 6 }) {
+          Text(this.store.selectedStationComplex.complexName)
+            .fontSize(this.tablet ? 13 : 12)
+            .fontWeight(FontWeight.Medium)
+            .fontColor(this.c.fourth)
+            .layoutWeight(1)
+            .maxLines(1)
+            .textOverflow({ overflow: TextOverflow.Ellipsis })
+          Text('共 ' + this.store.selectedStationComplex.memberCount.toString() + ' 舱段/飞船')
+            .fontSize(10)
+            .fontColor(this.c.accent)
+            .padding({ left: 7, right: 7, top: 2, bottom: 2 })
+            .backgroundColor(this.c.softStrong)
+            .borderRadius(UI_RADIUS_MEDIA)
+        }.width('100%').alignItems(VerticalAlign.Center)
+
+        Text('同轨组合体舱段与在轨对接飞船 · 点选切换查看独立轨道与根数')
+          .fontSize(10.5)
+          .fontColor(this.c.tertiary)
+          .width('100%')
+
+        Column({ space: 5 }) {
+          ForEach(this.store.selectedStationComplex.members, (member: StationComplexMember) => {
+            Row({ space: 8 }) {
+              Circle({ width: 6, height: 6 })
+                .fill(this.isCurrentMember(member) ? this.c.accent : (member.isPrimary ? this.c.fourth : this.c.border))
+              Column({ space: 2 }) {
+                Row({ space: 6 }) {
+                  Text(member.name)
+                    .fontSize(this.tablet ? 12 : 11.5)
+                    .fontWeight(this.isCurrentMember(member) ? FontWeight.Medium : FontWeight.Normal)
+                    .fontColor(this.isCurrentMember(member) ? this.c.fourth : this.c.text)
+                    .maxLines(1)
+                    .textOverflow({ overflow: TextOverflow.Ellipsis })
+                    .layoutWeight(1)
+                  Text(member.roleLabel)
+                    .fontSize(9.5)
+                    .fontColor(member.isPrimary ? this.c.accent : this.c.sub)
+                    .padding({ left: 6, right: 6, top: 1.5, bottom: 1.5 })
+                    .backgroundColor(this.c.input)
+                    .borderRadius(UI_RADIUS_MEDIA)
+                }.width('100%').alignItems(VerticalAlign.Center)
+                Text('NORAD ' + member.id + (member.englishName !== member.name ? ' · ' + member.englishName : ''))
+                  .fontSize(9.5)
+                  .fontColor(this.c.tertiary)
+                  .maxLines(1)
+                  .textOverflow({ overflow: TextOverflow.Ellipsis })
+                  .width('100%')
+              }.layoutWeight(1).alignItems(HorizontalAlign.Start)
+
+              Text(this.isCurrentMember(member) ? '当前' : '›')
+                .fontSize(this.isCurrentMember(member) ? 10 : 14)
+                .fontColor(this.isCurrentMember(member) ? this.c.accent : this.c.tertiary)
+            }
+              .width('100%')
+              .padding({ left: 9, right: 9, top: 7, bottom: 7 })
+              .backgroundColor(this.isCurrentMember(member) ? this.c.softStrong : this.c.bg)
+              .border({ width: 0.5, color: this.isCurrentMember(member) ? this.c.accent : this.c.border })
+              .borderRadius(UI_RADIUS_CONTROL)
+              .onClick(() => {
+                if (!this.isCurrentMember(member)) {
+                  this.onSelectMember(member)
+                }
+              })
+          }, (member: StationComplexMember) => 'station-complex-member-' + member.id)
+        }.width('100%')
+      }
+        .width('100%')
+        .padding({ left: 10, right: 10, top: 10, bottom: 10 })
+        .backgroundColor(this.c.soft)
+        .border({ width: 0.5, color: this.c.border })
+        .borderRadius(UI_RADIUS_CONTROL)
+    }
   }
 }
 

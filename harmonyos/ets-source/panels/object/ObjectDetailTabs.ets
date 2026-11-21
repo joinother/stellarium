@@ -1,11 +1,11 @@
 import { I18n } from '../../pages/I18n'
 import { objectDetailFontSize } from '../../common/ui/UiTypography'
 import { ObjectDetailStore } from '../../state/ObjectDetailStore'
-import { SatellitePass } from '../../pages/StellariumTypes'
+import { SatellitePass, StationComplexMember } from '../../pages/StellariumTypes'
 import { ObjectDataTile, ObjectMetric, ObjectScheduleTile } from './DetailTiles'
 import { ObjectDataRow } from './DetailRows'
 import { ObjectDistanceNotice, SelectedCoordinateRows } from './DetailLiveRows'
-import { SatellitePassDetails } from './SatellitePassDetails'
+import { SatellitePassDetails, StationComplexSection } from './SatellitePassDetails'
 import { ConstellationCultureView } from './ConstellationCultureView'
 import { StructuredDetailRows } from './StructuredDetailRows'
 import { TabletInspectorMediaGroup } from './TabletInspectorMediaGroup'
@@ -106,6 +106,7 @@ export struct ObjectDetailDataTab {
   resolve: (key: string) => string = () => ''
   onLoadPasses: () => void = () => {}
   onJumpToPass: (pass: SatellitePass) => void = () => {}
+  onSelectComplexMember: (member: StationComplexMember) => void = () => {}
   onMediaOpen: () => void = () => {}
   onMediaRetry: () => void = () => {}
   onModelExpand: () => void = () => {}
@@ -135,6 +136,10 @@ export struct ObjectDetailDataTab {
   onModelExpand: () => { this.onModelExpand() },
   onModelTouch: (event: TouchEvent) => { this.onModelTouch(event) }
 })
+            StationComplexSection({
+              store: this.store, tablet: this.tablet,
+              onSelectMember: (member: StationComplexMember) => { this.onSelectComplexMember(member) }
+            })
             SatellitePassDetails({
               store: this.store, tablet: false, visible: this.satelliteVisible, tleEpoch: this.tleEpoch,
               onLoad: () => { this.onLoadPasses() },

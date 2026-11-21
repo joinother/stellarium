@@ -41,7 +41,7 @@ import { LOCATION_COUNTRY_NAMES } from '../common/location/countries'
 import { LOCATION_ZH_NAMES } from '../common/location/names_zh'
 import { ASTRONOMY_GUIDES, AstronomyGuide, GuideState, GuideStep, guideHasSkyAtmosphere } from '../common/derive/AstronomyGuide'
 
-import { StellariumBridgeResponse, SessionSnapshot, TonightPlanet, TonightShower, TonightEvents, WutTarget, EphemerisRow, AstroCalcContext, RtsCalendarDay, AltAzPoint, AnnualElevationPoint, ObservabilityDay, LunarElongationPoint, PlanetTimeSeriesPoint, PlanetPairDistancePoint, PlanetCalcItem, PhenomenonItem, EclipseItem, PlanetaryTransitItem, MoonPhaseItem, SeasonEvent, LangOption, HierCity, NameItem, SearchSug, WindowNativeNodeCreateInfo, ChipItem, LandscapeItem, ScriptMetadata, HeliocentricPosition, CelestialPosition, ObjectInfo, SkyCultureItem, SkyCultureRawItem, SkyCultureArtItem, SkyCultureDescriptionBlock, SkyCultureTerritoryEntry, SkyCultureTerritoryPolygon, PluginItem, Scenery3dItem, ShellAction, LocSearchItem, SavedLocation, ObjectDetailField, ObjectDetailModel, SatellitePass, KeyboardShortcutItem } from './StellariumTypes'
+import { StellariumBridgeResponse, SessionSnapshot, TonightPlanet, TonightShower, TonightEvents, WutTarget, EphemerisRow, AstroCalcContext, RtsCalendarDay, AltAzPoint, AnnualElevationPoint, ObservabilityDay, LunarElongationPoint, PlanetTimeSeriesPoint, PlanetPairDistancePoint, PlanetCalcItem, PhenomenonItem, EclipseItem, PlanetaryTransitItem, MoonPhaseItem, SeasonEvent, LangOption, HierCity, NameItem, SearchSug, WindowNativeNodeCreateInfo, ChipItem, LandscapeItem, ScriptMetadata, HeliocentricPosition, CelestialPosition, ObjectInfo, SkyCultureItem, SkyCultureRawItem, SkyCultureArtItem, SkyCultureDescriptionBlock, SkyCultureTerritoryEntry, SkyCultureTerritoryPolygon, PluginItem, Scenery3dItem, ShellAction, LocSearchItem, SavedLocation, ObjectDetailField, ObjectDetailModel, SatellitePass, StationComplexMember, KeyboardShortcutItem } from './StellariumTypes'
 import { setLifecycleListener } from '../common/StellariumLifecycle'
 import { AudioEngine } from '../capability/AudioEngine'
 import { I18n, LANGUAGE_DISPLAY, PROJECTION_KEYS } from './I18n'
@@ -7157,6 +7157,11 @@ export struct WindowNativeNode {
         this.objectDetailStore.selectedSatellitePasses = result.satellitePasses
         this.objectDetailStore.selectedSatellitePassesLoaded = true
       }
+      if (result.stationComplex !== undefined) {
+        this.objectDetailStore.selectedStationComplex = result.stationComplex
+      } else if (isNewSelection) {
+        this.objectDetailStore.selectedStationComplex = undefined
+      }
       const ra: string = result.ra ? result.ra : ''
       const dec: string = result.dec ? result.dec : ''
       this.objectDetailStore.selectedCoordEq = showBasicInfo && result.equatorialOfDate
@@ -7280,6 +7285,7 @@ export struct WindowNativeNode {
       this.objectDetailStore.selectedSatellitePasses = []
       this.objectDetailStore.selectedSatellitePassesLoaded = false
       this.objectDetailStore.selectedSatellitePassesRequested = false
+      this.objectDetailStore.selectedStationComplex = undefined
       this.objectDetailStore.selectedStatus = result.query && result.query.length > 0 ? 'Try English name' : 'No match'
       this.objectDetailStore.selectedMagnitude = ''
       this.objectDetailStore.selectedApparentMagnitude = ''
@@ -9122,6 +9128,7 @@ export struct WindowNativeNode {
                 onSelectTab: (index: number) => { this.selectObjectDetailTab(index) },
                 onLoadPasses: () => { this.objectDetailStore.loadSelectedSatellitePasses() },
                 onJumpToPass: (pass: SatellitePass) => { this.jumpToSatellitePass(pass) },
+                onSelectComplexMember: (member: StationComplexMember) => { this.searchObject(member.name, '', 'object|Satellite|' + member.id) },
                 onMediaOpen: () => { this.objectInspectorMediaCtl().openObjectInspectorMediaPreview() },
                 onMediaRetry: () => { this.objectInspectorMediaCtl().retryObjectInspectorMedia() },
                 onModelExpand: () => { this.objectModelRendererCtl().setObjectInspectorModelImmersive(true) },
@@ -9245,6 +9252,7 @@ export struct WindowNativeNode {
                 onSelectTab: (index: number) => { this.selectObjectDetailTab(index) },
                 onLoadPasses: () => { this.objectDetailStore.loadSelectedSatellitePasses() },
                 onJumpToPass: (pass: SatellitePass) => { this.jumpToSatellitePass(pass) },
+                onSelectComplexMember: (member: StationComplexMember) => { this.searchObject(member.name, '', 'object|Satellite|' + member.id) },
                 onMediaOpen: () => { this.objectInspectorMediaCtl().openObjectInspectorMediaPreview() },
                 onMediaRetry: () => { this.objectInspectorMediaCtl().retryObjectInspectorMedia() },
                 onModelExpand: () => { this.objectModelRendererCtl().setObjectInspectorModelImmersive(true) },
@@ -9386,6 +9394,7 @@ export struct WindowNativeNode {
                 onSelectTab: (index: number) => { this.selectObjectDetailTab(index) },
                 onLoadPasses: () => { this.objectDetailStore.loadSelectedSatellitePasses() },
                 onJumpToPass: (pass: SatellitePass) => { this.jumpToSatellitePass(pass) },
+                onSelectComplexMember: (member: StationComplexMember) => { this.searchObject(member.name, '', 'object|Satellite|' + member.id) },
                 onMediaOpen: () => { this.objectInspectorMediaCtl().openObjectInspectorMediaPreview() },
                 onMediaRetry: () => { this.objectInspectorMediaCtl().retryObjectInspectorMedia() },
                 onModelExpand: () => { this.objectModelRendererCtl().setObjectInspectorModelImmersive(true) },
@@ -10020,6 +10029,8 @@ export struct WindowNativeNode {
         onModelExpand: () => { this.objectModelRendererCtl().setObjectInspectorModelImmersive(true) },
         onModelTouch: (event: TouchEvent) => { this.objectModelRendererCtl().handleObjectInspectorModelTouch(event) },
         onLoadSatPasses: () => { this.objectDetailStore.loadSelectedSatellitePasses() },
+        onJumpToPass: (pass: SatellitePass) => { this.jumpToSatellitePass(pass) },
+        onSelectComplexMember: (member: StationComplexMember) => { this.searchObject(member.name, '', 'object|Satellite|' + member.id) },
         onGoto: () => { this.telescopeCtl().lx200GotoSelected() },
         onSync: () => { this.telescopeCtl().lx200SyncSelected() },
         onAbort: () => { this.telescopeCtl().lx200Abort() }

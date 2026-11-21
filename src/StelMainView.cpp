@@ -4110,6 +4110,17 @@ QJsonObject selectedObjectJson(StelCore* core = nullptr, bool includeDetails = f
 	if (!detailModel.isEmpty())
 		result[QStringLiteral("detailModel")] = detailModel;
 
+	QVariantMap stationComplexInfo;
+	if (selectedType == QLatin1String("Satellite"))
+	{
+		if (auto* sats = static_cast<Satellites*>(StelApp::getInstance().getModuleMgr().getModule(QStringLiteral("Satellites"), true)))
+		{
+			stationComplexInfo = sats->getStationComplexInfo(object->getID());
+			if (!stationComplexInfo.isEmpty())
+				result[QStringLiteral("stationComplex")] = QJsonObject::fromVariantMap(stationComplexInfo);
+		}
+	}
+
 	if (core && includeDynamic)
 	{
 		const QVariantMap m = object->getInfoMap(core);
@@ -4335,6 +4346,13 @@ QJsonObject selectedObjectJson(StelCore* core = nullptr, bool includeDetails = f
 
 			if (m.contains(QStringLiteral("tle-epoch")))
 			{
+				if (!stationComplexInfo.isEmpty())
+				{
+					const QString complexSummary = QStringLiteral("%1 · %2 个在轨舱段/飞船")
+						.arg(stationComplexInfo.value(QStringLiteral("complexName")).toString())
+						.arg(stationComplexInfo.value(QStringLiteral("memberCount")).toInt());
+					appendField(QStringLiteral("stationComplex"), QStringLiteral("satellite"), complexSummary);
+				}
 				appendLocalizedText(QStringLiteral("description"), QStringLiteral("satellite"), QStringLiteral("description"));
 				appendText(QStringLiteral("launchDate"), QStringLiteral("satellite"), QStringLiteral("launch-date"));
 				appendText(QStringLiteral("launchOperator"), QStringLiteral("satellite"), QStringLiteral("launch-operator"));
@@ -8345,7 +8363,15 @@ extern "C" __attribute__((visibility("default"))) const char* StellariumOhos_com
 		{
 			if (auto* satellites = static_cast<Satellites*>(StelApp::getInstance().getModuleMgr().getModule(QStringLiteral("Satellites"), true)))
 			{
-				list = satellites->listAllObjectsForCatalog(inEnglish);
+				const QVector<QPair<QString, StelObjectP>> rawList = satellites->listAllObjectsForCatalog(inEnglish);
+				list.reserve(rawList.size());
+				for (const auto& pair : rawList)
+				{
+					const SatelliteP sat = qSharedPointerDynamicCast<Satellite>(pair.second);
+					if (sat && sat->isStationComplexMember())
+						continue;
+					list.append(pair);
+				}
 				// Deterministic priority sort so iconic space stations and bright satellites
 				// appear at the top of the Search -> Satellites catalog instead of raw debris IDs.
 				auto satRank = [](const QPair<QString, StelObjectP>& pair) -> int {
@@ -8356,8 +8382,9 @@ extern "C" __attribute__((visibility("default"))) const char* StellariumOhos_com
 					if (id == QLatin1String("25544")) return 1; // ISS (Zarya)
 					if (id == QLatin1String("20580")) return 2; // Hubble Space Telescope
 					const QString en = obj->getEnglishName().toUpper();
-					if (en.startsWith(QLatin1String("CSS (")) || en.startsWith(QLatin1String("ISS "))
-						|| en.startsWith(QLatin1String("TIANGONG"))) return 3;
+					const bool isDebrisOrObj = en.contains(QLatin1String("OBJECT")) || en.contains(QLatin1String("DEB"));
+					if (!isDebrisOrObj && (en.startsWith(QLatin1String("CSS (")) || en.startsWith(QLatin1String("ISS "))
+						|| en.startsWith(QLatin1String("TIANGONG")))) return 3;
 					if (en.startsWith(QLatin1String("BEIDOU")) || en.startsWith(QLatin1String("FENGYUN"))
 						|| en.startsWith(QLatin1String("NOAA")) || en.startsWith(QLatin1String("GPS "))
 						|| en.startsWith(QLatin1String("GALILEO"))) return 4;

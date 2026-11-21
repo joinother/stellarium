@@ -258,6 +258,12 @@ public:
 	bool isOrbitValid() const { return initialized && orbitValid; }
 	bool shouldDisplayOrbit() const { return orbitDisplayed || orbitPreview; }
 	float getOrbitExpandProgress() const { return orbitExpandProgress; }
+	bool isStationComplexMember() const { return !stationComplexParentId.isEmpty(); }
+	bool isStationComplexPrimary() const { return !stationComplexId.isEmpty() && stationComplexParentId.isEmpty(); }
+	QString getStationComplexId() const { return stationComplexId; }
+	QString getStationComplexName() const { return stationComplexName; }
+	QString getStationComplexParentId() const { return stationComplexParentId; }
+	QString getStationComplexRole() const { return stationComplexRole; }
 	QVariantMap getOrbitLineStatus() const;
 	void updateOrbitLines();
 	//! Returns the (COSPAR) International Designator.
@@ -459,6 +465,10 @@ private:
 
 	bool isISS;
 	bool isStarlink;
+	QString stationComplexId;
+	QString stationComplexName;
+	QString stationComplexParentId;
+	QString stationComplexRole;
 	PlanetP moon;
 	PlanetP sun;
 

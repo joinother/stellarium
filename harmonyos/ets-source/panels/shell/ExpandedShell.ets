@@ -8,7 +8,7 @@ import { UnifiedObjectDetailCard } from '../object/UnifiedObjectDetailCard'
 import { GyroStore } from '../../state/GyroStore'
 import { ObjectDetailStore } from '../../state/ObjectDetailStore'
 import { ObjectMediaStore } from '../../state/ObjectMediaStore'
-import { SatellitePass } from '../../pages/StellariumTypes'
+import { SatellitePass, StationComplexMember } from '../../pages/StellariumTypes'
 import { OverlayStore } from '../../state/OverlayStore'
 import { DEFAULT_SLOTS, ThemeSlots, slotsFromTheme } from '../../state/StellariumTheme'
 
@@ -125,6 +125,7 @@ export struct ExpandedShell {
   onSelectTab: (index: number) => void = () => {}
   onLoadPasses: () => void = () => {}
   onJumpToPass: (pass: SatellitePass) => void = () => {}
+  onSelectComplexMember: (member: StationComplexMember) => void = () => {}
   onMediaOpen: () => void = () => {}
   onMediaRetry: () => void = () => {}
   onModelExpand: () => void = () => {}
@@ -255,6 +256,7 @@ export struct ExpandedShell {
             onSelectTab: (index: number) => { this.onSelectTab(index) },
             onLoadPasses: () => { this.onLoadPasses() },
             onJumpToPass: (pass: SatellitePass) => { this.onJumpToPass(pass) },
+            onSelectComplexMember: (member: StationComplexMember) => { this.onSelectComplexMember(member) },
             onMediaOpen: () => { this.onMediaOpen() },
             onMediaRetry: () => { this.onMediaRetry() },
             onModelExpand: () => { this.onModelExpand() },

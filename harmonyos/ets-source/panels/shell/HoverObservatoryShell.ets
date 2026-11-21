@@ -1,5 +1,5 @@
 import { Theme } from '@kit.ArkUI'
-import { ShellAction, SatellitePass } from '../../pages/StellariumTypes'
+import { ShellAction, SatellitePass, StationComplexMember } from '../../pages/StellariumTypes'
 import { BottomDock } from './BottomDock'
 import { ObjectDetailConnectorLayer } from '../overlay/ObjectDetailConnectorLayer'
 import { UnifiedObjectDetailCard } from '../object/UnifiedObjectDetailCard'
@@ -102,6 +102,7 @@ export struct HoverObservatoryShell {
   onSelectTab: (index: number) => void = () => {}
   onLoadPasses: () => void = () => {}
   onJumpToPass: (pass: SatellitePass) => void = () => {}
+  onSelectComplexMember: (member: StationComplexMember) => void = () => {}
   onMediaOpen: () => void = () => {}
   onMediaRetry: () => void = () => {}
   onModelExpand: () => void = () => {}
@@ -241,6 +242,7 @@ export struct HoverObservatoryShell {
             onSelectTab: (index: number) => { this.onSelectTab(index) },
             onLoadPasses: () => { this.onLoadPasses() },
             onJumpToPass: (pass: SatellitePass) => { this.onJumpToPass(pass) },
+            onSelectComplexMember: (member: StationComplexMember) => { this.onSelectComplexMember(member) },
             onMediaOpen: () => { this.onMediaOpen() },
             onMediaRetry: () => { this.onMediaRetry() },
             onModelExpand: () => { this.onModelExpand() },

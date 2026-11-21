@@ -1,4 +1,4 @@
-import { StellariumBridgeResponse, ObjectDetailField, ObjectDetailModel, SatellitePass, SkyCultureDescriptionBlock } from '../pages/StellariumTypes'
+import { StellariumBridgeResponse, ObjectDetailField, ObjectDetailModel, SatellitePass, StationComplexInfo, SkyCultureDescriptionBlock } from '../pages/StellariumTypes'
 import { I18n } from '../pages/I18n'
 import { catalogIconForObjectType } from '../common/derive/catalog'
 import { modelIdentity, modelMultiply } from '../common/derive/DetailModelGeometry'
@@ -41,6 +41,7 @@ export class ObjectDetailStore {
   selectedSatellitePasses: Array<SatellitePass> = []
   selectedSatellitePassesLoaded: boolean = false
   selectedSatellitePassesRequested: boolean = false
+  selectedStationComplex: StationComplexInfo | undefined = undefined
   selectedCoordEq: string = ''
   selectedCoordEqJ2000: string = ''
   selectedCoordApparentAltAz: string = ''

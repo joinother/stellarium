@@ -323,6 +323,11 @@ public:
 	//! This intentionally avoids orbital-detail calculations for every satellite.
 	QVariantMap getCatalogSummary(const QString& group, const QString& query, int limit) const;
 
+	//! Recompute dynamic space-station complex groupings (ISS & Tiangong/CSS) from current orbital elements.
+	void refreshStationComplexes();
+	//! Return docked complex metadata & member roster for a satellite belonging to a station complex.
+	QVariantMap getStationComplexInfo(const QString& satId) const;
+
 	//! Get a satellite object by its identifier (i.e. NORAD number).
 	SatelliteP getById(const QString& id) const;
 	

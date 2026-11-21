@@ -95,9 +95,11 @@ bool satelliteMatchesSearch(const Satellite& satellite, const QString& query)
 	if (normalizedQuery.isEmpty())
 		return true;
 
-	const QStringList names = {
+	QStringList names = {
 		satellite.getID(), satellite.getEnglishName(), satellite.getNameI18n()
 	};
+	if (satellite.isStationComplexPrimary() && !satellite.getStationComplexName().isEmpty())
+		names.append(satellite.getStationComplexName());
 	for (const QString& name : names)
 	{
 		const QString normalizedName = normalizeSatelliteSearch(name);
@@ -114,7 +116,8 @@ bool satelliteMatchesSearch(const Satellite& satellite, const QString& query)
 			|| normalizedQuery.contains(QStringLiteral("internationalspacestation"))
 			|| normalizedQuery.contains(QStringLiteral("国际太空站"));
 	}
-	if (englishName.startsWith(QStringLiteral("CSS")) || englishName.contains(QStringLiteral("TIANGONG"))
+	if (englishName.startsWith(QStringLiteral("CSS (")) || englishName.startsWith(QStringLiteral("CSS-"))
+		|| englishName == QLatin1String("CSS") || englishName.contains(QStringLiteral("TIANGONG"))
 		|| englishName.contains(QStringLiteral("TIANHE")) || englishName.contains(QStringLiteral("WENTIAN"))
 		|| englishName.contains(QStringLiteral("MENGTIAN")))
 	{
@@ -998,10 +1001,15 @@ QList<StelObjectP> Satellites::searchAround(const Vec3d& av, double limitFov, co
 	const double cosLimFov = cos(effectiveFov * M_PI/180.);
 	Vec3d equPos;
 
+	const QList<StelObjectP> selected = GETSTELMODULE(StelObjectMgr)->getSelectedObject("Satellite");
+	const QString selectedId = selected.isEmpty() ? QString() : selected.first()->getID();
+
 	for (const auto& sat : satellites)
 	{
 		if (sat->initialized && sat->displayed && sat->orbitValid)
 		{
+			if (sat->isStationComplexMember() && sat->id != selectedId)
+				continue;
 			equPos = sat->XYZ;
 			equPos.normalize();
 			if (equPos[0]*v[0] + equPos[1]*v[1] + equPos[2]*v[2]>=cosLimFov)
@@ -1990,6 +1998,7 @@ void Satellites::setDataMap(const QVariantMap& map)
 		smit++;
 	}
 	std::sort(satellites.begin(), satellites.end());
+	refreshStationComplexes();
 	
 	if (satelliteListModel)
 		satelliteListModel->endSatellitesChange();
@@ -2091,16 +2100,249 @@ SatellitesListModel* Satellites::getSatellitesListModel()
 	return satelliteListModel;
 }
 
+namespace {
+
+bool isStationComplexExcludedName(const QString& enUpper)
+{
+	return enUpper.contains(QLatin1String("DEB"))
+		|| enUpper.contains(QLatin1String("R/B"))
+		|| enUpper.contains(QLatin1String("OBJECT"))
+		|| enUpper.contains(QLatin1String("FRAGMENT"))
+		|| enUpper.contains(QLatin1String("SHROUD"))
+		|| enUpper.contains(QLatin1String("COVER"))
+		|| enUpper.contains(QLatin1String("CAMERA"))
+		|| enUpper.contains(QLatin1String("CUBE"));
+}
+
+int stationComplexRoleOrder(const SatelliteP& sat)
+{
+	if (!sat)
+		return 99;
+	if (sat->isStationComplexPrimary())
+		return 0;
+	const QString role = sat->getStationComplexRole();
+	if (role == QStringLiteral("实验舱") || role == QStringLiteral("服务舱"))
+		return 1;
+	if (role == QStringLiteral("节点/气闸舱") || role == QStringLiteral("组合体舱段"))
+		return 2;
+	if (role == QStringLiteral("载人飞船"))
+		return 3;
+	if (role == QStringLiteral("货运飞船"))
+		return 4;
+	return 5;
+}
+
+} // namespace
+
+void Satellites::refreshStationComplexes()
+{
+	for (const SatelliteP& sat : std::as_const(satellites))
+	{
+		if (sat.isNull())
+			continue;
+		sat->stationComplexId.clear();
+		sat->stationComplexName.clear();
+		sat->stationComplexParentId.clear();
+		sat->stationComplexRole.clear();
+	}
+
+	auto getPeriodMin = [](const SatelliteP& sat) -> double {
+		if (sat.isNull() || !sat->pSatWrapper)
+			return 0.0;
+		const double period = sat->pSatWrapper->getOrbitalPeriod();
+		return std::isfinite(period) && period > 0.0 ? period : 0.0;
+	};
+
+	const SatelliteP issPrimary = getById(QStringLiteral("25544"));
+	if (!issPrimary.isNull() && issPrimary->initialized)
+	{
+		const double issInc = issPrimary->inclination;
+		const double issPeriod = getPeriodMin(issPrimary);
+		issPrimary->stationComplexId = QStringLiteral("iss");
+		issPrimary->stationComplexName = QStringLiteral("国际空间站组合体");
+		issPrimary->stationComplexRole = QStringLiteral("核心舱 · 主站");
+
+		if (issPeriod > 0.0)
+		{
+			for (const SatelliteP& sat : std::as_const(satellites))
+			{
+				if (sat.isNull() || !sat->initialized || sat->id == issPrimary->id)
+					continue;
+				const QString en = sat->name.trimmed().toUpper();
+				if (isStationComplexExcludedName(en))
+					continue;
+				const double period = getPeriodMin(sat);
+				if (period <= 0.0)
+					continue;
+				const double incDiff = qAbs(sat->inclination - issInc);
+				const double perDiff = qAbs(period - issPeriod);
+				QString role;
+				if (incDiff < 0.35 && perDiff < 0.80)
+				{
+					if (sat->id == QLatin1String("49044") || en.contains(QLatin1String("NAUKA")))
+						role = QStringLiteral("实验舱");
+					else if (sat->id == QLatin1String("36086") || en.contains(QLatin1String("POISK"))
+						|| en.contains(QLatin1String("PRICHAL")) || en.contains(QLatin1String("RASSVET"))
+						|| en.contains(QLatin1String("PIRS")))
+						role = QStringLiteral("节点/气闸舱");
+					else if (en.contains(QLatin1String("ZVEZDA")))
+						role = QStringLiteral("服务舱");
+					else if (en.startsWith(QLatin1String("ISS (")) || en.startsWith(QLatin1String("ISS-")))
+						role = QStringLiteral("组合体舱段");
+				}
+				if (role.isEmpty() && incDiff < 0.25 && perDiff < 0.45)
+				{
+					if (en.contains(QLatin1String("SOYUZ")) || en.contains(QLatin1String("CREW DRAGON"))
+						|| en.contains(QLatin1String("STARLINER")))
+						role = QStringLiteral("载人飞船");
+					else if (en.contains(QLatin1String("PROGRESS")) || en.contains(QLatin1String("CYGNUS"))
+						|| en.contains(QLatin1String("HTV"))
+						|| (en.contains(QLatin1String("DRAGON")) && !en.contains(QLatin1String("CREW"))))
+						role = QStringLiteral("货运飞船");
+				}
+				if (!role.isEmpty())
+				{
+					sat->stationComplexId = QStringLiteral("iss");
+					sat->stationComplexName = QStringLiteral("国际空间站组合体");
+					sat->stationComplexParentId = issPrimary->id;
+					sat->stationComplexRole = role;
+				}
+			}
+		}
+	}
+
+	const SatelliteP cssPrimary = getById(QStringLiteral("48274"));
+	if (!cssPrimary.isNull() && cssPrimary->initialized)
+	{
+		const double cssInc = cssPrimary->inclination;
+		const double cssPeriod = getPeriodMin(cssPrimary);
+		cssPrimary->stationComplexId = QStringLiteral("css");
+		cssPrimary->stationComplexName = QStringLiteral("天宫空间站组合体");
+		cssPrimary->stationComplexRole = QStringLiteral("核心舱 · 主站");
+
+		if (cssPeriod > 0.0)
+		{
+			for (const SatelliteP& sat : std::as_const(satellites))
+			{
+				if (sat.isNull() || !sat->initialized || sat->id == cssPrimary->id || !sat->stationComplexId.isEmpty())
+					continue;
+				const QString en = sat->name.trimmed().toUpper();
+				if (isStationComplexExcludedName(en))
+					continue;
+				const double period = getPeriodMin(sat);
+				if (period <= 0.0)
+					continue;
+				const double incDiff = qAbs(sat->inclination - cssInc);
+				const double perDiff = qAbs(period - cssPeriod);
+				QString role;
+				if (incDiff < 0.35 && perDiff < 0.80)
+				{
+					if (sat->id == QLatin1String("53239") || sat->id == QLatin1String("54216")
+						|| en.contains(QLatin1String("WENTIAN")) || en.contains(QLatin1String("MENGTIAN")))
+						role = QStringLiteral("实验舱");
+					else if (en.startsWith(QLatin1String("CSS (")) || en.startsWith(QLatin1String("CSS-")))
+						role = QStringLiteral("组合体舱段");
+				}
+				if (role.isEmpty() && incDiff < 0.25 && perDiff < 0.45)
+				{
+					if (en.contains(QLatin1String("SHENZHOU")) || en.contains(QLatin1String("MENGZHOU")))
+						role = QStringLiteral("载人飞船");
+					else if (en.contains(QLatin1String("TIANZHOU")))
+						role = QStringLiteral("货运飞船");
+				}
+				if (!role.isEmpty())
+				{
+					sat->stationComplexId = QStringLiteral("css");
+					sat->stationComplexName = QStringLiteral("天宫空间站组合体");
+					sat->stationComplexParentId = cssPrimary->id;
+					sat->stationComplexRole = role;
+				}
+			}
+		}
+	}
+}
+
+QVariantMap Satellites::getStationComplexInfo(const QString& satId) const
+{
+	QVariantMap info;
+	const SatelliteP target = getById(satId);
+	if (target.isNull() || !target->initialized || target->stationComplexId.isEmpty())
+		return info;
+
+	const QString complexId = target->stationComplexId;
+	QVector<SatelliteP> groupMembers;
+	SatelliteP primary;
+	for (const SatelliteP& sat : satellites)
+	{
+		if (sat.isNull() || !sat->initialized || sat->stationComplexId != complexId)
+			continue;
+		groupMembers.append(sat);
+		if (sat->isStationComplexPrimary())
+			primary = sat;
+	}
+	if (primary.isNull() || groupMembers.size() <= 1)
+		return info;
+
+	std::sort(groupMembers.begin(), groupMembers.end(), [](const SatelliteP& a, const SatelliteP& b) {
+		const int ra = stationComplexRoleOrder(a);
+		const int rb = stationComplexRoleOrder(b);
+		if (ra != rb)
+			return ra < rb;
+		if (ra >= 3)
+			return a->id.toInt() > b->id.toInt();
+		return a->id.toInt() < b->id.toInt();
+	});
+
+	const double currentJD = StelApp::getInstance().getCore()->getJD();
+	QVariantList memberList;
+	memberList.reserve(groupMembers.size());
+	for (const SatelliteP& m : groupMembers)
+	{
+		QVariantMap entry;
+		entry.insert(QStringLiteral("id"), m->id);
+		entry.insert(QStringLiteral("name"), m->getNameI18n());
+		entry.insert(QStringLiteral("englishName"), m->name);
+		entry.insert(QStringLiteral("roleLabel"), m->stationComplexRole);
+		entry.insert(QStringLiteral("isPrimary"), m->isStationComplexPrimary());
+		entry.insert(QStringLiteral("displayed"), m->displayed);
+		entry.insert(QStringLiteral("outdated"), qAbs(currentJD - m->tleEpochJD) > Satellite::tleEpochAge);
+		memberList.append(entry);
+	}
+
+	info.insert(QStringLiteral("complexId"), complexId);
+	info.insert(QStringLiteral("complexName"), target->stationComplexName);
+	info.insert(QStringLiteral("primaryId"), primary->id);
+	info.insert(QStringLiteral("primaryName"), primary->getNameI18n());
+	info.insert(QStringLiteral("primaryEnglishName"), primary->name);
+	info.insert(QStringLiteral("isPrimary"), target->isStationComplexPrimary());
+	info.insert(QStringLiteral("roleLabel"), target->stationComplexRole);
+	info.insert(QStringLiteral("memberCount"), memberList.size());
+	info.insert(QStringLiteral("members"), memberList);
+	return info;
+}
+
 QVariantMap Satellites::getCatalogSummary(const QString& group, const QString& query, int limit) const
 {
 	QVariantMap summary;
-	QVariantList items;
+	QVariantList priorityItems;
+	QVariantList regularItems;
 	QDateTime newestUpdate;
 	int count = 0;
 	int outdatedCount = 0;
 	int matchedCount = 0;
 	const QString normalizedQuery = query.trimmed();
 	const double currentJD = StelApp::getInstance().getCore()->getJD();
+
+	QSet<QString> activePrimaries;
+	QHash<QString, QString> primaryNames;
+	for (const SatelliteP& sat : satellites)
+	{
+		if (sat.isNull() || !sat->initialized || !sat->isStationComplexPrimary())
+			continue;
+		primaryNames.insert(sat->id, sat->getNameI18n());
+		if (group.isEmpty() || sat->groups.contains(group))
+			activePrimaries.insert(sat->id);
+	}
 
 	for (const SatelliteP& satellite : satellites)
 	{
@@ -2118,20 +2360,25 @@ QVariantMap Satellites::getCatalogSummary(const QString& group, const QString& q
 		if (!group.isEmpty() && !satellite->groups.contains(group))
 			continue;
 
-		QString localizedName;
+		// When browsing without a search query, fold docked modules & visiting spacecraft
+		// into their primary station row whenever the primary station is present in this group.
+		if (normalizedQuery.isEmpty()
+			&& satellite->isStationComplexMember()
+			&& activePrimaries.contains(satellite->stationComplexParentId))
+			continue;
+
 		const bool matches = satelliteMatchesSearch(*satellite, normalizedQuery);
 		if (!matches)
 			continue;
 
 		matchedCount++;
-		if (items.size() >= limit)
+		const bool isPriorityPrimary = normalizedQuery.isEmpty() && satellite->isStationComplexPrimary();
+		if (!isPriorityPrimary && regularItems.size() >= limit)
 			continue;
-		if (localizedName.isEmpty())
-			localizedName = satellite->getNameI18n();
 
 		QVariantMap item;
 		item.insert("id", satellite->id);
-		item.insert("name", localizedName);
+		item.insert("name", satellite->getNameI18n());
 		item.insert("englishName", satellite->name);
 		item.insert("displayed", satellite->displayed);
 		item.insert("outdated", outdated);
@@ -2141,6 +2388,53 @@ QVariantMap Satellites::getCatalogSummary(const QString& group, const QString& q
 		item.insert("tleEpoch", satellite->tleEpoch);
 		item.insert("lastUpdated", lastUpdated.toUTC().toString(Qt::ISODate));
 		if (satellite->orbitValid) item.insert("heightKm", satellite->height);
+
+		if (satellite->isStationComplexPrimary())
+		{
+			const QVariantMap cinfo = getStationComplexInfo(satellite->id);
+			if (!cinfo.isEmpty())
+			{
+				item.insert("complexId", cinfo.value("complexId"));
+				item.insert("complexName", cinfo.value("complexName"));
+				item.insert("complexRole", cinfo.value("roleLabel"));
+				item.insert("complexCount", cinfo.value("memberCount"));
+				item.insert("complexMembers", cinfo.value("members"));
+			}
+		}
+		else if (satellite->isStationComplexMember())
+		{
+			item.insert("complexId", satellite->stationComplexId);
+			item.insert("complexName", satellite->stationComplexName);
+			item.insert("complexRole", satellite->stationComplexRole);
+			item.insert("complexParentId", satellite->stationComplexParentId);
+			item.insert("complexParentName", primaryNames.value(satellite->stationComplexParentId));
+		}
+
+		if (isPriorityPrimary)
+			priorityItems.append(item);
+		else
+			regularItems.append(item);
+	}
+
+	std::sort(priorityItems.begin(), priorityItems.end(), [](const QVariant& a, const QVariant& b) {
+		const QString idA = a.toMap().value(QStringLiteral("id")).toString();
+		const QString idB = b.toMap().value(QStringLiteral("id")).toString();
+		const int rankA = (idA == QLatin1String("48274")) ? 0 : ((idA == QLatin1String("25544")) ? 1 : 2);
+		const int rankB = (idB == QLatin1String("48274")) ? 0 : ((idB == QLatin1String("25544")) ? 1 : 2);
+		if (rankA != rankB) return rankA < rankB;
+		return idA < idB;
+	});
+
+	QVariantList items;
+	items.reserve(qMin(limit, priorityItems.size() + regularItems.size()));
+	for (const QVariant& item : priorityItems)
+	{
+		if (items.size() >= limit) break;
+		items.append(item);
+	}
+	for (const QVariant& item : regularItems)
+	{
+		if (items.size() >= limit) break;
 		items.append(item);
 	}
 
@@ -2618,6 +2912,7 @@ void Satellites::add(const TleDataList& newSatellites)
 	}
 	if (numAdded > 0)
 		std::sort(satellites.begin(), satellites.end());
+	refreshStationComplexes();
 	
 	if (satelliteListModel)
 		satelliteListModel->endSatellitesChange();
@@ -2659,6 +2954,8 @@ void Satellites::removeWithoutModelReset(const QStringList& idList)
 		}
 	}
 	// As the satellite list is kept sorted, no need for re-sorting.
+	if (numRemoved > 0)
+		refreshStationComplexes();
 
 	qDebug() << "[Satellites] "
 		 << idList.count() << "satellites proposed for removal, "
@@ -3669,6 +3966,7 @@ void Satellites::updateSatellites(TleDataHash& newTleSets, bool complete)
 		groups.unite(added->groups);
 	}
 	if (addedCount) std::sort(satellites.begin(), satellites.end());
+	refreshStationComplexes();
 	if (satelliteListModel) satelliteListModel->endSatellitesChange();
 	markLastUpdate();
 	updateState = updatedCount > 0 || addedCount > 0 ? CompleteUpdates : CompleteNoUpdates;

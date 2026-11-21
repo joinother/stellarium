@@ -365,6 +365,28 @@ export interface SatellitePass {
 }
 
 
+export interface StationComplexMember {
+  id: string
+  name: string
+  englishName: string
+  roleLabel: string
+  isPrimary: boolean
+  displayed?: boolean
+  outdated?: boolean
+}
+
+export interface StationComplexInfo {
+  complexId: string
+  complexName: string
+  primaryId: string
+  primaryName: string
+  primaryEnglishName: string
+  isPrimary: boolean
+  roleLabel: string
+  memberCount: number
+  members: StationComplexMember[]
+}
+
 export interface DsoFlags {
   show?: boolean
   hints?: boolean
@@ -409,6 +431,7 @@ export interface StellariumBridgeResponse {
   detailMediaKind?: string
   detailMediaLabel?: string
   detailModel?: ObjectDetailModel
+  stationComplex?: StationComplexInfo
   constellationCultureId?: string
   constellationCultureName?: string
   constellationCultureEnglishName?: string
