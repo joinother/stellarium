@@ -4296,6 +4296,7 @@ QJsonObject currentStateJson()
 		result["environmentMode"] = landscape->getFlagAtmosphere() ? (ground ? 2 : 3) : (ground ? 1 : 0);
 		result["vividAtmosphere"] = landscape->getFlagVividAtmosphere();
 		result["zoomFadeEnvironment"] = landscape->getFlagZoomFadeEnvironment();
+		result["landscapeAutoSelection"] = landscape->getFlagLandscapeAutoSelection();
 	}
 	if (SporadicMeteorMgr* mmgr = GETSTELMODULE(SporadicMeteorMgr))
 	{
@@ -9369,6 +9370,160 @@ extern "C" __attribute__((visibility("default"))) const char* StellariumOhos_com
 			return result;
 		}
 
+		// getLandscapeAutoSelection / setLandscapeAutoSelection — 观测星球切换时
+		// 是否按天体名自动匹配地景。Earth 不参与自动选择，保留用户当前地景；
+		// 无匹配天体回落 zero 平坦地平线。
+		if (commandName == "getLandscapeAutoSelection")
+		{
+			LandscapeMgr* lmgr = GETSTELMODULE(LandscapeMgr);
+			if (!lmgr)
+			{
+				result["error"] = "landscape manager not available";
+				return result;
+			}
+			result["ok"] = true;
+			result["enabled"] = lmgr->getFlagLandscapeAutoSelection();
+			return result;
+		}
+		if (commandName == "setLandscapeAutoSelection")
+		{
+			LandscapeMgr* lmgr = GETSTELMODULE(LandscapeMgr);
+			if (!lmgr)
+			{
+				result["error"] = "landscape manager not available";
+				return result;
+			}
+			const QString value = arg.trimmed();
+			bool enabled = false;
+			if (value == "1" || value.compare("true", Qt::CaseInsensitive) == 0)
+				enabled = true;
+			else if (!(value == "0" || value.compare("false", Qt::CaseInsensitive) == 0))
+			{
+				result["error"] = "expects 0|1";
+				return result;
+			}
+			lmgr->setFlagLandscapeAutoSelection(enabled);
+			result["ok"] = true;
+			result["enabled"] = lmgr->getFlagLandscapeAutoSelection();
+			return result;
+		}
+		// getEnvironmentAutoEnable / setEnvironmentAutoEnable — PC's Location
+		// dialog option "Auto-enable atmosphere". OHOS keeps the PC default
+		// (on) and exposes the value for diagnostics and regression tests.
+		if (commandName == "getEnvironmentAutoEnable")
+		{
+			LandscapeMgr* lmgr = GETSTELMODULE(LandscapeMgr);
+			if (!lmgr)
+			{
+				result["error"] = "landscape manager not available";
+				return result;
+			}
+			result["ok"] = true;
+			result["enabled"] = lmgr->getFlagEnvironmentAutoEnable();
+			return result;
+		}
+		if (commandName == "setEnvironmentAutoEnable")
+		{
+			LandscapeMgr* lmgr = GETSTELMODULE(LandscapeMgr);
+			if (!lmgr)
+			{
+				result["error"] = "landscape manager not available";
+				return result;
+			}
+			const QString value = arg.trimmed();
+			bool enabled = false;
+			if (value == "1" || value.compare("true", Qt::CaseInsensitive) == 0)
+				enabled = true;
+			else if (!(value == "0" || value.compare("false", Qt::CaseInsensitive) == 0))
+			{
+				result["error"] = "expects 0|1";
+				return result;
+			}
+			lmgr->setFlagEnvironmentAutoEnable(enabled);
+			StelApp::immediateSaveNow("viewing/flag_environment_auto_enable", enabled);
+			result["ok"] = true;
+			result["enabled"] = lmgr->getFlagEnvironmentAutoEnable();
+			return result;
+		}
+		// applyEnvironmentDefaults — OHOS has no Location dialog, so automatic
+		// atmosphere/fog switching is a fixed product behavior. Ensure it is on
+		// and persist the value so the core environment history remains enabled.
+		if (commandName == "applyEnvironmentDefaults")
+		{
+			LandscapeMgr* lmgr = GETSTELMODULE(LandscapeMgr);
+			if (!lmgr)
+			{
+				result["error"] = "landscape manager not available";
+				return result;
+			}
+			const bool wasEnabled = lmgr->getFlagEnvironmentAutoEnable();
+			lmgr->setFlagEnvironmentAutoEnable(true);
+			StelApp::immediateSaveNow("viewing/flag_environment_auto_enable", true);
+			result["ok"] = true;
+			result["initialized"] = !wasEnabled;
+			result["enabled"] = lmgr->getFlagEnvironmentAutoEnable();
+			return result;
+		}
+		// applyLandscapeDefaults — OHOS first-run default. Older builds never
+		// exposed this preference, so the key is absent for existing installs;
+		// turn automatic landscape selection on only when the user has never
+		// made an explicit choice (an existing true/false key is preserved).
+		if (commandName == "applyLandscapeDefaults")
+		{
+			LandscapeMgr* lmgr = GETSTELMODULE(LandscapeMgr);
+			QSettings* conf = StelApp::getInstance().getSettings();
+			if (!lmgr || !conf)
+			{
+				result["error"] = "landscape manager not available";
+				return result;
+			}
+			bool initialized = false;
+			if (!conf->contains("viewing/flag_landscape_autoselection"))
+			{
+				lmgr->setFlagLandscapeAutoSelection(true);
+				initialized = true;
+			}
+			result["ok"] = true;
+			result["initialized"] = initialized;
+			result["enabled"] = lmgr->getFlagLandscapeAutoSelection();
+			return result;
+		}
+		// restoreSavedEarthLandscape — startup only. When the app comes back on
+		// Earth with the zero horizon but automatic selection is on, re-apply the
+		// panorama remembered before the last departure. A real non-zero landscape
+		// is left alone so a user's current choice is not overridden.
+		if (commandName == "restoreSavedEarthLandscape")
+		{
+			LandscapeMgr* lmgr = GETSTELMODULE(LandscapeMgr);
+			StelCore* coreState = StelApp::getInstance().getCore();
+			if (!lmgr || !coreState || !lmgr->getFlagLandscapeAutoSelection() ||
+				coreState->getCurrentLocation().planetName != QStringLiteral("Earth"))
+			{
+				result["ok"] = true;
+				result["applied"] = false;
+				return result;
+			}
+			const QString saved = StelApp::getInstance().getSettings()
+				->value("landscape/saved_earth_landscape_id").toString();
+			const QString current = lmgr->getCurrentLandscapeID();
+			if (saved.isEmpty() || !lmgr->getAllLandscapeIDs().contains(saved) ||
+				(!current.isEmpty() && current != QStringLiteral("zero")))
+			{
+				result["ok"] = true;
+				result["applied"] = false;
+				result["current"] = current;
+				return result;
+			}
+			const bool setsLocation = lmgr->getFlagLandscapeSetsLocation();
+			lmgr->setFlagLandscapeSetsLocation(false);
+			const bool applied = lmgr->setCurrentLandscapeID(saved);
+			lmgr->setFlagLandscapeSetsLocation(setsLocation);
+			result["ok"] = true;
+			result["applied"] = applied;
+			result["current"] = lmgr->getCurrentLandscapeID();
+			return result;
+		}
+
 		// setLandscapeTransparency
 		if (commandName == "setLandscapeTransparency")
 		{
@@ -11847,16 +12002,43 @@ extern "C" __attribute__((visibility("default"))) const char* StellariumOhos_com
 				result["error"] = "solar system not ready";
 				return result;
 			}
+			// Stable type names for the ArkUI observer picker ordering: the UI groups
+			// Earth/Moon/Earth Observer first, then the Sun and major planets with
+			// their moons, then minor bodies. Keep the enumeration itself unfiltered.
+			const auto planetTypeName = [](Planet::PlanetType type) -> QString
+			{
+				switch (type)
+				{
+				case Planet::isStar: return QStringLiteral("star");
+				case Planet::isPlanet: return QStringLiteral("planet");
+				case Planet::isMoon: return QStringLiteral("moon");
+				case Planet::isObserver: return QStringLiteral("observer");
+				case Planet::isArtificial: return QStringLiteral("artificial");
+				case Planet::isAsteroid: return QStringLiteral("asteroid");
+				case Planet::isPlutino: return QStringLiteral("plutino");
+				case Planet::isComet: return QStringLiteral("comet");
+				case Planet::isDwarfPlanet: return QStringLiteral("dwarfPlanet");
+				case Planet::isCubewano: return QStringLiteral("cubewano");
+				case Planet::isSDO: return QStringLiteral("sdo");
+				case Planet::isOCO: return QStringLiteral("oco");
+				case Planet::isSednoid: return QStringLiteral("sednoid");
+				case Planet::isInterstellar: return QStringLiteral("interstellar");
+				default: return QStringLiteral("undefined");
+				}
+			};
 			QJsonArray list;
 			QJsonArray observerPlanets;
 			for (const auto& planet : ssys->getAllPlanets())
 			{
 				const QString name = planet->getEnglishName();
+				const PlanetP parent = planet->getParent();
 				list.append(name);
 				QJsonObject entry;
 				entry["name"] = name;
 				entry["displayName"] = planet->getNameI18n();
 				entry["mapTexture"] = name == "Earth" ? QString() : planet->getTextMapName();
+				entry["type"] = planetTypeName(planet->getPlanetType());
+				entry["parent"] = parent ? parent->getEnglishName() : QString();
 				observerPlanets.append(entry);
 			}
 			result["ok"] = true;
@@ -11920,7 +12102,38 @@ extern "C" __attribute__((visibility("default"))) const char* StellariumOhos_com
 				}
 			}
 			LandscapeMgr* landscapeMgr = GETSTELMODULE(LandscapeMgr);
-			const QString landscapeHint = planetChanged && landscapeMgr && landscapeMgr->getFlagLandscapeAutoSelection() ? loc.planetName : QString();
+			// The engine's auto-selection matches a landscape by the observer body's
+			// English name and falls back to zero. Earth has no such landscape, so
+			// remember the last Earth panorama in the OHOS bridge and pass it as an
+			// explicit landscape ID when returning, without changing core behavior.
+			QString landscapeHint;
+			const bool autoLandscape = planetChanged && landscapeMgr &&
+				landscapeMgr->getFlagLandscapeAutoSelection();
+			if (autoLandscape)
+			{
+				const QString previousPlanet = core->getCurrentLocation().planetName;
+				if (loc.planetName == QStringLiteral("Earth"))
+				{
+					QString savedEarth = StelApp::getInstance().getSettings()
+						->value("landscape/saved_earth_landscape_id").toString();
+					if (savedEarth.isEmpty() || !landscapeMgr->getAllLandscapeIDs().contains(savedEarth))
+						savedEarth = landscapeMgr->getDefaultLandscapeID();
+					landscapeHint = savedEarth;
+				}
+				else
+				{
+					if (previousPlanet == QStringLiteral("Earth"))
+					{
+						const QString earthLandscape = landscapeMgr->getCurrentLandscapeID();
+						// Startup restoration may switch away from the engine's default
+						// Earth before the persisted observer location is applied; do not
+						// let that transient zero horizon overwrite the saved panorama.
+						if (!earthLandscape.isEmpty() && earthLandscape != QStringLiteral("zero"))
+							StelApp::immediateSaveNow("landscape/saved_earth_landscape_id", earthLandscape);
+					}
+					landscapeHint = loc.planetName;
+				}
+			}
 			if (planetChanged || parts.size() >= 4)
 				core->moveObserverTo(loc, 0.0, 0.0, landscapeHint);
 			markOhosInteraction();
@@ -18157,6 +18370,13 @@ extern "C" __attribute__((visibility("default"))) const char* StellariumOhos_com
 				drawer->setAtmosphereTemperature(qBound(-60.0, jo.value("temperature").toDouble(), 60.0));
 			if (jo.contains("extinction"))
 				drawer->setExtinctionCoefficient(qBound(0.0, jo.value("extinction").toDouble(), 1.0));
+			// Persist the atmosphere model: StelSkyDrawer reads these three keys on
+			// startup (landscape/pressure_mbar, temperature_C, extinction). The
+			// setters only update the live drawer, so without this the values are
+			// lost when the OHOS process is killed and restarted.
+			StelApp::immediateSaveNow("landscape/pressure_mbar", drawer->getAtmospherePressure());
+			StelApp::immediateSaveNow("landscape/temperature_C", drawer->getAtmosphereTemperature());
+			StelApp::immediateSaveNow("landscape/atmospheric_extinction_coefficient", drawer->getExtinctionCoefficient());
 			result["ok"] = true;
 			result["pressure"] = drawer->getAtmospherePressure();
 			result["temperature"] = drawer->getAtmosphereTemperature();

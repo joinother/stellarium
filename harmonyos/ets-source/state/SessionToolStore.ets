@@ -5,6 +5,18 @@ import { sessionSignature } from '../common/derive/actions'
 import { planetZh } from '../common/derive/labels'
 import { I18n } from '../pages/I18n'
 
+// 观测星球选择列表的分组顺序：地球、月球、地球观测点固定前三；其后太阳与
+// 八大行星按行星顺序分组（行星 → 卫星 → 全览点）；再后矮行星/小行星；最后彗星等小天体。
+const OBSERVER_PLANET_TOP_ORDER: string[] = ['Earth', 'Moon', 'Earth Observer']
+const OBSERVER_MAJOR_PLANET_ORDER: string[] = ['Mercury', 'Venus', 'Mars', 'Jupiter', 'Saturn', 'Uranus', 'Neptune']
+const OBSERVER_DWARF_PLANET_TYPES: string[] = ['dwarfPlanet', 'plutino', 'cubewano', 'sdo', 'oco', 'sednoid']
+
+interface ObserverPlanetSortEntry {
+  name: string
+  key: number
+  originalIndex: number
+}
+
 // 宿主 → SessionToolStore 的注入。
 // UI 提示、剪贴板写入、ToolsStore 的导入/导出文本框与 canUseDistributed 标志经具名回注
 //（store 不 import UI / 他 store）。
@@ -110,44 +122,91 @@ export class SessionToolStore {
     }
     port.requestInteractive('getObserverPlanetList', '', (r: StellariumBridgeResponse) => {
       if (r.ok === true && r.planets) {
+        // 必须先保存引擎返回的 planetList，sortObserverPlanets() 才能据此生成
+        // 下拉框项；rebase 时这里漏掉赋值会让 Select 变空、无法选择天体。
+        this.planetList = r.planets
         this.observerPlanets = r.observerPlanets ?? []
-        this.planetList = this.sortObserverPlanetNames(r.planets, this.observerPlanets)
+        this.sortObserverPlanets()
         this.notifyChanged()
       }
     })
   }
 
-  // 把观测星球列表按常用天文层级排序（地球/月球/太阳 → 八大行星 → 冥王星与全览点 →
-  // 已有中文译名的卫星/矮行星/名彗星 → 其余临时编号小天体与彗星），避免 400 条英文临时编号排在最前。
-  private sortObserverPlanetNames(names: string[], items: ObserverPlanetItem[]): string[] {
-    const priorityOrder: string[] = [
-      'Earth', 'Moon', 'Sun',
-      'Mercury', 'Venus', 'Mars', 'Jupiter', 'Saturn', 'Uranus', 'Neptune', 'Pluto',
-      'Solar System Observer', 'Earth Observer', 'Mars Observer', 'Jupiter Observer', 'Saturn Observer'
-    ]
-    const displayByName: Record<string, string> = {}
-    for (let i = 0; i < items.length; i++) {
-      displayByName[items[i].name] = items[i].displayName
+  // 选择列表按观测优先级重排；planetList 与 observerPlanets 必须保持同名同序，
+  // Select 的 selected 索引与 onSelect 回调都直接使用 planetList 下标。
+  private sortObserverPlanets(): void {
+    const typeByName = new Map<string, string>()
+    const parentByName = new Map<string, string>()
+    const indexByName = new Map<string, number>()
+    for (let i = 0; i < this.observerPlanets.length; i++) {
+      const item = this.observerPlanets[i]
+      typeByName.set(item.name, item.type ?? '')
+      parentByName.set(item.name, item.parent ?? '')
+      indexByName.set(item.name, i)
     }
-    const rankOf = (name: string): number => {
-      const idx = priorityOrder.indexOf(name)
-      if (idx >= 0) return idx
-      if (name.endsWith(' Observer')) return 100
-      const display = displayByName[name] ?? name
-      const translated = display !== name || planetZh(name) !== name
-      if (translated) return 200
-      return 300
+    const entries: ObserverPlanetSortEntry[] = []
+    for (let i = 0; i < this.planetList.length; i++) {
+      const name = this.planetList[i]
+      const type = typeByName.get(name) ?? ''
+      const parent = parentByName.get(name) ?? ''
+      entries.push({
+        name: name,
+        key: this.observerPlanetSortKey(name, type, parent, i, indexByName, typeByName),
+        originalIndex: i
+      })
     }
-    const copy = names.slice()
-    copy.sort((a: string, b: string): number => {
-      const ra = rankOf(a)
-      const rb = rankOf(b)
-      if (ra !== rb) return ra - rb
-      const da = displayByName[a] ?? a
-      const db = displayByName[b] ?? b
-      return da.localeCompare(db)
+    entries.sort((left: ObserverPlanetSortEntry, right: ObserverPlanetSortEntry): number => {
+      if (left.key !== right.key) return left.key - right.key
+      return left.originalIndex - right.originalIndex
     })
-    return copy
+    this.planetList = entries.map((entry: ObserverPlanetSortEntry): string => entry.name)
+    const sortedPlanets: ObserverPlanetItem[] = []
+    for (const entry of entries) {
+      const item = this.observerPlanets.find((candidate: ObserverPlanetItem) => candidate.name === entry.name)
+      if (item !== undefined) sortedPlanets.push(item)
+    }
+    // 防御：引擎若返回 planetList 之外的条目，仍保留其本地化名称/贴图。
+    for (const item of this.observerPlanets) {
+      if (sortedPlanets.indexOf(item) < 0) sortedPlanets.push(item)
+    }
+    this.observerPlanets = sortedPlanets
+  }
+
+  private observerPlanetSortKey(name: string, type: string, parent: string, originalIndex: number,
+    indexByName: Map<string, number>, typeByName: Map<string, string>): number {
+    const topRank = OBSERVER_PLANET_TOP_ORDER.indexOf(name)
+    if (topRank >= 0) return topRank
+    if (type === 'star') return 1000
+    const majorRank = OBSERVER_MAJOR_PLANET_ORDER.indexOf(name)
+    if (majorRank >= 0) return 1000 + (majorRank + 1) * 1000
+    if (type === 'moon') {
+      const parentMajorRank = OBSERVER_MAJOR_PLANET_ORDER.indexOf(parent)
+      if (parentMajorRank >= 0) return 1000 + (parentMajorRank + 1) * 1000 + 10
+    }
+    if (type === 'observer') {
+      if (name === 'Solar System Observer') return 9000
+      if (name.endsWith(' Observer')) {
+        const base = name.substring(0, name.length - 9)
+        const observerMajorRank = OBSERVER_MAJOR_PLANET_ORDER.indexOf(base)
+        if (observerMajorRank >= 0) return 1000 + (observerMajorRank + 1) * 1000 + 20
+      }
+    }
+    if (OBSERVER_DWARF_PLANET_TYPES.indexOf(type) >= 0) {
+      return 100000 + originalIndex * 10
+    }
+    if (type === 'moon') {
+      // 矮行星/小行星的卫星紧随其母天体。
+      const parentIndex = indexByName.get(parent)
+      if (parentIndex !== undefined) {
+        const parentType = typeByName.get(parent) ?? ''
+        const base = OBSERVER_DWARF_PLANET_TYPES.indexOf(parentType) >= 0 ? 100000 : 200000
+        return base + parentIndex * 10 + 1
+      }
+      return 200000 + originalIndex * 10 + 1
+    }
+    if (type === 'asteroid') return 200000 + originalIndex * 10
+    const otherRank = type === 'comet' ? 0 : (type === 'interstellar' ? 1 : (type === 'artificial' ? 2 : 3))
+    return 1000000 + otherRank * 10000 + originalIndex * 10
   }
 
   observerPlanetLabel(name: string): string {
@@ -278,9 +337,15 @@ export class SessionToolStore {
     }
   }
 
+  // 观测点变化后让缓存的今晚天象失效；面板打开或用户手动刷新时再重算。
+  invalidateTonight(): void {
+    this.tonightFetchedAt = 0
+  }
+
   // 「位置」面板今晚天象：桥拉取并本地化各卡片文案。
   // force=false（面板打开时的自动刷新）10 分钟内复用缓存；force=true（用户点「刷新」）强制重算。
-  refreshTonight(force: boolean = false): void {
+  // silent=true 用于定位变化后的自动重算，不弹“已刷新”提示。
+  refreshTonight(force: boolean = false, silent: boolean = false): void {
     const port = this.ensurePort()
     const hooks = this.hooks
     if (port === null || hooks === null) {
@@ -322,8 +387,8 @@ export class SessionToolStore {
       this.tonightSunJd = t.sun?.astroTwilightEndJd ?? 0
       this.tonightShowerJd = (t.meteorShowers && t.meteorShowers.length > 0) ? (t.meteorShowers[0].primeJd ?? this.tonightSunJd) : this.tonightSunJd
       this.tonightHint = I18n.t('tn_updated') + ' · ' + this.fmtIso(t.date ?? '')
-      // 只有用户主动点「刷新」才弹提示；面板打开时的自动刷新静默完成。
-      if (force) hooks.flashHint('已刷新今晚天象 · 点击卡片可跳转')
+      // 只有用户主动点「刷新」才弹提示；面板打开或定位变化后的自动刷新静默完成。
+      if (force && !silent) hooks.flashHint('已刷新今晚天象 · 点击卡片可跳转')
     }, (): void => { this.tonightInFlight = false })
   }
 

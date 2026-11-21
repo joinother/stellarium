@@ -9,6 +9,11 @@ const INERTIA_TIME_CONSTANT_MS: number = 420
 const INERTIA_STOP_VELOCITY: number = 0.03
 const INERTIA_MAX_DURATION_MS: number = 1800
 
+// 时间轮只处理横向拖动。竖向滑动属于面板 Scroll（向下翻看时间设置），
+// 不能在 Down 上抢走手势、暂停时间或在轻微 x 抖动时改时间。
+const WHEEL_DIRECTION_SLOP: number = 6
+const WHEEL_HORIZONTAL_RATIO: number = 1.2
+
 // 时间轮的**交互控制器**：拖动 / 惯性 / 轨道重基准 / 引擎推送。
 //
 // 为什么是普通类而不是 @Observed store：这里的字段是**每个触摸采样都在变**的手势草稿量
@@ -31,6 +36,12 @@ export class TimeWheelController {
   private lastTouchX: number = 0
   private lastTouchMs: number = 0
   private dragCarry: number = 0
+  private touchPending: boolean = false
+  private touchStartX: number = 0
+  private touchStartY: number = 0
+  private pendingGestureBaseMs: number = 0
+  private pendingGestureTickOffset: number = 0
+  private pendingDragCarry: number = 0
   private lastNativePushMs: number = 0
   private gestureBaseMs: number = 0
   private gestureSteps: number = 0
@@ -83,64 +94,130 @@ export class TimeWheelController {
     if (points.length === 0) { return }
     const point = points[0]
     if (event.type === TouchType.Down) {
-      this.stopInertia()
-      this.store.timeWheelDragging = true
-      this.lastTouchX = point.x
-      this.lastTouchMs = Date.now()
-      this.lastInputMs = Date.now()
-      this.gestureBaseMs = Date.UTC(this.store.timeWheelYear, this.store.timeWheelMonth - 1,
-        this.store.timeWheelDay, this.store.timeWheelHour, this.store.timeWheelMinute, this.store.timeWheelSecond)
-      this.gestureSteps = 0
-      this.gestureTickOffset = this.store.timeWheelAppliedSteps
-      this.dragCarry = this.store.timeWheelVisualOffset
-      this.lastVisualVelocity = 0
-      this.hapticTickCounter = 0
-      this.lastDragHapticMs = 0
-      this.lastInertiaHapticMs = 0
+      this.handleDown(point.x, point.y)
+    } else if (event.type === TouchType.Move) {
+      this.handleMove(point.x, point.y)
+    } else if (event.type === TouchType.Up) {
+      this.handleEnd(false)
+    } else if (event.type === TouchType.Cancel) {
+      this.handleEnd(true)
+    }
+  }
+
+  // PanGesture 已确认横向意图后调用：直接进入拖动，不再做方向判定。
+  beginPan(x: number, y: number): void {
+    this.stopInertia()
+    this.touchPending = false
+    this.pendingGestureBaseMs = Date.UTC(this.store.timeWheelYear, this.store.timeWheelMonth - 1,
+      this.store.timeWheelDay, this.store.timeWheelHour, this.store.timeWheelMinute, this.store.timeWheelSecond)
+    this.pendingGestureTickOffset = this.store.timeWheelAppliedSteps
+    this.pendingDragCarry = this.store.timeWheelVisualOffset
+    this.beginWheelDrag()
+    this.lastTouchX = x
+    this.lastTouchMs = Date.now()
+  }
+
+  updatePan(x: number): void {
+    this.handleMove(x, 0)
+  }
+
+  endPan(cancelled: boolean): void {
+    this.handleEnd(cancelled)
+  }
+
+  private handleDown(x: number, y: number): void {
+    this.stopInertia()
+    // 先只记录起点，等 Move 判断方向。竖向手势必须留给面板 Scroll。
+    this.touchPending = true
+    this.touchStartX = x
+    this.touchStartY = y
+    this.lastTouchX = x
+    this.lastTouchMs = Date.now()
+    this.pendingGestureBaseMs = Date.UTC(this.store.timeWheelYear, this.store.timeWheelMonth - 1,
+      this.store.timeWheelDay, this.store.timeWheelHour, this.store.timeWheelMinute, this.store.timeWheelSecond)
+    this.pendingGestureTickOffset = this.store.timeWheelAppliedSteps
+    this.pendingDragCarry = this.store.timeWheelVisualOffset
+  }
+
+  private handleMove(x: number, y: number): void {
+    if (this.touchPending && !this.store.timeWheelDragging) {
+      const totalDx = x - this.touchStartX
+      const totalDy = y - this.touchStartY
+      if (Math.abs(totalDx) < WHEEL_DIRECTION_SLOP && Math.abs(totalDy) < WHEEL_DIRECTION_SLOP) {
+        return
+      }
+      if (Math.abs(totalDx) <= Math.abs(totalDy) * WHEEL_HORIZONTAL_RATIO) {
+        // 竖向翻看：放弃时间轮手势，既不暂停时间也不改时间。
+        this.touchPending = false
+        return
+      }
+      this.touchPending = false
+      this.beginWheelDrag()
+      // 继续走下面的拖动分支，把本次 Move 的完整位移应用上去。
+    }
+    if (!this.store.timeWheelDragging) {
+      return
+    }
+    const now = Date.now()
+    const delta = x - this.lastTouchX
+    const elapsedMs = Math.max(1, now - this.lastTouchMs)
+    this.lastTouchX = x
+    this.lastTouchMs = now
+    const speed = Math.abs(delta) / elapsedMs
+    const stepDelta = -delta * this.velocityMultiplier(speed) / this.store.tickSpacing
+    const effectiveDelta = -stepDelta * this.store.tickSpacing
+    this.dragCarry += effectiveDelta
+    this.gestureSteps += stepDelta
+    // Slower movement gives denser detent feedback; faster movement spreads
+    // pulses out to avoid a continuous buzz and to keep the UI thread light.
+    const hapticGap = speed < 0.35 ? 70 : (speed < 0.8 ? 100 : 140)
+    if (delta !== 0 && now - this.lastDragHapticMs >= hapticGap) {
+      this.lastDragHapticMs = now
+      this.onTick(++this.hapticTickCounter)
+    }
+    this.store.timeWheelVisualOffset = this.dragCarry
+    const instantVelocity = effectiveDelta / elapsedMs
+    this.lastVisualVelocity = this.lastVisualVelocity * 0.45 + instantVelocity * 0.55
+    const local = this.store.dateAtFraction(this.gestureBaseMs, this.gestureSteps)
+    const sendNative = now - this.lastNativePushMs >= 16
+    this.applyDate(local, false, sendNative)
+    if (Math.abs(this.store.timeWheelVisualOffset) >= this.store.tickSpacing * 8) {
       this.rebaseTrackAtCenter()
-      this.onStopSpeed()
+    }
+  }
+
+  private handleEnd(cancelled: boolean): void {
+    if (this.touchPending && !this.store.timeWheelDragging) {
+      // 纯点击/竖向滑动，从未进入时间轮拖动。
+      this.touchPending = false
       return
     }
-    if (event.type === TouchType.Move && this.store.timeWheelDragging) {
-      const now = Date.now()
-      const delta = point.x - this.lastTouchX
-      const elapsedMs = Math.max(1, now - this.lastTouchMs)
-      this.lastTouchX = point.x
-      this.lastTouchMs = now
-      const speed = Math.abs(delta) / elapsedMs
-      const stepDelta = -delta * this.velocityMultiplier(speed) / this.store.tickSpacing
-      const effectiveDelta = -stepDelta * this.store.tickSpacing
-      this.dragCarry += effectiveDelta
-      this.gestureSteps += stepDelta
-      // Slower movement gives denser detent feedback; faster movement spreads
-      // pulses out to avoid a continuous buzz and to keep the UI thread light.
-      const hapticGap = speed < 0.35 ? 70 : (speed < 0.8 ? 100 : 140)
-      if (delta !== 0 && now - this.lastDragHapticMs >= hapticGap) {
-        this.lastDragHapticMs = now
-        this.onTick(++this.hapticTickCounter)
-      }
-      this.store.timeWheelVisualOffset = this.dragCarry
-      const instantVelocity = effectiveDelta / elapsedMs
-      this.lastVisualVelocity = this.lastVisualVelocity * 0.45 + instantVelocity * 0.55
-      const local = this.store.dateAtFraction(this.gestureBaseMs, this.gestureSteps)
-      const sendNative = now - this.lastNativePushMs >= 16
-      this.applyDate(local, false, sendNative)
-      if (Math.abs(this.store.timeWheelVisualOffset) >= this.store.tickSpacing * 8) {
-        this.rebaseTrackAtCenter()
-      }
-      return
+    this.touchPending = false
+    this.store.timeWheelDragging = false
+    if (this.gestureBaseMs > 0) {
+      this.applyDate(this.store.dateAtFraction(this.gestureBaseMs, this.gestureSteps), false, true)
     }
-    if (event.type === TouchType.Up || event.type === TouchType.Cancel) {
-      this.store.timeWheelDragging = false
-      if (this.gestureBaseMs > 0) {
-        this.applyDate(this.store.dateAtFraction(this.gestureBaseMs, this.gestureSteps), false, true)
-      }
-      if (event.type === TouchType.Up) {
-        this.startInertia()
-      } else {
-        this.stopInertia()
-      }
+    if (!cancelled) {
+      this.startInertia()
+    } else {
+      this.stopInertia()
     }
+  }
+
+  // 横向意图确认后才真正接管：暂停时间、建立拖动基准并开启触感。
+  private beginWheelDrag(): void {
+    this.store.timeWheelDragging = true
+    this.lastInputMs = Date.now()
+    this.gestureBaseMs = this.pendingGestureBaseMs
+    this.gestureSteps = 0
+    this.gestureTickOffset = this.pendingGestureTickOffset
+    this.dragCarry = this.pendingDragCarry
+    this.lastVisualVelocity = 0
+    this.hapticTickCounter = 0
+    this.lastDragHapticMs = 0
+    this.lastInertiaHapticMs = 0
+    this.rebaseTrackAtCenter()
+    this.onStopSpeed()
   }
 
   syncFromSimulation(jd: number): void {

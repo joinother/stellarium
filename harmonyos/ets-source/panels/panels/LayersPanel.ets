@@ -10,12 +10,14 @@ import { SkyCultureSettingsStore } from '../../state/SkyCultureSettingsStore'
 import { SkyCultureViewStore } from '../../state/SkyCultureViewStore'
 import { SurveyStore } from '../../state/SurveyStore'
 import { LayerPresetBar } from '../layers/LayerPresetBar'
+import { LayerPresetTab } from '../layers/LayerPresetTab'
+import { LayerPresetStore } from '../../state/LayerPresetStore'
 import { LayerTabs } from '../layers/LayerTabs'
 import { LayerSkyTab, LayerSsoTab, LayerDsoTab, LayerMarkingsTab, LayerLandscapeTab, LayerSurveysTab } from '../layers/LayerViewTabs'
 import { SkyCultureViewTab } from '../skyculture/SkyCultureViewTab'
 
 // 「图层」面板，对应 `activePanel === 'layers'`：组装图层预设条 + 视图标签页选择器 +
-// 六个图层页签（Sky/Sso/Dso/Markings/Landscape/Surveys）+ 星空文化页签 SkyCultureViewTab；
+// 六个既有页签（Sky/Sso/Dso/Markings/Landscape/Surveys）+ 星空文化页签 + 「图层预设」管理页；
 // 预设条与页签选择器之间有一条横向分隔线，「清除坐标与标记」已上移到面板标题栏。
 //
 // 「天空」页分 恒星 / 天空 / 观测条件 三节；大气折射块（ObservationAidBlock）挂在观测条件节内。
@@ -32,7 +34,10 @@ export struct LayersPanel {
   @ObjectLink skyCultureSettingsStore: SkyCultureSettingsStore
   @ObjectLink atmosphereStore: AtmosphereStore
   @ObjectLink surveyStore: SurveyStore
+  @ObjectLink presetStore: LayerPresetStore
   @Prop nightModeOn: boolean
+  @Prop observerAltitude: number = 0
+  @Prop earthObserver: boolean = true
   @Prop viewTab: number
   @Prop expandedLayout: boolean
   @Prop foldTablet: boolean
@@ -44,13 +49,14 @@ export struct LayersPanel {
   @State private c: ThemeSlots = DEFAULT_SLOTS
   mapContextSettings: RenderingContextSettings = new RenderingContextSettings(true)
   mapContext: CanvasRenderingContext2D = new CanvasRenderingContext2D(this.mapContextSettings)
-  onPreset: (preset: string) => void = () => {}
   onSelectTab: (id: number) => void = () => {}
   onToggleLayer: (actionId: string, cmd: string, value: boolean) => void = () => {}
   onRefreshSurvey: () => void = () => {}
   onSelectSpectral: (id: string) => void = () => {}
   onCloseSpectral: () => void = () => {}
   onSetSkyDisplay: (setting: string, value: boolean | number) => void = () => {}
+  // 进入图层面板时从引擎回读已持久化的大气参数。
+  onLoadAtmosphere: () => void = () => {}
   onStarMagLimit: (value: number) => void = () => {}
   onMilkyWayBright: (value: number) => void = () => {}
   onAtmosphere: (pressure: number, temperature: number, extinction: number) => void = () => {}
@@ -71,6 +77,7 @@ export struct LayersPanel {
   onToggleViewCoordinates: (visible: boolean) => void = () => {}
   onSelectViewCoordinateFamily: (family: string) => void = () => {}
   onSelectViewEquatorialEpoch: (epoch: string) => void = () => {}
+  onToggleLandscapeAutoSelection: (enabled: boolean) => void = () => {}
   onSetLandscapeFadeWithZoom: (isOn: boolean) => void = () => {}
   onImportLandscape: () => void = () => {}
   onSelectLandscape: (id: string, name: string) => void = () => {}
@@ -101,9 +108,13 @@ export struct LayersPanel {
 
   onWillApplyTheme(theme: Theme): void { this.c = slotsFromTheme(theme) }
 
+  aboutToAppear(): void {
+    this.onLoadAtmosphere()
+  }
+
   build() {
       Column() {
-        LayerPresetBar({ onPreset: (preset: string) => { this.onPreset(preset) } })
+        LayerPresetBar({ presetStore: this.presetStore })
         // 图层预设 tag 与子面板标签 tag 之间的横向分隔线
         Row().width('100%').height(0.5).backgroundColor(this.c.border).margin({ top: 2, bottom: 2 })
         LayerTabs({ tabs: this.layerTabs, activeTab: this.viewTab, foldTablet: this.foldTablet, onSelectTab: (id: number) => { this.onSelectTab(id) } })
@@ -113,6 +124,8 @@ export struct LayersPanel {
               layerStore: this.layerStore,
               layerViewStore: this.layerViewStore,
               nightModeOn: this.nightModeOn,
+              observerAltitude: this.observerAltitude,
+              earthObserver: this.earthObserver,
               refractionOn: this.atmosphereStore.refractionOn,
               atmoPressure: this.atmosphereStore.atmoPressure,
               atmoTemperature: this.atmosphereStore.atmoTemperature,
@@ -164,7 +177,9 @@ export struct LayersPanel {
             LayerLandscapeTab({
               layerStore: this.layerStore,
               layerViewStore: this.layerViewStore,
+              earthObserver: this.earthObserver,
               onToggleLayer: (actionId: string, cmd: string, value: boolean) => { this.onToggleLayer(actionId, cmd, value) },
+              onToggleLandscapeAutoSelection: (enabled: boolean) => { this.onToggleLandscapeAutoSelection(enabled) },
               onSetLandscapeFadeWithZoom: (isOn: boolean) => { this.onSetLandscapeFadeWithZoom(isOn) },
               onImportLandscape: () => { this.onImportLandscape() },
               onSelectLandscape: (id: string, name: string) => { this.onSelectLandscape(id, name) },
@@ -212,11 +227,15 @@ export struct LayersPanel {
               onSelectSpectral: (id: string) => { this.onSelectSpectral(id) },
               onCloseSpectral: () => { this.onCloseSpectral() }
             })
+          } else if (this.viewTab === 7) {
+            LayerPresetTab({ presetStore: this.presetStore })
           } else {
             LayerSkyTab({
               layerStore: this.layerStore,
               layerViewStore: this.layerViewStore,
               nightModeOn: this.nightModeOn,
+              observerAltitude: this.observerAltitude,
+              earthObserver: this.earthObserver,
               refractionOn: this.atmosphereStore.refractionOn,
               atmoPressure: this.atmosphereStore.atmoPressure,
               atmoTemperature: this.atmosphereStore.atmoTemperature,

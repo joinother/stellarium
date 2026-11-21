@@ -3,6 +3,7 @@ import { DEFAULT_SLOTS, ThemeSlots, slotsFromTheme } from '../../state/Stellariu
 import { panelFontSize } from '../../common/ui/UiTypography'
 import { UI_RADIUS_CONTROL } from '../../common/ui/UiTokens'
 import { I18n } from '../../capability/I18n'
+import { DEFAULT_HAPTIC_INTENSITY } from '../../capability/HapticFeedback'
 
 @Component
 export struct HapticSection {
@@ -10,7 +11,12 @@ export struct HapticSection {
   @Prop available: boolean = false
   @Prop failed: boolean = false
   @Prop busy: boolean = false
-  @Prop @Watch('syncIntensity') intensity: number = 40
+  // 14600101 = DEVICE_OPERATION_FAILED；OpenHarmony 在系统触感反馈关闭时
+  // 用它拒绝 usage=touch 的请求（MiscdeviceService 返回 IGNORE_FEEDBACK）。
+  @Prop errorCode: number = 0
+  // -1 未知 / 0 系统触感反馈关闭 / 1 开启。
+  @Prop systemFeedback: number = -1
+  @Prop @Watch('syncIntensity') intensity: number = DEFAULT_HAPTIC_INTENSITY
   @StorageProp('stellariumReadableUi') readableUi: boolean = false
   // Toggle 的 isOn 不能直接绑 @Prop：父层写回 @Prop 时会再触发一次
   // onChange（真机上观察到 true 后 67ms 又收到 false），导致开关自己弹回。
@@ -22,6 +28,7 @@ export struct HapticSection {
   @State c: ThemeSlots = DEFAULT_SLOTS
   onChange: (enabled: boolean) => void = () => {}
   onIntensityChange: (value: number, commit: boolean) => void = () => {}
+  onOpenSystemSettings: () => void = () => {}
   onPreview: () => void = () => {}
 
   aboutToAppear(): void {
@@ -68,6 +75,34 @@ export struct HapticSection {
     return I18n.getLanguage().startsWith('zh') ? zh : en
   }
 
+  // 14600101 不是设备能力问题：系统触感反馈关闭时，OpenHarmony 的
+  // MiscdeviceService 会以 IGNORE_FEEDBACK 丢弃 usage=touch 的请求。
+  // 此时应提示用户打开系统开关，而不是误报“设备不支持”。
+  private statusText(): string {
+    if (this.failed) {
+      if (this.errorCode === 14600101) {
+        if (this.systemFeedback === 0) {
+          return this.text('系统触感反馈已关闭。请在系统设置中开启“触感反馈/触摸振动”后重试。',
+            'System touch feedback is off. Enable it in system settings and retry.')
+        }
+        if (this.systemFeedback === 1) {
+          return this.text('系统触感反馈已开启，但振动服务拒绝了请求。请检查系统静音/振动设置或重启设备后重试。',
+            'System touch feedback is on, but the vibrator service rejected the request. Check silent/vibration settings or restart the device and retry.')
+        }
+        return this.text('系统触感反馈已关闭或振动服务正忙。请在系统设置中开启“触感反馈/触摸振动”后重试。',
+          'System touch feedback is off or the vibrator is busy. Enable touch feedback in system settings and retry.')
+      }
+      return this.text('系统未能播放触觉效果，请检查系统触感设置与设备支持情况。',
+        'The system could not play haptics. Check system haptics and device support.')
+    }
+    if (this.available) {
+      return this.text('选中天体、切换面板与时间刻度时，给予轻微反馈。',
+        'Gentle feedback for object selection, panels and time steps.')
+    }
+    return this.text('此设备不支持应用使用的轻触振动效果。',
+      'This device does not support these gentle haptic effects.')
+  }
+
   build() {
     Column({ space: 4 }) {
       Row({ space: 12 }) {
@@ -80,13 +115,15 @@ export struct HapticSection {
         .width('100%')
         .height(this.readableUi ? 50 : 42)
         .padding({ left: 10, right: 8 })
-      Text(this.failed
-        ? this.text('系统未能播放触觉效果，请检查系统触感设置与设备支持情况。', 'The system could not play haptics. Check system haptics and device support.')
-        : this.available
-        ? this.text('选中天体、切换面板与时间刻度时，给予轻微反馈。', 'Gentle feedback for object selection, panels and time steps.')
-        : this.text('此设备不支持应用使用的轻触振动效果。', 'This device does not support these gentle haptic effects.'))
+      Text(this.statusText())
         .fontSize(panelFontSize(10, this.readableUi)).fontColor(this.c.sub).width('100%')
         .padding({ left: 10, right: 8 }).margin({ bottom: 4 })
+      if (this.systemFeedback === 0) {
+        Text(this.text('前往系统设置开启“系统触感反馈”', 'Open system settings to enable touch feedback'))
+          .fontSize(panelFontSize(10, this.readableUi)).fontColor(this.c.accent).width('100%')
+          .padding({ left: 10, right: 8 }).margin({ bottom: 4 })
+          .onClick(() => { this.onOpenSystemSettings() })
+      }
       Row({ space: 8 }) {
         Text(this.text('震动力度', 'Vibration strength'))
           .fontSize(panelFontSize(12, this.readableUi)).fontColor(this.c.text).layoutWeight(1)

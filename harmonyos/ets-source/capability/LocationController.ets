@@ -7,7 +7,7 @@ import hilog from '@ohos.hilog'
 import { I18n } from '../pages/I18n'
 import { StellariumBridgeResponse, HierCity } from '../pages/StellariumTypes'
 import { ObserverLocationRecord } from '../pages/MainWindowModels'
-import { approximateTimeZoneDisplay, planetZh, quickLocationLabel } from '../common/derive/labels'
+import { approximateTimeZoneDisplay, quickLocationLabel } from '../common/derive/labels'
 import { METERED_MAP_APIS_ENABLED } from '../common/config/OhosFeatureFlags'
 import { CommandPort } from '../bridge/CommandPort'
 import { LocationPort } from '../bridge/LocationPort'
@@ -25,6 +25,8 @@ export interface LocationHostHooks {
   setObserverPlanetCrossStore(name: string): void
   // 位置头部三 @State（locationText / coordinateText / altitudeText）回注。
   setLocationTexts(location: string, coordinate: string, altitude: string): void
+  // 观测点变化后让今晚天象缓存失效，并在可见时按新坐标重算。
+  refreshTonightData(): void
   // GPS 门禁（宿主保留：privacyNativeStartupAllowed / applicationInForeground / hasCurrentPrivacyConsent）。
   privacyAllowed(): boolean
   inForeground(): boolean
@@ -190,7 +192,7 @@ export class LocationController {
       void this.saveObserverLocationToStorage()
       this.hooks.setLocationTexts(
         quickLocationLabel('gps',
-          this.pickerStore.locationDisplayName(this.pickerStore.locationPickerName), 'Earth', detail) + ' · ' + planetZh('Earth'),
+          this.pickerStore.locationDisplayName(this.pickerStore.locationPickerName), 'Earth', detail) + ' · ' + this.sessionToolStore.observerPlanetLabel('Earth'),
         this.locationStore.formatDegrees(this.pickerStore.locationPickerLatitude, 'N', 'S') + ' / ' +
           this.locationStore.formatDegrees(this.pickerStore.locationPickerLongitude, 'E', 'W'),
         this.pickerStore.locationPickerAltitude.toFixed(0) + ' m')
@@ -270,9 +272,9 @@ export class LocationController {
       if (targetPlanet !== 'Earth') this.setLocationMapProvider('offline')
     }
     this.saveObserverLocationToStorage()
-    const planetDisplay = typeof this.sessionToolStore.observerPlanetLabel === 'function'
-      ? this.sessionToolStore.observerPlanetLabel(targetPlanet)
-      : planetZh(targetPlanet)
+    const planetDisplay = this.sessionToolStore.observerPlanetLabel(targetPlanet)
+    // 位置变了，位置面板的今晚天象（月出/日落/行星可见性）必须按新坐标重算。
+    this.hooks.refreshTonightData()
     this.hooks.setLocationTexts(
         quickLocationLabel(source, this.pickerStore.locationDisplayName(name), targetPlanet,
           source === 'gps' ? this.pickerStore.gpsPlaceDetail : '') + ' · ' + planetDisplay,
@@ -366,5 +368,8 @@ export class LocationController {
     this.restoreDetailLongitude = rec.longitude
     hilog.info(0x0000, 'StellariumArkUI', '[location] restoring persisted observer location')
     this.setLocation(name, rec.latitude, rec.longitude, restoredAltitude, planet, true, source)
+    // 自动选择开启且启动落在地球时，若引擎仍停在 zero，则恢复上次记住的地球地景。
+    // 非地球记录会在随后的 setObserverPlanet 中由自动匹配覆盖，这里无需判断 planet。
+    this.port.requestWhenReady('restoreSavedEarthLandscape', '', () => {})
   }
 }

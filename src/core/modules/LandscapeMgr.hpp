@@ -555,6 +555,10 @@ public slots:
 	bool getFlagAtmosphere() const;
 	//! Set flag for displaying Atmosphere.
 	void setFlagAtmosphere(const bool displayed);
+	//! Set atmosphere and fog for automatic planet-dependent environment switching.
+	//! These runtime changes must not overwrite the user's stored preferences, which
+	//! are needed to restore the previous state when returning to a planet with air.
+	void setFlagAtmosphereAndFogForEnvironment(bool showAtmosphere, bool showFog);
 	bool getFlagVividAtmosphere() const { return flagVividAtmosphere; }
 	void setFlagVividAtmosphere(bool enabled);
 	bool getFlagZoomFadeEnvironment() const { return flagZoomFadeEnvironment; }
@@ -828,6 +832,13 @@ private:
 	float getAtmosphereLightPollutionLuminance() const;
 	//! Set light pollution luminance level in cd/m².
 	void setAtmosphereLightPollutionLuminance(const float f);
+
+	//! Apply an atmosphere/fog visibility change without writing it to config.ini.
+	//! Used by automatic environment switching, which is transient and must not
+	//! replace the user's saved preference.
+	void setFlagAtmosphereInternal(const bool displayed, const bool saveToConfig);
+	//! Apply a fog visibility change without writing it to config.ini.
+	void setFlagFogInternal(const bool displayed, const bool saveToConfig);
 
 	//! For a given landscape name, return the landscape ID.
 	//! This takes a name of the landscape, as described in the landscape:name item in the

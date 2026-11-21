@@ -42,5 +42,5 @@ test('pointer position bridge is wired end to end', () => {
   assert.match(cpp, /commandName == "setPointerPosition"/);
   assert.match(cpp, /setOhosMousePos\(x2, y2\)/);
   assert.match(cpp, /state\["screenX"\]/);
-  assert.match(catalog, /selectAt,setPointerPosition,selftestActions/);
+  assert.match(catalog, /selectAt,[^"]*setPointerPosition,selftestActions/);
 });

@@ -2,6 +2,7 @@ import { Theme } from '@kit.ArkUI'
 import { I18n } from '../../pages/I18n'
 import { SavedLocation } from '../../pages/StellariumTypes'
 import { LocationStore } from '../../state/LocationStore'
+import { SessionToolStore } from '../../state/SessionToolStore'
 import { UI_RADIUS_CONTROL } from '../../common/ui/UiTokens'
 import { DEFAULT_SLOTS, ThemeSlots, slotsFromTheme } from '../../state/StellariumTheme'
 
@@ -13,6 +14,8 @@ import { DEFAULT_SLOTS, ThemeSlots, slotsFromTheme } from '../../state/Stellariu
 @Component
 export struct CityChipsRow {
   @ObjectLink store: LocationStore
+  // 直接观察会话 store：面板打开后才异步加载的星球列表到达时，已保存行要随之刷新。
+  @ObjectLink sessionToolStore: SessionToolStore
   @Prop observerPlanet: string = 'Earth'
   @State c: ThemeSlots = DEFAULT_SLOTS
   @State private actionKey: string = ''
@@ -28,7 +31,14 @@ export struct CityChipsRow {
   }
 
   private coordinateLine(item: SavedLocation): string {
-    return item.lat.toFixed(2) + '° / ' + item.lon.toFixed(2) + '° · ' + item.planet
+    // 与观测星球下拉共用同一本地化标签；SavedLocation.planet 仍保存英文名。
+    return item.lat.toFixed(2) + '° / ' + item.lon.toFixed(2) + '° · ' + this.sessionToolStore.observerPlanetLabel(item.planet)
+  }
+
+  // 星球列表在面板打开后才异步加载，标签变化必须让 ForEach 重建该行；
+  // 否则列表到达前渲染的英文名会一直保留。
+  private rowKey(item: SavedLocation): string {
+    return this.store.savedLocationKey(item) + '|' + this.sessionToolStore.observerPlanetLabel(item.planet)
   }
 
   private openActions(key: string): void {
@@ -165,7 +175,7 @@ export struct CityChipsRow {
           Column({ space: 6 }) {
             ForEach(this.store.savedLocations, (s: SavedLocation) => {
               this.savedRow(s)
-            }, (s: SavedLocation) => this.store.savedLocationKey(s))
+            }, (s: SavedLocation) => this.rowKey(s))
           }
           .width('100%')
           .padding({ right: 2 })
@@ -242,7 +252,7 @@ export struct CityChipsRow {
           Row({ space: 8 }) {
             ForEach(this.store.recentLocations, (s: SavedLocation) => {
               this.recentChip(s)
-            }, (s: SavedLocation) => 'recent|' + this.store.savedLocationKey(s))
+            }, (s: SavedLocation) => 'recent|' + this.rowKey(s))
           }
           .padding({ left: 2, right: 2 })
         }

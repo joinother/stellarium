@@ -40,6 +40,9 @@ let regionMapLang: string = ''
 // System getDisplayCountry() is a locale-sensitive ICU call. Country codes are
 // few, so cache the result per language instead of calling it per city.
 const COUNTRY_DISPLAY_CACHE: Map<string, string> = new Map<string, string>()
+// 全屏选点界面的外星观测点标签：按星球列出全部离线地点（不依赖层级列当前选择）。
+// 模块级缓存，避免在宿主 build() 期间写 @Observed store 字段。
+const PLANET_PLACES_CACHE: Record<string, Array<HierCity>> = {}
 
 @Observed
 export class LocationPickerStore {
@@ -615,6 +618,24 @@ export class LocationPickerStore {
   // 层级城市列表（selectCityByName 需要拿到经纬度落地）。
   hierCities(observerPlanet: string): Array<HierCity> {
     return this.hierCityList(observerPlanet)
+  }
+
+  // 某观测星球的全部离线地点。全屏地图把所有外星观测点画成带名称标签的
+  // 标记，用户不必先经过层级列筛选；结果按星球缓存（首次扫描一次性完成）。
+  planetPlaces(observerPlanet: string): Array<HierCity> {
+    const cached = PLANET_PLACES_CACHE[observerPlanet]
+    if (cached !== undefined) return cached
+    const places: Array<HierCity> = []
+    for (const continent of Object.keys(LOCATION_HIERARCHY)) {
+      const regions = LOCATION_HIERARCHY[continent]
+      for (const country of Object.keys(regions)) {
+        for (const city of regions[country]) {
+          if (this.isCurrentObserverPlanet(city, observerPlanet)) places.push(city)
+        }
+      }
+    }
+    PLANET_PLACES_CACHE[observerPlanet] = places
+    return places
   }
 
   hierarchySelectionFor(kind: string): string {

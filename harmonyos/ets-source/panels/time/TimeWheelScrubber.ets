@@ -16,7 +16,7 @@ export struct TimeWheelScrubber {
   @ObjectLink store: TimeWheelStore
   @State c: ThemeSlots = DEFAULT_SLOTS
   onSelectUnit: (unit: string) => void = () => {}
-  onWheelTouch: (event: TouchEvent) => void = () => {}
+  onWheelRect: (x: number, y: number, width: number, height: number) => void = () => {}
 
   onWillApplyTheme(theme: Theme): void {
     this.c = slotsFromTheme(theme)
@@ -92,10 +92,14 @@ export struct TimeWheelScrubber {
       Stack({ alignContent: Alignment.Center }) {
         TimeWheelCanvas({
           store: this.store,
-          onWheelTouch: (event: TouchEvent) => { this.onWheelTouch(event) }
+          onWheelRect: (x: number, y: number, width: number, height: number) => {
+            this.onWheelRect(x, y, width, height)
+          }
         })
           .width('100%')
           .height('100%')
+          // 自定义组件的根节点也要排除命中，否则仍会挡住父级面板 Scroll。
+          .hitTestBehavior(HitTestMode.None)
       }
       .width('100%')
       .height(56)
@@ -104,6 +108,9 @@ export struct TimeWheelScrubber {
       .border({ width: 1, color: this.c.border })
       .borderRadius(UI_RADIUS_SHEET)
       .clip(true)
+      // 轮盘容器不参与命中测试：竖向滑动直接落到面板 Scroll，横向拖动由
+      // 宿主按轮盘矩形做坐标路由（TimeWheelCanvas 只负责绘制）。
+      .hitTestBehavior(HitTestMode.None)
     }
     .width('100%')
     .padding({ left: 12, right: 12, top: 6, bottom: 8 })

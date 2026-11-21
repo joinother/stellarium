@@ -52,7 +52,7 @@ test('panel dragging and scrolling disable the expensive backdrop blur and shado
   assert.match(host, /@State private panelDragging: boolean = false/);
   assert.match(host, /@State private panelScrolling: boolean = false/);
   assert.match(host, /@State private panelTouching: boolean = false/);
-  assert.match(host, /private panelChromeBusy\(\): boolean \{\s*return this\.panelDragging \|\| this\.panelScrolling\s*\}/);
+  assert.match(host, /private panelChromeBusy\(\): boolean \{\s*return this\.panelDragging \|\| this\.panelScrolling \|\| this\.timeWheelStore\.timeWheelDragging\s*\}/);
   assert.match(host, /backdropBlur\(this\.panelChromeBusy\(\) \? 0 : 30\)/);
   assert.match(host, /shadow\(\{ radius: this\.panelChromeBusy\(\) \? 0 : 30/);
   assert.match(host, /shadow\(\{ radius: this\.panelChromeBusy\(\) \? 0 : 34/);
@@ -61,8 +61,8 @@ test('panel dragging and scrolling disable the expensive backdrop blur and shado
   assert.match(host, /if \(!this\.panelDragging\) this\.panelDragging = true/);
   assert.match(host, /onFinish: \(\) => \{ this\.panelDragging = false \}/);
   assert.match(host, /\.onScrollStart\(\(\) => \{ if \(!this\.panelScrolling\) this\.panelScrolling = true \}\)/);
-  assert.match(host, /\.onScrollStop\(\(\) => \{ this\.panelScrolling = false \}\)/);
-  assert.match(host, /this\.panelScrolling = false\s*\n\s*this\.panelTouching = false\s*\n\s*\/\/ 时间面板首帧/);
+  assert.match(host, /\.onScrollStop\(\(\) => \{\s*this\.panelScrolling = false\s*\n\s*this\.updatePanelScrollBlur\(/);
+  assert.match(host, /this\.panelScrolling = false\s*\n\s*this\.panelTouching = false\s*\n\s*this\.timeWheelTouchPending = false\s*\n\s*this\.timeWheelTouchDragging = false\s*\n\s*\/\/ 时间面板首帧/);
 });
 
 test('location search folding avoids ICU-backed locale lowercasing', () => {
@@ -152,6 +152,14 @@ test('saved locations carry coordinates and support rename, delete and recent us
   assert.match(chips, /savedRow/);
   assert.match(chips, /ScrollDirection\.Vertical/);
   assert.match(chips, /this\.store\.savedLocations\.length \* 52/);
+  // 已保存/最近条目的星球名与观测星球下拉同源本地化；磁盘仍按英文名保存。
+  // CityChipsRow 必须直接观察 SessionToolStore：星球列表在面板打开后才异步到达。
+  assert.match(chips, /@ObjectLink sessionToolStore: SessionToolStore/)
+  assert.match(chips, /this\.sessionToolStore\.observerPlanetLabel\(item\.planet\)/)
+  assert.match(chips, /private rowKey\(item: SavedLocation\): string/)
+  assert.match(chips, /this\.rowKey\(s\)/)
+  assert.doesNotMatch(chips, /° · ' \+ item\.planet/)
+  assert.match(place, /CityChipsRow\(\{[\s\S]{0,160}sessionToolStore: this\.sessionToolStore/);
   assert.match(store, /this\.savedLocations = \[item, \.\.\.this\.savedLocations\]/);
   // The hardcoded China/world city chips are gone.
   assert.doesNotMatch(chips, /Text\('中国城市'\)/);

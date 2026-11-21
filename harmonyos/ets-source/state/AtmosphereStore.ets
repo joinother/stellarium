@@ -1,5 +1,6 @@
 // 「大气观测辅助」域状态：气压 / 温度 / 消光（atmoPressure / atmoTemperature / atmoExtinction）
-// 与大气折射开关（refractionOn），由且仅由图层面板（LayersPanel → 天空页「观测条件」→ ObservationAidBlock）消费。
+// 与大气折射开关（refractionOn）。图层面板（LayersPanel → 天空页「观测条件」→
+// ObservationAidBlock）与位置面板（PlacePanel → PlaceEnvironmentSection）共用同一份参数。
 // 本 store 自持回包写入 applyAtmosphereResponse；动作 applyAtmosphere 仍由宿主驱动。
 //
 // refractionOn 与 atmo* 同属「观测点大气条件」消费链，故成组于此而非 OverlayStore（叠层语义）。

@@ -8,6 +8,9 @@ const dialog = read('src/gui/LocationDialog.cpp');
 const core = read('src/core/StelCore.cpp');
 const landscape = read('src/core/modules/LandscapeMgr.cpp');
 const catalog = read('src/StelOhosCommandCatalog.hpp');
+const host = read('harmonyos/ets-source/pages/MainWindowNativeNode.ets');
+const locationController = read('harmonyos/ets-source/capability/LocationController.ets');
+const sessionStore = read('harmonyos/ets-source/state/SessionToolStore.ets');
 
 function block(source, marker) {
   const markerIndex = source.indexOf(marker);
@@ -46,25 +49,111 @@ test('localized names and raw texture names preserve the agreed UI schema', () =
   assert.doesNotMatch(switchPlanet, /" surface"|"garching"|"jupiter"|"mars"/);
 });
 
-test('planet changes delegate the English name to the upstream automatic landscape route', () => {
+test('observer picker metadata exposes stable planet types and moon parents', () => {
+  assert.match(planetList, /const PlanetP parent = planet->getParent\(\)/)
+  assert.match(planetList, /entry\["type"\] = planetTypeName\(planet->getPlanetType\(\)\)/)
+  assert.match(planetList, /entry\["parent"\] = parent \? parent->getEnglishName\(\) : QString\(\)/)
+  for (const type of ['star', 'planet', 'moon', 'observer', 'asteroid', 'dwarfPlanet', 'comet', 'interstellar']) {
+    assert.match(planetList, new RegExp(`return QStringLiteral\\("${type}"\\)`))
+  }
+})
+
+test('planet changes remember the Earth landscape in the OHOS bridge and reuse the upstream auto route', () => {
   assert.match(switchPlanet, /core->moveObserverTo\(loc, 0\.0, 0\.0, landscapeHint\)/);
-  assert.match(switchPlanet, /const QString landscapeHint = planetChanged && landscapeMgr && landscapeMgr->getFlagLandscapeAutoSelection\(\) \? loc\.planetName : QString\(\)/);
+  assert.match(switchPlanet,
+    /autoLandscape = planetChanged && landscapeMgr &&\s+landscapeMgr->getFlagLandscapeAutoSelection\(\)/);
+  assert.match(switchPlanet, /value\("landscape\/saved_earth_landscape_id"\)/)
+  assert.match(switchPlanet, /earthLandscape != QStringLiteral\("zero"\)/)
+  assert.match(switchPlanet, /immediateSaveNow\("landscape\/saved_earth_landscape_id", earthLandscape\)/)
+  assert.match(switchPlanet, /landscapeHint = savedEarth/)
+  assert.match(switchPlanet, /landscapeHint = loc\.planetName/)
   assert.match(block(dialog, 'void LocationDialog::moveToAnotherPlanet('), /moveObserverTo\(loc, 0\., 0\., loc\.planetName\)/);
   assert.match(moveObserver, /emit targetLocationChanged\(target, landscapeID\)/);
   assert.match(targetChanged, /else if \(flagLandscapeAutoSelection && \(loc\.planetName != currentPlanetName\)\)/);
+  assert.match(targetChanged, /getAllLandscapeNames\(\)\.indexOf\(loc\.planetName\) >= 0/);
   assert.match(targetChanged, /setCurrentLandscapeID\("zero"\)/);
   assert.match(targetChanged, /setFlagLandscapeSetsLocation\(false\)/);
   assert.match(targetChanged, /setFlagLandscapeSetsLocation\(landscapeSetsLocation\)/);
 });
 
-test('the bridge leaves atmosphere, fog and custom landscape preferences to the engine', () => {
+test('landscape auto-selection and environment auto-enable are exposed through the OHOS bridge', () => {
+  assert.match(native, /commandName == "getLandscapeAutoSelection"/)
+  assert.match(native, /commandName == "setLandscapeAutoSelection"/)
+  assert.match(native, /commandName == "restoreSavedEarthLandscape"/)
+  assert.match(native, /commandName == "applyLandscapeDefaults"/)
+  assert.match(native, /lmgr->setFlagLandscapeAutoSelection\(enabled\)/)
+  assert.match(native, /result\["landscapeAutoSelection"\] = landscape->getFlagLandscapeAutoSelection\(\)/)
+  assert.match(locationController, /requestWhenReady\('restoreSavedEarthLandscape'/)
+  assert.match(host, /requestWhenReady\('applyLandscapeDefaults'/)
+  assert.match(catalog, /getLandscapeAutoSelection/)
+  assert.match(catalog, /setLandscapeAutoSelection/)
+  assert.match(catalog, /applyLandscapeDefaults/)
+  assert.match(catalog, /restoreSavedEarthLandscape/)
+
+  // PC's "Auto-enable atmosphere" is a fixed ON behavior on OHOS (no Location
+  // dialog). Startup must persist it and the bridge must expose the value.
+  assert.match(native, /commandName == "getEnvironmentAutoEnable"/)
+  assert.match(native, /commandName == "setEnvironmentAutoEnable"/)
+  assert.match(native, /commandName == "applyEnvironmentDefaults"/)
+  assert.match(native, /lmgr->setFlagEnvironmentAutoEnable\(true\)/)
+  assert.match(native, /immediateSaveNow\("viewing\/flag_environment_auto_enable", true\)/)
+  assert.match(host, /requestWhenReady\('applyEnvironmentDefaults'/)
+  assert.match(catalog, /getEnvironmentAutoEnable/)
+  assert.match(catalog, /setEnvironmentAutoEnable/)
+  assert.match(catalog, /applyEnvironmentDefaults/)
+});
+
+test('place panel location rows reuse the observer picker localized label', () => {
+  // 位置条目与下拉列表必须同源：引擎本地化的卫星/全览点名称不能只靠 planetZh。
+  assert.match(sessionStore, /observerPlanetLabel\(name: string\): string/)
+  assert.match(locationController, /observerPlanetLabel\(targetPlanet\)/)
+  assert.match(host, /' · ' \+ this\.sessionToolStore\.observerPlanetLabel\(planetName\)/)
+  // 全屏选点顶部标题（以及搜索占位、离线分区）复用同一标签。
+  assert.match(host, /planetLabel: \(en: string\) => this\.sessionToolStore\.observerPlanetLabel\(en\)/)
+  assert.match(read('harmonyos/ets-source/panels/location/LocationFullScreenMap.ets'),
+    /Text\(this\.planetLabel\(this\.observerPlanet\)\)/)
+});
+
+test('automatic environment switching preserves stored atmosphere and fog preferences', () => {
   for (const name of ['setObserverPlanet', 'setLocation', 'setLocationCoords']) {
-    assert.doesNotMatch(command(name), /setCurrentLandscape|setFlag(?:Landscape|Atmosphere|Fog|Environment)|setProperty|immediateSave/);
+    // The only bridge-side write allowed here is the OHOS Earth-landscape memory;
+    // landscape/atmosphere/fog preferences must still be handled by LandscapeMgr.
+    const body = command(name).replace(
+      /StelApp::immediateSaveNow\("landscape\/saved_earth_landscape_id", earthLandscape\);\r?\n/g, '');
+    assert.doesNotMatch(body, /setCurrentLandscape|setFlag(?:Landscape|Atmosphere|Fog|Environment)|setProperty|immediateSave/);
   }
   assert.match(targetChanged, /pl && flagEnvironmentAutoEnabling && currentPlanetName!=loc\.planetName/);
-  for (const preference of ['atmosphere', 'fog']) {
-    assert.match(targetChanged, new RegExp(`pl->hasAtmosphere\\(\\) && conf->value\\("landscape/flag_${preference}"`));
-  }
+  const autoPlanet = block(targetChanged, 'if (pl && flagEnvironmentAutoEnabling && currentPlanetName!=loc.planetName)');
+  assert.match(autoPlanet, /const bool hasAtmosphere = pl->hasAtmosphere\(\)/);
+  assert.match(autoPlanet, /setFlagAtmosphereAndFogForEnvironment\(/);
+  assert.match(autoPlanet, /hasAtmosphere && conf->value\("landscape\/flag_atmosphere"/);
+  assert.match(autoPlanet, /hasAtmosphere && conf->value\("landscape\/flag_fog"/);
+  // Automatic switching must not call the persisting user-action setters.
+  assert.doesNotMatch(targetChanged, /setFlagAtmosphere\(|setFlagFog\(/);
+  const observerBranch = block(targetChanged, "if (loc.role==QChar('o'))");
+  assert.match(observerBranch, /setFlagAtmosphereAndFogForEnvironment\(false, false\)/);
+  assert.doesNotMatch(observerBranch, /setFlagAtmosphere\(|setFlagFog\(/);
+
+  const atmosphereInternal = block(landscape, 'void LandscapeMgr::setFlagAtmosphereInternal(');
+  assert.match(atmosphereInternal, /if \(saveToConfig\)\s+StelApp::immediateSave\("landscape\/flag_atmosphere"/);
+  const fogInternal = block(landscape, 'void LandscapeMgr::setFlagFogInternal(');
+  assert.match(fogInternal, /if \(saveToConfig\)\s+StelApp::immediateSave\("landscape\/flag_fog"/);
+  assert.match(block(landscape, 'void LandscapeMgr::setFlagAtmosphere(const bool displayed)'),
+    /setFlagAtmosphereInternal\(displayed, true\)/);
+  assert.match(block(landscape, 'void LandscapeMgr::setFlagFog(const bool displayed)'),
+    /setFlagFogInternal\(displayed, true\)/);
+  assert.match(block(landscape, 'void LandscapeMgr::setFlagAtmosphereAndFogForEnvironment('),
+    /setFlagAtmosphereInternal\(showAtmosphere, false\)[\s\S]*setFlagFogInternal\(showFog, false\)/);
+
+  // The other automatic paths (return home, Location dialog preview) use the
+  // same non-persisting route.
+  assert.match(block(core, 'void StelCore::returnToHome('),
+    /setFlagAtmosphereAndFogForEnvironment\(/);
+  assert.doesNotMatch(block(core, 'void StelCore::returnToHome('),
+    /setFlagAtmosphere\(|setFlagFog\(/);
+  const locationFields = block(dialog, 'void LocationDialog::setFieldsFromLocation(');
+  assert.match(locationFields, /setFlagAtmosphereAndFogForEnvironment\(/);
+  assert.doesNotMatch(locationFields, /setProperty\("atmosphereDisplayed"|setProperty\("fogDisplayed"/);
 });
 
 test('coordinate conversion rejects invalid, nonfinite and out of range input before writing', () => {
@@ -110,7 +199,8 @@ test('same-planet fine tuning cannot reset the initial view or choose another la
   assert.match(cleanup, /movementMgr->resetInitViewPos\(\)/);
   assert.equal(switchPlanet.match(/resetInitViewPos\(/g)?.length, 1);
   assert.match(switchPlanet, /if \(planetChanged \|\| parts\.size\(\) >= 4\)\s+core->moveObserverTo/);
-  assert.match(switchPlanet, /planetChanged && landscapeMgr && landscapeMgr->getFlagLandscapeAutoSelection\(\) \? loc\.planetName : QString\(\)/);
+  assert.match(switchPlanet,
+    /autoLandscape = planetChanged && landscapeMgr &&\s+landscapeMgr->getFlagLandscapeAutoSelection\(\)/);
 });
 
 test('ordinary destinations clear selection of the home planet and observers reuse core tracking', () => {

@@ -1,5 +1,19 @@
 > **身份图例**：本文件真机记录中出现的 `com.cnchensh.stellarium` 是**本机调试签名身份**（本机 DevEco 自动生成，非发布身份）；发布身份为 `com.joinother.skyinstrument`。构建脚本 `build-ohos-hap-windows.ps1 -Install` 从产物 `pack.info` 读取实际包名，仓库不写死任何签名身份（见 `docs/harmonyos/release/BUNDLE-IDENTITY-CLEANUP.md`）。
 
+## [2026-11-20] 面板底部留白收口、时间轮竖向滚动与设置单滚动修复
+
+- **修改文件：** `harmonyos/ets-source/pages/MainWindowNativeNode.ets`、`harmonyos/ets-source/panels/panels/TimePanel.ets`、`harmonyos/ets-source/panels/panels/MorePanel.ets`、`harmonyos/ets-source/panels/panels/SettingsPanel.ets`、`harmonyos/ets-source/panels/time/TimeWheelCanvas.ets`、`harmonyos/ets-source/panels/time/TimeWheelScrubber.ets`、`harmonyos/ets-source/state/TimeWheelController.ets`、`harmonyos/ets-source/common/derive/actions.ets`、`harmonyos/ets-source/common/derive/labels.ets`、`scripts/test-ohos-compact-panel-geometry.mjs`、`scripts/test-ohos-time-panel.mjs`、`scripts/test-ohos-location-panel.mjs`、`scripts/test-ohos-settings-choice-motion.mjs`、`docs/harmonyos/CHANGELOG.md`。
+- **核心改动：**
+  1. **时间面板底部收口：** 紧凑/平板高度不再用固定的 `30 + header + 14` 常量叠加，改为实际 `panelTopChromeHeight()` + 实测时间轮/速度块高度 + 8vp（平板 18vp）底部留白。此前手算比实际 chrome 多出约 20vp，会把下一行快捷 chips 的顶部露在面板底边。
+  2. **「更多功能」按内容收口：** `MorePanel` 通过 `onAreaChange` 上报实测内容高度，紧凑态以 `chrome + 内容` 收口且不超过 0.9 吸附高度；未测得高度时保留原 0.9 兜底。面板底部滚动留白按类型收紧（时间 20vp、快捷 16vp、其余 50vp），更多面板打开时按内容收口、滚到末尾保留 50vp 尾部。
+  3. **时间轮竖向滚动手势：** 时间轮只处理横向拖动。竖向滑动不暂停时间、不改时间，直接交给面板 Scroll；轮盘 Canvas/容器均不参与命中测试，宿主按 `onWheelRect` 上报的窗口矩形做坐标路由，横向确认后才开启触感。修复手指落在时间轮上向下翻看时面板不动、或轻微 x 抖动误改时间的问题。
+  4. **滚动模糊状态更新：** `updatePanelScrollBlur` 合并到下一轮事件循环，避免 `onDidScroll` 在 build/布局阶段直接写 `@State` 触发 “State variable changed during render” 并中断本帧命中测试（表现为面板上滑时星图仍跟着拖动）。
+  5. **设置全部标签单滚动：** 设置面板不再持有内嵌 `Scroll(this.contentScroller)`，所有标签共用宿主面板 Scroll；根高度改为 `auto`、内容区 `layoutWeight(0)`，切换标签时宿主把当前面板滚回顶部。移除只有面板跳转的「工具」标签，工具与数据统一从更多面板进入；切到「关于」时顶部标题栏显示「关于」。
+  6. **更多功能入口顺序：** 「系统」分组中「设置」与「工具与数据」交换位置，设置在上。
+- **验证与真机实测（`192.168.3.95:36717`，`com.joinother.skyinstrument`）：**
+  - 主机验证：面板/时间/设置/预设 69 项、观测环境回归 100 项自动化测试全部通过；`check-ohos-ui-contract.mjs`（37 面板 / 60 锚点）、`check-ohos-i18n.mjs`、`check-ohos-command-catalog.mjs`（431 命令）通过。
+  - 真机核验：时间面板内容在轮盘区域上滑可正常滚动且 JD 不变；轮盘横向拖动仍可改时间；设置主标签、管理扩展、关于均通过宿主面板整体滚动（标签栏随内容移出）；关于标题栏显示「关于」；工具标签已移除；更多面板顺序为「设置 → 工具与数据」，打开时无底部空白、滚到末尾保留 50vp 尾部；滚动时无 “FIX THIS APPLICATION ERROR”。
+
 ## [2026-11-20] 插件体系整改阶段 1：全新鸿蒙风格「插件中心」、补齐三大 Hub 缺失入口与修复全量插件落地路由
 
 - **修改文件：** `harmonyos/ets-source/panels/settings/PluginCenterSection.ets`（新增）、`harmonyos/ets-source/panels/panels/SettingsPanel.ets`、`harmonyos/ets-source/common/derive/labels.ets`、`harmonyos/ets-source/common/derive/actions.ets`、`harmonyos/ets-source/capability/PluginFeatureController.ets`、`harmonyos/ets-source/pages/MainWindowNativeNode.ets`、`docs/harmonyos/CHANGELOG.md`。
@@ -692,6 +706,115 @@
   - **冷启动重进阻塞：** 3 个月 `getAstronomyCalendarEvents` 由 ~14.7s 降至 `sky-revealed` 后约 **1.0s** 完成（总计 ~1.6s，月 1/2/3 分别约 0.48s/0.32s/0.38s），`sky-revealed` 后零 `QtWatchdog` 告警，立即拖动响应正常；退后台再切前台 `onForeground` 仅 **140ms**，零阻塞。
 - **边界与未覆盖项：** 未改签名或构建 Release 包；剩余常规画面单帧 draw 耗时（约 18–23ms @ 2560×1600）主要在 `ConstellationMgr`（7–11ms）和 `NebulaMgr`（4–5ms），与时间倍率无关，仍记录于 `KNOWN-ISSUES.md`；未提交、未推送。
 
+## [2026-11-20] OHOS 开发记录 - 修复观测星球下拉框为空
+
+- **修改文件：** `harmonyos/ets-source/state/SessionToolStore.ets`。
+- **原因：** rebase 到 `90513` 时 `loadPlanetList()` 丢掉了 `this.planetList = r.planets` 赋值；新的 `sortObserverPlanets()` 只从空 `planetList` 生成条目，导致位置面板“观测星球”下拉框没有选项、无法切换天体。
+- **修复：** 恢复引擎返回列表的赋值后再排序；`planetList` 与 `observerPlanets` 重新保持同名同序。
+- **测试覆盖：** `scripts/test-ohos-observer-location.mjs` 已覆盖 `loadPlanetList` 的枚举与排序（修复前 2 项失败，修复后 10/10）；ArkUI `Select` 本体仍属真机视觉/交互验证，不在该单测范围内。
+- **回归：** 观测点 10/10、观测星球契约 16/16、大气 14/14、图层预设 8/8、巡天 UI 5/5；UI 契约、430 项命令目录通过。
+
+
+## [2026-11-19] OHOS 开发记录 - 目镜“选择天体”夜间配色
+
+- **修改文件：** `harmonyos/ets-source/panels/panels/OcularsPanel.ets`。
+- **问题与修复：** 夜间主题下“选择天体”按钮使用 `textStrong`（夜间 `#FF2222`）叠在 `accent`（夜间 `#F00000`）红底上，文字与背景几乎同色。改为主题的 `onAccent`（夜间 `#1A0505`、日间浅色），红底深色字，保持可读。
+- **验证：** 夜间模式打开「目镜模拟」，未选择目标时的提示卡按钮显示深色“选择天体”文字，确认可读。
+
+
+## [2026-11-19] OHOS 开发记录 - 图层预设系统
+
+- **修改文件：** `harmonyos/ets-source/common/types/MainWindowModels.ets`、`harmonyos/ets-source/state/LayerPresetStore.ets`、`harmonyos/ets-source/panels/layers/LayerPresetBar.ets`、`harmonyos/ets-source/panels/layers/LayerPresetTab.ets`、`harmonyos/ets-source/panels/layers/LayerTabs.ets`、`harmonyos/ets-source/panels/panels/LayersPanel.ets`、`harmonyos/ets-source/capability/LayerController.ets`、`harmonyos/ets-source/pages/MainWindowNativeNode.ets`、`harmonyos/ets-source/capability/I18n.ets`、`scripts/test-ohos-layer-presets.mjs`、`scripts/test-ohos-pointer-surveys-ui.mjs`。
+- **预设定义：** 5 个内置预设（纯净星空、观测辅助、摄影构图、星图研习、绚丽星空）+ 最多 3 个完全自定义预设。每个预设保存完整场景快照：全部标记/内容图层 action、绚丽大气、现实星等、银河亮度、夜间模式、观测模式、赤道仪、寻星镜、CCD、深空标签、3D 星座艺术；星等限制为可选字段，只有明确设置时才在应用时改写。
+- **纯净星空：** 星空/行星/深空/银河/大气/地面开启，银河亮度 6，非绚丽大气、现实星等。**观测辅助：** 保留大气与地面，非绚丽大气、现实星等，星座标签、赤道坐标、天体详情观测模式、夜间模式、寻星镜、赤道仪；星等限制设为最高 21 等。**摄影构图：** 保留大气与地面，非绚丽大气、现实星等，星座/星群标签、赤道坐标、CCD 取景框；星等限制同样设为最高 21 等。其余预设不改变当前星等限制。**星图研习：** 只清除大气、地面、动态雾山等遮挡，保留当前投影与视场。**绚丽星空：** 放在末尾，基于纯净星空，绚丽大气、动态雾山、3D 星座艺术，关闭现实星等，打开星座连线与星座标签，银河亮度 6。
+- **选中语义：** 手动修改图层/大气/银河/地景后预设保持选中，并以 `*` 标记（不再提供独立“保持”开关）；选中态与 `*` 随重启保留。应用预设期间通过 `busy/applying` 抑制手动变更标记。**查看修改项**在预设有未保存的手动修改时捕获当前场景并与预设快照对比（加载期间显示“正在读取当前设置…”），不再出现“有星号但修改项为空”；手动改回与预设一致时自动清除星号。
+- **管理页：** 图层面板新增「图层预设」页签。保存当前场景到所选预设、把所选预设另存为自定义、自定义预设改名、每行启停、详情（对比出厂快照）、每行还原初始状态、删除自定义。保存类按钮置于页面顶部；点击行名称即应用该预设，高亮行代表当前生效的预设，不再提供独立“应用”按钮；详情/改名/还原/删除折叠在行内 `⋯` 展开区，行高保持 42/50 vp 标准功能行；顺序用长按 `≡` 拖动调整。重命名使用独立居中浮层（`bindContentCover`），避免行位于面板底部时输入框和确认按钮被面板边界/键盘遮挡。自定义上限 3 个，命名空白时回退为“自定义”。自定义预设创建时记录初始快照；之后“保存当前设置到所选预设”仍以 `*` 标记相对创建状态的修改，并支持“还原初始状态”。
+- **预设条：** 面板顶部保留“图层预设”小字标题与可横向滚动的预设 chip，点击即应用；移除旧“保持”开关。自定义预设改名后 chip 立即刷新（名称纳入 `ForEach` key）；打开图层面板时若选中项不在可视区，自动滚动露出一次（末项选中时滚到最右）；之后手动横向滚动完全由用户控制，松手不会被弹回选中项。窄屏标签条在打开面板时自动滚到末端，避免「巡天/图层预设」页签不可见。
+- **状态与持久化：** `LayerPresetStore` 只做状态、差异与顺序；Preferences 读写、引擎快照捕获/应用留在宿主。快照应用走 `setActionStates`、`setSkyDisplaySetting`、星等限制、银河亮度、深空标签、3D 星座艺术、夜间模式、观测模式、赤道仪与 Oculars 插件（寻星镜/CCD）。手动拖动星等滑杆现在也会把当前预设标记为已修改。持久化键 `stellarium_layer_presets`，版本 1，保存 `selectedId/selectedDirty/presets`；内置出厂快照不落盘，重启后仍可还原。启动期 `getHostContext` 尚未就绪时读取失败会重试（最多约 2 秒），不再把失败误判为“没有预设”而回退出厂列表、继而覆盖自定义预设。
+- **CLI：** `setLayerTab` 允许 `0..7`，可用 `openUiPanel layers` + `setLayerTab 7` 打开预设管理页。
+- **构建与安装：** ArkTS HAP `BUILD SUCCESSFUL`（806.4 MB），覆盖安装到 `192.168.3.95:36717` 并启动成功。
+- **真机验证：** 5 个预设 chip 与高亮正常；展开行显示详情/还原，点击行名称即应用并保持高亮；`摄影构图` 修改详情显示“银河亮度 3 → 6、夜间模式 关 → 开”，还原后 `*`、还原按钮与修改项消失并提示“预设已还原到初始状态”；自定义预设展开显示应用/重命名/删除，输入 `TestSky` 后行名与顶部 chip 同步更新；长按 `≡` 拖动把自定义预设从末位移动到摄影构图之后；`纯净星空` 应用后手动打开绚丽模式，选中保持并出现 `*`；重启后自定义名称、拖动顺序与“摄影构图已还原”状态保持。
+- **回归：** `test-ohos-layer-presets.mjs` 5/5；UI 契约（37 面板 / 61 锚点）、i18n、命令目录检查通过。重启后自定义预设、名称与顺序保持；选中末项时顶部预设条自动滚动露出选中 chip；重命名改为居中浮层后输入框与确认按钮不再被面板边缘遮挡。
+
+
+## [2026-11-19] OHOS 开发记录 - 自动大气/雾偏好修复与地景自动选择
+
+- **修改文件：** `src/core/modules/LandscapeMgr.hpp`、`src/core/modules/LandscapeMgr.cpp`、`src/core/StelCore.cpp`、`src/gui/LocationDialog.cpp`、`src/StelMainView.cpp`、`src/StelOhosCommandCatalog.hpp`、`harmonyos/ets-source/pages/MainWindowNativeNode.ets`、`harmonyos/ets-source/capability/LocationController.ets`、`harmonyos/ets-source/capability/LayerController.ets`、`harmonyos/ets-source/capability/I18n.ets`、`harmonyos/ets-source/panels/layers/LayerViewTabs.ets`、`harmonyos/ets-source/panels/location/CityChipsRow.ets`、`harmonyos/ets-source/panels/panels/PlacePanel.ets`、`docs/harmonyos/CLI.md`、`scripts/test-ohos-observer-planet-contract.mjs`、`scripts/test-ohos-location-panel.mjs`、`scripts/test-ohos-observer-location.mjs`、`scripts/test-ohos-place-atmosphere.mjs`。
+- **自动大气/雾根因：** `LandscapeMgr::onTargetLocationChanged()` 在自动环境切换时调用 `setFlagAtmosphere()` / `setFlagFog()`，而这两个 setter 会把运行时结果立即写回 `landscape/flag_atmosphere` / `landscape/flag_fog`。切到无大气天体时“自动关闭”被误存为用户偏好，返回地球时读取到的仍是 false。观测点角色、`returnToHome()` 与 PC 位置对话框预览也走同一路径。
+- **核心修复（单独 commit `418811695c`）：** 新增 `LandscapeMgr::setFlagAtmosphereAndFogForEnvironment()`，自动切换只改运行时状态、不写配置；用户主动切换仍由原 setter 持久化。`StelCore::returnToHome()` 与 `LocationDialog` 预览改用同一入口。
+- **OHOS 固定自动开启：** 新增 `getEnvironmentAutoEnable` / `setEnvironmentAutoEnable` / `applyEnvironmentDefaults`；启动时强制 `viewing/flag_environment_auto_enable=true` 并落盘（OHOS 无 PC 位置对话框中的对应开关）。
+- **联动钩子：** `LocationController` 中“返回地球强制开大气”的旧钩子已移除；真机验证仅靠核心修复即可按用户偏好恢复大气。
+- **已保存地点：** `CityChipsRow` 的已保存/最近条目不再直接显示英文 `planet`，改经 `SessionToolStore.observerPlanetLabel()` 本地化（地球、月球、火卫一等与观测星球下拉一致）；持久化数据仍保存英文名，不影响地点身份键。组件直接 `@ObjectLink SessionToolStore`，并把本地化标签纳入 `ForEach` key，确保面板打开后才异步到达的星球列表能刷新已渲染行（真机验证曾出现 `Atlas` 保持英文的旧行）。
+- **地景面板排版：** “随观测星球自动选择地景”“动态雾山”“俯视时地景淡出”统一使用 `LayerSwitchRow`，说明文字移到开关行外并统一为 11 号次级文字；俯视淡出不再使用自定义行。地景透明度控件从页尾移到地景列表之前。自动地景与雾山说明同步精简。
+- **自动地景（Phase 1）：** 默认开启“随观测星球自动选择地景”，Earth 保留用户地景并在离开时记忆，无匹配天体回落 `zero`；手动选择不改自动开关。非地球观测点的动态雾山行置灰并提示“动态雾山仅在地球可用”，保留原偏好。
+- **构建与安装：** 引擎 + ArkTS HAP `BUILD SUCCESSFUL`（806.2 MB），覆盖安装到 `192.168.3.95:36717` 并启动成功。
+- **真机验证：** 地球大气/雾开启（配置均 true）→ 切月球后运行时大气/雾关闭、两份配置仍为 true → 返回地球后大气/雾恢复 true；先在地球手动关闭大气（配置 false）再往返月球，返回地球保持关闭，证明自动切换不再覆盖用户偏好。启动后 `getEnvironmentAutoEnable.enabled=true`。已保存位置现有条目“土卫十五的日出”的星球行由 `· Atlas` 刷新为 `· 土卫十五`，与观测星球下拉一致。钩子移除后的最终 HAP 再次往返月球，返回地球大气/雾恢复 true。地景面板截图确认自动地景与俯视淡出说明位于开关行外，俯视淡出复用统一开关行，透明度位于“地景列表”之前。验证后已恢复地球、大气开启、自动环境开启。
+
+## [2026-11-18] OHOS 开发记录 - 观测星球排序、位置标签共用与步进按钮右对齐
+
+- **修改文件：** `state/SessionToolStore.ets`、`common/types/StellariumTypes.ets`、`capability/LocationController.ets`、`pages/MainWindowNativeNode.ets`、`panels/layers/LayerViewTabs.ets`、`src/StelMainView.cpp`、`scripts/test-ohos-observer-location.mjs`、`scripts/test-ohos-observer-planet-contract.mjs`、`scripts/test-ohos-place-atmosphere.mjs`。
+- **观测星球排序：** `getObserverPlanetList` 为每个条目增加 `type`（`Planet::PlanetType` 的稳定字符串）与 `parent`（卫星的母天体英文名），枚举本身仍不过滤。`SessionToolStore` 据此重排 `planetList` / `observerPlanets`：地球、月球、地球全览点固定前三 → 太阳与八大行星（行星 → 卫星 → 全览点，按行星顺序）→ 矮行星/小行星 → 彗星、星际天体、人造天体等其他小天体。真机下拉前 11 项为：地球、月球、地球全览点、太阳、水星、金星、火星、火卫一、火卫二、火星全览点、木星。
+- **本地化名称共用：** 位置面板的位置条目、全屏选点顶部标题/搜索占位/离线分区不再只走 `planetZh` 的十大天体表，改用 `SessionToolStore.observerPlanetLabel`，与下拉列表同源。真机选择火卫一后位置条目显示“自定义位置 · 火卫一”；选择 `(65) 原神星` 时显示“自定义位置 · (65) 原神星”。验证后已恢复地球并重新自动定位。
+- **步进按钮右对齐：** 银河亮度与光污染等级行统一为“标题在左、中间留白、−/数值/+ 控件整体贴右”，步进按钮与数值不再分散在行内。真机截图确认两行效果。
+- **构建结果：** 引擎 + ArkTS HAP `BUILD SUCCESSFUL`（806.2 MB），已覆盖安装到 `192.168.3.95:36717` 并启动成功。
+- **验证结果：** 位置/地图/大气/观测星球契约单测 50/50；i18n、UI 契约（61 锚点 / 315 文件）、423 项命令目录检查通过。全屏选点标题与位置条目共用同一 `planetLabel` 注入，源码测试已锁定布线。
+
+## [2026-11-18] OHOS 开发记录 - 大气回包 pending 修复、温度符号合并与光污染 ± 按钮
+
+- **修改文件：** `capability/AstroCalcController.ets`、`pages/MainWindowNativeNode.ets`、`panels/layers/ObservationAidBlock.ets`、`panels/location/PlaceEnvironmentSection.ets`、`panels/layers/LayerViewTabs.ets`、`state/AtmosphereStore.ets`、`capability/I18n.ets`、`scripts/test-ohos-place-atmosphere.mjs`。
+- **根因修复（回包 pending）：** `setAtmosphereParams` 在原生渲染泵上执行，第一次同步 `port.request()` 返回 `{ok:false,error:'pending'}`；旧代码把这个 pending 回包直接交给 `AtmosphereStore`，所以原生值已更新、应用内按钮/手动行却一直停在旧值。改为 `port.requestInteractive()` 轮询到最终回包后再写 store。真机日志确认 `[atmo] request → result ok=1 → store 977.3/13.0`。
+- **手动行刷新：** `ObservationAidBlock` 的气压/气温/消光行原先通过带参数的 `@Builder valueRow(label, valueText, target)` 传格式化字符串；`@Builder` 参数按值捕获，native 回包或滚轮确认后不会刷新。改为三个无参数 builder，直接读取 `this.atmoPressure/atmoTemperature/atmoExtinction`。真机验证：应用后手动气压行从 1013.0 变为 977.3；滚轮把气温改为 15.0 后手动行同步显示 15.0。
+- **温度符号合并：** 取消独立符号轮，整数轮改为 `-60..-1, -0, 0..60`；`-0` 用于表示 -0.1..-0.9，仍可精确设置负小数。滚轮变为“整数（含负号）+ 小数”两列。
+- **光污染等级：** 按用户要求改为「− / Bortle N / +」按钮逐级跳转，移除滑杆；点击后本地 store 与 native 同步，真机验证 Bortle 1 → 2。
+- **当前大气模型行：** `place_env_current_model` 的占位符从 `%s` 改为 `%1/%2`，与 `I18n.format` 的替换规则一致；此前真机显示原始 `%s`。
+- **重启后回读：** `loadAtmosphereParams()` 原先用同步 `port.request()`；面板若在启动时被恢复挂载，会早于 Qt 引擎就绪，首个失败回包被 `AtmosphereStore` 丢弃，手动行一直是 store 默认值。改为 `requestWhenReady()` 重试，并在 `setPanel()` 每次打开位置/图层页时重新回读，因此面板复用（不重建）也能拿到引擎值。
+- **构建结果：** ArkTS HAP `BUILD SUCCESSFUL`（806.2 MB）。已覆盖安装到 `192.168.3.95:36717` 并启动成功。
+- **验证结果（真机 `uitest` + 语义 CLI）：** 重启后打开「图层 → 天空」，`当前大气模型` 与手动行显示 `812.3 hPa / -12.5 °C / 0.21`，与 `getAtmosphereParams` 一致；气温滚轮打开即选中 `-12 / 5` 两列并预览 `-12.5 °C`，滚动确认后手动行与 native 同步为 `-12.2 °C`；点「应用到大气模型」后立即变为 `977.3 hPa · 13.0 °C`、按钮“已应用到大气模型”、手动行同步，native 回读一致；用 CLI 改为 `800/-10/0.30` 后关闭再打开面板，界面同步显示 `800.0 hPa / -10.0 °C / 0.30`；位置面板的同一模块也显示相同当前模型；光污染 −/+ 实测 Bortle 2 → 3 → 2。验证后已把大气参数恢复为 `812.3 / -12.5 / 0.21`。相关单测 22/22，i18n、UI 契约（61 锚点 / 315 文件）与 423 项命令目录检查通过。
+
+## [2026-11-18] OHOS 开发记录 - 滚轮弹层主题、观测环境底衬与光污染拖动修复
+
+- **修改文件：** `panels/layers/ObservationAidBlock.ets`、`panels/location/PlaceEnvironmentSection.ets`、`panels/layers/LayerViewTabs.ets`、`panels/layers/LayerSwitchRow.ets`、`panels/panels/LayersPanel.ets`、`capability/LayerController.ets`、`capability/I18n.ets`、`scripts/test-ohos-place-atmosphere.mjs`。
+- **观测环境模块：** 位置面板与「图层 → 天空 → 观测条件」共用 `PlaceEnvironmentSection`；整块增加 `c.soft` 底衬 + 边框 + 圆角。新增“当前大气模型：x hPa · y °C”行和点击应用后的本地快照，应用后按钮与数值立即更新，不再只依赖宿主回包。图层侧把观测点海拔与 `earthObserver` 从宿主经 `LayersPanel → LayerSkyTab → ObservationAidBlock` 传入。
+- **滚轮弹层：** 弃用系统 `showTextPickerDialog`（浅色系统主题下白底白字），改为 `bindContentCover` + 应用内 `TextPicker` 多列卡片：气压整数/小数、气温符号/整数/小数、消光整数/两位小数。卡片背景 `#101E2C`（夜间 `#150505`），文字使用 `ThemeSlots.text/sub/tertiary`，夜间自动红色；取消/确定按钮与面板同风格。
+- **光污染滑杆：** 移除“−/+”按钮，只保留滑杆。拖动过程中仅写本地 `LayerViewStore.bortleScale`，`SliderChangeMode.End/Click` 时才发一次 native 请求；`setSkyDisplaySetting` 不再在 `bortleScale` 成功回包后整包 `refreshState()`，避免旧回包把滑块弹回。滑杆轨道改用 `softStrong`，在 `c.bg` 底衬上可见。
+- **行视觉统一：** 天空页星等、银河亮度、流星率、黄道光、光污染、FOV 标记、地景透明度、太阳系轨迹重置等行统一为 `c.bg` 底衬 + `dividerSoft` 边框 + 42/50 vp 高 + 10/8 内边距 + 6 vp 间距 + 14/13 字号；`LayerSwitchRow` 增加可选 `hint` 行，大气折射开关复用它，字号与 Toggle 尺寸和普通开关行一致。
+- **修改原因：** 用户反馈观测环境模块缺少整体底衬、点击应用后数值未刷新、滚轮弹层白底白字、光污染滑杆拖动一次后长时间不可再拖且会跳到另一端、补充底衬的行与原有行高度/字体/间距不一致。
+- **构建结果：** ArkTS HAP `BUILD SUCCESSFUL`（806.2 MB；本轮无 C++ 修改，沿用上一轮已重编的引擎）。已覆盖安装到 `192.168.3.95:36717` 并启动成功。
+- **验证结果：** `test-ohos-place-atmosphere.mjs` 13/13、观测点切换 22/22；i18n、UI 契约、命令目录检查通过。真机滚轮配色、应用刷新与光污染拖动待用户确认。
+
+## [2026-11-18] OHOS 开发记录 - 大气参数滚轮/气压计、图层底衬与设置页整理
+
+- **修改文件：** `panels/layers/ObservationAidBlock.ets`、`panels/layers/LayerViewTabs.ets`、`panels/panels/SettingsPanel.ets`、`capability/LocationController.ets`、`capability/LayerController.ets`、`pages/MainWindowNativeNode.ets`、`capability/I18n.ets`、`src/StelMainView.cpp`、`scripts/test-ohos-place-atmosphere.mjs`、`scripts/test-ohos-observer-location.mjs`。
+- **大气配置：** 气压、气温、消光三项不再使用滑杆，改为点按数值/「调整」弹出多列 `TextPicker` 滚轮：气压 `0..1100` + 小数 `0..9`，气温 `− / +` 符号 + `0..60` 整数 + `0..9` 小数（完整支持 -60.0..60.0 °C），消光 `0..1` + 两位小数 `00..99`。气压行新增「气压计实测」按钮，读取一次 `sensor.once(SensorId.BAROMETER)` 并直接写回；失败/无气压计时显示提示。模块内所有行加 `rowBg` 底衬。
+- **持久化：** `setAtmosphereParams` 在写回 drawer 后调用 `StelApp::immediateSaveNow` 写入 `landscape/pressure_mbar`、`landscape/temperature_C`、`landscape/atmospheric_extinction_coefficient`，与 `StelSkyDrawer` 启动读取的键一致，重启不再丢失。
+- **图层面板：** 天空页星等、银河亮度、流星率、黄道光、光污染、FOV 标记、地景透明度以及太阳系轨迹重置等非 toggle 行补上 `rowBg` 底衬；光污染等级增加「− / +」按钮，滑杆仍保留，避免密集面板中难以拖动。
+- **设置页：** 「视角与导航」移除底部「保存全部设置」按钮（关闭应用已自动保存），保留「恢复默认设置」；最大视场角滑块从页面末尾移到「启动视角」之后、「导航控制」开关之前。
+- **返回地球：** `LocationController.commitLocation` 在观测星球由外星切回地球时调用新 hook `enableAtmosphereOnEarth()`，经 `LayerController.enableAtmosphereLayer()` 自动打开大气层；仅星球变化时触发，普通地球定位不会强制改开关。
+- **修改原因：** 用户要求把气压计纳入大气配置、优化温度负值范围、将三项手动输入改为整数/小数分离的弹窗滚轮、修复大气参数重启丢失、补齐图层非 toggle 行底衬并解决光污染等级不可调、移除冗余保存按钮、把最大视场角上移、返回地球时联动大气层。
+- **构建结果：** 引擎（含 `src/StelMainView.cpp`）+ ArkTS HAP `BUILD SUCCESSFUL`（806.2 MB，`libstellarium.so` 已重新编译并部署）。设备 `192.168.3.95:36717` 当前离线，未安装。
+- **验证结果：** 相关单测 58/58 通过（含 22 项位置/大气与 5 项观测点切换）；i18n、UI 契约（37 面板 / 61 锚点 / 315 文件）、423 项命令目录检查通过。真机滚轮弹窗、气压计读数、重启持久化与返回地球联动待安装确认。
+- **备注：** 大气参数持久化走 `config.ini` 的 `landscape/*` 键；无新增联网或权限。
+
+## [2026-11-18] OHOS 开发记录 - 外星选点标签避让、星空背景与点选热区
+
+- **修改文件：** `panels/location/LocationFullScreenMap.ets`、`resources/base/media/ic_map_dot.svg`、新增 `resources/base/media/space_starfield.png`、新增 `scripts/build-ohos-starfield-background.mjs`、`scripts/test-ohos-place-atmosphere.mjs`。
+- **标签避让：** 先用 Map Kit 自带的 `MarkerOptions.priority`（数值越小优先级越高）让地图在图标碰撞时保留地点库靠前的任务地点；再用 `Projection.toScreenLocation()` 把每个地点投到屏幕坐标，按估算的文字矩形做贪心避让，重叠时只调用 `Marker.setAnnotationVisible(false)` 隐藏文字、保留圆点；当前选中地点始终排在最前。3D 球面模式下按与相机目标的角距剔除背面地点（>84°），避免背面标签投到正面。`cameraIdle` 后重算；不支持 `setAnnotationVisible` 的旧地图服务回退为隐藏整个 Marker。Map Kit 自带的碰撞只按图标占位判断，不计算文字矩形，因此必须补这一层文字级避让。
+- **星空背景：** 用 `SphereParams.backgroundImage` 为 `setSphereMapEnabled` 的离线地球/外星 3D 球体增加星空背景；贴图由确定性脚本生成（2048×1024 等距圆柱星场 + 银河带，0.65 MiB），解码为 PixelMap 后传入，失败时只记录日志并回退到地图默认背景，不影响球体纹理。
+- **点选热区：** `mapClick` 位置先做 44 vp 的最近地点吸附（仅当前可见半球、屏幕范围内），点圆点附近或标签文字都能选中对应地点；圆点图标从 24 px 放大到 32 px；当前观测点的红色主标记改为 `clickable:false`，不再吞掉落在其覆盖范围内的地图点击。
+- **修改原因：** 用户反馈外星观测点标签互相重叠，且标识太小不易点中；离线地图（地球与外星）缺少在线地图的星空背景。
+- **构建结果：** ArkTS-only 构建 `BUILD SUCCESSFUL`（806.1 MB）。已覆盖安装到 `192.168.3.95:36717` 并 `start ability successfully`（进程存活）。
+- **验证结果：** `test-ohos-place-atmosphere.mjs` 9/9；位置/地图回归合计 37/37；i18n、UI 契约（37 面板 / 61 锚点 / 315 文件）、423 项命令目录检查通过。真机标签避让密度、星空背景与 44 vp 吸附手感待用户确认。
+- **备注：** 新增贴图为本地静态资源，无新增联网、权限或签名配置。
+
+## [2026-11-17] OHOS 开发记录 - 位置面板观测环境与外星选点标签
+
+- **修改文件：** 新增 `common/derive/atmosphere.ets`、`capability/BarometerReader.ets`、`panels/location/PlaceEnvironmentSection.ets`、`resources/base/media/ic_map_dot.svg`、`scripts/test-ohos-place-atmosphere.mjs`；修改 `panels/panels/PlacePanel.ets`、`panels/location/LocationFullScreenMap.ets`、`state/LocationPickerStore.ets`、`pages/MainWindowNativeNode.ets`、`capability/I18n.ets`、`docs/harmonyos/json/ui-contract-baseline.json`。
+- **修改内容：** 位置面板新增地球观测点的「观测环境」卡片：按国际标准大气（ISA）从海拔推算站点气压与基准气温（`1013.25 hPa`、`15 °C`、`0.0065 °C/m` 递减率，气压按 `(1 - 2.25577e-5 h)^5.25588`），也可切到「气压计测量」用 `sensor.once(SensorId.BAROMETER)` 读取一次站点气压；读数失败或 2 秒超时自动回退海拔推算。结果需按「应用到大气模型」显式提交，保留当前消光值；按钮显示“已应用”状态，避免编辑海拔时反复发 native 命令。外星观测点不显示该卡片。全屏地图新增外星观测点标记与名称标签：从位置库按星球列出全部离线地点（月球任务点、火星/金星/土卫六/贝努着陆点等），用 Map Kit `Marker.annotations` 画白字黑描边标签；旧地图服务不支持 annotations 时回退为普通 title 标记。点按标记或标签会把该地点设为待应用选点、同步主标记与底部操作卡，再按“选此点”应用；`planetPlaces()` 使用模块级缓存，不依赖层级列当前选择，也不在宿主 build 期间写 `@Observed` 字段。
+- **修改原因：** 用户要求位置面板支持“基于海拔高度的气压推算/气压计直接测量”“基于海拔高度的基准气温推算”，并在全屏选点界面为外星观测点提供可点选的标识与名称标签。
+- **构建结果：** ArkTS-only 构建 `BUILD SUCCESSFUL`（805.4 MB，`-SkipEngine -SkipResources`；构建脚本已同步新增 SVG 与三个新 ETS 文件）。已覆盖安装到 `192.168.3.95:36717`（`com.joinother.skyinstrument`），`start ability successfully`，进程存活。
+- **验证结果：** 新增 `test-ohos-place-atmosphere.mjs` 6/6 通过（ISA 公式与夹取范围、一次性气压计与超时、环境卡片与应用回调、地球限定、`planetPlaces` 与层级选择解耦、全屏标签/点选接线）；位置/地图/大气既有测试合计 36/36 通过；i18n 检查、423 项命令目录检查通过；UI 契约更新为 37 面板 / 61 锚点（新增 `place-environment`、`place-environment-apply`）/ 315 文件。安装后 `getAppState` 返回 `ok:true`（FOV 60°、fps 约 27、zh_CN）；环境卡片实际布局、气压计读数与外星标签点选待用户真机确认。
+- **备注：** 气压计返回的是站点绝对气压，直接作为 Stellarium 的 `atmo_pressure` 使用；基准气温始终按海拔推算（设备环境温度传感器不用于天文参数）。`scripts/check-ohos-refactor-slice.mjs` 对含 `async` 方法的文件仍有既有的误报（把 `async` 当作方法名），本轮未改该脚本。
+
 ## [2026-11-15] Codex - 选星调时稳定与绚丽夜空；继续排查调时卡顿
 
 - **修改内容：** 当前 mount 坐标系直接求解选中锚点，保留规范向上方向及相机控制权；时间命令不再复写旧 J2000 姿态。绚丽地球模式在太阳高度−6°至−18°连续解除视觉散射，完整夜间恢复关闭大气的清晰度；视觉/物理消光分离，资料计算和折射不变。
@@ -729,6 +852,33 @@
 - **验证结果：** 全部 82 个台账来源及 GLB 哈希核对通过；几何/锚点/升级清单 2 项批量测试通过，覆盖全部网格；资源升级及天空文化刷新 9/9 通过。生成并查看全量网格前视预览；UI 契约、423 项命令目录及 i18n 检查通过（原有未翻译文案提示保留）。
 - **构建结果：** debug `assembleHap` BUILD SUCCESSFUL，逐一解包核验 82 个 SCM 的 SHA-256 及 manifest 完全一致。versionCode 保持 1000054，本轮未提升版本号。
 - **限制：** 按用户要求跳过 Pad 实机测试，未安装；前视网格预览不是星图截图，未宣称本轮已完成设备投影、缩放与帧率验收。
+
+## [2026-11-17] OHOS 开发记录 - 星等默认 21、定位刷新今晚天象、面板短页顶部对齐
+
+- **修改文件：** `state/LayerViewStore.ets`、`cmake/default_cfg.ini.cmake`、`src/core/StelSkyDrawer.cpp`、`state/SessionToolStore.ets`、`capability/LocationController.ets`、`pages/MainWindowNativeNode.ets`、`panels/panels/SettingsPanel.ets`、`scripts/test-ohos-observer-location.mjs`、`docs/harmonyos/json/ui-contract-baseline.json`。
+- **修改内容：** 恒星“星等限制”默认改为 21.0：`LayerViewStore.starMagLimit`、`default_cfg.ini` 的 `star_magnitude_limit` 与 `flag_star_magnitude_limit`、`StelSkyDrawer` 的兜底值同步改为 21.0/开启，避免滑块显示 21 但自定义限制未生效。观测点提交成功后新增 `refreshTonightData()`：让 `SessionToolStore` 的今晚天象缓存与 `AstroStore.tonightAstro` 失效；位置面板可见时 200ms 后按新坐标静默重算（不弹“已刷新”提示），天文计算面板的“今晚”页可见时同样重载。宽屏与手机面板的外层 `Scroll` 增加 `align(Alignment.TopStart)`，修复设置等短内容页面被 Scroll 垂直居中、标签栏被推到面板中部并留下大块空白的问题。设置面板顶部标签条改为与「图层」面板 `LayerTabs` 同一套尺寸：字号 12（大字模式 +2）、最小 60/76×36/40 vp、左右内边距 10/13、上下 6、标签条高 42/46、标签间距 6，颜色与选中态也一致。标签顺序调整为“工具”位于倒数第二、最后为“关于”。设置页不再由面板外壳 `Scroll` 包裹：外壳为 `settings` 提供有界高度，`SettingsPanel` 自己管理内容滚动；脚本页与扩展管理页改为头部固定、列表 `layoutWeight(1)` 填满剩余面板高度并在内部滚动，切换标签时列表与内容都回到顶部。
+- **修改原因：** 用户要求星等限制默认 21 等；定位变化后旧的月出/日落/行星可见性会继续显示，必须按新坐标更新；真机截图确认“工具/管理扩展”等短设置页内容垂直居中，属于面板绘制区域未从顶部开始；设置顶部的标签文字过小，需与图层面板标签条统一。
+- **构建结果：** 完整引擎 + 资源 + ArkTS HAP `BUILD SUCCESSFUL`（805.4 MB）；随后两次 ArkTS-only 构建分别安装标签条与“工具页/全高列表”改动，均覆盖安装到 `192.168.3.95:36717`。安装后的自动启动均被锁屏 `10106102` 拦截，解锁后需手动打开应用。
+- **验证结果：** 位置/触觉/时间轮/搜索测试合计 43/43 通过；UI 契约 37 面板 / 59 锚点（`settings` 分支与通用分支各有一个 `panel-content-` 动态锚点，基线已更新）；构建通过。真机界面与星等默认值待解锁后复测。
+- **备注：** 已保存过 6.5/关闭状态的 config.ini 不会被覆盖；需要恢复默认设置或清除配置后才会采用新的 21 等默认。旧设置页的 `touchPickRadiusVp` 解析时忽略。
+
+## [2026-11-17] OHOS 开发记录 - 移除附加设置中的触控拾取范围
+
+- **修改文件：** `panels/panels/SettingsPanel.ets`、`pages/MainWindowNativeNode.ets`、`state/SettingsRepository.ets`、`state/ViewSettingsStore.ets`、`capability/I18n.ets`、`docs/harmonyos/CLI.md`、`docs/harmonyos/specs/TOUCH-PICKING-OPTIMIZATION.md`。
+- **修改内容：** 删除“设置 → 附加 → 触控拾取范围”的 66/48 vp 选项、`setTouchPickRadius` 宿主回调、`UiSettings.touchPickRadiusVp` 持久化、启动恢复时的 `setTouchPickRadius` 调用与 `ViewSettingsStore.touchPickRadiusVp` 字段；移除仅该设置使用的两条 i18n 文案。触控拾取固定使用 `TouchPicker` 默认 66 vp；原生 `getTouchPickRadius`/`setTouchPickRadius` 保留为诊断/回归命令，不再由 UI 修改。
+- **修改原因：** 该设置项已不再需要。由于原实现仍把持久化的 48 vp 传给原生拾取器，只删 UI 会让曾选 48 vp 的用户被静默固定在 48 vp 且无法改回；因此同时移除持久化与恢复调用，让所有设备回到默认 66 vp。
+- **构建结果：** 随 2026-11-17 的完整引擎/资源构建一并打包，并已覆盖安装到 `192.168.3.95:36717`（805.4 MB）。
+- **验证结果：** 相关测试合计 43/43 通过；UI 契约 37 面板 / 57 锚点。
+- **备注：** 旧版设置 JSON 中的 `touchPickRadiusVp` 键会被解析器忽略，下次保存时自然丢弃；无需迁移。
+
+## [2026-11-16] OHOS 开发记录 - 触觉反馈默认开启并修复一次失败后永久不可用
+
+- **修改文件：** `capability/HapticFeedback.ets`、`capability/HarmonyHapticFeedback.ets`、`pages/MainWindowNativeNode.ets`、`panels/panels/SettingsPanel.ets`、`panels/settings/HapticSection.ets`、`scripts/test-ohos-haptic-feedback.mjs`、`docs/harmonyos/CLI.md`、`docs/harmonyos/specs/HAPTIC-FEEDBACK-TRIAL.md`。
+- **修改内容：** 新增 `DEFAULT_HAPTIC_ENABLED=true`，首次安装与「恢复默认设置」都回到开启状态；震动力度默认拉满为 100，恢复默认也写回 100。`setEnabled` 的写入失败回滚改为恢复写入前的值，而不是无条件写 false。平台开始振动失败时不再清空 `supported`，只记录 `vibration-start` 与错误码；时间轮刻度失败后冷却 1.5s，用户点「试一下」仍可立即重试。`HapticDriver` 新增 `feedbackMode()`，经 `@ohos.settings` 读取系统 `physic_navi_haptic_feedback_enabled` 并写入 `HapticStatus.systemFeedback`；设置页据此区分“系统触感反馈已关闭”“已开启但服务拒绝”“读取不到”三种提示。应用内开关仅控制本应用：打开开关时若系统触感反馈关闭，保存后弹出提示对话框（不自动跳转），对话框提供“去开启”按钮跳转华为设置 `volume_settings`（“声音和振动”，内含“系统触感反馈”）；应用开关保持开启。点击“试一下”真实失败时同样弹窗提示（`14600101` 用系统开关文案，其它失败用通用文案），替代原先一闪而过的 log 条。
+- **修改原因：** 真机日志显示 `MiscdeviceService: ShouldIgnoreVibrate ... ret:9`，即 OpenHarmony 的 `IGNORE_FEEDBACK`：当系统触感反馈开关（`physic_navi_haptic_feedback_enabled`）关闭时，`usage='touch'` 的振动会被服务层直接丢弃，`startVibration` 返回 `14600101 DEVICE_OPERATION_FAILED`。旧逻辑在此失败后清空能力列表，`available` 变为 false，预览按钮被禁用且只能重启应用才恢复；同时默认值为关闭、恢复默认也显式写关闭，与用户预期相反。
+- **构建结果：** 完整引擎 + 资源 + ArkTS HAP `BUILD SUCCESSFUL`（805.4 MB）；力度默认改为 100、系统触感开关读取、失败弹窗与系统设置跳转后，ArkTS-only 构建覆盖安装到 `192.168.3.95:36717`（首次自动启动遇锁屏 10106102，解锁后重试启动成功）。
+- **验证结果：** 触觉单测 29/29 通过（默认开启/最大力度、`14600101` 后保留能力并可重试、时间轮失败冷却、系统开关读取、关闭时弹窗且不自动跳转、失败预览弹窗用例）；时间轮/搜索测试 6/6 通过（合计 35/35）；UI 契约 37 面板 / 57 锚点。真机 CLI（`192.168.3.95:36717`）：系统关闭时 `systemFeedback:false`、`played:false`、`lastErrorCode:14600101`；用户开启“系统触感反馈”后 `systemFeedback:true`、`playHapticFeedback confirmation` 返回 `played:true`。`volume_settings` URI 实测打开“声音和振动”页，页面包含“系统触感反馈”开关。系统日志 `MiscdeviceService: ShouldIgnoreVibrate ... ret:9`（`IGNORE_FEEDBACK`）与开关状态一致。
+- **备注：** 若设备系统触感反馈确实关闭，应用侧无法绕过该平台过滤（OpenHarmony 对 touch/media/unknown/physicalFeedback/simulateReality 一律返回 `IGNORE_FEEDBACK`）；需在系统设置中开启触感反馈后，再点「试一下」，无需重启应用。
 
 ## [2026-11-14] OHOS 开发记录 - 时间轮 Canvas 化，搜索面板移除星座导航
 

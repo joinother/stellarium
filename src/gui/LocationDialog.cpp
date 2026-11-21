@@ -381,14 +381,16 @@ void LocationDialog::setFieldsFromLocation(const StelLocation& loc)
 
 	SolarSystem* ssm = GETSTELMODULE(SolarSystem);
 	PlanetP p = ssm->searchByEnglishName(loc.planetName);
-	StelModule* ls = StelApp::getInstance().getModule("LandscapeMgr");
-	if (ls->property("flagEnvironmentAutoEnable").toBool())
+	LandscapeMgr* lmgr = GETSTELMODULE(LandscapeMgr);
+	if (lmgr->getFlagEnvironmentAutoEnable())
 	{
 		if (loc.planetName != core->getCurrentLocation().planetName)
 		{
 			QSettings* conf = StelApp::getInstance().getSettings();
-			ls->setProperty("atmosphereDisplayed", p->hasAtmosphere() && conf->value("landscape/flag_atmosphere", true).toBool());
-			ls->setProperty("fogDisplayed", p->hasAtmosphere() && conf->value("landscape/flag_fog", true).toBool());
+			const bool hasAtmosphere = p->hasAtmosphere();
+			lmgr->setFlagAtmosphereAndFogForEnvironment(
+				hasAtmosphere && conf->value("landscape/flag_atmosphere", true).toBool(),
+				hasAtmosphere && conf->value("landscape/flag_fog", true).toBool());
 		}
 	}
 

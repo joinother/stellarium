@@ -8,7 +8,7 @@ import { photoAccessHelper } from '@kit.MediaLibraryKit'
 import { systemShare } from '@kit.ShareKit'
 import { privacyManager } from '@kit.AppGalleryKit'
 import { hasCurrentPrivacyConsent } from '../qability/PrivacyConsent'
-import { HapticFeedback, DEFAULT_HAPTIC_INTENSITY } from '../capability/HapticFeedback'
+import { HapticFeedback, DEFAULT_HAPTIC_ENABLED, DEFAULT_HAPTIC_INTENSITY } from '../capability/HapticFeedback'
 import { createHapticFeedback } from '../capability/HarmonyHapticFeedback'
 import { AstronomyCalendarController, AstronomyCalendarHostHooks, AstronomyCalendarReminderResult } from '../capability/AstronomyCalendarController'
 import { AstronomyCalendarStore } from '../state/AstronomyCalendarStore'
@@ -142,6 +142,7 @@ import { LocationPickerPanel } from '../panels/location/LocationPickerPanel'
 import { LocationFullScreenMap } from '../panels/location/LocationFullScreenMap'
 import { LocationPickerStore } from '../state/LocationPickerStore'
 import { LayerStore } from '../state/LayerStore'
+import { LayerPresetStore } from '../state/LayerPresetStore'
 import { LayerPresetBar } from '../panels/layers/LayerPresetBar'
 import { LayerTabs } from '../panels/layers/LayerTabs'
 import { LayerViewStore } from '../state/LayerViewStore'
@@ -261,7 +262,8 @@ import {
   SkyCultureMakerDraft, SkyCultureMakerIssue,
   HeliocentricOrbit, ConfigurationOption, SkyCultureVisualColors, CelestialPositionOptions,
   CelestialPositionCategory, PhenomenaOptions, PhenomenaStartOption, EphemerisOptions, RtsCalendarOptions, EclipseOptions,
-  LayerPresetState, MARKING_LAYER_ACTION_IDS, CONTENT_LAYER_ACTION_IDS, AstroCsvExport, CELESTIAL_POSITION_CATEGORIES, HELIOCENTRIC_PLANET_ORBITS,
+  LayerPresetState, LayerPresetDefinition, LayerPresetSnapshot, LAYER_PRESET_STORE,
+  MARKING_LAYER_ACTION_IDS, CONTENT_LAYER_ACTION_IDS, AstroCsvExport, CELESTIAL_POSITION_CATEGORIES, HELIOCENTRIC_PLANET_ORBITS,
   HELIOCENTRIC_DISTANCE_GUIDES, PHENOMENA_START_OPTIONS,
   GyroGuideProjection, SkyUiObstacle, BookmarkItem,
   BookmarkRaw, BookmarksResponse, BOOKMARK_STORE, SEARCH_HISTORY_STORE, OBSERVING_STORE, LOCATION_STORE, QUICK_PANEL_STORE, INFO_WINDOW_STORE, NIGHT_MODE_STORE, ObserverLocationRecord, OFFLINE_APPGALLERY_BUILD,
@@ -1275,6 +1277,8 @@ export struct WindowNativeNode {
   @State private panelScrolling: boolean = false
   // 华为 HarmonyOS 设计规范：面板上下滑动时顶部标题栏渐进式动态模糊进度（0=顶部通透，1=滚动 >=24vp 完整毛玻璃）。
   @State private panelScrollBlurProgress: number = 0
+  private panelScrollBlurUpdatePending: boolean = false
+  private pendingPanelScrollBlurOffsetY: number = 0
   // 统一字体与按钮尺寸档位（'system' | 'standard' | 'large' | 'xlarge'），与系统 fontSizeScale 联动。
   @State private uiFontScaleMode: string = 'system'
   @StorageProp('stellariumSystemFontScale') @Watch('syncUiTypographyScale') private systemFontScale: number = 1.0
@@ -1287,6 +1291,8 @@ export struct WindowNativeNode {
   @State private expandedPanelDragOffsetY: number = 0
   // 时间面板“时间轮 + 倒带/实时”两块的自然高度（vp），用于平板紧凑高度。
   @State private timeSpeedBlockHeight: number = 0
+  // 「更多功能」列表的实测高度（vp）：紧凑态按内容收口，避免末行到 Dock 之间留白。
+  @State private morePanelContentHeight: number = 0
   private lastInfoWinCloseMs: number = 0
   private dismissedObjectName: string = ''
   @State private panelContentKey: number = 0
@@ -1324,6 +1330,9 @@ export struct WindowNativeNode {
   // getState 的请求序号：作为 payload 附在命令后，使桥的 consume-on-read 缓存键
   // 每次刷新唯一。被放弃的轮询链留下的旧快照因此不会被后续刷新消费。
   private stateRefreshSerial: number = 0
+  // 预设快照的 getState 序号：与其他 getState 请求区分缓存键，避免详情/保存并发时
+  // 读到上一条 consume-on-read 缓存（会把保存前的旧夜间模式等状态写进预设）。
+  private presetCaptureSerial: number = 0
   /** 主界面 Dock 右上的常驻时钟文本（HH:mm），面板未打开时显示。 */
   @State private dockClockText: string = ''
   /** Dock 时钟的独立轻量刷新定时器（1s），不并入时间面板 125ms 高频刷新。 */
@@ -1363,6 +1372,7 @@ export struct WindowNativeNode {
   @State private locationStore: LocationStore = new LocationStore()
   @State private layerStore: LayerStore = new LayerStore()
   @State private layerViewStore: LayerViewStore = new LayerViewStore()
+  @State private layerPresetStore: LayerPresetStore = new LayerPresetStore()
   @State private fovText: string = '--'
   @State private trackingText: string = 'Off'
   @State private trackingRequestPending: boolean = false
@@ -1415,6 +1425,9 @@ export struct WindowNativeNode {
   @State private hapticAvailable: boolean = false
   @State private hapticFailed: boolean = false
   @State private hapticBusy: boolean = false
+  @State private hapticErrorCode: number = 0
+  // -1 未知 / 0 系统触感反馈关闭 / 1 开启。
+  @State private hapticSystemFeedback: number = -1
   @State private hapticIntensity: number = DEFAULT_HAPTIC_INTENSITY
   @State private calendarStore: AstronomyCalendarStore = new AstronomyCalendarStore()
   private calendarController: AstronomyCalendarController | undefined = undefined
@@ -1449,7 +1462,6 @@ export struct WindowNativeNode {
   private panelRouteDirection: number = 1
   private widePanelScroller: Scroller = new Scroller()
   private compactPanelScroller: Scroller = new Scroller()
-  private scriptListScroller: Scroller = new Scroller()
   @State private bookmarkStore: BookmarkStore = new BookmarkStore()
   @State private telescopeStore: TelescopeStore = new TelescopeStore()
   @State private overlayStore: OverlayStore = new OverlayStore()
@@ -1593,6 +1605,18 @@ export struct WindowNativeNode {
   // 时间轮交互控制器（普通类，非可观测）：拖动/惯性/轨道重基准/引擎推送。
   // 跨域依赖以回调注入：引擎推送、暂停速度、UTC 偏移。
   private timeWheelController: TimeWheelController | undefined = undefined
+  // 时间轮触感只在横向拖动确认后开启；竖向翻看面板不应触发。
+  private timeWheelHapticStarted: boolean = false
+  // 时间轮在窗口中的矩形（vp）与面板级触摸路由状态。轮盘自身不接触摸，
+  // 由面板 onTouch 在命中矩形内识别横向拖动，竖向手势继续交给面板 Scroll。
+  private timeWheelRectX: number = 0
+  private timeWheelRectY: number = 0
+  private timeWheelRectW: number = 0
+  private timeWheelRectH: number = 0
+  private timeWheelTouchPending: boolean = false
+  private timeWheelTouchDragging: boolean = false
+  private timeWheelTouchStartX: number = 0
+  private timeWheelTouchStartY: number = 0
   // Time-wheel haptics use the system clock-timer preset, rate-limited by
   // HapticFeedback and by the wheel's speed-adaptive tick cadence.
   private timeWheelHapticEnabled: boolean = true
@@ -1832,6 +1856,16 @@ export struct WindowNativeNode {
     // 图层视图域（地景列表 / 行星轨道 / 行星轨迹）复用同一实例；消费方均为
     // @ObjectLink，字段赋值即刷新，该域无 publish* 发布点，onChanged 传空实现。
     this.layerViewStore.attachPort(hostPort, () => {})
+    // 图层预设：快照读写/应用与 Preferences 持久化留在宿主，store 只做状态与差异计算。
+    this.layerPresetStore.attachHooks({
+      loadPresetJson: (done: (json: string) => void): void => { this.loadLayerPresetJson(done) },
+      persistPresetJson: (json: string): void => { this.persistLayerPresetJson(json) },
+      captureSnapshot: (done: (snapshot: LayerPresetSnapshot) => void): void => { this.captureLayerPresetSnapshot(done) },
+      applySnapshot: (snapshot: LayerPresetSnapshot, done: () => void): void => { this.applyLayerPresetSnapshot(snapshot, done) },
+      flashHint: (text: string): void => { this.flashHint(text) },
+      refreshState: (): void => { this.refreshState() }
+    })
+    this.layerPresetStore.load()
     // 星表下载域复用同一 HostCommandPort 实例。其消费方（CatalogsPanel）为
     // @ObjectLink，字段赋值即刷新，该域无 publish* 发布点，故 onChanged 传空实现。
     this.catalogStore.attachPort(hostPort, () => {})
@@ -2009,6 +2043,11 @@ export struct WindowNativeNode {
       setSkyCultureObserverLatitude: (value: number): void => { this.skyCultureSettingsStore.skyCultureObserverLatitude = value },
       setObserverPlanet: (value: string): void => { this.sessionToolStore.observerPlanet = value }
     })
+    // OHOS 首次运行默认开启“随观测星球自动选择地景”；已显式保存过的偏好保持不变。
+    this.commandPort().requestWhenReady('applyLandscapeDefaults', '', () => { this.refreshState() })
+    // OHOS 没有 PC 位置对话框中的“自动启用大气”选项：固定开启，返回地球时由核心
+    // 恢复用户保存的大气/雾偏好。
+    this.commandPort().requestWhenReady('applyEnvironmentDefaults', '', () => { this.refreshState() })
     // 启动恢复上次观测点（含 GPS 定点）：不再每次重启回退引擎默认北京。引擎未就绪由
     // setLocation 内的 callNativeWhenReady 重试兜底（起经位置控制器）。
     this.locationCtl().restoreObserverLocation()
@@ -2268,7 +2307,7 @@ export struct WindowNativeNode {
       }
       if (commandName === 'setLayerTab') {
         const tabId = Number(String(event['payload'] ?? '').trim())
-        if (this.activePanel === 'layers' && this.panelVisible && Number.isInteger(tabId) && tabId >= 0 && tabId <= 6) {
+        if (this.activePanel === 'layers' && this.panelVisible && Number.isInteger(tabId) && tabId >= 0 && tabId <= 7) {
           this.layerCtl().selectViewTab(tabId)
           hilog.info(0x0000, 'StellariumArkUI', '[cli-ui] layer tab=%{public}d', tabId)
         } else {
@@ -2435,6 +2474,7 @@ export struct WindowNativeNode {
 
   // 观测模式开关（快捷面板格子与设置页 Toggle 的同一入口）：只切呈现轴，并给一次提示。
   private applyObserveMode(enabled: boolean): void {
+    this.layerPresetStore.noteManualChange()
     const target = enabled ? 'observe' : 'planetarium'
     const changed = this.infoWindowStore.detailDisplayMode !== target
     this.infoWindowStore.setDetailDisplayMode(target)
@@ -2828,6 +2868,8 @@ export struct WindowNativeNode {
     this.hapticAvailable = state.available
     this.hapticFailed = state.lastFailure.startsWith('vibration-')
     this.hapticBusy = state.saving || state.probing
+    this.hapticErrorCode = state.lastErrorCode
+    this.hapticSystemFeedback = state.systemFeedback === undefined ? -1 : (state.systemFeedback ? 1 : 0)
     this.hapticIntensity = state.intensity
   }
 
@@ -2842,8 +2884,85 @@ export struct WindowNativeNode {
     this.refreshHapticState()
     hilog.info(0x0000, 'StellariumArkUI', '[haptic] change result enabled=%{public}s success=%{public}s',
       this.hapticEnabled ? 'true' : 'false', success ? 'true' : 'false')
-    if (!success) this.flashHint('触觉反馈设置未保存，请重试')
+    if (!success) {
+      this.flashHint('触觉反馈设置未保存，请重试')
+      return false
+    }
+    if (enabled) {
+      // 应用内开关只控制本应用。OpenHarmony 另有一个系统级“系统触感反馈”
+      // 总开关；它为关闭时，平台会丢弃所有 usage=touch 的请求。这里只提示，
+      // 不自动跳转：用弹窗让用户决定是否前往系统设置。
+      const systemFeedback = await this.haptics().refreshSystemFeedback()
+      this.refreshHapticState()
+      if (systemFeedback === false) {
+        this.showSystemHapticDialog()
+      }
+    }
     return success
+  }
+
+  // “试一下”失败：弹窗提示，并提供前往系统设置的按钮；比一闪而过的
+  // log 条更不容易漏看。14600101 使用系统触感反馈的专门文案。
+  private previewHaptic(): void {
+    void this.haptics().confirmation().then((played: boolean) => {
+      const state = this.haptics().status()
+      this.refreshHapticState()
+      if (played || state.lastOutcome !== 'failed') return
+      if (state.lastErrorCode === 14600101) this.showSystemHapticDialog()
+      else this.showHapticFailureDialog()
+    })
+  }
+
+  private showSystemHapticDialog(): void {
+    const zh = I18n.getLanguage().startsWith('zh')
+    this.getUIContext().showAlertDialog({
+      title: zh ? '系统触感反馈未开启' : 'System touch feedback is off',
+      message: zh
+        ? '应用内触觉反馈已开启，但系统“系统触感反馈”开关关闭，平台会丢弃应用的振动请求。请前往系统设置开启后重试。'
+        : 'The app haptic switch is on, but the system touch feedback switch is off, so the platform discards vibration requests. Enable it in system settings and retry.',
+      primaryButton: {
+        value: zh ? '取消' : 'Cancel',
+        action: () => {}
+      },
+      secondaryButton: {
+        value: zh ? '去开启' : 'Open settings',
+        action: () => { this.openSystemHapticSettings() }
+      }
+    })
+  }
+
+  private showHapticFailureDialog(): void {
+    const zh = I18n.getLanguage().startsWith('zh')
+    this.getUIContext().showAlertDialog({
+      title: zh ? '未能播放触觉反馈' : 'Haptic feedback could not play',
+      message: zh
+        ? '请检查系统触感设置、静音/振动模式或设备支持情况。也可以在系统设置中确认“系统触感反馈”已开启。'
+        : 'Check system haptics, silent/vibration mode or device support. You can also confirm that system touch feedback is enabled in settings.',
+      primaryButton: {
+        value: zh ? '知道了' : 'OK',
+        action: () => {}
+      },
+      secondaryButton: {
+        value: zh ? '打开系统设置' : 'Open settings',
+        action: () => { this.openSystemHapticSettings() }
+      }
+    })
+  }
+
+  // 打开系统“声音和振动”页（含“系统触感反馈”开关）。该页面 URI 与
+  // 华为设置应用对应；非华为/不支持时回退为手动路径提示。
+  private openSystemHapticSettings(): void {
+    const context = this.getUIContext().getHostContext() as common.UIAbilityContext
+    const want: Want = {
+      bundleName: 'com.huawei.hmos.settings',
+      abilityName: 'com.huawei.hmos.settings.MainAbility',
+      uri: 'volume_settings'
+    }
+    context.startAbility(want).then((): void => {
+      hilog.info(0x0000, 'StellariumArkUI', '[haptic] opened system touch feedback settings')
+    }).catch((): void => {
+      this.flashHint('未能打开系统设置，请手动前往：设置 → 声音和振动 → 系统触感反馈')
+    })
   }
 
   private async changeHapticIntensity(value: number, commit: boolean): Promise<void> {
@@ -3208,6 +3327,16 @@ export struct WindowNativeNode {
     return this.skyInputControllerImpl
   }
 
+  // 从引擎回读已持久化的大气参数；进入位置/图层页时调用，避免面板显示
+  // AtmosphereStore 的初始默认值（引擎 config.ini 中其实已经是用户值）。
+  // 启动时面板可能先于 Qt 引擎就绪挂载（上次面板被恢复），首次请求会失败，
+  // 故用 requestWhenReady 重试；回包只在 ok 时写入 store。
+  private loadAtmosphereParams(): void {
+    this.commandPort().requestWhenReady('getAtmosphereParams', '', (response: StellariumBridgeResponse) => {
+      this.atmosphereStore.applyAtmosphereResponse(response)
+    }, undefined, 0, 200, 30)
+  }
+
   // 位置域控制器惰性构造。NAPI（权限/定位/preferences）经 HostLocationPort；跨域写
   // （SessionToolStore.observerPlanet、位置头部三 @State）与 GPS 门禁经 LocationHostHooks 注入。
   private locationCtl(): LocationController {
@@ -3217,6 +3346,19 @@ export struct WindowNativeNode {
         refreshState: (): void => { this.refreshState() },
         loadObserverInfo: (): void => { this.locationPickerStore.loadObserverInfo(true) },
         setObserverPlanetCrossStore: (name: string): void => { this.sessionToolStore.observerPlanet = name },
+        refreshTonightData: (): void => {
+          // 位置变化会让月出/日落/行星可见性全部失效；先清缓存，面板可见时再静默重算。
+          this.sessionToolStore.invalidateTonight()
+          this.astroStore.tonightAstro = null
+          setTimeout(() => {
+            if (this.activePanel === 'place' && this.panelVisible) {
+              this.sessionToolStore.refreshTonight(true, true)
+            }
+            if (this.activePanel === 'astro' && this.panelVisible && this.astroStore.astroTab === 5) {
+              this.astroCalcCtl().loadTonightAstro()
+            }
+          }, 200)
+        },
         setLocationTexts: (location: string, coordinate: string, altitude: string): void => {
           this.locationText = location
           this.coordinateText = coordinate
@@ -3321,6 +3463,7 @@ export struct WindowNativeNode {
         persistEquatorialMount: (): void => { this.telescopeStore.persistEquatorialMount() },
         persistNightMode: (): void => { this.nightModeStore.persistNightMode() },
         applyNightMode: (enabled: boolean): void => { this.nightModeStore.applyNightMode(enabled, true) },
+        noteLayerPresetManualChange: (): void => { this.layerPresetStore.noteManualChange() },
         syncSkyCultureTimeFollowTimer: (): void => { this.skyCultureCtl().syncSkyCultureTimeFollowTimer() },
         loadScriptList: (): void => { this.scriptPlaybackCtl().loadScriptList() },
         loadRecordings: (): void => { this.scriptPlaybackCtl().loadRecordings() },
@@ -3602,7 +3745,9 @@ export struct WindowNativeNode {
           this.applySelectedObject(result, fromRefresh, placement, userReselect)
         },
         setPanel: (panel: string): void => { this.setPanel(panel) },
-        applyAtmosphereResponse: (result: StellariumBridgeResponse): void => { this.atmosphereStore.applyAtmosphereResponse(result) },
+        applyAtmosphereResponse: (result: StellariumBridgeResponse): void => {
+          this.atmosphereStore.applyAtmosphereResponse(result)
+        },
         hasSelectedObject: (): boolean => this.objectDetailStore.hasSelectedObject(),
         selectedObjectName: (): string => this.objectDetailStore.selectedName,
         hecLayoutPositions: (positions: Array<HeliocentricPosition>): Array<HeliocentricPosition> => hecLayoutPositions(positions),
@@ -3965,13 +4110,23 @@ export struct WindowNativeNode {
   }
 
   // 按华为 HarmonyOS 标题栏动态模糊规范（0 -> 24vp 渐进）更新顶部毛玻璃背板进度。
+  // onDidScroll 可能在 build/布局阶段触发；此时直接写 @State 会报
+  // "State variable changed during render" 并中断本帧命中测试，表现为面板上滑时
+  // 星图仍跟着拖动。合并到下一轮事件循环再更新，避免在渲染中改状态。
   private updatePanelScrollBlur(offsetY: number): void {
-    const raw = Number.isFinite(offsetY) ? clamp(offsetY / 24, 0, 1) : 0
-    if (Math.abs(raw - this.panelScrollBlurProgress) >= 0.04
-      || (raw === 0 && this.panelScrollBlurProgress !== 0)
-      || (raw === 1 && this.panelScrollBlurProgress !== 1)) {
-      this.panelScrollBlurProgress = raw
-    }
+    this.pendingPanelScrollBlurOffsetY = offsetY
+    if (this.panelScrollBlurUpdatePending) return
+    this.panelScrollBlurUpdatePending = true
+    setTimeout(() => {
+      this.panelScrollBlurUpdatePending = false
+      const pending = this.pendingPanelScrollBlurOffsetY
+      const raw = Number.isFinite(pending) ? clamp(pending / 24, 0, 1) : 0
+      if (Math.abs(raw - this.panelScrollBlurProgress) >= 0.04
+        || (raw === 0 && this.panelScrollBlurProgress !== 0)
+        || (raw === 1 && this.panelScrollBlurProgress !== 1)) {
+        this.panelScrollBlurProgress = raw
+      }
+    }, 0)
   }
 
   private panelTopChromeHeight(isCompact: boolean): number {
@@ -3987,8 +4142,13 @@ export struct WindowNativeNode {
   private exitAppAfterRestore(): void {
     const context = this.getUIContext().getHostContext() as common.UIAbilityContext
     setTimeout(() => {
-      this.changeHapticEnabled(false).then((saved: boolean) => {
+      // 触觉偏好存在独立的 stellarium_haptics 存储，SettingsRepository.resetToDefaults()
+      // 不会清它；恢复默认时要显式写回默认值（开启 + 默认力度），而不是写关闭。
+      this.changeHapticEnabled(DEFAULT_HAPTIC_ENABLED).then((saved: boolean) => {
         if (!saved) throw new Error('haptic preference reset failed')
+        return this.haptics().setIntensity(DEFAULT_HAPTIC_INTENSITY)
+      }).then((saved: boolean) => {
+        if (!saved) throw new Error('haptic intensity reset failed')
         return this.settingsRepository.resetToDefaults()
       }).then(() => {
         return this.clearUiBehaviorPreferences()
@@ -4044,8 +4204,7 @@ export struct WindowNativeNode {
       rtsCalendarDays: settings.rtsCalendarDays.toString(),
       graphMode: settings.graphMode.toString(),
       eclipseMonths: settings.eclipseMonths.toString(),
-      moonPhaseDays: settings.moonPhaseDays.toString(),
-      touchPickRadiusVp: settings.touchPickRadiusVp.toString()
+      moonPhaseDays: settings.moonPhaseDays.toString()
     }))
     this.viewSettingsStore.touchPickRadiusVp = settings.touchPickRadiusVp
     this.uiFontScaleMode = settings.uiFontScaleMode
@@ -4556,9 +4715,14 @@ export struct WindowNativeNode {
       : (routeDirection < 0 ? -1 : 1)
     hilog.info(0x0000, 'StellariumArkUI', 'setPanel ' + panel)
     const nextVisible = panel.length === 0 ? false : (forceVisible ? true : (this.activePanel === panel ? !this.panelVisible : true))
+    // 面板可能在上次会话结束时保持挂载，aboutToAppear 不会再触发；每次打开
+    // 位置/图层页都重新回读引擎中的大气参数，确保手动行与“当前大气模型”一致。
+    if (nextVisible && (panel === 'place' || panel === 'layers')) this.loadAtmosphereParams()
     this.panelDragging = false
     this.panelScrolling = false
     this.panelTouching = false
+    this.timeWheelTouchPending = false
+    this.timeWheelTouchDragging = false
     // 时间面板首帧必须已经是当前模拟时间：用缓存的 JD 预填时间轮与手动时间，
     // 不要等面板动画后的 125ms 轮询（否则会先闪一下旧日期/空刻度）。
     if (panel === 'time' && nextVisible) this.prepareTimePanel()
@@ -4845,8 +5009,14 @@ export struct WindowNativeNode {
     }, 16)
   }
 
+  // 设置页所有标签共用宿主面板 Scroll；切换标签时回到顶部。
+  private resetActivePanelScroll(): void {
+    this.resetPanelScroll(this.isExpandedLayout ? this.widePanelScroller : this.compactPanelScroller)
+  }
+
   private resetPanelScroll(scroller: Scroller): void {
     this.panelScrollBlurProgress = 0
+    this.pendingPanelScrollBlurOffsetY = 0
     try {
       scroller.scrollTo({ xOffset: 0, yOffset: 0, animation: false })
     } catch (error) {
@@ -5064,6 +5234,65 @@ export struct WindowNativeNode {
     } else if (event.type === TouchType.Up || event.type === TouchType.Cancel) {
       this.panelTouching = false
       this.resetPanelIdle()
+    }
+  }
+
+  // 时间轮横向拖动的时间面板级路由。轮盘 Canvas 设成 HitTestMode.None，
+  // 不拦截触摸；这里在面板的被动 onTouch 中按轮盘矩形识别横向意图：
+  // 横向 → 时间轮拖动；竖向 → 不消费，面板 Scroll 正常翻看。
+  private handleTimeWheelTouch(event: TouchEvent): void {
+    if (!this.panelVisible || this.activePanel !== 'time' ||
+      this.timeWheelRectW <= 0 || this.timeWheelRectH <= 0) {
+      return
+    }
+    const points = event.touches.length > 0 ? event.touches : event.changedTouches
+    if (points.length === 0) return
+    const point = points[0]
+    const x = point.windowX
+    const y = point.windowY
+    if (event.type === TouchType.Down) {
+      const inside = x >= this.timeWheelRectX && x <= this.timeWheelRectX + this.timeWheelRectW &&
+        y >= this.timeWheelRectY && y <= this.timeWheelRectY + this.timeWheelRectH
+      this.timeWheelTouchPending = inside
+      this.timeWheelTouchDragging = false
+      if (inside) {
+        this.timeWheelTouchStartX = x
+        this.timeWheelTouchStartY = y
+      }
+      return
+    }
+    if (event.type === TouchType.Move) {
+      if (this.timeWheelTouchDragging) {
+        this.wheel().updatePan(x)
+        return
+      }
+      if (!this.timeWheelTouchPending) return
+      const dx = x - this.timeWheelTouchStartX
+      const dy = y - this.timeWheelTouchStartY
+      if (Math.abs(dx) < 6 && Math.abs(dy) < 6) return
+      if (Math.abs(dx) <= Math.abs(dy) * 1.2) {
+        // 竖向翻看：退出时间轮路由，交给面板 Scroll。
+        this.timeWheelTouchPending = false
+        return
+      }
+      this.timeWheelTouchPending = false
+      this.timeWheelTouchDragging = true
+      this.wheel().beginPan(this.timeWheelTouchStartX, this.timeWheelTouchStartY)
+      this.wheel().updatePan(x)
+      if (this.timeWheelHapticEnabled && !this.timeWheelHapticStarted) {
+        this.timeWheelHapticStarted = true
+        this.haptics().beginRuler(0)
+      }
+      return
+    }
+    if (event.type === TouchType.Up || event.type === TouchType.Cancel) {
+      const wasDragging = this.timeWheelTouchDragging
+      this.timeWheelTouchPending = false
+      this.timeWheelTouchDragging = false
+      if (!wasDragging) return
+      this.wheel().endPan(event.type === TouchType.Cancel)
+      if (event.type === TouchType.Cancel && this.timeWheelHapticEnabled) this.haptics().endRuler()
+      this.timeWheelHapticStarted = false
     }
   }
 
@@ -5932,19 +6161,35 @@ export struct WindowNativeNode {
     if (this.activePanel === 'time') {
       // 与平板共用同一套时间面板高度：只展开到“时间轮 + 倒带/停止/实时”一行；
       // 日出/中天/日落及以下内容留在面板内 Scroll，不再用 0.6/0.9 的通用吸附高度。
-      return this.timePanelSpeedHeight(usable, 12 + 16)
+      return this.timePanelSpeedHeight(usable, true)
     }
     const minH = Math.min(usable, 280)
+    if (this.activePanel === 'more' && this.morePanelContentHeight > 0) {
+      // 内容实测前沿用 0.9 吸附高度；实测后按内容收口，末行直接贴齐面板
+      // 底边，不再保留固定高度差或额外底部留白。
+      const fitted = this.panelTopChromeHeight(true) + this.morePanelContentHeight
+      return clamp(Math.min(fitted, usable * this.compactPanelSnapRatio), minH, usable)
+    }
     return clamp(usable * this.compactPanelSnapRatio - this.compactPanelDragOffsetY, minH, usable)
   }
 
-  // 时间面板（手机紧凑 / 平板展开）共用的展开高度：顶部留白 + 抓手 + 标题栏 +
-  // 标题下间距 + 时间轮/速度栏内容高度。块高度未测得时按可用高度的 0.6 兜底。
-  private timePanelSpeedHeight(usable: number, verticalPadding: number): number {
+  // 紧凑面板滚动内容的底部留白：快捷/时间只留少量呼吸空间；
+  // 「更多功能」高度仍按内容收口，50vp 只作为滚到末尾时的尾部空间，打开时不会露出空白。
+  private compactPanelBottomPadding(): number {
+    if (this.activePanel === 'quick') return 16
+    if (this.activePanel === 'time') return 20
+    return 50
+  }
+
+  // 时间面板（手机紧凑 / 平板展开）共用的展开高度：实际顶部 chrome + 时间轮/速度栏
+  // 内容高度 + 少量底部留白。块高度未测得时按可用高度的 0.6 兜底。
+  // 不能再叠加固定标题栏常量：控制缩放/副标题会改变 header 高度，手算会多出
+  // 约 20vp，把下一行快捷 chips 的顶部露在面板底边。
+  private timePanelSpeedHeight(usable: number, isCompact: boolean): number {
     const block = this.timeSpeedBlockHeight
     if (block <= 0) return Math.min(usable * 0.6, usable)
-    const header = this.timeStore.panelSubtitle(this.activePanel).length > 0 ? 56 : 44
-    return Math.min(verticalPadding + 30 + header + 14 + block, usable)
+    const bottomInset = isCompact ? 8 : 18
+    return Math.min(this.panelTopChromeHeight(isCompact) + block + bottomInset, usable)
   }
 
   // 抓手拖动或面板内容滚动时，整块 backdropBlur 每帧都要重算滤镜缓存；
@@ -6038,6 +6283,116 @@ export struct WindowNativeNode {
 
   // 快捷操作面板各项当前值（一律读既有 store，与池中 id 一一对应）。
   // 入口类（type === 'entry'）**刻意不入表**：查不到即恒为 false，格子永远不会显示成「永久点亮」。
+  // ---- 图层预设：Preferences / 快照读写 ----
+
+  // 读取失败（UIAbility 上下文尚未就绪）不能当成“没有预设”：否则 store 会回退到
+  // 出厂预设，下一次手动变更再把出厂列表写回 Preferences，导致自定义预设丢失。
+  // 读取抛错时交给 loadLayerPresetJson 重试；只有键确实不存在时才返回空串。
+  private async readLayerPresetStorage(): Promise<string> {
+    const ctx = this.getUIContext().getHostContext() as common.UIAbilityContext
+    const store = await preferences.getPreferences(ctx, LAYER_PRESET_STORE)
+    return (await store.get('presets', '')) as string
+  }
+
+  private async writeLayerPresetStorage(json: string): Promise<void> {
+    try {
+      const ctx = this.getUIContext().getHostContext() as common.UIAbilityContext
+      const store = await preferences.getPreferences(ctx, LAYER_PRESET_STORE)
+      await store.put('presets', json)
+      await store.flush()
+    } catch (error) {
+      hilog.warn(0x0000, 'StellariumArkUI', 'save layer presets failed')
+    }
+  }
+
+  private loadLayerPresetJson(done: (json: string) => void, attempt: number = 0): void {
+    this.readLayerPresetStorage().then((json: string) => done(json)).catch(() => {
+      // 启动早期 getHostContext 可能尚未可用；最多重试约 2 秒，避免误判为空数据。
+      if (attempt < 12) {
+        setTimeout(() => { this.loadLayerPresetJson(done, attempt + 1) }, 150)
+        return
+      }
+      hilog.warn(0x0000, 'StellariumArkUI', 'read layer presets failed')
+      done('')
+    })
+  }
+
+  private persistLayerPresetJson(json: string): void {
+    void this.writeLayerPresetStorage(json)
+  }
+
+  private captureLayerPresetSnapshot(done: (snapshot: LayerPresetSnapshot) => void): void {
+    const captureSerial = (++this.presetCaptureSerial).toString()
+    this.commandPort().requestInteractive('getState', captureSerial, (response: StellariumBridgeResponse): void => {
+      const raw = response as Record<string, Object>
+      const actions: Record<string, boolean> = {}
+      const actionIds = MARKING_LAYER_ACTION_IDS.concat(CONTENT_LAYER_ACTION_IDS)
+      for (const id of actionIds) actions[id] = raw[id] === true
+      const intensity = typeof raw['milkyWayIntensity'] === 'number' ? raw['milkyWayIntensity'] as number : 1
+      const finish = (constellationArt3d: boolean): void => {
+        done({
+          actions: actions,
+          vividAtmosphere: response.vividAtmosphere === true,
+          milkyWayBright: Math.max(0, Math.min(6, Math.round(intensity * 3))),
+          realisticStarVisibility: response.realisticStarVisibility === true,
+          nightMode: this.nightModeStore.nightMode,
+          observeMode: this.infoWindowStore.observeModeEnabled(),
+          equatorialMount: this.telescopeStore.equatorialMount,
+          telrad: this.telescopeStore.telradOn,
+          ccd: this.telescopeStore.ccdOn,
+          dsoLabels: response.dsoLabels === true,
+          constellationArt3d: constellationArt3d,
+          starMagLimit: this.layerViewStore.starMagLimit
+        })
+      }
+      this.commandPort().requestInteractive('getSkyCultureVisualSettings', 'capture|' + captureSerial,
+        (visual: StellariumBridgeResponse): void => {
+          const visualRaw = visual as Record<string, Object>
+          finish(visualRaw['constellationArt3d'] === true)
+        }, (): void => { finish(this.skyCultureSettingsStore.skyCultureConstellationArt3d) })
+    })
+  }
+
+  private applyLayerPresetSnapshot(snapshot: LayerPresetSnapshot, done: () => void): void {
+    const states: Array<LayerPresetState> = []
+    const actionIds = MARKING_LAYER_ACTION_IDS.concat(CONTENT_LAYER_ACTION_IDS)
+    for (const id of actionIds) states.push({ id: id, enabled: snapshot.actions[id] === true })
+    this.commandPort().requestInteractive('setActionStates', JSON.stringify(states), (response: StellariumBridgeResponse): void => {
+      if (response.ok !== true) {
+        this.flashHint(I18n.t('msg_apply_failed'))
+        done()
+        return
+      }
+      this.layerCtl().setSkyDisplaySetting('vividAtmosphere', snapshot.vividAtmosphere)
+      this.layerCtl().setSkyDisplaySetting('realisticStarVisibility', snapshot.realisticStarVisibility)
+      if (snapshot.starMagLimit !== undefined) this.layerCtl().applyStarMagLimit(snapshot.starMagLimit)
+      this.layerCtl().applyMilkyWayBright(snapshot.milkyWayBright)
+      this.commandPort().requestInteractive('setDsoLabels', snapshot.dsoLabels ? '1' : '0', (): void => {})
+      this.layerStore.dsoLabels = snapshot.dsoLabels
+      this.skyCultureCtl().setSkyCultureVisualSetting('constellationArt3d', snapshot.constellationArt3d ? 1 : 0)
+      this.nightModeStore.applyNightMode(snapshot.nightMode, true)
+      this.infoWindowStore.setDetailDisplayMode(snapshot.observeMode ? 'observe' : 'planetarium')
+      this.telescopeStore.equatorialMount = snapshot.equatorialMount
+      this.commandPort().requestInteractive('setActionChecked',
+        'actionSwitch_Equatorial_Mount|' + (snapshot.equatorialMount ? '1' : '0'), (): void => {
+          this.telescopeStore.persistEquatorialMount()
+        })
+      const applyOculars = (): void => {
+        this.ocularCtl().setTelrad(snapshot.telrad)
+        this.ocularCtl().setCCD(snapshot.ccd)
+        done()
+      }
+      if (snapshot.telrad || snapshot.ccd) {
+        this.pluginFeatureCtl().ensurePluginLoaded('Oculars', applyOculars, () => done())
+      } else {
+        applyOculars()
+      }
+    }, () => {
+      this.flashHint(I18n.t('msg_apply_failed'))
+      done()
+    })
+  }
+
   private async persistNightModePreference(night: boolean): Promise<void> {
     try {
       const ctx = this.getUIContext().getHostContext() as common.UIAbilityContext
@@ -6082,6 +6437,7 @@ export struct WindowNativeNode {
   private quickToggle(id: string, value: boolean): void {
     const item = quickActionById(id)
     if (item === undefined) return
+    if (item.type !== 'entry') this.layerPresetStore.noteManualChange()
     if (item.type === 'entry') {
       // 入口类不切换开关态，只跳面板（格子恒不高亮，见 quickActionValues 注释）。
       this.openSubPanel(item.openPanel)
@@ -6242,7 +6598,7 @@ export struct WindowNativeNode {
       return Math.min(this.quickPanelContentHeight(), usable)
     }
     if (this.activePanel === 'time') {
-      return this.timePanelSpeedHeight(usable, 18 + 18)
+      return this.timePanelSpeedHeight(usable, false)
     }
     return usable
   }
@@ -7844,6 +8200,9 @@ export struct WindowNativeNode {
     this.layerStore.milkyWay = result.actionShow_MilkyWay === true
     this.layerStore.ground = result.actionShow_Ground === true
     this.layerStore.mistHorizon = result.actionShow_MistHorizon === true
+    if (result.landscapeAutoSelection !== undefined) {
+      this.layerStore.landscapeAutoSelection = result.landscapeAutoSelection === true
+    }
     this.layerStore.constellationLines = result.actionShow_Constellation_Lines === true
     this.layerStore.constellationLabels = result.actionShow_Constellation_Labels === true
     this.layerStore.constellationBoundaries = result.actionShow_Constellation_Boundaries === true
@@ -7993,6 +8352,8 @@ export struct WindowNativeNode {
         this.locationText = quickLocationLabel(this.locationPickerStore.locationSource,
           this.locationPickerStore.locationDisplayName(result.locationName), planetName,
           this.locationPickerStore.locationSource === 'gps' ? this.locationPickerStore.gpsPlaceDetail : '') +
+          // 与「观测星球」下拉使用同一标签：木卫、地球全览点等引擎本地化名称
+          // 不能只走 planetZh 的十大天体表，否则位置条目会退回英文。
           ' · ' + this.sessionToolStore.observerPlanetLabel(planetName)
       }
       if (result.altitude !== undefined) {
@@ -9053,6 +9414,13 @@ export struct WindowNativeNode {
           altitudeSource: this.locationPickerStore.locationSource,
           locationName: this.locationPickerStore.locationPickerName,
           locationPort: this.hostLocationPort,
+          // Named surface sites for non-Earth bodies: show every offline place
+          // as a labelled marker so it can be picked without the hierarchy tab.
+          namedPlaces: this.sessionToolStore.observerPlanet === 'Earth'
+            ? [] : this.locationPickerStore.planetPlaces(this.sessionToolStore.observerPlanet),
+          placeLabel: (name: string) => this.locationPickerStore.hierarchyItemLabel(
+            'city', name, this.sessionToolStore.observerPlanet),
+          // 全屏选点标题/搜索占位/离线分区与「观测星球」下拉共用同一中文标签。
           planetLabel: (en: string) => this.sessionToolStore.observerPlanetLabel(en),
           contextOf: (item: LocSearchItem) => this.locationPickerStore.locationResultContext(item, this.sessionToolStore.observerPlanet),
           onPick: (latitude: number, longitude: number, altitude: number, name: string, source: string) => {
@@ -9120,6 +9488,7 @@ export struct WindowNativeNode {
             this.panelContent()
           }
             .width('100%')
+            .height('100%')
             .opacity(this.panelRouteOpacity)
             .translate({ x: this.panelRouteOffsetX, y: 0 })
         }
@@ -9203,7 +9572,10 @@ export struct WindowNativeNode {
       .borderRadius(UI_RADIUS_SHEET)
       .clip(true)
       .shadow({ radius: this.panelChromeBusy() ? 0 : 34, color: this.hostSlots().shadowSoft, offsetX: 0, offsetY: 18 })
-      .onTouch((event: TouchEvent) => { this.notePanelTouch(event) })
+      .onTouch((event: TouchEvent) => {
+        this.notePanelTouch(event)
+        this.handleTimeWheelTouch(event)
+      })
       .scale({ x: this.panelIdleOpacity < 1 ? 0.97 : 1.0, y: this.panelIdleOpacity < 1 ? 0.97 : 1.0 })
       .opacity(this.panelIdleOpacity * this.panelPresentationOpacity)
       .translate({ y: this.panelPresentationOffsetY })
@@ -9233,7 +9605,7 @@ export struct WindowNativeNode {
             top: this.panelTopChromeHeight(true),
             left: this.compactPanelHorizontalPadding(),
             right: this.compactPanelHorizontalPadding(),
-            bottom: this.activePanel === 'quick' ? 16 : 50
+            bottom: this.compactPanelBottomPadding()
           })
           .id('panel-content-' + this.i18nLang)
       }
@@ -9315,7 +9687,10 @@ export struct WindowNativeNode {
       .shadow({ radius: this.panelChromeBusy() ? 0 : 30, color: this.hostSlots().shadowSoft, offsetX: 0, offsetY: 14 })
       .margin({ bottom: 10 })
       .hitTestBehavior(HitTestMode.Default)
-      .onTouch((event: TouchEvent) => { this.notePanelTouch(event) })
+      .onTouch((event: TouchEvent) => {
+        this.notePanelTouch(event)
+        this.handleTimeWheelTouch(event)
+      })
       .alignSelf(ItemAlign.Center)
       .scale({ x: this.panelIdleOpacity < 1 ? 0.98 : 1.0, y: this.panelIdleOpacity < 1 ? 0.98 : 1.0 })
       .opacity(this.panelIdleOpacity * this.panelPresentationOpacity)
@@ -9330,7 +9705,10 @@ export struct WindowNativeNode {
         actions: moreActions(),
         languageRevision: this.languageStore.languageRevision,
         startsSection: (item: ShellAction, index: number) => this.moreActionStartsSection(item, index),
-        onOpenPanel: (panel: string) => { this.openSubPanel(panel) }
+        onOpenPanel: (panel: string) => { this.openSubPanel(panel) },
+        onContentHeight: (height: number) => {
+          if (Math.abs(height - this.morePanelContentHeight) > 0.5) this.morePanelContentHeight = height
+        }
       })
     } else if (DEV_TOOLS_ENABLED && this.activePanel === 'devTools') {
       DevToolsPanel({
@@ -9420,18 +9798,17 @@ export struct WindowNativeNode {
         manualHour: this.timeStore.manualHour,
         manualMinute: this.timeStore.manualMinute,
         onSelectUnit: (unit: string) => { this.wheel().selectUnit(unit) },
-        onWheelTouch: (event: TouchEvent) => {
-          if (this.timeWheelHapticEnabled && event.type === TouchType.Down) this.haptics().beginRuler(0)
-          this.wheel().handleTouch(event)
-          // Keep the ruler active after Up so inertia detents can still tick;
-          // the next Down starts a fresh ruler gesture, and Cancel ends it.
-          if (this.timeWheelHapticEnabled && event.type === TouchType.Cancel) this.haptics().endRuler()
+        onWheelRect: (x: number, y: number, width: number, height: number) => {
+          this.timeWheelRectX = x
+          this.timeWheelRectY = y
+          this.timeWheelRectW = width
+          this.timeWheelRectH = height
         },
         onChip: (id: string) => { this.timeCtl().handleChip(id) },
         onEquationToggle: (setting: string, enabled: boolean) => { this.ocularCtl().setEquationOfTime(setting, enabled) },
         onAdjustJulian: (scale: string, direction: number) => { this.julianStore.adjustJulianDate(scale, direction) },
         onApplyJulian: (scale: string) => { this.julianStore.applyJulianDateInput(scale) },
-        onNightMode: (enabled: boolean) => { this.nightModeStore.applyNightMode(enabled, true) },
+        onNightMode: (enabled: boolean) => { this.layerPresetStore.noteManualChange(); this.nightModeStore.applyNightMode(enabled, true) },
         onPickDate: (year: number, monthIndex: number, day: number) => {
           this.timeStore.manualYear = year; this.timeStore.manualMonth = monthIndex + 1; this.timeStore.manualDay = day
         },
@@ -9447,6 +9824,7 @@ export struct WindowNativeNode {
         locationPickerStore: this.locationPickerStore,
         locationStore: this.locationStore,
         sessionToolStore: this.sessionToolStore,
+        atmosphereStore: this.atmosphereStore,
         locationText: this.locationText,
         coordinateText: this.coordinateText,
         altitudeText: this.altitudeText,
@@ -9471,6 +9849,10 @@ export struct WindowNativeNode {
         onApplyLocation: (name: string, lat: number, lon: number, alt: number, planet: string) => { this.locationCtl().setLocation(name, lat, lon, alt, planet) },
         onDeleteLocation: (key: string) => { this.locationStore.deleteSavedLocation(key) },
         onSelectPlanet: (name: string) => { this.locationCtl().setObserverPlanet(name) },
+        onApplyEnvironment: (pressure: number, temperature: number) => {
+          this.astroCalcCtl().applyAtmosphere(pressure, temperature, this.atmosphereStore.atmoExtinction)
+        },
+        onLoadAtmosphere: () => { this.loadAtmosphereParams() },
         onRefreshTonight: () => { this.sessionToolStore.refreshTonight(true) },
         onJump: (jd: number, lock: string, title: string) => { this.gotoTonightEvent(jd, lock, title) }
       })
@@ -9478,12 +9860,15 @@ export struct WindowNativeNode {
       LayersPanel({
         layerStore: this.layerStore,
         layerViewStore: this.layerViewStore,
+        presetStore: this.layerPresetStore,
         skyCultureViewStore: this.skyCultureViewStore,
         skyCultureSettingsStore: this.skyCultureSettingsStore,
         atmosphereStore: this.atmosphereStore,
         overlayStore: this.overlayStore,
         surveyStore: this.surveyStore,
         nightModeOn: this.nightModeStore.nightMode,
+        observerAltitude: this.locationPickerStore.locationPickerAltitude,
+        earthObserver: this.sessionToolStore.observerPlanet === 'Earth',
         viewTab: this.viewTab,
         expandedLayout: this.isExpandedLayout,
         foldTablet: this.isFoldTabletLayout,
@@ -9493,13 +9878,13 @@ export struct WindowNativeNode {
         skyCultureArtStates: this.skyCultureArtStates,
         narrationParagraphs: this.skyCultureViewStore.skyCultureNarrationParagraphs(),
         mapContext: this.skyCultureMapContext,
-        onPreset: (preset: string) => { this.layerCtl().applyLayerPreset(preset) },
         onSelectTab: (id: number) => { this.switchViewTab(id) },
         onToggleLayer: (actionId: string, cmd: string, value: boolean) => { this.layerCtl().applyLayerSwitch(actionId, cmd, value) },
         onRefreshSurvey: () => { this.surveyCtl().loadSurveyState() },
         onSelectSpectral: (id: string) => { this.surveyCtl().setSpectralDataset(id) },
         onCloseSpectral: () => { this.surveyCtl().closeSpectralView() },
         onSetSkyDisplay: (setting: string, value: boolean | number) => { this.layerCtl().setSkyDisplaySetting(setting, value) },
+        onLoadAtmosphere: () => { this.loadAtmosphereParams() },
         onStarMagLimit: (value: number) => { this.layerCtl().applyStarMagLimit(value) },
         onMilkyWayBright: (value: number) => { this.layerCtl().applyMilkyWayBright(value) },
         onAtmosphere: (pressure: number, temperature: number, extinction: number) => { this.astroCalcCtl().applyAtmosphere(pressure, temperature, extinction) },
@@ -9520,6 +9905,7 @@ export struct WindowNativeNode {
         onToggleViewCoordinates: (visible: boolean) => { this.viewCoordinateCtl().setViewCoordinatesVisible(visible) },
         onSelectViewCoordinateFamily: (family: string) => { this.viewCoordinateCtl().setViewCoordinateFamily(family) },
         onSelectViewEquatorialEpoch: (epoch: string) => { this.viewCoordinateCtl().setViewEquatorialEpoch(epoch) },
+        onToggleLandscapeAutoSelection: (enabled: boolean) => { this.layerCtl().setLandscapeAutoSelection(enabled) },
         onSetLandscapeFadeWithZoom: (isOn: boolean) => { this.layerCtl().setLandscapeFadeWithZoom(isOn) },
         onImportLandscape: () => { this.layerCtl().importLandscapeFile() },
         onSelectLandscape: (id: string, name: string) => { this.layerCtl().selectLandscape(id, name) },
@@ -9665,7 +10051,6 @@ export struct WindowNativeNode {
         notificationStore: this.notificationStore,
         keyboardShortcutStore: this.keyboardShortcutStore,
         toolsStore: this.tools,
-        scroller: this.scriptListScroller,
         remoteControlEnabled: this.remoteControlEnabled,
         remoteControlStatus: this.remoteControlStatus,
         remoteControlPort: this.remoteControlPort,
@@ -9719,23 +10104,16 @@ export struct WindowNativeNode {
         scriptSourceLine: (filename: string) => { return this.scriptStore.scriptSourceLine(filename) },
         hasSelectedObject: () => { return this.objectDetailStore.hasSelectedObject() },
         selectConfigTab: (tabId: number) => { this.switchConfigTab(tabId) },
+        onRequestScrollTop: () => { this.resetActivePanelScroll() },
         setLanguage: (lang: string) => { this.setLanguage(lang) },
         setEphemerisEnabled: (key: string, available: boolean, enabled: boolean) => { this.ephemerisStore.setEphemerisEnabled(key, available, enabled) },
         setDistanceUnit: (useMetric: boolean) => { this.viewSettingsStore.setDistanceUnit(useMetric) },
         setConfigurationDithering: (value: string) => { this.viewSettingsStore.setConfigurationDithering(value) },
         setDecimalDegreesCoords: (enabled: boolean) => { this.viewSettingsStore.setDecimalDegrees(enabled, this.viewSettingsStore.decimalDegreesOther) },
         setDecimalDegreesOther: (enabled: boolean) => { this.viewSettingsStore.setDecimalDegrees(this.viewSettingsStore.decimalDegreesCoords, enabled) },
-        setTouchPickRadius: (radiusVp: number) => {
-          this.viewSettingsStore.touchPickRadiusVp = radiusVp
-          this.callInteractive('setTouchPickRadius', radiusVp.toString(), (r) => {
-            if (r.ok !== true) this.flashHint(r.error ?? I18n.t('msg_apply_failed'))
-          })
-          this.saveAppSettings()
-        },
         setProjection: (name: string) => { this.viewSettingsStore.setProjection(name) },
         saveAppSettings: () => { this.saveAppSettings() },
         flashHint: (text: ResourceStr) => { this.flashHint(text) },
-        saveAllCoreSettings: () => { this.tools.saveAllCoreSettings() },
         restoreCoreDefaults: () => { this.tools.restoreCoreDefaults() },
         saveCurrentViewAsStartup: () => { this.startupBridge().saveCurrentViewAsStartup() },
         setViewLockState: (enabled: boolean) => { this.layerCtl().setViewLockState(enabled) },
@@ -9756,20 +10134,13 @@ export struct WindowNativeNode {
         hapticAvailable: this.hapticAvailable,
         hapticFailed: this.hapticFailed,
         hapticBusy: this.hapticBusy,
+        hapticErrorCode: this.hapticErrorCode,
+        hapticSystemFeedback: this.hapticSystemFeedback,
         hapticIntensity: this.hapticIntensity,
         setHapticEnabled: (enabled: boolean) => { void this.changeHapticEnabled(enabled) },
         setHapticIntensity: (value: number, commit: boolean) => { void this.changeHapticIntensity(value, commit) },
-        previewHaptic: () => {
-          void this.haptics().confirmation().then((played: boolean) => {
-            const state = this.haptics().status()
-            this.refreshHapticState()
-            // A throttled or in-flight pulse is not a hardware failure. Only
-            // report the explicit start failure so rapid preview taps stay quiet.
-            if (!played && state.lastOutcome === 'failed') this.flashHint(I18n.getLanguage().startsWith('zh')
-              ? '未能播放触觉反馈，请检查系统触感设置或设备支持情况。'
-              : 'Haptic feedback could not play. Check system haptics and device support.')
-          })
-        },
+        openSystemHapticSettings: () => { this.openSystemHapticSettings() },
+        previewHaptic: () => { this.previewHaptic() },
         scheduleNextSolarTermReminder: () => { this.notificationCtl().scheduleNextSolarTerm() },
         scheduleNextMoonPhaseReminder: () => { this.notificationCtl().scheduleNextMoonPhase() },
         scheduleNextMeteorReminder: () => { this.notificationCtl().scheduleNextMeteorShower() },
@@ -9808,7 +10179,6 @@ export struct WindowNativeNode {
         triggerAction: (actionId: string) => { this.triggerAction(actionId) },
         moveToSelectedObject: () => { this.moveToSelectedObject() },
         onOpenLayersSky: () => { this.viewTab = 0; this.openSubPanel('layers') },
-        onOpenTools: () => { this.openSubPanel('tools') },
         openExternalUrl: (url: string) => { this.openExternalUrl(url) }
       })
     } else if (this.activePanel === 'calendar') {
@@ -9965,9 +10335,9 @@ export struct WindowNativeNode {
         store: this.telescopeStore,
         onOpenSubPanel: (name: string) => { this.openSubPanel(name) },
         onSetOcularMode: (isOn: boolean) => { this.ocularCtl().setOcularMode(isOn) },
-        onSetTelrad: (isOn: boolean) => { this.ocularCtl().setTelrad(isOn) },
+        onSetTelrad: (isOn: boolean) => { this.layerPresetStore.noteManualChange(); this.ocularCtl().setTelrad(isOn) },
         onSetCrosshairs: (isOn: boolean) => { this.ocularCtl().setCrosshairs(isOn) },
-        onSetCcd: (isOn: boolean) => { this.ocularCtl().setCCD(isOn) },
+        onSetCcd: (isOn: boolean) => { this.layerPresetStore.noteManualChange(); this.ocularCtl().setCCD(isOn) },
         onSelectInstrument: (kind: string, index: number) => { this.ocularCtl().selectOcularInstrument(kind, index) },
         onChangeCcdRotation: (value: number, mode: SliderChangeMode) => { this.ocularCtl().changeOcularCcdRotation(value, mode) },
         onChangePrismRotation: (value: number, mode: SliderChangeMode) => { this.ocularCtl().changeOcularPrismRotation(value, mode) },

@@ -37,7 +37,9 @@ class TimeWheelFrameCallback extends FrameCallback {
 export struct TimeWheelCanvas {
   @ObjectLink store: TimeWheelStore
   @State c: ThemeSlots = DEFAULT_SLOTS
-  onWheelTouch: (event: TouchEvent) => void = () => {}
+  // 轮盘在窗口中的矩形（vp）。宿主用它把面板级触摸中的横向拖动路由给时间轮，
+  // 轮盘本身不注册触摸/手势，避免挡住面板 Scroll 的竖向滑动。
+  onWheelRect: (x: number, y: number, width: number, height: number) => void = () => {}
 
   private ctx: CanvasRenderingContext2D = new CanvasRenderingContext2D(new RenderingContextSettings(true))
   private pump: displaySync.DisplaySync | undefined = undefined
@@ -89,6 +91,11 @@ export struct TimeWheelCanvas {
         // 内边距生效前后可能不是最终的 vp 宽度，直接用它会算错中心。
         const width = Number(newValue.width)
         const height = Number(newValue.height)
+        if (width > 0 && height > 0) {
+          const gx = Number(newValue.globalPosition.x)
+          const gy = Number(newValue.globalPosition.y)
+          if (Number.isFinite(gx) && Number.isFinite(gy)) this.onWheelRect(gx, gy, width, height)
+        }
         if (width > 0 && height > 0 &&
           (Math.abs(width - this.widthVp) > 0.5 || Math.abs(height - this.heightVp) > 0.5)) {
           this.widthVp = width
@@ -96,25 +103,9 @@ export struct TimeWheelCanvas {
           this.draw()
         }
       })
-      .onTouch((event: TouchEvent) => this.handleTouch(event))
-  }
-
-  private handleTouch(event: TouchEvent): void {
-    if (event.type === TouchType.Down) {
-      this.clearSettleTimer()
-      this.idleFrames = 0
-      this.setRate(120)
-    }
-    this.onWheelTouch(event)
-    // 触摸事件本身已经是 120Hz；同步重画一次并记录已绘状态，避免同一帧内
-    // displaySync.onFrame() + postFrameCallback 对相同偏移重复绘制三次。
-    this.lastOffset = this.store.timeWheelVisualOffset
-    this.lastLabels = this.store.timeWheelAllLabels
-    this.draw()
-    if (event.type === TouchType.Up || event.type === TouchType.Cancel) {
-      this.idleFrames = 0
-      this.startSettleTimer()
-    }
+      // 轮盘只负责绘制，不注册触摸/手势：竖向滑动交给面板 Scroll，横向拖动
+      // 由宿主按 onWheelRect 报告的矩形做坐标路由，避免内联手势吞掉 Scroll。
+      .hitTestBehavior(HitTestMode.None)
   }
 
   private startSettleTimer(): void {

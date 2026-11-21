@@ -12,6 +12,13 @@ async function sourceModule(relativePath) {
 
 const { TimeWheelStore } = await sourceModule('state/TimeWheelStore.ets');
 const { TimeStore } = await sourceModule('state/TimeStore.ets');
+const { TimeWheelController } = await sourceModule('state/TimeWheelController.ets');
+
+globalThis.TouchType = { Down: 0, Move: 1, Up: 2, Cancel: 3 };
+
+function touchEvent(type, x, y) {
+  return { type, touches: [{ x, y }], changedTouches: [{ x, y }] };
+}
 
 test('the time wheel starts from the current wall clock, not a hardcoded date', () => {
   const before = new Date();
@@ -26,6 +33,40 @@ test('the time wheel starts from the current wall clock, not a hardcoded date', 
   assert.ok(initialMs >= beforeMs - 1000 && initialMs <= afterMs + 1000);
   assert.equal(store.timeWheelTickLabels.length, store.centerTick * 2 + 1);
   assert.ok(store.timeWheelTickLabels.some(label => label.length > 0));
+});
+
+test('vertical panel scrolling never pauses or changes the time wheel', () => {
+  const store = new TimeWheelStore();
+  store.timeWheelYear = 2026;
+  store.timeWheelMonth = 11;
+  store.timeWheelDay = 20;
+  store.timeWheelHour = 22;
+  store.timeWheelMinute = 0;
+  store.timeWheelSecond = 0;
+  store.timeWheelUnit = 'hour';
+  store.timeWheelVisualOffset = 0;
+  store.timeWheelAppliedSteps = 0;
+  store.refreshTicks();
+  let seeks = 0;
+  let stops = 0;
+  const wheel = new TimeWheelController(store, () => { seeks += 1; }, () => { stops += 1; }, () => 0, () => {});
+
+  wheel.handleTouch(touchEvent(TouchType.Down, 100, 100));
+  wheel.handleTouch(touchEvent(TouchType.Move, 102, 40));
+  assert.equal(store.timeWheelDragging, false);
+  assert.equal(stops, 0);
+  wheel.handleTouch(touchEvent(TouchType.Up, 102, 40));
+  assert.equal(seeks, 0);
+  assert.equal(store.timeWheelDragging, false);
+
+  // A clear horizontal drag still takes over and seeks the simulation time.
+  wheel.handleTouch(touchEvent(TouchType.Down, 100, 100));
+  wheel.handleTouch(touchEvent(TouchType.Move, 170, 102));
+  assert.equal(store.timeWheelDragging, true);
+  wheel.handleTouch(touchEvent(TouchType.Up, 170, 102));
+  assert.equal(stops, 1);
+  assert.ok(seeks > 0);
+  wheel.stop();
 });
 
 test('manual time uses the observation-local wall clock', () => {
@@ -54,4 +95,12 @@ test('the tablet clock anchor keeps edgeMargin and skyWidth in the declared orde
   assert.doesNotMatch(host, /chromeRowPosXRight\(this\.isExpandedLayout, this\.skyWidth, this\.EDGE_MARGIN,/);
   assert.match(host, /if \(panel === 'time' && nextVisible\) this\.prepareTimePanel\(\)/);
   assert.match(host, /this\.wheel\(\)\.seedFromSimulation\(jd\)/);
+  assert.doesNotMatch(host, /onWheelTouch: \(event: TouchEvent\)/);
+  assert.doesNotMatch(host, /onWheelPanStart/);
+  assert.match(host, /onWheelRect: \(x: number, y: number, width: number, height: number\) => \{/);
+  assert.match(host, /this\.handleTimeWheelTouch\(event\)/);
+  assert.match(host, /this\.wheel\(\)\.beginPan\(this\.timeWheelTouchStartX, this\.timeWheelTouchStartY\)/);
+  const canvas = readFileSync(new URL('../harmonyos/ets-source/panels/time/TimeWheelCanvas.ets', import.meta.url), 'utf8');
+  assert.doesNotMatch(canvas, /\.gesture\(/);
+  assert.match(canvas, /\.hitTestBehavior\(HitTestMode\.None\)/);
 });

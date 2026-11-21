@@ -153,6 +153,8 @@ mirror_entry "harmonyos/module.json5" "entry/src/main/module.json5"
 
 # 6. Native template sources.
 mirror_entry "harmonyos/cpp-source/hello.cpp" "entry/src/main/cpp/hello.cpp"
+mirror_entry "harmonyos/cpp-source/DetailModelNative.cpp" "entry/src/main/cpp/DetailModelNative.cpp"
+mirror_entry "harmonyos/cpp-source/DetailModelNative.h" "entry/src/main/cpp/DetailModelNative.h"
 mirror_entry "harmonyos/cpp-source/PresentationGeometry.h" "entry/src/main/cpp/PresentationGeometry.h"
 mirror_entry "harmonyos/cpp-source/CMakeLists.txt" "entry/src/main/cpp/CMakeLists.txt"
 mirror_files "$REPO_ROOT/harmonyos/cpp-source/types/libentry" "$MODULE_ROOT/cpp/types/libentry"

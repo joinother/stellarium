@@ -13,35 +13,59 @@ import { UI_RADIUS_CONTROL } from '../../common/ui/UiTokens'
 export struct LayerSwitchRow {
   @StorageProp('stellariumReadableUi') readableUi: boolean = false
   @Prop label: ResourceStr
+  // Optional secondary line. When present the row grows to fit it.
+  @Prop hint: ResourceStr = ''
   @Prop isOn: boolean
+  // Disabled rows keep their preference visible but cannot be changed (e.g.
+  // the Earth-only mist horizon while observing another body).
+  // Named rowEnabled because CustomComponent already exposes enabled().
+  @Prop rowEnabled: boolean = true
   @State private c: ThemeSlots = DEFAULT_SLOTS
   onToggle: (value: boolean) => void = () => {}
 
   onWillApplyTheme(theme: Theme) { this.c = slotsFromTheme(theme) }
 
+  private hasHint(): boolean {
+    if (typeof this.hint === 'string') return this.hint.length > 0
+    return true
+  }
+
   build() {
     Row() {
-      Text(this.label)
-        .fontSize(panelFontSize(14, this.readableUi))
-        .fontColor(this.c.text)
+      Column({ space: 1 }) {
+        Text(this.label)
+          .fontSize(panelFontSize(14, this.readableUi))
+          .fontColor(this.c.text)
+          .width('100%')
+        if (this.hasHint()) {
+          Text(this.hint)
+            .fontSize(10)
+            .fontColor(this.c.sub)
+            .width('100%')
+            .maxLines(3)
+        }
+      }
         .layoutWeight(1)
+        .alignItems(HorizontalAlign.Start)
       Toggle({ type: ToggleType.Switch, isOn: this.isOn })
         .width(46)
         .height(28)
         .selectedColor(this.c.accent)
         .clickEffect({ level: ClickEffectLevel.LIGHT })
+        .enabled(this.rowEnabled)
         .onChange((value: boolean) => {
-          if (value === this.isOn) return
+          if (!this.rowEnabled || value === this.isOn) return
           this.onToggle(value)
         })
     }
-      .height(this.readableUi ? 50 : 42)
+      .height(this.hasHint() ? (this.readableUi ? 64 : 56) : (this.readableUi ? 50 : 42))
       .width('100%')
       .padding({ left: 10, right: 8 })
       .backgroundColor(this.isOn ? this.c.soft : this.c.bg)
       .border({ width: 1, color: this.isOn ? this.c.soft : this.c.dividerSoft })
       .borderRadius(UI_RADIUS_CONTROL)
       .margin({ bottom: 6 })
+      .opacity(this.rowEnabled ? 1 : 0.55)
       .animation({ duration: 200, curve: curves.springMotion(0.45, 0.9) })
   }
 }

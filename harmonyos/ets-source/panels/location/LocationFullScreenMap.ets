@@ -6,7 +6,7 @@ import { AsyncCallback, BusinessError } from '@ohos.base'
 import hilog from '@ohos.hilog'
 import { I18n } from '../../pages/I18n'
 import { LocationStore, OfflinePlaceAltitude } from '../../state/LocationStore'
-import { LocSearchItem } from '../../pages/StellariumTypes'
+import { HierCity, LocSearchItem } from '../../pages/StellariumTypes'
 import { LocationPort } from '../../bridge/LocationPort'
 import { inverseMapPoint, MapPoint } from '../../pages/MapCoordinate'
 import { smallestAdminDivision } from '../../common/location/ReverseGeocodeName'
@@ -14,6 +14,25 @@ import { DEFAULT_SLOTS, ThemeSlots, slotsFromTheme } from '../../state/Stellariu
 import { METERED_MAP_APIS_ENABLED } from '../../common/config/OhosFeatureFlags'
 import { tintMatrixFor } from '../../common/ui/IconTint'
 import { UI_RADIUS_CONTROL, UI_RADIUS_PANEL, UI_RADIUS_PILL } from '../../common/ui/UiTokens'
+
+// 外星观测点标签：白字黑描边，任何底色上都可读。
+const PLACE_LABEL_COLOR: number = 0xFFFFFFFF
+const PLACE_LABEL_STROKE_COLOR: number = 0xFF000000
+const PLACE_LABEL_FONT_SIZE: number = 12
+// 标签底边到标记圆点的距离，以及估算标签占用矩形的留白。
+const PLACE_LABEL_ICON_GAP_PX: number = 14
+const PLACE_LABEL_PADDING_PX: number = 8
+// 3D 球面上超过这个角距的地点位于球体背面，不显示标签。
+const PLACE_GLOBE_VISIBLE_ANGLE_DEG: number = 84
+// 点按圆点附近也算选中该地点。图标本身只有几十像素，44 vp 更接近可点范围。
+const PLACE_TAP_RADIUS_VP: number = 44
+
+interface PlaceLabelRect {
+  left: number
+  top: number
+  right: number
+  bottom: number
+}
 
 interface MapApiSearchResult {
   name: string
@@ -84,6 +103,11 @@ export struct LocationFullScreenMap {
   @Prop altitudeSource: string = ''
   @Prop locationName: string = ''
   locationPort?: LocationPort
+  // 外星观测点：Moon 任务地点、Mars/Venus/Titan/Bennu 着陆点等离线地点。
+  // 用普通字段而非 @Prop：全屏地图按星球挂载/卸载，切星球时组件会重建，
+  // 避免每次宿主 build 深拷贝整份地点数组。
+  namedPlaces: HierCity[] = []
+  placeLabel: (name: string) => string = (name: string) => name
   @StorageLink('stellariumScreenSafeTopPixels') private screenSafeTopPixels: number = 0
   @StorageLink('stellariumScreenSafeBottomPixels') private screenSafeBottomPixels: number = 0
   @State private c: ThemeSlots = DEFAULT_SLOTS
@@ -129,6 +153,14 @@ export struct LocationFullScreenMap {
   private controller?: map.MapComponentController
   private marker?: map.Marker
   private gpsHitMarker?: map.Marker
+  private placeMarkers: Array<map.Marker> = []
+  private placeMarkerIds: Array<string> = []
+  private placeMarkerPlaces: Array<HierCity> = []
+  private placeMarkerLabels: Array<string> = []
+  // 当前选中的地点标签始终优先显示，其余按地点库顺序贪心避让。
+  private selectedPlaceIndex: number = -1
+  // onMapLoad 与 local-globe fallback 都可能触发标记同步；用序号取消旧的一轮。
+  private placeMarkerSyncId: number = 0
   private planetSurfaceOverlay?: map.ImageOverlay
   private timeoutId: number = -1
   private options: mapCommon.MapOptions = {
@@ -152,10 +184,13 @@ export struct LocationFullScreenMap {
     const events = controller.getEventManager()
     events.on('mapLoad', () => { this.onMapLoad() })
     events.on('error', (error: BusinessError) => { this.onMapError(error) })
-    events.on('cameraIdle', () => { this.syncPlanet2DOverlay() })
+    events.on('cameraIdle', () => {
+      this.syncPlanet2DOverlay()
+      this.refreshPlaceLabelVisibility()
+    })
     events.on('mapClick', (position: mapCommon.LatLng) => { this.handleMapClick(position) })
     events.on('myLocationClick', (position: mapCommon.LatLng) => { this.onGpsDotClick(position) })
-    events.on('markerClick', (marker: map.Marker) => { this.onGpsHitMarkerClick(marker) })
+    events.on('markerClick', (marker: map.Marker) => { this.onMapMarkerClick(marker) })
   }
   onPick: (latitude: number, longitude: number, altitude: number, name: string, source: string) => void =
     () => {}
@@ -207,6 +242,17 @@ export struct LocationFullScreenMap {
     this.selectedPointSource = this.altitudeSource === 'gps' ? 'gps'
       : (this.altitudeSource === 'named' ? 'named' : 'map')
     this.globeTexturePath = surfaceTexturePath(this.observerPlanet, this.mapTexture)
+    // If the picker opens on a named site, keep its label at the top of the
+    // declutter order.
+    this.selectedPlaceIndex = -1
+    if (this.observerPlanet !== 'Earth' && this.locationName.length > 0) {
+      for (let i = 0; i < this.namedPlaces.length; i += 1) {
+        if (this.placeLabel(this.namedPlaces[i].n) === this.locationName) {
+          this.selectedPlaceIndex = i
+          break
+        }
+      }
+    }
     this.clearSearchState()
     this.prepareMap()
   }
@@ -271,6 +317,7 @@ export struct LocationFullScreenMap {
     } catch (_error) {
       // The controller may already be torn down with the MapComponent.
     }
+    this.cancelNamedPlaceMarkers()
     this.planetSurfaceOverlay = undefined
     this.gpsHitMarker = undefined
     this.controller = undefined
@@ -300,6 +347,7 @@ export struct LocationFullScreenMap {
     } catch (_error) {
       // The controller may already be torn down with the MapComponent.
     }
+    this.cancelNamedPlaceMarkers()
     this.planetSurfaceOverlay = undefined
     this.gpsHitMarker = undefined
     this.controller = undefined
@@ -338,6 +386,7 @@ export struct LocationFullScreenMap {
     }
     this.applyMapPadding()
     await this.placeInitialPoint()
+    await this.syncNamedPlaceMarkers()
   }
 
   private onMapError(error: BusinessError): void {
@@ -385,6 +434,7 @@ export struct LocationFullScreenMap {
     this.loading = false
     this.applyMapPadding()
     await this.placeInitialPoint()
+    await this.syncNamedPlaceMarkers()
   }
 
   // Returns an I18n key describing why the globe texture could not be applied,
@@ -408,15 +458,34 @@ export struct LocationFullScreenMap {
       const bytes = await context.resourceManager.getRawFileContent(this.globeTexturePath)
       const source = image.createImageSource(bytes.buffer as ArrayBuffer)
       const pixelMap = await source.createPixelMap()
+      // The starfield is decoration: decode failures must not take the globe
+      // down with them, so fall back to Map Kit's own background.
+      let starSource: image.ImageSource | undefined = undefined
+      let starPixelMap: image.PixelMap | undefined = undefined
       try {
-        await controller.setSphereMapEnabled(true, {
+        const starBytes = await context.resourceManager.getMediaContent($r('app.media.space_starfield'))
+        starSource = image.createImageSource(starBytes.buffer as ArrayBuffer)
+        starPixelMap = await starSource.createPixelMap()
+      } catch (_starError) {
+        hilog.info(0x0000, 'StellariumArkUI', '[full-map] starfield decode failed')
+        starPixelMap = undefined
+      }
+      try {
+        const params: mapCommon.SphereParams = {
           sunLightEnabled: false,
           cityLightEnabled: false,
           animateDuration: 0,
           coverageImage: pixelMap
-        })
+        }
+        // Map Kit paints this image behind the 3D sphere. Without it the
+        // offline globe (MapType.NONE) floats on the empty-map background
+        // instead of a night sky. Online Petal maps keep their own globe.
+        if (starPixelMap !== undefined) params.backgroundImage = starPixelMap
+        await controller.setSphereMapEnabled(true, params)
         return ''
       } finally {
+        if (starPixelMap !== undefined) starPixelMap.release()
+        if (starSource !== undefined) starSource.release()
         pixelMap.release()
         source.release()
       }
@@ -521,12 +590,77 @@ export struct LocationFullScreenMap {
 
   private async handleMapClick(position: mapCommon.LatLng): Promise<void> {
     if (!this.mapReady) return
+    // Map Kit only fires markerClick inside the small icon bounds. A tap on the
+    // empty space around a dot or on its label lands here; snap it to the
+    // nearest named site so the interaction matches a much larger touch target.
+    const nearbyPlace = this.nearestPlaceAt(position)
+    if (nearbyPlace >= 0) {
+      this.selectedPlaceIndex = nearbyPlace
+      await this.chooseNamedPlace(this.placeMarkerPlaces[nearbyPlace])
+      this.refreshPlaceLabelVisibility()
+      return
+    }
     const point = await this.toWgs84(position)
     this.selectedPointSource = 'map'
+    this.selectedPlaceIndex = -1
     // Let the reverse geocoder name the picked point (street/community/town)
     // instead of leaving the generic "自定义位置" label.
     await this.setDraft(point.latitude, point.longitude, position, undefined,
       undefined, undefined, undefined, true)
+    this.refreshPlaceLabelVisibility()
+  }
+
+  // 返回点按位置附近（屏幕 44 vp 内）最近的外星观测点；没有则 -1。
+  // 只考虑当前可见半球与屏幕范围内的地点，避免选到球体背面。
+  private nearestPlaceAt(position: mapCommon.LatLng): number {
+    if (this.observerPlanet === 'Earth' || this.placeMarkers.length === 0) return -1
+    const controller = this.controller
+    if (!controller) return -1
+    let projection: map.Projection
+    let camera: mapCommon.CameraPosition
+    try {
+      projection = controller.getProjection()
+      camera = controller.getCameraPosition()
+    } catch (_error) {
+      return -1
+    }
+    let tap: mapCommon.MapPoint
+    try {
+      tap = projection.toScreenLocation(position)
+    } catch (_error) {
+      return -1
+    }
+    const radiusPx = this.getUIContext().vp2px(PLACE_TAP_RADIUS_VP)
+    const radiusSquared = radiusPx * radiusPx
+    const globeMode = this.labelGlobeMode(camera.zoom)
+    let bestIndex = -1
+    let bestDistance = radiusSquared
+    for (let i = 0; i < this.placeMarkers.length; i += 1) {
+      let markerPosition: mapCommon.LatLng
+      try {
+        markerPosition = this.placeMarkers[i].getPosition()
+      } catch (_error) {
+        continue
+      }
+      if (globeMode && this.angularDistanceDeg(camera.target.latitude, camera.target.longitude,
+        markerPosition.latitude, markerPosition.longitude) > PLACE_GLOBE_VISIBLE_ANGLE_DEG) {
+        continue
+      }
+      let screen: mapCommon.MapPoint
+      try {
+        screen = projection.toScreenLocation(markerPosition)
+      } catch (_error) {
+        continue
+      }
+      const dx = screen.positionX - tap.positionX
+      const dy = screen.positionY - tap.positionY
+      const distance = dx * dx + dy * dy
+      if (distance < bestDistance) {
+        bestDistance = distance
+        bestIndex = i
+      }
+    }
+    return bestIndex
   }
 
   private async setDraft(latitude: number, longitude: number,
@@ -571,7 +705,9 @@ export struct LocationFullScreenMap {
         this.marker.setPosition(point)
         await this.marker.setIcon(icon)
       } else {
-        this.marker = await controller.addMarker({ position: point, icon: icon })
+        // The selected-point pin must not swallow taps: non-clickable markers
+        // let the map click reach the nearby-place hit test below.
+        this.marker = await controller.addMarker({ position: point, icon: icon, clickable: false })
       }
     } catch (_error) {
       // Keep the draft even if the marker layer is unavailable.
@@ -739,18 +875,43 @@ export struct LocationFullScreenMap {
     }
   }
 
-  private onGpsHitMarkerClick(marker: map.Marker): void {
-    if (!this.gpsHitMarker) return
+  private onMapMarkerClick(marker: map.Marker): void {
     let clickedId = ''
-    let hitId = ''
     try {
       clickedId = marker.getId()
-      hitId = this.gpsHitMarker.getId()
     } catch (_error) {
       return
     }
-    if (clickedId.length === 0 || clickedId !== hitId) return
-    this.onGpsDotClick({ latitude: this.gpsLat, longitude: this.gpsLon })
+    if (clickedId.length === 0) return
+    const gpsMarker = this.gpsHitMarker
+    if (gpsMarker) {
+      let hitId = ''
+      try {
+        hitId = gpsMarker.getId()
+      } catch (_error) {
+        hitId = ''
+      }
+      if (hitId.length > 0 && clickedId === hitId) {
+        this.onGpsDotClick({ latitude: this.gpsLat, longitude: this.gpsLon })
+        return
+      }
+    }
+    const index = this.placeMarkerIds.indexOf(clickedId)
+    if (index >= 0) {
+      this.selectedPlaceIndex = index
+      this.chooseNamedPlace(this.placeMarkerPlaces[index])
+      this.refreshPlaceLabelVisibility()
+    }
+  }
+
+  // 点按外星观测点标签：把该地点设为待应用选点，主标记与底部操作卡同步更新；
+  // 用户再按“选此点”即可应用（与地图点选、GPS 蓝点行为一致）。
+  private async chooseNamedPlace(place: HierCity): Promise<void> {
+    const point = await this.toMapCoordinate(place.la, place.lo)
+    this.selectedPointSource = 'named'
+    await this.setDraft(place.la, place.lo, point, this.placeLabel(place.n), place.al,
+      this.observerPlanet === 'Earth' ? 'city' : 'offline')
+    this.focusMap(point)
   }
 
   private async onGpsDotClick(position: mapCommon.LatLng): Promise<void> {
@@ -789,7 +950,9 @@ export struct LocationFullScreenMap {
         this.marker.setPosition(point)
         await this.marker.setIcon(icon)
       } else {
-        this.marker = await controller.addMarker({ position: point, icon: icon })
+        // The selected-point pin must not swallow taps: non-clickable markers
+        // let the map click reach the nearby-place hit test below.
+        this.marker = await controller.addMarker({ position: point, icon: icon, clickable: false })
       }
       controller.moveCamera(map.newCameraPosition({
         target: point,
@@ -800,6 +963,237 @@ export struct LocationFullScreenMap {
       }
     } catch (_error) {
       // Keep the draft even if the marker or camera update fails.
+    }
+  }
+
+  // 外星观测点的标记与名称标签。Map Kit 的 Marker.annotations 承载标签文字；
+  // 旧版地图服务不支持时回退为普通 title 标记（点按后仍可选取该地点）。
+  private async syncNamedPlaceMarkers(): Promise<void> {
+    const controller = this.controller
+    if (!controller) return
+    const syncId = ++this.placeMarkerSyncId
+    this.removeNamedPlaceMarkers()
+    if (this.observerPlanet === 'Earth' || this.namedPlaces.length === 0) return
+    for (let placeIndex = 0; placeIndex < this.namedPlaces.length; placeIndex += 1) {
+      const place = this.namedPlaces[placeIndex]
+      if (syncId !== this.placeMarkerSyncId || this.controller !== controller) return
+      const point = await this.toMapCoordinate(place.la, place.lo)
+      if (syncId !== this.placeMarkerSyncId || this.controller !== controller) return
+      const label = this.placeLabel(place.n)
+      let placeMarker: map.Marker | undefined = undefined
+      try {
+        placeMarker = await controller.addMarker({
+          position: point,
+          icon: $r('app.media.ic_map_dot'),
+          anchorU: 0.5,
+          anchorV: 0.5,
+          clickable: true,
+          zIndex: 5,
+          // Map Kit 自带的标记碰撞：数值越小优先级越高。地点库靠前的
+          // 任务地点（如 Apollo 11）优先保留，配合下面的标签避让使用。
+          priority: placeIndex,
+          collisionRule: mapCommon.CollisionRule.NONE,
+          annotations: [{
+            content: label,
+            color: PLACE_LABEL_COLOR,
+            fontSize: PLACE_LABEL_FONT_SIZE,
+            strokeColor: PLACE_LABEL_STROKE_COLOR,
+            strokeWidth: 2
+          }],
+          annotationPosition: mapCommon.TextPosition.TOP,
+          showIcon: true,
+          title: label
+        })
+      } catch (_error) {
+        try {
+          placeMarker = await controller.addMarker({
+            position: point,
+            icon: $r('app.media.ic_map_dot'),
+            anchorU: 0.5,
+            anchorV: 0.5,
+            clickable: true,
+            zIndex: 5,
+            title: label
+          })
+        } catch (_fallbackError) {
+          placeMarker = undefined
+        }
+      }
+      if (placeMarker === undefined) continue
+      if (syncId !== this.placeMarkerSyncId || this.controller !== controller) {
+        try {
+          placeMarker.remove()
+        } catch (_removeError) {
+          // A newer sync owns the marker layer now.
+        }
+        return
+      }
+      let placeId = ''
+      try {
+        placeId = placeMarker.getId()
+      } catch (_error) {
+        placeId = ''
+      }
+      if (placeId.length === 0) {
+        try {
+          placeMarker.remove()
+        } catch (_removeError) {
+          // Ignore a marker that cannot be addressed; it must not stay pickable.
+        }
+        continue
+      }
+      this.placeMarkers.push(placeMarker)
+      this.placeMarkerIds.push(placeId)
+      this.placeMarkerPlaces.push(place)
+      this.placeMarkerLabels.push(label)
+    }
+    this.refreshPlaceLabelVisibility()
+  }
+
+  private cancelNamedPlaceMarkers(): void {
+    this.placeMarkerSyncId += 1
+    this.removeNamedPlaceMarkers()
+  }
+
+  private removeNamedPlaceMarkers(): void {
+    for (const placeMarker of this.placeMarkers) {
+      try {
+        placeMarker.remove()
+      } catch (_error) {
+        // The controller may already be torn down with the MapComponent.
+      }
+    }
+    this.placeMarkers = []
+    this.placeMarkerIds = []
+    this.placeMarkerPlaces = []
+    this.placeMarkerLabels = []
+  }
+
+  // 标签避让：Map Kit 自带的 Marker 碰撞只保证标记图标不重叠，注释文字仍可能
+  // 互相压住。这里用 Projection 把每个地点投到屏幕坐标，按优先级（当前选中
+  // 地点最优先，其次地点库顺序）贪心保留不重叠的标签，其余只隐藏文字、保留圆点。
+  // 3D 球面模式下先剔除背面的地点，避免背面标签投到正面。
+  private refreshPlaceLabelVisibility(): void {
+    const controller = this.controller
+    if (!controller || this.placeMarkers.length === 0) return
+    let projection: map.Projection
+    let camera: mapCommon.CameraPosition
+    try {
+      projection = controller.getProjection()
+      camera = controller.getCameraPosition()
+    } catch (_error) {
+      return
+    }
+    const widthPx = this.getUIContext().vp2px(this.skyWidth > 0 ? this.skyWidth : 1)
+    const heightPx = this.getUIContext().vp2px(this.skyHeight > 0 ? this.skyHeight : 1)
+    const globeMode = this.labelGlobeMode(camera.zoom)
+    const labelHeight = PLACE_LABEL_FONT_SIZE + PLACE_LABEL_PADDING_PX
+    const accepted: Array<PlaceLabelRect> = []
+    const order: Array<number> = []
+    if (this.selectedPlaceIndex >= 0 && this.selectedPlaceIndex < this.placeMarkers.length) {
+      order.push(this.selectedPlaceIndex)
+    }
+    for (let i = 0; i < this.placeMarkers.length; i += 1) {
+      if (i !== this.selectedPlaceIndex) order.push(i)
+    }
+    let visibleCount = 0
+    for (const markerIndex of order) {
+      const marker = this.placeMarkers[markerIndex]
+      let visible = true
+      let position: mapCommon.LatLng = { latitude: 0, longitude: 0 }
+      try {
+        position = marker.getPosition()
+      } catch (_error) {
+        visible = false
+      }
+      if (visible && globeMode &&
+        this.angularDistanceDeg(camera.target.latitude, camera.target.longitude,
+          position.latitude, position.longitude) > PLACE_GLOBE_VISIBLE_ANGLE_DEG) {
+        visible = false
+      }
+      let rect: PlaceLabelRect = { left: 0, top: 0, right: 0, bottom: 0 }
+      if (visible) {
+        let screen: mapCommon.MapPoint = { positionX: 0, positionY: 0 }
+        try {
+          screen = projection.toScreenLocation(position)
+        } catch (_error) {
+          visible = false
+        }
+        if (visible) {
+          const label = markerIndex < this.placeMarkerLabels.length
+            ? this.placeMarkerLabels[markerIndex] : ''
+          const width = this.placeLabelWidthPx(label)
+          const left = screen.positionX - width / 2
+          const top = screen.positionY - PLACE_LABEL_ICON_GAP_PX - labelHeight
+          if (screen.positionX < -80 || screen.positionX > widthPx + 80 ||
+            screen.positionY < -40 || screen.positionY > heightPx + 40) {
+            visible = false
+          } else {
+            rect = { left: left, top: top, right: left + width, bottom: top + labelHeight }
+            for (const other of accepted) {
+              if (this.labelRectsOverlap(rect, other)) {
+                visible = false
+                break
+              }
+            }
+          }
+        }
+      }
+      if (visible) {
+        accepted.push(rect)
+        visibleCount += 1
+      }
+      this.setPlaceAnnotationVisible(marker, visible)
+    }
+    hilog.info(0x0000, 'StellariumArkUI',
+      '[full-map] place labels visible=%{public}d/%{public}d zoom=%{public}f globe=%{public}s',
+      visibleCount, this.placeMarkers.length, camera.zoom, globeMode.toString())
+  }
+
+  private labelGlobeMode(zoom: number): boolean {
+    // Map Kit switches to the 2D renderer at zoom >= 4 for bodies with a
+    // Mercator overlay; minor bodies stay on the 3D globe at every zoom.
+    if (this.observerPlanet !== 'Earth' && !supports2DMap(this.observerPlanet)) return true
+    return zoom < 4
+  }
+
+  private angularDistanceDeg(lat1: number, lon1: number, lat2: number, lon2: number): number {
+    const rad = Math.PI / 180
+    const dLat = (lat2 - lat1) * rad
+    const dLon = (lon2 - lon1) * rad
+    const sinLat = Math.sin(dLat / 2)
+    const sinLon = Math.sin(dLon / 2)
+    const a = sinLat * sinLat +
+      Math.cos(lat1 * rad) * Math.cos(lat2 * rad) * sinLon * sinLon
+    return 2 * Math.asin(Math.min(1, Math.sqrt(a))) / rad
+  }
+
+  private placeLabelWidthPx(label: string): number {
+    let units = 0
+    for (let i = 0; i < label.length; i += 1) {
+      // CJK / full-width glyphs occupy roughly one em; Latin glyphs ~0.58 em.
+      units += label.charCodeAt(i) >= 0x2E80 ? 1 : 0.58
+    }
+    return units * PLACE_LABEL_FONT_SIZE + PLACE_LABEL_PADDING_PX
+  }
+
+  private labelRectsOverlap(a: PlaceLabelRect, b: PlaceLabelRect): boolean {
+    const gap = 2
+    return a.left < b.right + gap && a.right + gap > b.left &&
+      a.top < b.bottom + gap && a.bottom + gap > b.top
+  }
+
+  private setPlaceAnnotationVisible(marker: map.Marker, visible: boolean): void {
+    try {
+      // setAnnotationVisible arrived with Map Kit 5.1.1; hide the whole marker
+      // on older services so overlapping labels still cannot stack up.
+      if (typeof marker.setAnnotationVisible === 'function') {
+        marker.setAnnotationVisible(visible)
+      } else {
+        marker.setVisible(visible)
+      }
+    } catch (_error) {
+      // Keep the marker as-is if the installed map service rejects the call.
     }
   }
 

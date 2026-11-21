@@ -6,6 +6,7 @@ import { LayerViewStore } from '../../state/LayerViewStore'
 import { OverlayStore } from '../../state/OverlayStore'
 import { DEFAULT_SLOTS, ThemeSlots, slotsFromTheme } from '../../state/StellariumTheme'
 import { UI_RADIUS_CONTROL } from '../../common/ui/UiTokens'
+import { panelFontSize } from '../../common/ui/UiTypography'
 import { LayerSwitchRow } from './LayerSwitchRow'
 import { ObservationAidBlock } from './ObservationAidBlock'
 import { AtmosphereGroundSection } from './AtmosphereGroundSection'
@@ -29,7 +30,10 @@ import { ViewCoordinateSettings } from '../view/ViewCoordinateSettings'
 export struct LayerSkyTab {
   @ObjectLink layerStore: LayerStore
   @ObjectLink layerViewStore: LayerViewStore
+  @StorageProp('stellariumReadableUi') readableUi: boolean = false
   @Prop nightModeOn: boolean
+  @Prop observerAltitude: number = 0
+  @Prop earthObserver: boolean = true
   @Prop refractionOn: boolean
   @Prop atmoPressure: number
   @Prop atmoTemperature: number
@@ -68,7 +72,7 @@ export struct LayerSkyTab {
       LayerSwitchRow({ label: I18n.t('s0530'), isOn: this.layerStore.stars, onToggle: (value: boolean) => { this.onToggleLayer('actionShow_Stars', '', value) } })
       // 星等限制
       Row() {
-        Text(I18n.t('i0300')).fontSize(12).fontColor(this.c.sub).width(72)
+        Text(I18n.t('i0300')).fontSize(panelFontSize(14, this.readableUi)).fontColor(this.c.text).width(86)
         Slider({
           value: this.layerViewStore.starMagLimit,
           min: 2.0,
@@ -77,15 +81,18 @@ export struct LayerSkyTab {
           style: SliderStyle.OutSet
         })
           .sliderInteractionMode(SliderInteraction.SLIDE_ONLY).minResponsiveDistance(8)
-          .trackColor(this.c.bg)
+          .trackColor(this.c.softStrong)
           .showSteps(false)
           .showTips(false)
           .layoutWeight(1)
           .onChange((value: number) => {
             this.onStarMagLimit(Math.round(value * 10) / 10)
           })
-        Text(this.layerViewStore.starMagLimit.toFixed(1)).fontSize(12).fontColor(this.c.text).width(36).textAlign(TextAlign.End)
-      }.height(34).width('100%').padding({ left: 10, right: 10 }).margin({ bottom: 4 })
+        Text(this.layerViewStore.starMagLimit.toFixed(1))
+          .fontSize(panelFontSize(13, this.readableUi)).fontColor(this.c.text).width(40).textAlign(TextAlign.End)
+      }.height(this.readableUi ? 50 : 42).width('100%').padding({ left: 10, right: 8 })
+        .backgroundColor(this.c.bg).border({ width: 1, color: this.c.dividerSoft })
+        .borderRadius(UI_RADIUS_CONTROL).margin({ bottom: 6 })
       LayerSwitchRow({ label: '亮星光晕', isOn: this.layerStore.bigStarHalo, onToggle: (value: boolean) => { this.onToggleLayer('bigStarHalo', 'setSkyDisplayBigStarHalo', value) } })
       LayerSwitchRow({ label: '星芒效果', isOn: this.layerStore.starSpiky, onToggle: (value: boolean) => { this.onToggleLayer('starSpiky', 'setSkyDisplayStarSpiky', value) } })
       LayerSwitchRow({ label: '星星闪烁', isOn: this.layerStore.starTwinkle, onToggle: (value: boolean) => { this.onToggleLayer('starTwinkle', 'setSkyDisplayStarTwinkle', value) } })
@@ -98,49 +105,60 @@ export struct LayerSkyTab {
       LayerSwitchRow({ label: I18n.t('s0531'), isOn: this.layerStore.milkyWay, onToggle: (value: boolean) => { this.onToggleLayer('actionShow_MilkyWay', '', value) } })
       // 银河亮度
       Row() {
-        Text(I18n.t('i0212')).fontSize(12).fontColor(this.c.sub).width(72)
+        Text(I18n.t('i0212')).fontSize(panelFontSize(14, this.readableUi)).fontColor(this.c.text).width(86)
+        // 与光污染等级行同版式：标题在左，中间留白，步进控件整体靠右。
         Row({ space: 6 }) {
-          Button('-').fontSize(12).fontColor(this.c.text).backgroundColor(this.c.bg)
-            .borderRadius(UI_RADIUS_CONTROL).width(36).height(28)
-            .padding({ left: 0, right: 0 })
+          Button('−').fontSize(15).fontColor(this.c.text).backgroundColor(this.c.softStrong)
+            .borderRadius(UI_RADIUS_CONTROL).width(40).height(30).padding({ left: 0, right: 0 })
+            .enabled(this.layerViewStore.milkyWayBright > 0)
             .onClick(() => {
               if (this.layerViewStore.milkyWayBright > 0) {
                 this.onMilkyWayBright(this.layerViewStore.milkyWayBright - 1)
               }
             })
-          Text(this.layerViewStore.milkyWayBright.toString()).fontSize(14).fontColor(this.c.text).width(24).textAlign(TextAlign.Center)
-          Button('+').fontSize(12).fontColor(this.c.text).backgroundColor(this.c.bg)
-            .borderRadius(UI_RADIUS_CONTROL).width(36).height(28)
-            .padding({ left: 0, right: 0 })
+          Text(this.layerViewStore.milkyWayBright.toString())
+            .fontSize(panelFontSize(14, this.readableUi)).fontColor(this.c.text)
+            .width(40).textAlign(TextAlign.Center)
+          Button('+').fontSize(15).fontColor(this.c.text).backgroundColor(this.c.softStrong)
+            .borderRadius(UI_RADIUS_CONTROL).width(40).height(30).padding({ left: 0, right: 0 })
+            .enabled(this.layerViewStore.milkyWayBright < 6)
             .onClick(() => {
               if (this.layerViewStore.milkyWayBright < 6) {
                 this.onMilkyWayBright(this.layerViewStore.milkyWayBright + 1)
               }
             })
-        }
-      }.height(34).width('100%').padding({ left: 10, right: 10 }).margin({ bottom: 4 })
+        }.layoutWeight(1).justifyContent(FlexAlign.End)
+      }.height(this.readableUi ? 50 : 42).width('100%').padding({ left: 10, right: 8 })
+        .backgroundColor(this.c.bg).border({ width: 1, color: this.c.dividerSoft })
+        .borderRadius(UI_RADIUS_CONTROL).margin({ bottom: 6 })
       LayerSwitchRow({ label: I18n.t('s0532'), isOn: this.layerStore.starLabels, onToggle: (value: boolean) => { this.onToggleLayer('actionShow_Stars_Labels', '', value) } })
       LayerSwitchRow({ label: I18n.t('s0308'), isOn: this.layerStore.meteors, onToggle: (value: boolean) => { this.onToggleLayer('setMeteors', 'setMeteors', value) } })
       if (this.layerStore.meteors) {
         Row() {
-          Text('理论流星率').fontSize(12).fontColor(this.c.sub).width(76)
+          Text('理论流星率').fontSize(panelFontSize(14, this.readableUi)).fontColor(this.c.text).width(86)
           Slider({ value: this.meteorZhrSliderPosition(), min: 0, max: 1000, step: 1, style: SliderStyle.OutSet }).sliderInteractionMode(SliderInteraction.SLIDE_ONLY).minResponsiveDistance(8)
-            .layoutWeight(1).trackColor(this.c.bg).showSteps(false)
+            .layoutWeight(1).trackColor(this.c.softStrong).showSteps(false)
             .onChange((value: number) => { this.onSetSkyDisplay('meteorZhr', this.meteorZhrFromSliderPosition(value)) })
-          Text(this.layerViewStore.meteorZhr + ' / 小时').fontSize(11).fontColor(this.c.text).width(66).textAlign(TextAlign.End)
-        }.height(36).width('100%').padding({ left: 10, right: 10 }).margin({ bottom: 2 })
+          Text(this.layerViewStore.meteorZhr + ' / 小时')
+            .fontSize(panelFontSize(13, this.readableUi)).fontColor(this.c.text).width(70).textAlign(TextAlign.End)
+        }.height(this.readableUi ? 50 : 42).width('100%').padding({ left: 10, right: 8 })
+          .backgroundColor(this.c.bg).border({ width: 1, color: this.c.dividerSoft })
+          .borderRadius(UI_RADIUS_CONTROL).margin({ bottom: 6 })
         Text('实际可见数量还会受夜间、地景亮度和地平高度影响')
-          .fontSize(10).fontColor(this.c.sub).width('100%').padding({ left: 86, right: 10 }).margin({ bottom: 4 })
+          .fontSize(10).fontColor(this.c.sub).width('100%').padding({ left: 10, right: 10 }).margin({ bottom: 6 })
       }
       LayerSwitchRow({ label: '黄道光', isOn: this.layerStore.zodiacalLight, onToggle: (value: boolean) => { this.onToggleLayer('zodiacalLight', 'setSkyDisplayZodiacalLight', value) } })
       if (this.layerStore.zodiacalLight) {
         Row() {
-          Text('黄道光亮度').fontSize(12).fontColor(this.c.sub).width(76)
+          Text('黄道光亮度').fontSize(panelFontSize(14, this.readableUi)).fontColor(this.c.text).width(86)
           Slider({ value: this.layerViewStore.zodiacalIntensity, min: 0, max: 5, step: 0.1, style: SliderStyle.OutSet }).sliderInteractionMode(SliderInteraction.SLIDE_ONLY).minResponsiveDistance(8)
-            .layoutWeight(1).trackColor(this.c.bg).showSteps(false)
+            .layoutWeight(1).trackColor(this.c.softStrong).showSteps(false)
             .onChange((value: number) => { this.onSetSkyDisplay('zodiacalIntensity', Math.round(value * 10) / 10) })
-          Text(this.layerViewStore.zodiacalIntensity.toFixed(1)).fontSize(11).fontColor(this.c.text).width(34).textAlign(TextAlign.End)
-        }.height(36).width('100%').padding({ left: 10, right: 10 }).margin({ bottom: 4 })
+          Text(this.layerViewStore.zodiacalIntensity.toFixed(1))
+            .fontSize(panelFontSize(13, this.readableUi)).fontColor(this.c.text).width(38).textAlign(TextAlign.End)
+        }.height(this.readableUi ? 50 : 42).width('100%').padding({ left: 10, right: 8 })
+          .backgroundColor(this.c.bg).border({ width: 1, color: this.c.dividerSoft })
+          .borderRadius(UI_RADIUS_CONTROL).margin({ bottom: 6 })
       }
       LayerSwitchRow({ label: I18n.t('s0300'), isOn: this.nightModeOn, onToggle: (value: boolean) => { this.onToggleLayer('actionShow_Night_Mode', '', value) } })
       LayerSwitchRow({ label: I18n.t('s0309'), isOn: this.layerStore.flipHoriz, onToggle: (value: boolean) => { this.onToggleLayer('actionHorizontal_Flip', '', value) } })
@@ -151,13 +169,25 @@ export struct LayerSkyTab {
       LayerSwitchRow({ label: I18n.t('s0305'), isOn: this.layerStore.atmosphere, onToggle: (value: boolean) => { this.onToggleLayer('actionShow_Atmosphere', '', value) } })
       LayerSwitchRow({ label: I18n.t('s0306'), isOn: this.layerStore.ground, onToggle: (value: boolean) => { this.onToggleLayer('actionShow_Ground', '', value) } })
       LayerSwitchRow({ label: I18n.t('s0307'), isOn: this.layerStore.fogEffect, onToggle: (value: boolean) => { this.onToggleLayer('actionShow_Fog', '', value) } })
-      Row() {
-        Text('光污染等级').fontSize(12).fontColor(this.c.sub).width(76)
-        Slider({ value: this.layerViewStore.bortleScale, min: 1, max: 9, step: 1, style: SliderStyle.OutSet }).sliderInteractionMode(SliderInteraction.SLIDE_ONLY).minResponsiveDistance(8)
-          .layoutWeight(1).trackColor(this.c.bg).showSteps(false)
-          .onChange((value: number) => { this.onSetSkyDisplay('bortleScale', Math.round(value)) })
-        Text('Bortle ' + this.layerViewStore.bortleScale).fontSize(11).fontColor(this.c.text).width(58).textAlign(TextAlign.End)
-      }.height(36).width('100%').padding({ left: 10, right: 10 }).margin({ bottom: 4 })
+      Row({ space: 8 }) {
+        Text('光污染等级').fontSize(panelFontSize(14, this.readableUi)).fontColor(this.c.text).width(86)
+        // 标题在左，中间留白，步进控件整体靠右（与银河亮度行一致）。
+        Row({ space: 6 }) {
+          Button('−').fontSize(15).fontColor(this.c.text).backgroundColor(this.c.softStrong)
+            .borderRadius(UI_RADIUS_CONTROL).width(40).height(30).padding({ left: 0, right: 0 })
+            .enabled(this.layerViewStore.bortleScale > 1)
+            .onClick(() => { this.onSetSkyDisplay('bortleScale', Math.max(1, this.layerViewStore.bortleScale - 1)) })
+          Text('Bortle ' + this.layerViewStore.bortleScale)
+            .fontSize(panelFontSize(14, this.readableUi)).fontColor(this.c.text)
+            .width(72).textAlign(TextAlign.Center)
+          Button('+').fontSize(15).fontColor(this.c.text).backgroundColor(this.c.softStrong)
+            .borderRadius(UI_RADIUS_CONTROL).width(40).height(30).padding({ left: 0, right: 0 })
+            .enabled(this.layerViewStore.bortleScale < 9)
+            .onClick(() => { this.onSetSkyDisplay('bortleScale', Math.min(9, this.layerViewStore.bortleScale + 1)) })
+        }.layoutWeight(1).justifyContent(FlexAlign.End)
+      }.height(this.readableUi ? 50 : 42).width('100%').padding({ left: 10, right: 8 })
+        .backgroundColor(this.c.bg).border({ width: 1, color: this.c.dividerSoft })
+        .borderRadius(UI_RADIUS_CONTROL).margin({ bottom: 6 })
       LayerSwitchRow({ label: '人眼动态视觉调适', isOn: this.layerStore.luminanceAdaptation, onToggle: (value: boolean) => { this.onToggleLayer('luminanceAdaptation', 'setSkyDisplayLuminanceAdaptation', value) } })
       // 大气折射（气压 / 气温 / 消光）自时间面板迁入
       ObservationAidBlock({
@@ -165,6 +195,8 @@ export struct LayerSkyTab {
         atmoPressure: this.atmoPressure,
         atmoTemperature: this.atmoTemperature,
         atmoExtinction: this.atmoExtinction,
+        altitude: this.observerAltitude,
+        earthObserver: this.earthObserver,
         onAtmosphere: (pressure: number, temperature: number, extinction: number) => { this.onAtmosphere(pressure, temperature, extinction) }
       })
     }.width('100%')
@@ -176,6 +208,7 @@ export struct LayerSkyTab {
 export struct LayerSsoTab {
   @ObjectLink layerStore: LayerStore
   @ObjectLink layerViewStore: LayerViewStore
+  @StorageProp('stellariumReadableUi') readableUi: boolean = false
   @Prop expandedLayout: boolean
   @State private c: ThemeSlots = DEFAULT_SLOTS
   onToggleLayer: (actionId: string, cmd: string, value: boolean) => void = () => {}
@@ -264,7 +297,7 @@ export struct LayerSsoTab {
               Text(this.layerViewStore.orbitThickness.toFixed(0) + ' px').fontSize(11).fontColor(this.c.sub).width(34).textAlign(TextAlign.End)
               Slider({ value: this.layerViewStore.orbitThickness, min: 1, max: 5, step: 1, style: SliderStyle.OutSet })
                 .sliderInteractionMode(SliderInteraction.SLIDE_ONLY).minResponsiveDistance(8)
-                .layoutWeight(1).trackColor(this.c.bg).showSteps(false).showTips(false)
+                .layoutWeight(1).trackColor(this.c.softStrong).showSteps(false).showTips(false)
                 .onChange((value: number) => { this.onSetOrbitThickness(value) })
             }.height(34).width('100%').padding({ left: 8, right: 10 }).backgroundColor(this.c.rowBg).borderRadius(UI_RADIUS_CONTROL)
             Row({ space: 8 }) {
@@ -308,7 +341,7 @@ export struct LayerSsoTab {
                 Text(this.layerViewStore.trailSelectionCount.toFixed(0) + ' 个').fontSize(11).fontColor(this.c.sub).width(34).textAlign(TextAlign.End)
                 Slider({ value: this.layerViewStore.trailSelectionCount, min: 1, max: 5, step: 1, style: SliderStyle.OutSet })
                   .sliderInteractionMode(SliderInteraction.SLIDE_ONLY).minResponsiveDistance(8)
-                  .layoutWeight(1).trackColor(this.c.bg).showSteps(false).showTips(false)
+                  .layoutWeight(1).trackColor(this.c.softStrong).showSteps(false).showTips(false)
                   .onChange((value: number) => { this.onSetTrailNumber('selectionCount', value) })
               }.height(34).width('100%').padding({ left: 8, right: 10 }).backgroundColor(this.c.rowBg).borderRadius(UI_RADIUS_CONTROL)
             }
@@ -317,7 +350,7 @@ export struct LayerSsoTab {
               Text(this.layerViewStore.trailYears.toFixed(0) + ' 年').fontSize(11).fontColor(this.c.sub).width(42).textAlign(TextAlign.End)
               Slider({ value: this.layerViewStore.trailYears, min: 1, max: 250, step: 1, style: SliderStyle.OutSet })
                 .sliderInteractionMode(SliderInteraction.SLIDE_ONLY).minResponsiveDistance(8)
-                .layoutWeight(1).trackColor(this.c.bg).showSteps(false).showTips(false)
+                .layoutWeight(1).trackColor(this.c.softStrong).showSteps(false).showTips(false)
                 .onChange((value: number) => { this.onSetTrailNumber('years', value) })
             }.height(34).width('100%').padding({ left: 8, right: 10 }).backgroundColor(this.c.rowBg).borderRadius(UI_RADIUS_CONTROL)
             Row() {
@@ -325,7 +358,7 @@ export struct LayerSsoTab {
               Text(this.layerViewStore.trailThickness.toFixed(0) + ' px').fontSize(11).fontColor(this.c.sub).width(42).textAlign(TextAlign.End)
               Slider({ value: this.layerViewStore.trailThickness, min: 1, max: 5, step: 1, style: SliderStyle.OutSet })
                 .sliderInteractionMode(SliderInteraction.SLIDE_ONLY).minResponsiveDistance(8)
-                .layoutWeight(1).trackColor(this.c.bg).showSteps(false).showTips(false)
+                .layoutWeight(1).trackColor(this.c.softStrong).showSteps(false).showTips(false)
                 .onChange((value: number) => { this.onSetTrailNumber('thickness', value) })
             }.height(34).width('100%').padding({ left: 8, right: 10 }).backgroundColor(this.c.rowBg).borderRadius(UI_RADIUS_CONTROL)
             Row({ space: 8 }) {
@@ -349,11 +382,14 @@ export struct LayerSsoTab {
         LayerSwitchRow({ label: I18n.t('s0317'), isOn: this.layerStore.enlargeSun, onToggle: (value: boolean) => { this.onToggleLayer('actionShow_Planets_EnlargeSun', '', value) } })
       }
       Row() {
-        Text(I18n.t('i0281')).fontSize(12).fontColor(this.c.sub).width(72)
-        Button(I18n.t('i0282')).fontSize(11).fontColor(this.c.text).backgroundColor(this.c.bg)
+        Text(I18n.t('i0281')).fontSize(panelFontSize(14, this.readableUi)).fontColor(this.c.text).width(86)
+        Button(I18n.t('i0282')).fontSize(panelFontSize(11, this.readableUi)).fontColor(this.c.text)
+          .backgroundColor(this.c.softStrong)
           .borderRadius(UI_RADIUS_CONTROL).height(28).padding({ left: 10, right: 10 })
           .onClick(() => { this.onTriggerAction('actionShow_Planets_Trails_Reset') })
-      }.height(34).width('100%').padding({ left: 10, right: 10 }).margin({ bottom: 4 })
+      }.height(this.readableUi ? 50 : 42).width('100%').padding({ left: 10, right: 8 })
+        .backgroundColor(this.c.bg).border({ width: 1, color: this.c.dividerSoft })
+        .borderRadius(UI_RADIUS_CONTROL).margin({ bottom: 6 })
     }.width('100%')
   }
 }
@@ -397,6 +433,7 @@ export struct LayerMarkingsTab {
   @ObjectLink layerStore: LayerStore
   @ObjectLink layerViewStore: LayerViewStore
   @ObjectLink overlayStore: OverlayStore
+  @StorageProp('stellariumReadableUi') readableUi: boolean = false
   @State private c: ThemeSlots = DEFAULT_SLOTS
   onToggleLayer: (actionId: string, cmd: string, value: boolean) => void = () => {}
   onSetFovMarker: (setting: string, value: number) => void = () => {}
@@ -467,40 +504,52 @@ export struct LayerMarkingsTab {
       LayerSwitchRow({ label: I18n.t('s0534'), isOn: this.layerStore.fovCircularMarker, onToggle: (value: boolean) => { this.onToggleLayer('actionShow_FOV_Circular_Marker', '', value) } })
       if (this.layerStore.fovCircularMarker) {
         Row() {
-          Text('圆形直径').fontSize(11).fontColor(this.c.sub).width(72)
-          Text(this.layerViewStore.fovCircularMarkerSize.toFixed(1) + '°').fontSize(11).fontColor(this.c.text).width(42).textAlign(TextAlign.End)
+          Text('圆形直径').fontSize(panelFontSize(14, this.readableUi)).fontColor(this.c.text).width(86)
+          Text(this.layerViewStore.fovCircularMarkerSize.toFixed(1) + '°')
+            .fontSize(panelFontSize(13, this.readableUi)).fontColor(this.c.text).width(48).textAlign(TextAlign.End)
           Slider({ value: this.layerViewStore.fovCircularMarkerSize, min: 0.1, max: 180, step: 0.1, style: SliderStyle.OutSet })
             .sliderInteractionMode(SliderInteraction.SLIDE_ONLY).minResponsiveDistance(8)
-            .layoutWeight(1).trackColor(this.c.bg).showSteps(false).showTips(false)
+            .layoutWeight(1).trackColor(this.c.softStrong).showSteps(false).showTips(false)
             .onChange((value: number) => { this.layerViewStore.fovCircularMarkerSize = value; this.onSetFovMarker('circleSize', value) })
-        }.height(34).width('100%').padding({ left: 14, right: 10 }).margin({ bottom: 3 })
+        }.height(this.readableUi ? 50 : 42).width('100%').padding({ left: 10, right: 8 })
+          .backgroundColor(this.c.bg).border({ width: 1, color: this.c.dividerSoft })
+          .borderRadius(UI_RADIUS_CONTROL).margin({ bottom: 6 })
       }
       LayerSwitchRow({ label: I18n.t('s0535'), isOn: this.layerStore.fovRectangularMarker, onToggle: (value: boolean) => { this.onToggleLayer('actionShow_FOV_Rectangular_Marker', '', value) } })
       if (this.layerStore.fovRectangularMarker) {
         Row() {
-          Text('矩形宽度').fontSize(11).fontColor(this.c.sub).width(72)
-          Text(this.layerViewStore.fovRectangularMarkerWidth.toFixed(1) + '°').fontSize(11).fontColor(this.c.text).width(42).textAlign(TextAlign.End)
+          Text('矩形宽度').fontSize(panelFontSize(14, this.readableUi)).fontColor(this.c.text).width(86)
+          Text(this.layerViewStore.fovRectangularMarkerWidth.toFixed(1) + '°')
+            .fontSize(panelFontSize(13, this.readableUi)).fontColor(this.c.text).width(48).textAlign(TextAlign.End)
           Slider({ value: this.layerViewStore.fovRectangularMarkerWidth, min: 0.1, max: 180, step: 0.1, style: SliderStyle.OutSet })
             .sliderInteractionMode(SliderInteraction.SLIDE_ONLY).minResponsiveDistance(8)
-            .layoutWeight(1).trackColor(this.c.bg).showSteps(false).showTips(false)
+            .layoutWeight(1).trackColor(this.c.softStrong).showSteps(false).showTips(false)
             .onChange((value: number) => { this.layerViewStore.fovRectangularMarkerWidth = value; this.onSetFovMarker('rectWidth', value) })
-        }.height(34).width('100%').padding({ left: 14, right: 10 })
+        }.height(this.readableUi ? 50 : 42).width('100%').padding({ left: 10, right: 8 })
+          .backgroundColor(this.c.bg).border({ width: 1, color: this.c.dividerSoft })
+          .borderRadius(UI_RADIUS_CONTROL).margin({ bottom: 6 })
         Row() {
-          Text('矩形高度').fontSize(11).fontColor(this.c.sub).width(72)
-          Text(this.layerViewStore.fovRectangularMarkerHeight.toFixed(1) + '°').fontSize(11).fontColor(this.c.text).width(42).textAlign(TextAlign.End)
+          Text('矩形高度').fontSize(panelFontSize(14, this.readableUi)).fontColor(this.c.text).width(86)
+          Text(this.layerViewStore.fovRectangularMarkerHeight.toFixed(1) + '°')
+            .fontSize(panelFontSize(13, this.readableUi)).fontColor(this.c.text).width(48).textAlign(TextAlign.End)
           Slider({ value: this.layerViewStore.fovRectangularMarkerHeight, min: 0.1, max: 180, step: 0.1, style: SliderStyle.OutSet })
             .sliderInteractionMode(SliderInteraction.SLIDE_ONLY).minResponsiveDistance(8)
-            .layoutWeight(1).trackColor(this.c.bg).showSteps(false).showTips(false)
+            .layoutWeight(1).trackColor(this.c.softStrong).showSteps(false).showTips(false)
             .onChange((value: number) => { this.layerViewStore.fovRectangularMarkerHeight = value; this.onSetFovMarker('rectHeight', value) })
-        }.height(34).width('100%').padding({ left: 14, right: 10 })
+        }.height(this.readableUi ? 50 : 42).width('100%').padding({ left: 10, right: 8 })
+          .backgroundColor(this.c.bg).border({ width: 1, color: this.c.dividerSoft })
+          .borderRadius(UI_RADIUS_CONTROL).margin({ bottom: 6 })
         Row() {
-          Text('旋转角度').fontSize(11).fontColor(this.c.sub).width(72)
-          Text(this.layerViewStore.fovRectangularMarkerRotation.toFixed(0) + '°').fontSize(11).fontColor(this.c.text).width(42).textAlign(TextAlign.End)
+          Text('旋转角度').fontSize(panelFontSize(14, this.readableUi)).fontColor(this.c.text).width(86)
+          Text(this.layerViewStore.fovRectangularMarkerRotation.toFixed(0) + '°')
+            .fontSize(panelFontSize(13, this.readableUi)).fontColor(this.c.text).width(48).textAlign(TextAlign.End)
           Slider({ value: this.layerViewStore.fovRectangularMarkerRotation, min: -180, max: 180, step: 1, style: SliderStyle.OutSet })
             .sliderInteractionMode(SliderInteraction.SLIDE_ONLY).minResponsiveDistance(8)
-            .layoutWeight(1).trackColor(this.c.bg).showSteps(false).showTips(false)
+            .layoutWeight(1).trackColor(this.c.softStrong).showSteps(false).showTips(false)
             .onChange((value: number) => { this.layerViewStore.fovRectangularMarkerRotation = value; this.onSetFovMarker('rectRotation', value) })
-        }.height(34).width('100%').padding({ left: 14, right: 10 }).margin({ bottom: 3 })
+        }.height(this.readableUi ? 50 : 42).width('100%').padding({ left: 10, right: 8 })
+          .backgroundColor(this.c.bg).border({ width: 1, color: this.c.dividerSoft })
+          .borderRadius(UI_RADIUS_CONTROL).margin({ bottom: 6 })
       }
       LayerSwitchRow({ label: I18n.t('s0344'), isOn: this.layerStore.intercardinalPts, onToggle: (value: boolean) => { this.onToggleLayer('actionShow_Intercardinal_Points', '', value) } })
       LayerSwitchRow({ label: I18n.t('s0536'), isOn: this.layerStore.secondaryIntercardinalPts, onToggle: (value: boolean) => { this.onToggleLayer('actionShow_Secondary_Intercardinal_Points', '', value) } })
@@ -570,8 +619,11 @@ export struct LayerMarkingsTab {
 export struct LayerLandscapeTab {
   @ObjectLink layerStore: LayerStore
   @ObjectLink layerViewStore: LayerViewStore
+  @StorageProp('stellariumReadableUi') readableUi: boolean = false
+  @Prop earthObserver: boolean = true
   @State private c: ThemeSlots = DEFAULT_SLOTS
   onToggleLayer: (actionId: string, cmd: string, value: boolean) => void = () => {}
+  onToggleLandscapeAutoSelection: (enabled: boolean) => void = () => {}
   onSetLandscapeFadeWithZoom: (isOn: boolean) => void = () => {}
   onImportLandscape: () => void = () => {}
   onSelectLandscape: (id: string, name: string) => void = () => {}
@@ -586,22 +638,52 @@ export struct LayerLandscapeTab {
   build() {
     Column({ space: 0 }) {
       LayerSwitchRow({ label: I18n.t('s0306'), isOn: this.layerStore.ground, onToggle: (value: boolean) => { this.onToggleLayer('actionShow_Ground', '', value) } })
-      LayerSwitchRow({ label: I18n.t('mist_horizon'), isOn: this.layerStore.mistHorizon, onToggle: (value: boolean) => { this.onToggleLayer('actionShow_MistHorizon', '', value) } })
-      Text(I18n.t('mist_horizon_hint')).fontSize(12).fontColor(this.c.sub).width('100%').padding({ left: 10, right: 10, bottom: 8 })
+      LayerSwitchRow({
+        label: I18n.t('landscape_auto_selection'),
+        isOn: this.layerStore.landscapeAutoSelection,
+        onToggle: (value: boolean) => { this.onToggleLandscapeAutoSelection(value) }
+      })
+      Text(I18n.t('landscape_auto_selection_hint'))
+        .fontSize(panelFontSize(11, this.readableUi)).fontColor(this.c.sub).width('100%')
+        .padding({ left: 10, right: 10, bottom: 8 })
+      LayerSwitchRow({
+        label: I18n.t('mist_horizon'),
+        isOn: this.layerStore.mistHorizon,
+        rowEnabled: this.earthObserver,
+        onToggle: (value: boolean) => { this.onToggleLayer('actionShow_MistHorizon', '', value) }
+      })
+      Text(this.earthObserver ? I18n.t('mist_horizon_hint') : I18n.t('mist_horizon_earth_only'))
+        .fontSize(panelFontSize(11, this.readableUi)).fontColor(this.c.sub).width('100%')
+        .padding({ left: 10, right: 10, bottom: 8 })
       if (!this.layerStore.ground) {
-        Text(I18n.t('landscape_preselect_hint')).fontSize(12).fontColor(this.c.sub).width('100%').padding({ left: 10, right: 10, bottom: 8 })
+        Text(I18n.t('landscape_preselect_hint'))
+          .fontSize(panelFontSize(11, this.readableUi)).fontColor(this.c.sub).width('100%')
+          .padding({ left: 10, right: 10, bottom: 8 })
       }
       LayerSwitchRow({ label: I18n.t('s0520'), isOn: this.layerStore.landscapeIllum, onToggle: (value: boolean) => { this.onToggleLayer('actionShow_LandscapeIllumination', '', value) } })
       LayerSwitchRow({ label: I18n.t('s0521'), isOn: this.layerStore.landscapeLabels, onToggle: (value: boolean) => { this.onToggleLayer('actionShow_LandscapeLabels', '', value) } })
       LayerSwitchRow({ label: I18n.t('s0307'), isOn: this.layerStore.fogEffect, onToggle: (value: boolean) => { this.onToggleLayer('actionShow_Fog', '', value) } })
+      LayerSwitchRow({
+        label: I18n.t('landscape_fade_with_zoom'),
+        isOn: this.layerViewStore.landscapeFadeWithZoom,
+        onToggle: (value: boolean) => { this.onSetLandscapeFadeWithZoom(value) }
+      })
+      Text(I18n.t('landscape_fade_with_zoom_hint'))
+        .fontSize(panelFontSize(11, this.readableUi)).fontColor(this.c.sub).width('100%')
+        .padding({ left: 10, right: 10, bottom: 8 })
       Row() {
-        Column() {
-          Text('俯视时地景淡出').fontSize(13).fontColor(this.c.text)
-          Text('视角压低看地面时地面渐隐，露出地平线下的星空（仍可见）').fontSize(11).fontColor(this.c.sub).margin({ top: 2 })
-        }.layoutWeight(1)
-        Toggle({ type: ToggleType.Switch, isOn: this.layerViewStore.landscapeFadeWithZoom })
-          .onChange((isOn: boolean) => { this.onSetLandscapeFadeWithZoom(isOn) })
-      }.width('100%').padding({ left: 10, right: 10 }).backgroundColor(this.c.bg).borderRadius(UI_RADIUS_CONTROL).margin({ top: 6 })
+        Text(I18n.t('i0289')).fontSize(panelFontSize(14, this.readableUi)).fontColor(this.c.text).width(86)
+        Text(this.layerViewStore.landscapeTransp + '%')
+          .fontSize(panelFontSize(13, this.readableUi)).fontColor(this.c.text).width(44).textAlign(TextAlign.End)
+        Slider({ value: this.layerViewStore.landscapeTransp, min: 0, max: 100, step: 5, style: SliderStyle.OutSet })
+          .sliderInteractionMode(SliderInteraction.SLIDE_ONLY).minResponsiveDistance(8)
+          .layoutWeight(1)
+          .trackColor(this.c.softStrong)
+          .showSteps(false)
+          .onChange((val: number) => { this.layerViewStore.landscapeTransp = Math.round(val); this.onChangeLandscapeTransparency(val) })
+      }.height(this.readableUi ? 50 : 42).width('100%').padding({ left: 10, right: 8 })
+        .backgroundColor(this.c.bg).border({ width: 1, color: this.c.dividerSoft })
+        .borderRadius(UI_RADIUS_CONTROL).margin({ top: 6, bottom: 6 })
       Row() {
         Text(I18n.t('i0288')).fontSize(11).fontColor(this.c.sub).width('100%').padding({ left: 2 })
       }.height(18).width('100%').margin({ top: 6 })
@@ -657,16 +739,6 @@ export struct LayerLandscapeTab {
         }, (item: LandscapeItem, index: number) => item.id)
       }
       .width('100%')
-      Row() {
-        Text(I18n.t('i0289')).fontSize(12).fontColor(this.c.sub).width(72)
-        Text(this.layerViewStore.landscapeTransp + '%').fontSize(14).fontColor(this.c.text).margin({ right: 8 })
-        Slider({ value: this.layerViewStore.landscapeTransp, min: 0, max: 100, step: 5, style: SliderStyle.OutSet })
-          .sliderInteractionMode(SliderInteraction.SLIDE_ONLY).minResponsiveDistance(8)
-          .layoutWeight(1)
-          .trackColor(this.c.bg)
-          .showSteps(false)
-          .onChange((val: number) => { this.layerViewStore.landscapeTransp = Math.round(val); this.onChangeLandscapeTransparency(val) })
-      }.height(34).width('100%').padding({ left: 10, right: 10 }).margin({ bottom: 4 })
     }.width('100%')
   }
 }

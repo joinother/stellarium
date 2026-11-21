@@ -1236,8 +1236,10 @@ void StelCore::returnToHome()
 
 	LandscapeMgr* landscapeMgr = GETSTELMODULE(LandscapeMgr);
 	landscapeMgr->setCurrentLandscapeID(landscapeMgr->getDefaultLandscapeID());
-	landscapeMgr->setFlagAtmosphere(p->hasAtmosphere() && conf->value("landscape/flag_atmosphere", true).toBool());
-	landscapeMgr->setFlagFog(p->hasAtmosphere() && conf->value("landscape/flag_fog", true).toBool());
+	const bool hasAtmosphere = p->hasAtmosphere();
+	landscapeMgr->setFlagAtmosphereAndFogForEnvironment(
+		hasAtmosphere && conf->value("landscape/flag_atmosphere", true).toBool(),
+		hasAtmosphere && conf->value("landscape/flag_fog", true).toBool());
 	landscapeMgr->setFlagLandscape(!p->getEnglishName().contains("observer", Qt::CaseInsensitive) && conf->value("landscape/flag_landscape", true).toBool());
 
 	GETSTELMODULE(StelObjectMgr)->unSelect();

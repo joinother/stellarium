@@ -250,6 +250,44 @@ export interface LayerPresetState {
   enabled: boolean
 }
 
+// 图层预设保存的完整场景快照：所有图层 action + 预设涉及的跨面板状态。
+// actions 只含 MARKING_LAYER_ACTION_IDS / CONTENT_LAYER_ACTION_IDS；night/mount/
+// telrad/ccd 等不是 action 的状态单独存放，应用时走对应控制器。
+export interface LayerPresetSnapshot {
+  actions: Record<string, boolean>
+  vividAtmosphere: boolean
+  milkyWayBright: number
+  realisticStarVisibility: boolean
+  nightMode: boolean
+  observeMode: boolean
+  equatorialMount: boolean
+  telrad: boolean
+  ccd: boolean
+  dsoLabels: boolean
+  constellationArt3d: boolean
+  // 星等限制：undefined = 应用预设时不改变当前值；有值时写入滑块并下发 setLimitMagnitude。
+  // 观测辅助/摄影构图出厂为最高值 21，等价于解除人工星等上限。
+  starMagLimit?: number
+}
+
+export interface LayerPresetDiffItem {
+  label: string
+  before: string
+  after: string
+}
+
+export interface LayerPresetDefinition {
+  id: string
+  kind: string // builtin | custom
+  nameKey: string
+  customName: string
+  enabled: boolean
+  snapshot: LayerPresetSnapshot
+  factory?: LayerPresetSnapshot
+}
+
+export const LAYER_PRESET_CUSTOM_LIMIT: number = 3
+
 export const MARKING_LAYER_ACTION_IDS: string[] = [
   'actionShow_Cardinal_Points', 'actionShow_Azimuthal_Grid', 'actionShow_Equatorial_Grid',
   'actionShow_Equatorial_J2000_Grid', 'actionShow_Ecliptic_Grid', 'actionShow_Ecliptic_J2000_Grid',
@@ -438,6 +476,7 @@ export const QUICK_PANEL_STORE: string = 'stellarium_quick_panel'
 // 与信息级别（数据轴，C++ 配置）正交，见 specs/OBJECT-DETAIL-OBSERVE-MODE.md §7。
 export const INFO_WINDOW_STORE: string = 'stellarium_info_window'
 export const NIGHT_MODE_STORE: string = 'night_mode_store'
+export const LAYER_PRESET_STORE: string = 'stellarium_layer_presets'
 // 备案已完成，联网功能放开（2026-11）：在线星表下载、卫星目录刷新、望远镜在线控件恢复。
 // 需要退回纯离线包时，把它改回 true 并重新构建。
 export const OFFLINE_APPGALLERY_BUILD: boolean = false

@@ -35,7 +35,7 @@ export struct TimePanel {
   @Prop manualHour: number
   @Prop manualMinute: number
   onSelectUnit: (unit: string) => void = () => {}
-  onWheelTouch: (event: TouchEvent) => void = () => {}
+  onWheelRect: (x: number, y: number, width: number, height: number) => void = () => {}
   onChip: (id: string) => void = () => {}
   onEquationToggle: (setting: string, enabled: boolean) => void = () => {}
   onAdjustJulian: (scale: string, direction: number) => void = () => {}
@@ -55,7 +55,9 @@ export struct TimePanel {
         TimeWheelScrubber({
           store: this.timeWheelStore,
           onSelectUnit: (unit: string) => { this.onSelectUnit(unit) },
-          onWheelTouch: (event: TouchEvent) => { this.onWheelTouch(event) }
+          onWheelRect: (x: number, y: number, width: number, height: number) => {
+            this.onWheelRect(x, y, width, height)
+          }
         })
         TimeSpeedChips({ store: this.timeStore, onChip: (id: string) => { this.onChip(id) } })
       }

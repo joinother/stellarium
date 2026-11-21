@@ -19,7 +19,7 @@ import { AstroColors } from './StellariumTheme'
 @Observed
 export class LayerViewStore {
   // —— 天空与恒星显示 ——
-  starMagLimit: number = 6.0
+  starMagLimit: number = 21.0
   // 星等上限随已加载星表调整（最低支持到 21 等），启动时由 StartupBridge 回读。
   starMagLimitMax: number = 21.0
   bortleScale: number = 3
