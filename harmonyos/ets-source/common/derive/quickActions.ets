@@ -27,7 +27,7 @@ export interface QuickActionItem {
 export const QUICK_ACTION_COLUMNS: number = 6
 export const QUICK_ACTION_SLOTS: number = QUICK_ACTION_COLUMNS * 2
 
-// 全量候选池（17 项）。顺序即默认网格顺序：**前 12 项即默认网格**。
+// 全量候选池（18 项）。顺序即默认网格顺序：**前 12 项即默认网格**。
 //
 // 三期变更：默认网格第 10 格由「卫星提示」换成「观测模式」开关
 // （specs/OBJECT-DETAIL-OBSERVE-MODE.md §5：模式切换要在快捷面板有一格）。
@@ -55,7 +55,9 @@ export function quickActionPool(): QuickActionItem[] {
     { id: 'observing_list', labelKey: 'more_observe_list', icon: 'bt_obs_list', kind: 'raster', type: 'entry', actionId: '', openPanel: 'observing' },
     { id: 'oculars', labelKey: 'panel_oculars', icon: 'oculars', kind: 'vector', type: 'entry', actionId: '', openPanel: 'oculars' },
     // —— 三期：卫星提示移出默认网格（保留在池中，用户可在自定义面板里拖回）——
-    { id: 'satellites', labelKey: 'plugin_satellites', icon: 'satellite', kind: 'vector', type: 'toggle', actionId: '', openPanel: '' }
+    { id: 'satellites', labelKey: 'plugin_satellites', icon: 'satellite', kind: 'vector', type: 'toggle', actionId: '', openPanel: '' },
+    // —— 红光手电：全屏红色照明，默认只在扩展列（候选带）出现 ——
+    { id: 'red_light', labelKey: 'quick_red_light', icon: 'red_light', kind: 'vector', type: 'toggle', actionId: '', openPanel: '' }
   ]
 }
 
@@ -109,8 +111,8 @@ export function quickActionEmptyItem(): QuickActionItem {
 }
 
 // 候选带布局：把「当前未列入」的项按 6 列补位，**上限两行**（12 格）。
-// 池 17 项 → 未列入 5 项 → 1 行。若日后把池扩到 18 项以上，这里会截断，
-// 届时须同步扩展 QuickPanel 的行渲染与宿主高度公式（见计划 §13.12 风险）。
+// 池 18 项 → 未列入 6 项 → 1 行。若日后把池扩到 18 项以上（默认 12 项固定），
+// 这里会截断，届时须同步扩展 QuickPanel 的行渲染与宿主高度公式（见计划 §13.12 风险）。
 export function quickCandidateSlotsFor(order: string[]): QuickActionItem[] {
   const candidates = quickActionCandidatesFor(order)
   const rows = Math.max(1, Math.min(2, Math.ceil(candidates.length / QUICK_ACTION_COLUMNS)))

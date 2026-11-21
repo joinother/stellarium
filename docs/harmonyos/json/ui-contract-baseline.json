@@ -423,6 +423,7 @@
     "polar-scope-close",
     "polar-scope-flip-horizontal",
     "polar-scope-flip-vertical",
+    "red-light-overlay",
     "satellites-back",
     "satellites-refresh",
     "screen-video-share",
@@ -469,11 +470,11 @@
     "satellites-",
     "search-category-"
   ],
-  "totalIdAnchors": 83,
+  "totalIdAnchors": 84,
   "count": {
     "panels": 41,
-    "staticIds": 51,
+    "staticIds": 52,
     "dynamicIdPrefixes": 29,
-    "totalIdAnchors": 83
+    "totalIdAnchors": 84
   }
 }

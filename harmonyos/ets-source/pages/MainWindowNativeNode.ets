@@ -1,7 +1,7 @@
 import { abilityAccessCtrl, common, Permissions, Want } from '@kit.AbilityKit'
 import { geoLocationManager } from '@kit.LocationKit'
 import { sensor } from '@kit.SensorServiceKit'
-import { curves } from '@kit.ArkUI'
+import { curves, window } from '@kit.ArkUI'
 import { uniformTypeDescriptor as utd } from '@kit.ArkData'
 import { media } from '@kit.MediaKit'
 import { photoAccessHelper } from '@kit.MediaLibraryKit'
@@ -1163,6 +1163,11 @@ export struct WindowNativeNode {
   @Watch('onCardRouteChanged')
   @StorageLink('stellariumCardRoute')
   private cardRoute: string = ''
+  // 快速面板「红光手电」：全屏纯红叠层 + 可调应用窗口亮度 + 常亮。
+  @State private redLightOn: boolean = false
+  @State private redLightBrightness: number = 1.0
+  private redLightWindowChain: Promise<void> = Promise.resolve()
+  private redLightBrightnessTimer: number = -1
   @State private landingBannerVisible: boolean = false
   @State private landingBannerTitle: string = ''
   @State private landingBannerSource: string = ''
@@ -1618,6 +1623,8 @@ export struct WindowNativeNode {
   }
   private handleApplicationLifecycle = (foreground: boolean): void => {
     this.applicationInForeground = foreground
+    // 红光手电只服务于前台观测；切后台时关掉，避免屏幕常亮耗电。
+    if (!foreground && this.redLightOn) this.setRedLight(false)
     if (foreground && this.engineReady && this.notificationControllerImpl !== null) void this.notificationControllerImpl.refreshSubscriptions()
     if (this.hapticFeedback !== undefined) {
       this.hapticFeedback.setForeground(foreground)
@@ -2588,18 +2595,46 @@ export struct WindowNativeNode {
       const ctx = this.getUIContext().getHostContext() as common.UIAbilityContext
       const store = await preferences.getPreferences(ctx, QUICK_PANEL_STORE)
       const raw = await store.get('order', '')
-      if (typeof raw !== 'string' || raw.length === 0) return
-      const parsed = JSON.parse(raw) as Object[]
-      const order: string[] = []
-      for (const entry of parsed) order.push(String(entry))
-      this.quickPanelStore.restoreOrder(order)
+      if (typeof raw === 'string' && raw.length > 0) {
+        const parsed = JSON.parse(raw) as Object[]
+        const order: string[] = []
+        for (const entry of parsed) order.push(String(entry))
+        this.quickPanelStore.restoreOrder(order)
+      }
+      // 红光手电亮度与快捷面板顺序同店存放；缺省/损坏时保持满亮度。
+      const brightness = await store.get('redLightBrightness', 1.0)
+      if (typeof brightness === 'number' && Number.isFinite(brightness)) {
+        this.redLightBrightness = Math.max(0.05, Math.min(1.0, brightness))
+      }
     } catch (e) {
       hilog.warn(0xD002, 'Stellarium', 'load quick panel order failed: %{public}s', String(e))
     }
   }
 
+  private saveRedLightBrightness(): void {
+    const value = this.redLightBrightness
+    void (async (): Promise<void> => {
+      try {
+        const ctx = this.getUIContext().getHostContext() as common.UIAbilityContext
+        const store = await preferences.getPreferences(ctx, QUICK_PANEL_STORE)
+        await store.put('redLightBrightness', value)
+        await store.flush()
+      } catch (e) {
+        hilog.warn(0xD002, 'Stellarium', 'save red-light brightness failed: %{public}s', String(e))
+      }
+    })()
+  }
+
   // 启动期自动定位（只触发一次）。GPS 可用时更新为真实位置，不可用时回退到已保存/默认位置。
   aboutToDisappear(): void {
+    if (this.redLightOn) {
+      this.redLightOn = false
+      void this.applyRedLightWindow(false)
+    }
+    if (this.redLightBrightnessTimer >= 0) {
+      clearTimeout(this.redLightBrightnessTimer)
+      this.redLightBrightnessTimer = -1
+    }
     this.calendarController?.dispose()
     this.calendarController = undefined
     this.liveViewControllerImpl?.dispose()
@@ -5308,6 +5343,56 @@ export struct WindowNativeNode {
     }
   }
 
+  // 红光手电：纯红全屏叠层 + 可调窗口亮度 + 屏幕常亮；关闭时恢复系统亮度。
+  // 亮度写入串行化，避免快速开关/拖动滑块时旧请求最后落地。
+  private setRedLight(enabled: boolean): void {
+    if (this.redLightOn === enabled) return
+    this.redLightOn = enabled
+    if (!enabled && this.redLightBrightnessTimer >= 0) {
+      clearTimeout(this.redLightBrightnessTimer)
+      this.redLightBrightnessTimer = -1
+    }
+    this.redLightWindowChain = this.redLightWindowChain
+      .then(() => this.applyRedLightWindow(enabled))
+      .catch((error: Error): void => {
+        hilog.warn(0x0000, 'StellariumArkUI', `[red-light] window update failed: ${error.message}`)
+      })
+  }
+
+  private changeRedLightBrightness(value: number, mode: SliderChangeMode): void {
+    this.redLightBrightness = Math.max(0.05, Math.min(1.0, value))
+    if (this.redLightOn) this.scheduleRedLightBrightness()
+    if (mode === SliderChangeMode.End || mode === SliderChangeMode.Click) this.saveRedLightBrightness()
+  }
+
+  // 拖动时以约 30 ms 合并一次窗口亮度写入，避免每帧都跨线程设置亮度。
+  private scheduleRedLightBrightness(): void {
+    if (!this.redLightOn || this.redLightBrightnessTimer >= 0) return
+    this.redLightBrightnessTimer = setTimeout(() => {
+      this.redLightBrightnessTimer = -1
+      if (!this.redLightOn) return
+      this.redLightWindowChain = this.redLightWindowChain
+        .then(() => this.applyRedLightBrightness())
+        .catch((error: Error): void => {
+          hilog.warn(0x0000, 'StellariumArkUI', `[red-light] brightness update failed: ${error.message}`)
+        })
+    }, 32) as number
+  }
+
+  private async applyRedLightBrightness(): Promise<void> {
+    if (!this.redLightOn) return
+    const context = this.getUIContext().getHostContext() as common.UIAbilityContext
+    const win = await window.getLastWindow(context)
+    await win.setWindowBrightness(this.redLightBrightness)
+  }
+
+  private async applyRedLightWindow(enabled: boolean): Promise<void> {
+    const context = this.getUIContext().getHostContext() as common.UIAbilityContext
+    const win = await window.getLastWindow(context)
+    await win.setWindowBrightness(enabled ? this.redLightBrightness : -1.0)
+    await win.setWindowKeepScreenOn(enabled)
+  }
+
   // 协作会话分享：把会话信封落盘到 cacheDir 后拉起系统分享。
   private shareCollaborationSession(json: string): void {
     try {
@@ -5887,6 +5972,7 @@ export struct WindowNativeNode {
   // 顺序 = 叠层由上到下：全屏叠层 → 信息窗 → 极轴镜 → 面板 → 主界面两次确认退出。
   private onRequestBack(): void {
     if (this.requestBackToken === 0) return
+    if (this.redLightOn) { this.setRedLight(false); return }
     if (this.objectMediaStore.objectInspectorMediaFullscreen) {
       this.objectInspectorMediaCtl().closeObjectInspectorMediaPreview()
       return
@@ -7431,7 +7517,8 @@ export struct WindowNativeNode {
       'night_mode': this.nightModeStore.nightMode,
       'equatorial_mount': this.telescopeStore.equatorialMount,
       'flip_horizontal': this.polarScopeStore.polarScopeHorizontalFlip,
-      'observe_mode': this.infoWindowStore.observeModeEnabled()
+      'observe_mode': this.infoWindowStore.observeModeEnabled(),
+      'red_light': this.redLightOn
     }
   }
 
@@ -7448,7 +7535,8 @@ export struct WindowNativeNode {
   private quickToggle(id: string, value: boolean): void {
     const item = quickActionById(id)
     if (item === undefined) return
-    if (item.type !== 'entry') this.layerPresetStore.noteManualChange()
+    // 红光手电是纯 UI 照明，不属于星图/图层预设，不应把预设标记为已修改。
+    if (item.type !== 'entry' && id !== 'red_light') this.layerPresetStore.noteManualChange()
     if (item.type === 'entry') {
       // 入口类不切换开关态，只跳面板（格子恒不高亮，见 quickActionValues 注释）。
       this.openSubPanel(item.openPanel)
@@ -7472,6 +7560,10 @@ export struct WindowNativeNode {
     }
     if (id === 'night_mode') {
       this.nightModeStore.applyNightMode(value, true)
+      return
+    }
+    if (id === 'red_light') {
+      this.setRedLight(value)
       return
     }
     if (id === 'equatorial_mount') {
@@ -10773,6 +10865,57 @@ export struct WindowNativeNode {
         .shadow({ radius: 18, color: 'rgba(0,0,0,0.28)', offsetY: 6 })
         .position({ x: this.isExpandedLayout ? Math.max(16, Math.round((this.skyWidth - 340) / 2)) : '6%', y: Math.max(80, this.skyHeight - 166) })
         .zIndex(140)
+      }
+
+      // 红光手电：纯红全屏叠层覆盖所有面板与 Dock，轻触任意位置关闭。
+      // 使用 #FF0000（长波长）以尽量保护暗适应；提示与亮度滑块压低亮度，避免成为新的光源。
+      if (this.redLightOn) {
+        Stack({ alignContent: Alignment.Bottom }) {
+          Column({ space: 10 }) {
+            Text(I18n.t('quick_red_light_hint'))
+              .fontSize(12)
+              .fontColor('rgba(40,0,0,0.72)')
+              .padding({ left: 12, right: 12, top: 7, bottom: 7 })
+              .backgroundColor('rgba(0,0,0,0.10)')
+              .borderRadius(UI_RADIUS_PILL)
+            Column({ space: 4 }) {
+              Row() {
+                Text(I18n.t('quick_red_light_brightness'))
+                  .fontSize(11).fontColor('rgba(60,0,0,0.75)')
+                Blank()
+                Text(Math.round(this.redLightBrightness * 100).toString() + '%')
+                  .fontSize(11).fontColor('rgba(60,0,0,0.75)')
+              }
+                .width('100%')
+              Slider({ value: this.redLightBrightness, min: 0.05, max: 1, step: 0.01, style: SliderStyle.OutSet })
+                .width('100%')
+                .blockColor('rgba(90,0,0,0.85)')
+                .trackColor('rgba(70,0,0,0.40)')
+                .selectedColor('rgba(120,0,0,0.75)')
+                .accessibilityText(I18n.t('quick_red_light_brightness'))
+                .onChange((value: number, mode: SliderChangeMode) => {
+                  this.changeRedLightBrightness(value, mode)
+                })
+            }
+              .width('78%')
+              .constraintSize({ maxWidth: 340 })
+              .padding({ left: 14, right: 14, top: 10, bottom: 10 })
+              .backgroundColor('rgba(0,0,0,0.10)')
+              .borderRadius(UI_RADIUS_PANEL)
+              // 吞掉滑块卡片内的点按，避免拖完亮度顺手把红光关掉。
+              .onClick(() => {})
+          }
+            .width('100%')
+            .padding({ bottom: 30 })
+            .alignItems(HorizontalAlign.Center)
+        }
+          .width('100%')
+          .height('100%')
+          .backgroundColor('#FF0000')
+          .zIndex(400)
+          .id('red-light-overlay')
+          .onClick(() => { this.setRedLight(false) })
+          .accessibilityText(I18n.t('quick_red_light_hint'))
       }
 
     }

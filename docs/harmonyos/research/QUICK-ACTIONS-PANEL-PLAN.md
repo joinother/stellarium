@@ -358,6 +358,7 @@ export interface QuickActionItem {
 ```
 
 - `quickActionPool()`（新）= **17 项**候选 = 一期 12 项 + 本次 5 项（N1–N5）。
+  > 2026-11-21 扩展：池尾追加 `red_light`（红光手电），共 **18 项**；默认 12 项、候选带 1 行与宿主高度公式均不变。
 - `quickActionDefaults()`（新）= 池中前 12 项 = **一期现状**，保证升级后观感与肌肉记忆不变。
 - 5 项新增条目的描述（`type` / 动作 / 状态源 / 图标）：
 

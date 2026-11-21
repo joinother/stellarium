@@ -29,6 +29,18 @@
   - 主机验证：新增 `scripts/test-ohos-nomenclature-and-3d-models.mjs`，连同 `check-ohos-resource-dirs.mjs`（10/10 目录）、`check-ohos-command-catalog.mjs`（438 命令）、`check-ohos-ui-contract.mjs`（40 面板）、`check-ohos-network-sources.mjs`、`fetch-mirror.test.mjs`、`test-ohos-plugin-panels-phase23.mjs`、`test-ohos-media-cultures-landscapes.mjs` 全部通过。
   - 真机实拍验收：实测「行星地貌图集」完整加载 16,079 处 IAU 地貌（月球 9,081 / 火星 2,052），点击第谷与奥林波斯山均精准望远镜缩放飞抵并清晰绘制中文标注与绿色环形山轮廓；实测灶神星（黎明号实测 3D 地形模型 + OpenGL 实景戴瓦利亚槽沟群）、火卫一（火星快车 3D 形态模型）、哈雷彗星（乔托号 3D 花生形彗核）、67P/Churyumov-Gerasimenko（罗塞塔号 3D 双瓣彗核）均秒级加载、流畅手势旋转、文案与排版零截断。
 
+## [2026-11-21] 快速面板红光手电（扩展列候选 + 全屏红光 + 亮度调节）
+
+- **修改文件：** `harmonyos/ets-source/common/derive/quickActions.ets`、`harmonyos/ets-source/common/ui/ShellIcons.ets`、`harmonyos/ets-source/pages/MainWindowNativeNode.ets`、`harmonyos/ets-source/capability/I18n.ets`、`harmonyos/ets-source/resources/base/media/ic_red_light.svg`（新增）、`scripts/test-ohos-quick-red-light.mjs`（新增）、`docs/harmonyos/json/ui-contract-baseline.json`、`docs/harmonyos/research/QUICK-ACTIONS-PANEL-PLAN.md`、`docs/harmonyos/specs/OBJECT-DETAIL-OBSERVE-MODE.md`、`docs/harmonyos/CHANGELOG.md`。
+- **核心改动：**
+  1. `quickActions.ets` 候选池新增第 18 项 `red_light`（默认不进 12 格，仅出现在扩展列候选带；默认候选 6 项仍为 1 行，宿主高度公式不变）；新增 `ic_red_light.svg` 与 `ShellIcons` 映射。
+  2. 宿主 `setRedLight` 渲染 `#FF0000` 全屏叠层（`zIndex(400)`，覆盖面板与 Dock），设置应用窗口亮度并 `setWindowKeepScreenOn(true)`；叠层底部提供亮度滑块（5%–100%，默认 100%），拖动时以约 30 ms 合并窗口亮度写入，松手/点击时持久化到快捷面板 preferences（`redLightBrightness`），下次开启自动恢复；轻触滑块以外空白、系统返回、切后台或页面销毁时关闭并恢复 `-1.0` 系统亮度与非常亮。窗口写入经 Promise 链串行化，避免快速开关/拖动时旧请求后落地。
+  3. 红光手电是纯 UI 照明，不参与图层预设的“已修改”标记。
+- **验证结果：**
+  - 包含本功能的 release HAP 构建成功（799.4 MB）；`node --test scripts/test-ohos-quick-red-light.mjs` 5 项通过；`check-ohos-ui-contract.mjs` 73 anchors、`check-ohos-i18n.mjs`、`check-ohos-command-catalog.mjs`（435 命令）通过。
+  - 真机实测（MatePad Mini `192.168.3.95:36717`）：快捷面板扩展列显示手电图标；点击后全屏纯红并显示亮度滑块，拖动 100% → 57% 时叠层保持打开，关闭后再次开启仍为 57%；轻触空白处可关闭并恢复面板。
+
+
 ## [2026-11-21] 太阳系小天体阿里云国内 MPC 镜像部署、离线精密历表与千颗彗星库全链路盘活及 SolarSystemEditor 鸿蒙沙盒写盘修复
 
 - **修改文件：** `deploy/tle-mirror/fetch-mirror.mjs`、`deploy/tle-mirror/sources.json`、`deploy/tle-mirror/test/fetch-mirror.test.mjs`、`data/ohos/network-sources.json`、`plugins/SolarSystemEditor/src/SolarSystemEditor.cpp`、`src/StelMainView.cpp`、`harmonyos/ets-source/common/types/StellariumTypes.ets`、`harmonyos/ets-source/state/MinorBodiesStore.ets`、`harmonyos/ets-source/panels/panels/MinorBodiesPanel.ets`、`harmonyos/ets-source/pages/MainWindowNativeNode.ets`、`docs/harmonyos/json/ui-contract-baseline.json`、`scripts/test-ohos-plugin-panels-phase23.mjs`、`docs/harmonyos/CHANGELOG.md`。
