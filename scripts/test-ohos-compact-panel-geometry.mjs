@@ -93,10 +93,13 @@ test('all Settings tabs share the host panel scroll', () => {
   assert.match(page, /private resetActivePanelScroll\(\): void/);
 });
 
-test('Settings drops the tools tab and More lists Settings before Tools', () => {
+test('Settings drops redundant tools and scripts tabs and More lists Settings before Tools', () => {
   const settings = readFileSync(new URL('../harmonyos/ets-source/panels/panels/SettingsPanel.ets', import.meta.url), 'utf8');
   assert.doesNotMatch(settings, /\{ label: I18n\.t\('c0004'\), id: 4 \}/);
   assert.doesNotMatch(settings, /configTab === 4/);
+  assert.doesNotMatch(settings, /\{ label: I18n\.t\('c0005'\), id: 5 \}/);
+  assert.doesNotMatch(settings, /configTab === 5/);
+  assert.doesNotMatch(settings, /scriptTabContent/);
   const actions = readFileSync(new URL('../harmonyos/ets-source/common/derive/actions.ets', import.meta.url), 'utf8');
   const more = actions.slice(actions.indexOf('export function moreActions'), actions.indexOf('export function observingHubActions'));
   const settingsIndex = more.indexOf("panel: 'settings'");

@@ -32,11 +32,11 @@ import { KeyboardShortcutItem } from '../../common/types/StellariumTypes'
 import { TimeSettingsSection } from '../settings/TimeSettingsSection'
 import { PluginCenterSection } from '../settings/PluginCenterSection'
 import { DeltaTSettingsBlock } from '../time/DeltaTSettingsBlock'
-import { sensZh, scriptZh, scriptDesc } from '../../common/derive/labels'
+import { sensZh } from '../../common/derive/labels'
 import { configDitheringLabel } from '../../common/derive/skycult'
 
-// 「设置」面板，对应 activePanel === 'settings'：设备与隐私 / 主设置 / 信息 / 天空 /
-// 时间 / 数据 / 插件管理 / 视图导航 / 关于 9 个子标签页。
+// 「设置」面板，对应 activePanel === 'settings'：设备与隐私 / 主设置 / 信息 / 附加 /
+// 时间 / 插件管理 / 视图导航 / 关于 8 个子标签页（脚本与录制统一归口至独立的 ScriptsPanel）。
 //
 // 实时状态集中在九个 @Observed store（gyro / overlay / deltaT / timeSettings / ephemeris /
 // plugin / navigation / viewSettings / tools，均 @ObjectLink），其余标量与主题色走 @Prop；
@@ -104,9 +104,6 @@ export struct SettingsPanel {
   @Prop configDitheringMode: string
   @Prop timeSettingsPending: boolean
   @Prop observationTimeText: string
-  @Prop scriptLaunching: boolean
-  @Prop scriptLaunchingName: string
-  @Prop scriptList: string[]
   @Prop fovText: string
   @State private c: ThemeSlots = DEFAULT_SLOTS
   // 最大视场用本地草稿 maxFovDraft（aboutToAppear 与 store 同步）：拖动只改草稿，
@@ -117,8 +114,6 @@ export struct SettingsPanel {
   pluginFeatureDestination: (id: string) => string = () => ''
   pluginFeatureIsActionable: (id: string) => boolean = () => false
   pluginFeatureActionLabel: (id: string) => string = () => ''
-  scriptMetaLine: (filename: string) => string = () => ''
-  scriptSourceLine: (filename: string) => string = () => ''
   hasSelectedObject: () => boolean = () => false
   selectConfigTab: (tabId: number) => void = () => {}
   // 设置页不再持有内嵌 Scroll，切换标签时由宿主把当前面板滚回顶部。
@@ -194,7 +189,6 @@ export struct SettingsPanel {
   keyboardShortcutResetAllChange: () => void = () => {}
   loadPluginList: () => void = () => {}
   openPluginFeature: (id: string) => void = () => {}
-  playScriptByName: (filename: string) => void = () => {}
   triggerAction: (actionId: string) => void = () => {}
   moveToSelectedObject: () => void = () => {}
   onOpenLayersSky: () => void = () => {}
@@ -228,65 +222,6 @@ export struct SettingsPanel {
     })
   }
 
-  // 脚本页：头部固定，列表占满面板剩余高度并自行滚动。
-  @Builder
-  scriptTabContent() {
-    Column({ space: 0 }) {
-      Row() {
-        Text(I18n.t('i0122')).fontSize(12).fontColor(this.c.sub).width(72)
-        Button(I18n.t('i0252')).fontSize(11).fontColor(this.c.text).backgroundColor(this.c.bg)
-          .borderRadius(UI_RADIUS_CONTROL).height(28).padding({ left: 10, right: 10 })
-          .onClick(() => { this.triggerAction('actionStop_Script') })
-      }.height(34).width('100%').padding({ left: 10, right: 10 }).margin({ bottom: 4 })
-      Row() {
-        Text(I18n.t('i0123')).fontSize(11).fontColor(this.c.sub).width('100%').margin({ top: 4 })
-      }.height(18).width('100%')
-      if (this.scriptLaunching) {
-        Row({ space: 6 }) {
-          LoadingProgress().width(16).height(16).color(this.c.accent)
-          Text(I18n.format('script_starting_named', [scriptZh(this.scriptLaunchingName)])).fontSize(10).fontColor(this.c.sub)
-        }.width('100%').padding({ left: 8, right: 8, bottom: 4 })
-      }
-      Column({ space: 2 }) {
-          ForEach(this.scriptList, (s: string) => {
-            Column({ space: 0 }) {
-              Row() {
-                Text(scriptZh(s)).fontSize(11).fontColor(this.c.text)
-                  .fontWeight(FontWeight.Medium).layoutWeight(1)
-                Text('▶').fontSize(10).fontColor(this.c.iconSecondary)
-              }
-              .height(28).width('100%').padding({ left: 10, right: 10 })
-              if (scriptDesc(s)) {
-                Text(scriptDesc(s))
-                  .fontSize(10).fontColor(this.c.sub).width('100%')
-                  .maxLines(1).textOverflow({ overflow: TextOverflow.Ellipsis })
-                  .padding({ left: 10, right: 10, bottom: 3 })
-              }
-              if (this.scriptMetaLine(s).length > 0) {
-                Text(this.scriptMetaLine(s))
-                  .fontSize(10).fontColor(this.c.tertiary).width('100%').maxLines(1).textOverflow({ overflow: TextOverflow.Ellipsis })
-                  .padding({ left: 10, right: 10, bottom: 3 })
-              }
-              if (this.scriptSourceLine(s).length > 0) {
-                Text(this.scriptSourceLine(s)).fontSize(10).fontColor(this.c.tertiary).width('100%').maxLines(1)
-                  .textOverflow({ overflow: TextOverflow.Ellipsis }).padding({ left: 10, right: 10, bottom: 3 })
-              }
-            }
-            .width('100%')
-            .backgroundColor(this.c.bg)
-            .borderRadius(UI_RADIUS_CONTROL)
-            .opacity(this.scriptLaunching && this.scriptLaunchingName !== s ? 0.55 : 1)
-              .hitTestBehavior(HitTestMode.Default)
-            .onClick(() => { this.playScriptByName(s) })
-          }, (s: string, index: number) => s)
-      }
-        .width('100%')
-    }
-    .width('100%')
-    .padding({ bottom: 16 })
-  }
-
-
   build() {
 
       Column() {
@@ -300,7 +235,6 @@ export struct SettingsPanel {
             { label: I18n.t('c0001'), id: 1 },
             { label: I18n.t('c0002'), id: 2 },
             { label: I18n.t('c0003'), id: 3 },
-            { label: I18n.t('c0005'), id: 5 },
             { label: I18n.t('more_plugins_manage'), id: 6 },
             { label: I18n.t('settings_view_navigation'), id: 7 },
             { label: I18n.t('c_about'), id: 8 },
@@ -322,10 +256,7 @@ export struct SettingsPanel {
         }.width('100%').height(uiControlHeight(42, this.readableUi, this.controlScale)).scrollable(ScrollDirection.Horizontal).scrollBar(BarState.Off)
           .margin({ top: 4, bottom: 10 }).id('config-tabs-' + this.i18nLang)
         Column({ space: 0 }) {
-          if (this.configTab === 5) {
-            this.scriptTabContent()
-          } else {
-            Column({ space: 0 }) {
+          Column({ space: 0 }) {
                 if (this.configTab === -1) {
             Text(I18n.t('i0060'))
               .fontSize(11).fontColor(this.c.sub).width('100%')
@@ -926,8 +857,7 @@ export struct SettingsPanel {
               onOpenUrl: (url: string) => { this.openExternalUrl(url) }
             })
           }
-              }.width('100%').padding({ bottom: 24 })
-          }
+          }.width('100%').padding({ bottom: 24 })
         }
           .width('100%')
           .layoutWeight(0)

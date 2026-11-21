@@ -37,10 +37,6 @@ export interface LayerHostHooks extends BehaviorHostHooks {
   noteLayerPresetManualChange(): void
   // 星空文化「时间跟随」定时器收口（宿主保留）。
   syncSkyCultureTimeFollowTimer(): void
-  // 脚本列表 / 录制列表 / 视频状态桥加载（ScriptPlaybackController 持有）。
-  loadScriptList(): void
-  loadRecordings(): void
-  loadVideoRecordingState(): void
   // 通知/后台提醒状态回读（NotificationController 持有）；进入「设备与隐私」页时刷新。
   refreshNotificationStatus(): void
   // 巡天 / 多波段图层状态回读（SurveyController 持有）；进入「巡天」页时刷新。
@@ -222,11 +218,7 @@ export class LayerController {
       if (transitionId !== this.configTabTransitionId) return
       this.hooks.setConfigTab(tabId)
       this.hooks.setConfigTabContentOffsetX(direction * 8)
-      if (tabId === 5) {
-        this.hooks.loadScriptList()
-        this.hooks.loadRecordings()
-        this.hooks.loadVideoRecordingState()
-      } else if (tabId === 6) {
+      if (tabId === 6) {
         this.pluginStore.loadPluginList()
       } else if (tabId === -1) {
         this.hooks.refreshNotificationStatus()
