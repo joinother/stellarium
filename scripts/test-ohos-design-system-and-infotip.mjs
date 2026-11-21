@@ -82,3 +82,24 @@ test('Key panels migrate verbose explanations into InfoTipButton and protect res
   const cal = read('harmonyos/ets-source/panels/panels/AstronomyCalendarPanel.ets');
   assert.doesNotMatch(cal, /\.borderRadius\(\d+\)/, 'AstronomyCalendarPanel must use UI_RADIUS tokens');
 });
+
+test('Desktop service cards (form/) use unified WidgetTokens with zero hardcoded numeric borderRadius', () => {
+  const tokens = read('harmonyos/ets-source/form/WidgetTokens.ts');
+  for (const name of ['WIDGET_RADIUS_BAR', 'WIDGET_RADIUS_BADGE', 'WIDGET_RADIUS_CHIP', 'WIDGET_RADIUS_ROW', 'WIDGET_RADIUS_SURFACE', 'WIDGET_RADIUS_PILL']) {
+    assert.match(tokens, new RegExp(`export const ${name}: number = \\d+`), `Missing ${name}`);
+  }
+  for (const file of [
+    'CelestialEventsCard.ets',
+    'CompanionArcCard.ets',
+    'SatellitePassCard.ets',
+    'SkyFormEditPage.ets',
+    'SkyLiveFormPage.ets',
+    'SkyWindowCard.ets',
+    'SolarArcCard.ets',
+    'SolarSystemCard.ets',
+    'WidgetVisuals.ets'
+  ]) {
+    const src = read('harmonyos/ets-source/form/' + file);
+    assert.doesNotMatch(src, /\.borderRadius\(\d+(?:\.\d+)?\)/, `form/${file} must use WIDGET_RADIUS_* tokens`);
+  }
+});

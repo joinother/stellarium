@@ -58,6 +58,7 @@ import {
   fallbackPlanetRows,
   satelliteIconResource
 } from './WidgetVisuals'
+import { WIDGET_RADIUS_BADGE, WIDGET_RADIUS_BAR, WIDGET_RADIUS_CHIP, WIDGET_RADIUS_PILL, WIDGET_RADIUS_ROW } from './WidgetTokens'
 
 const DOMAIN: number = 0xD003
 const TAG: string = 'SkyLiveFormPage'
@@ -878,7 +879,7 @@ struct SkyLiveFormPage {
             Text(this.satMagBadge(this.activeSatPass()))
               .fontSize(9.5).fontWeight(FontWeight.Medium)
               .fontColor(satelliteVisualProfile(this.activeSatPass().archetype).accentHex)
-              .padding({ left: 5, right: 5, top: 2, bottom: 2 }).backgroundColor('#280B1830').borderRadius(8)
+              .padding({ left: 5, right: 5, top: 2, bottom: 2 }).backgroundColor('#280B1830').borderRadius(WIDGET_RADIUS_BADGE)
           }
           .width('100%')
           .opacity(this.restingContentOpacity)
@@ -913,7 +914,7 @@ struct SkyLiveFormPage {
               .fontSize(10.5).fontWeight(FontWeight.Medium).fontColor('#7CEEFF').layoutWeight(1).maxLines(1)
             Text('提醒')
               .fontSize(9.5).fontWeight(FontWeight.Medium).fontColor('#EAF4FF').height(22)
-              .padding({ left: 8, right: 8 }).backgroundColor('#2E3B6DB8').borderRadius(11)
+              .padding({ left: 8, right: 8 }).backgroundColor('#2E3B6DB8').borderRadius(WIDGET_RADIUS_ROW)
           }
           .width('100%')
           .opacity(this.restingContentOpacity)
@@ -953,7 +954,7 @@ struct SkyLiveFormPage {
               Text(satelliteVisualProfile(this.activeSatPass().archetype).categoryLabelZh)
                 .fontSize(9.5).fontWeight(FontWeight.Medium)
                 .fontColor(satelliteVisualProfile(this.activeSatPass().archetype).accentHex)
-                .padding({ left: 6, right: 6, top: 2, bottom: 2 }).backgroundColor('#2C13294E').borderRadius(8)
+                .padding({ left: 6, right: 6, top: 2, bottom: 2 }).backgroundColor('#2C13294E').borderRadius(WIDGET_RADIUS_BADGE)
               Text(this.satMagBadge(this.activeSatPass())).fontSize(9.5).fontColor('#CFE4FF')
             }.width('100%')
 
@@ -973,8 +974,8 @@ struct SkyLiveFormPage {
             Blank()
 
             Row({ space: 6 }) {
-              Text('预约提醒').fontSize(10).fontWeight(FontWeight.Medium).fontColor('#FFFFFF').textAlign(TextAlign.Center).layoutWeight(1).height(27).backgroundColor('#323F76C8').borderRadius(13.5)
-              Text('追踪 ↗').fontSize(10).fontWeight(FontWeight.Medium).fontColor('#8CEEFF').textAlign(TextAlign.Center).width(52).height(27).backgroundColor('#28163A6E').borderRadius(13.5)
+              Text('预约提醒').fontSize(10).fontWeight(FontWeight.Medium).fontColor('#FFFFFF').textAlign(TextAlign.Center).layoutWeight(1).height(27).backgroundColor('#323F76C8').borderRadius(WIDGET_RADIUS_PILL)
+              Text('追踪 ↗').fontSize(10).fontWeight(FontWeight.Medium).fontColor('#8CEEFF').textAlign(TextAlign.Center).width(52).height(27).backgroundColor('#28163A6E').borderRadius(WIDGET_RADIUS_PILL)
             }.width('100%')
           }
           .layoutWeight(1)
@@ -993,7 +994,7 @@ struct SkyLiveFormPage {
               Text(formatCountdownZh(this.activeSatPass().startAt, Date.now()) + ' · ' + this.satMagBadge(this.activeSatPass()))
                 .fontSize(10).fontColor('#9CD4FF').maxLines(1)
             }.layoutWeight(1).alignItems(HorizontalAlign.Start)
-            Text('提醒').fontSize(10).fontWeight(FontWeight.Medium).fontColor('#FFFFFF').height(26).padding({ left: 10, right: 10 }).backgroundColor('#363F76C8').borderRadius(13)
+            Text('提醒').fontSize(10).fontWeight(FontWeight.Medium).fontColor('#FFFFFF').height(26).padding({ left: 10, right: 10 }).backgroundColor('#363F76C8').borderRadius(WIDGET_RADIUS_PILL)
           }
           .width('100%')
           .opacity(this.restingContentOpacity)
@@ -1070,7 +1071,7 @@ struct SkyLiveFormPage {
               .height(22)
               .padding({ left: 8, right: 8 })
               .backgroundColor('#2E4678C4')
-              .borderRadius(11)
+              .borderRadius(WIDGET_RADIUS_ROW)
           }
           .width('100%')
           .opacity(this.restingContentOpacity)
@@ -1091,7 +1092,7 @@ struct SkyLiveFormPage {
               .height(22)
               .padding({ left: 6, right: 6 })
               .backgroundColor('#22FFFFFF')
-              .borderRadius(11)
+              .borderRadius(WIDGET_RADIUS_ROW)
             Text(this.orreryDayOffset === 0 ? '此刻' : (this.orreryDayOffset > 0 ? '+' + String(this.orreryDayOffset) + 'd' : String(this.orreryDayOffset) + 'd'))
               .fontSize(10)
               .fontWeight(FontWeight.Medium)
@@ -1100,14 +1101,14 @@ struct SkyLiveFormPage {
               .layoutWeight(1)
               .height(22)
               .backgroundColor('#1EFFFFFF')
-              .borderRadius(11)
+              .borderRadius(WIDGET_RADIUS_ROW)
             Text('30天›')
               .fontSize(10)
               .fontColor('#CFE4FF')
               .height(22)
               .padding({ left: 6, right: 6 })
               .backgroundColor('#22FFFFFF')
-              .borderRadius(11)
+              .borderRadius(WIDGET_RADIUS_ROW)
           }
           .width('100%')
           .opacity(this.restingContentOpacity)
@@ -1155,15 +1156,15 @@ struct SkyLiveFormPage {
               .width('100%')
               .height(30)
               .backgroundColor('#384678C4')
-              .borderRadius(15)
+              .borderRadius(WIDGET_RADIUS_PILL)
               .maxLines(1)
 
             Blank()
 
             Row({ space: 4 }) {
-              Text('-1月').fontSize(10.5).fontWeight(FontWeight.Medium).fontColor('#D8ECFF').textAlign(TextAlign.Center).layoutWeight(1).height(32).backgroundColor('#24FFFFFF').borderRadius(16)
-              Text('今').fontSize(11).fontWeight(FontWeight.Medium).fontColor('#FFE29A').textAlign(TextAlign.Center).width(30).height(32).backgroundColor('#344678C4').borderRadius(16)
-              Text('+1月').fontSize(10.5).fontWeight(FontWeight.Medium).fontColor('#D8ECFF').textAlign(TextAlign.Center).layoutWeight(1).height(32).backgroundColor('#24FFFFFF').borderRadius(16)
+              Text('-1月').fontSize(10.5).fontWeight(FontWeight.Medium).fontColor('#D8ECFF').textAlign(TextAlign.Center).layoutWeight(1).height(32).backgroundColor('#24FFFFFF').borderRadius(WIDGET_RADIUS_PILL)
+              Text('今').fontSize(11).fontWeight(FontWeight.Medium).fontColor('#FFE29A').textAlign(TextAlign.Center).width(30).height(32).backgroundColor('#344678C4').borderRadius(WIDGET_RADIUS_PILL)
+              Text('+1月').fontSize(10.5).fontWeight(FontWeight.Medium).fontColor('#D8ECFF').textAlign(TextAlign.Center).layoutWeight(1).height(32).backgroundColor('#24FFFFFF').borderRadius(WIDGET_RADIUS_PILL)
             }
             .width('100%')
           }
@@ -1199,7 +1200,7 @@ struct SkyLiveFormPage {
               .height(26)
               .padding({ left: 10, right: 10 })
               .backgroundColor('#364678C4')
-              .borderRadius(13)
+              .borderRadius(WIDGET_RADIUS_PILL)
           }
           .width('100%')
           .opacity(this.restingContentOpacity)
@@ -1223,18 +1224,18 @@ struct SkyLiveFormPage {
                 Text(String(Math.round(p.lonDeg)) + '° · ' + p.distAU.toFixed(1) + 'AU')
                   .fontSize(9).fontColor('#9FBAD8').maxLines(1)
               }
-              .layoutWeight(1).padding({ top: 4, bottom: 4 }).backgroundColor('#1AFFFFFF').borderRadius(9).alignItems(HorizontalAlign.Center)
+              .layoutWeight(1).padding({ top: 4, bottom: 4 }).backgroundColor('#1AFFFFFF').borderRadius(WIDGET_RADIUS_BADGE).alignItems(HorizontalAlign.Center)
             }, (p: OrreryPlanetState) => p.id)
           }
           .width('100%')
           .opacity(this.restingContentOpacity)
 
           Row({ space: 6 }) {
-            Text('-30天').fontSize(10).fontColor('#DCEBFF').textAlign(TextAlign.Center).layoutWeight(1).height(28).backgroundColor('#22FFFFFF').borderRadius(14)
-            Text('此刻').fontSize(10).fontWeight(FontWeight.Medium).fontColor('#FFE29A').textAlign(TextAlign.Center).layoutWeight(1).height(28).backgroundColor('#324678C4').borderRadius(14)
-            Text('+30天').fontSize(10).fontColor('#DCEBFF').textAlign(TextAlign.Center).layoutWeight(1).height(28).backgroundColor('#22FFFFFF').borderRadius(14)
-            Text('+1年').fontSize(10).fontColor('#DCEBFF').textAlign(TextAlign.Center).layoutWeight(1).height(28).backgroundColor('#22FFFFFF').borderRadius(14)
-            Text('轨盘 ↗').fontSize(10).fontWeight(FontWeight.Medium).fontColor('#8AD4FF').textAlign(TextAlign.Center).layoutWeight(1).height(28).backgroundColor('#2C1C3C6E').borderRadius(14)
+            Text('-30天').fontSize(10).fontColor('#DCEBFF').textAlign(TextAlign.Center).layoutWeight(1).height(28).backgroundColor('#22FFFFFF').borderRadius(WIDGET_RADIUS_PILL)
+            Text('此刻').fontSize(10).fontWeight(FontWeight.Medium).fontColor('#FFE29A').textAlign(TextAlign.Center).layoutWeight(1).height(28).backgroundColor('#324678C4').borderRadius(WIDGET_RADIUS_PILL)
+            Text('+30天').fontSize(10).fontColor('#DCEBFF').textAlign(TextAlign.Center).layoutWeight(1).height(28).backgroundColor('#22FFFFFF').borderRadius(WIDGET_RADIUS_PILL)
+            Text('+1年').fontSize(10).fontColor('#DCEBFF').textAlign(TextAlign.Center).layoutWeight(1).height(28).backgroundColor('#22FFFFFF').borderRadius(WIDGET_RADIUS_PILL)
+            Text('轨盘 ↗').fontSize(10).fontWeight(FontWeight.Medium).fontColor('#8AD4FF').textAlign(TextAlign.Center).layoutWeight(1).height(28).backgroundColor('#2C1C3C6E').borderRadius(WIDGET_RADIUS_PILL)
           }
           .width('100%')
           .opacity(this.restingContentOpacity)
@@ -1294,7 +1295,7 @@ struct SkyLiveFormPage {
                 .height(26)
                 .padding({ left: 8, right: 9 })
                 .backgroundColor('#38140C04')
-                .borderRadius(13)
+                .borderRadius(WIDGET_RADIUS_PILL)
               Blank()
               Text(this.solarAltLabel())
                 .fontSize(12)
@@ -1360,7 +1361,7 @@ struct SkyLiveFormPage {
                     .height(24)
                     .padding({ left: 8, right: 9 })
                     .backgroundColor('#38140C04')
-                    .borderRadius(12)
+                    .borderRadius(WIDGET_RADIUS_ROW)
                     .maxLines(1)
                   Text(this.solarStageLabel() + ' · ' + this.solarTermLabel())
                     .fontSize(12)
@@ -1407,7 +1408,7 @@ struct SkyLiveFormPage {
                   .justifyContent(FlexAlign.Center)
                   .alignItems(HorizontalAlign.Center)
                   .backgroundColor('#32090F1E')
-                  .borderRadius(10)
+                  .borderRadius(WIDGET_RADIUS_CHIP)
                   .border({ width: 0.5, color: '#2AFFE09A' })
                 }, (pair: string[], idx: number) => pair[0] + '_' + String(idx))
               }
@@ -1466,7 +1467,7 @@ struct SkyLiveFormPage {
                 .height(26)
                 .padding({ left: 8, right: 9 })
                 .backgroundColor('#28FFFFFF')
-                .borderRadius(13)
+                .borderRadius(WIDGET_RADIUS_PILL)
               Blank()
               Text(this.moonIllumination >= 0 ? (String(Math.round(this.moonIllumination)) + '%') : '—')
                 .fontSize(12)
@@ -1534,7 +1535,7 @@ struct SkyLiveFormPage {
                     .height(28)
                     .padding({ left: 10, right: 10 })
                     .backgroundColor('#2CFFFFFF')
-                    .borderRadius(14)
+                    .borderRadius(WIDGET_RADIUS_PILL)
                     .maxLines(1)
                   Text(this.moonPhase)
                     .fontSize(15)
@@ -1650,7 +1651,7 @@ struct SkyLiveFormPage {
               .height(28)
               .padding({ left: 9, right: 10 })
               .backgroundColor('#38081224')
-              .borderRadius(14)
+              .borderRadius(WIDGET_RADIUS_PILL)
 
               Blank()
               Text(this.moonSummary).fontSize(10).fontColor('#B8DCEEFF').maxLines(1)
@@ -1713,7 +1714,7 @@ struct SkyLiveFormPage {
                   .height(30)
                   .padding({ left: 10, right: 11 })
                   .backgroundColor('#3A071022')
-                  .borderRadius(15)
+                  .borderRadius(WIDGET_RADIUS_PILL)
 
                   if (this.timeOffsetHours > 0 && this.timePreviewLabel.length > 0) {
                     Text(this.timePreviewLabel)
@@ -1724,7 +1725,7 @@ struct SkyLiveFormPage {
                       .padding({ left: 8, right: 8 })
                       .textAlign(TextAlign.Center)
                       .backgroundColor('#48140D04')
-                      .borderRadius(13)
+                      .borderRadius(WIDGET_RADIUS_PILL)
                   } else if (this.isStale()) {
                     Text('待刷新').fontSize(10).fontColor('#FFD27F')
                   }
@@ -1760,7 +1761,7 @@ struct SkyLiveFormPage {
                       .layoutWeight(1)
                       .height(32)
                       .backgroundColor('#34061022')
-                      .borderRadius(16)
+                      .borderRadius(WIDGET_RADIUS_PILL)
                     Text(this.timeOffsetHours > 0 ? '此刻' : '48h')
                       .fontSize(12)
                       .fontWeight(FontWeight.Medium)
@@ -1769,7 +1770,7 @@ struct SkyLiveFormPage {
                       .layoutWeight(1)
                       .height(32)
                       .backgroundColor('#28061022')
-                      .borderRadius(16)
+                      .borderRadius(WIDGET_RADIUS_PILL)
                     Text('+4h ›')
                       .fontSize(12)
                       .fontWeight(FontWeight.Medium)
@@ -1778,7 +1779,7 @@ struct SkyLiveFormPage {
                       .layoutWeight(1)
                       .height(32)
                       .backgroundColor('#34061022')
-                      .borderRadius(16)
+                      .borderRadius(WIDGET_RADIUS_PILL)
                   }
                   .width('100%')
                   .margin({ top: 4 })
@@ -1806,18 +1807,18 @@ struct SkyLiveFormPage {
               Row({ space: 8 }) {
                 Text('‹ -4h').fontSize(12).fontWeight(FontWeight.Medium)
                   .fontColor(this.timeOffsetHours > 0 ? '#FFFFFF' : '#77B0CCE8')
-                  .textAlign(TextAlign.Center).layoutWeight(1).height(34).backgroundColor('#30FFFFFF').borderRadius(17)
+                  .textAlign(TextAlign.Center).layoutWeight(1).height(34).backgroundColor('#30FFFFFF').borderRadius(WIDGET_RADIUS_PILL)
                 Text(this.timeOffsetHours > 0 ? '回到此刻' : '48h 实时').fontSize(12).fontWeight(FontWeight.Medium)
                   .fontColor(this.timeOffsetHours > 0 ? '#FFE09A' : '#C2E2FF')
-                  .textAlign(TextAlign.Center).layoutWeight(1.2).height(34).backgroundColor('#22FFFFFF').borderRadius(17)
+                  .textAlign(TextAlign.Center).layoutWeight(1.2).height(34).backgroundColor('#22FFFFFF').borderRadius(WIDGET_RADIUS_PILL)
                 Text('+4h ›').fontSize(12).fontWeight(FontWeight.Medium)
                   .fontColor('#FFFFFF')
-                  .textAlign(TextAlign.Center).layoutWeight(1).height(34).backgroundColor('#30FFFFFF').borderRadius(17)
+                  .textAlign(TextAlign.Center).layoutWeight(1).height(34).backgroundColor('#30FFFFFF').borderRadius(WIDGET_RADIUS_PILL)
               }
               .width('100%')
               .padding({ left: 6, right: 6, top: 5, bottom: 5 })
               .backgroundColor('#2A060D1E')
-              .borderRadius(20)
+              .borderRadius(WIDGET_RADIUS_PILL)
 
               Column({ space: 9 }) {
                 Row() {
@@ -1848,7 +1849,7 @@ struct SkyLiveFormPage {
               .justifyContent(FlexAlign.SpaceEvenly)
               .padding({ left: 13, right: 13, top: 10, bottom: 10 })
               .backgroundColor('#2B060D1E')
-              .borderRadius(15)
+              .borderRadius(WIDGET_RADIUS_PILL)
 
               Row({ space: 8 }) {
                 Circle().width(6).height(6).fill('#8AD4FF')
@@ -1859,7 +1860,7 @@ struct SkyLiveFormPage {
               .width('100%')
               .padding({ left: 12, right: 12, top: 10, bottom: 10 })
               .backgroundColor('#36050B1A')
-              .borderRadius(13)
+              .borderRadius(WIDGET_RADIUS_PILL)
             }
           }
           .width('100%')
@@ -1898,7 +1899,7 @@ struct SkyLiveFormPage {
       Column()
         .width(130)
         .height(130)
-        .borderRadius(65)
+        .borderRadius(WIDGET_RADIUS_PILL)
         .clip(true)
         .radialGradient({
           center: ['50%', '50%'],
@@ -1922,7 +1923,7 @@ struct SkyLiveFormPage {
                 .height(22)
                 .padding({ left: 8, right: 8 })
                 .backgroundColor('#28FFFFFF')
-                .borderRadius(11)
+                .borderRadius(WIDGET_RADIUS_ROW)
                 .maxLines(1)
               Text(eventBadgeText(this.heroKind()))
                 .fontSize(10)
@@ -1930,7 +1931,7 @@ struct SkyLiveFormPage {
                 .fontColor(eventAccentColor(this.heroKind()))
                 .padding({ left: 6, right: 6, top: 2, bottom: 2 })
                 .backgroundColor('#22FFFFFF')
-                .borderRadius(8)
+                .borderRadius(WIDGET_RADIUS_BADGE)
             }
             Text(this.heroTitle())
               .fontSize(this.isTall() ? 16 : 14)
@@ -1965,7 +1966,7 @@ struct SkyLiveFormPage {
                 .height(28)
                 .padding({ left: 9, right: 9 })
                 .backgroundColor(this.isReminded(this.heroEvent()!.id) ? '#FFD166' : '#3AFFFFFF')
-                .borderRadius(14)
+                .borderRadius(WIDGET_RADIUS_PILL)
             }
 
             // Exact top-right orb socket placeholder
@@ -1988,10 +1989,10 @@ struct SkyLiveFormPage {
               Blank()
               Row({ space: 5 }) {
                 Text('‹').fontSize(14).fontWeight(FontWeight.Medium).fontColor('#E4F1FF')
-                  .textAlign(TextAlign.Center).width(26).height(22).backgroundColor('#2CFFFFFF').borderRadius(11)
+                  .textAlign(TextAlign.Center).width(26).height(22).backgroundColor('#2CFFFFFF').borderRadius(WIDGET_RADIUS_ROW)
                 Text('1/' + String(this.eventsPage().pageCount)).fontSize(10).fontWeight(FontWeight.Medium).fontColor('#C6E0FA')
                 Text('›').fontSize(14).fontWeight(FontWeight.Medium).fontColor('#E4F1FF')
-                  .textAlign(TextAlign.Center).width(26).height(22).backgroundColor('#2CFFFFFF').borderRadius(11)
+                  .textAlign(TextAlign.Center).width(26).height(22).backgroundColor('#2CFFFFFF').borderRadius(WIDGET_RADIUS_ROW)
               }
               .alignItems(VerticalAlign.Center)
             }
@@ -2018,12 +2019,12 @@ struct SkyLiveFormPage {
                   .height(this.isTall() ? 30 : 25)
                   .padding({ left: 9, right: 9 })
                   .backgroundColor(this.isReminded(ev.id) ? '#FFD166' : '#3AFFFFFF')
-                  .borderRadius(14)
+                  .borderRadius(WIDGET_RADIUS_PILL)
               }
               .width('100%')
               .padding({ left: 10, right: 6, top: this.isTall() ? 6 : 3, bottom: this.isTall() ? 6 : 3 })
               .backgroundColor('#22FFFFFF')
-              .borderRadius(11)
+              .borderRadius(WIDGET_RADIUS_ROW)
             }, (ev: CompactEventItem, idx: number) => ev.id + '_' + String(idx))
           }
           .width('100%')
@@ -2045,7 +2046,7 @@ struct SkyLiveFormPage {
           .width('100%')
           .padding({ left: 12, right: 12, top: 8, bottom: 8 })
           .backgroundColor('#1EFFFFFF')
-          .borderRadius(12)
+          .borderRadius(WIDGET_RADIUS_ROW)
         }
       }
       .width('100%')
@@ -2088,7 +2089,7 @@ struct SkyLiveFormPage {
           .fontColor('#D8ECFF')
           .padding({ left: 7, right: 7, top: 2, bottom: 2 })
           .backgroundColor('#380B1830')
-          .borderRadius(8)
+          .borderRadius(WIDGET_RADIUS_BADGE)
         if (this.formKind === 'celestial_events_card') {
           Text(eventBadgeText(this.heroKind()))
             .fontSize(10)
@@ -2096,7 +2097,7 @@ struct SkyLiveFormPage {
             .fontColor(eventAccentColor(this.heroKind()))
             .padding({ left: 7, right: 7, top: 2, bottom: 2 })
             .backgroundColor('#380B1830')
-            .borderRadius(8)
+            .borderRadius(WIDGET_RADIUS_BADGE)
         }
         Blank()
         Text('轻触进入 ↗')
@@ -2181,7 +2182,7 @@ struct SkyLiveFormPage {
             }
             .padding({ left: 10, right: 10, top: 4, bottom: 4 })
             .backgroundColor('#AE081124')
-            .borderRadius(12)
+            .borderRadius(WIDGET_RADIUS_ROW)
 
             Row({ space: 8 }) {
               Text('↻ 换星')
@@ -2192,7 +2193,7 @@ struct SkyLiveFormPage {
                 .layoutWeight(1)
                 .height(34)
                 .backgroundColor('#D61D4282')
-                .borderRadius(17)
+                .borderRadius(WIDGET_RADIUS_PILL)
                 .onClick(() => this.cycleFloatingPlanetInPlace())
 
               Text('✦ 星图')
@@ -2203,7 +2204,7 @@ struct SkyLiveFormPage {
                 .layoutWeight(1)
                 .height(34)
                 .backgroundColor('#C409142B')
-                .borderRadius(17)
+                .borderRadius(WIDGET_RADIUS_PILL)
                 .onClick(() => this.launchAppDirect())
             }
             .width('100%')
@@ -2323,7 +2324,7 @@ struct SkyLiveFormPage {
           Column()
             .width(96)
             .height(3)
-            .borderRadius(1.5)
+            .borderRadius(WIDGET_RADIUS_BAR)
             .linearGradient({
               direction: GradientDirection.Right,
               colors: [
@@ -2335,7 +2336,7 @@ struct SkyLiveFormPage {
           Column()
             .width(8)
             .height(8)
-            .borderRadius(4)
+            .borderRadius(WIDGET_RADIUS_BAR)
             .backgroundColor('#FFFFFF')
             .shadow({ radius: 12, color: '#99E0FF', offsetX: 0, offsetY: 0 })
         }

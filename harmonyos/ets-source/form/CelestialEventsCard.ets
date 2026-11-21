@@ -15,6 +15,7 @@ import {
   eventAccentColor,
   eventBadgeText
 } from './WidgetVisuals'
+import { WIDGET_RADIUS_BADGE, WIDGET_RADIUS_PILL, WIDGET_RADIUS_ROW } from './WidgetTokens'
 
 const eventsCardStorage: LocalStorage = new LocalStorage()
 
@@ -175,7 +176,7 @@ struct CelestialEventsCard {
       Column()
         .width(130)
         .height(130)
-        .borderRadius(65)
+        .borderRadius(WIDGET_RADIUS_PILL)
         .clip(true)
         .radialGradient({
           center: ['50%', '50%'],
@@ -200,7 +201,7 @@ struct CelestialEventsCard {
                 .height(28)
                 .padding({ left: 10, right: 10 })
                 .backgroundColor('#2CFFFFFF')
-                .borderRadius(14)
+                .borderRadius(WIDGET_RADIUS_PILL)
                 .maxLines(1)
                 .onClick(() => this.cyclePlanet())
               Text(eventBadgeText(this.heroKind()))
@@ -209,7 +210,7 @@ struct CelestialEventsCard {
                 .fontColor(this.accent())
                 .padding({ left: 6, right: 6, top: 2, bottom: 2 })
                 .backgroundColor('#22FFFFFF')
-                .borderRadius(8)
+                .borderRadius(WIDGET_RADIUS_BADGE)
               if (this.reminderToast.length > 0) {
                 Text(this.reminderToast)
                   .fontSize(10)
@@ -254,7 +255,7 @@ struct CelestialEventsCard {
                 .height(32)
                 .padding({ left: 10, right: 10 })
                 .backgroundColor(this.isReminded(this.heroEvent()!.id) ? '#FFD166' : '#D62C62B8')
-                .borderRadius(16)
+                .borderRadius(WIDGET_RADIUS_PILL)
                 .onClick(() => {
                   const ev = this.heroEvent()
                   if (ev !== undefined) this.toggleReminder(ev)
@@ -294,7 +295,7 @@ struct CelestialEventsCard {
                   .width(32)
                   .height(28)
                   .backgroundColor('#2CFFFFFF')
-                  .borderRadius(14)
+                  .borderRadius(WIDGET_RADIUS_PILL)
                   .onClick(() => this.stepListPage(-1))
                 Text(String(this.currentPage().pageIndex + 1) + '/' + String(this.currentPage().pageCount))
                   .fontSize(10.5)
@@ -309,7 +310,7 @@ struct CelestialEventsCard {
                   .width(32)
                   .height(28)
                   .backgroundColor('#2CFFFFFF')
-                  .borderRadius(14)
+                  .borderRadius(WIDGET_RADIUS_PILL)
                   .onClick(() => this.stepListPage(1))
               }
               .alignItems(VerticalAlign.Center)
@@ -344,13 +345,13 @@ struct CelestialEventsCard {
                   .height(this.isTall() ? 30 : 25)
                   .padding({ left: 9, right: 9 })
                   .backgroundColor(this.isReminded(ev.id) ? '#FFD166' : '#3AFFFFFF')
-                  .borderRadius(14)
+                  .borderRadius(WIDGET_RADIUS_PILL)
                   .onClick(() => this.toggleReminder(ev))
               }
               .width('100%')
               .padding({ left: 10, right: 6, top: this.isTall() ? 6 : 3, bottom: this.isTall() ? 6 : 3 })
               .backgroundColor('#22FFFFFF')
-              .borderRadius(11)
+              .borderRadius(WIDGET_RADIUS_ROW)
               .onClick(() => this.openCalendar(ev))
             }, (ev: CompactEventItem, idx: number) => ev.id + '_' + String(this.listPageIndex) + '_' + String(idx))
           }
@@ -370,7 +371,7 @@ struct CelestialEventsCard {
           .width('100%')
           .padding({ left: 10, right: 10, top: 10, bottom: 10 })
           .backgroundColor('#1AFFFFFF')
-          .borderRadius(12)
+          .borderRadius(WIDGET_RADIUS_ROW)
         }
 
         if (this.isTall()) {
@@ -389,7 +390,7 @@ struct CelestialEventsCard {
           .width('100%')
           .padding({ left: 12, right: 12, top: 8, bottom: 8 })
           .backgroundColor('#1EFFFFFF')
-          .borderRadius(12)
+          .borderRadius(WIDGET_RADIUS_ROW)
         }
       }
       .width('100%')

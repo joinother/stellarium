@@ -21,6 +21,12 @@ export interface AstronomyCalendarEvent {
   alignment?: string
   separationDegrees?: number
   observerPlanet?: string
+  satCatalogId?: string
+  satArchetype?: string
+  satMaxAlt?: number
+  satVisible?: boolean
+  satDurationSec?: number
+  satAzimuthSummary?: string
 }
 
 export interface CalendarNativeEvent {

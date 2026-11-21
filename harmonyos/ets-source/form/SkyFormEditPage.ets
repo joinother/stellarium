@@ -16,6 +16,7 @@ import {
   resolveCardDataForConfig,
   writeFormConfig
 } from './FormStoreHelper'
+import { WIDGET_RADIUS_ROW, WIDGET_RADIUS_SURFACE } from './WidgetTokens'
 
 const DOMAIN: number = 0xD003
 const TAG: string = 'SkyFormEditPage'
@@ -162,7 +163,7 @@ struct SkyFormEditPage {
           .justifyContent(FlexAlign.Center)
           .alignItems(VerticalAlign.Center)
           .backgroundColor(selectedValue === choice.value ? ACCENT_BLUE : $r('sys.color.comp_background_tertiary'))
-          .borderRadius(12)
+          .borderRadius(WIDGET_RADIUS_ROW)
           .onClick(() => {
             onPick(choice.value)
             this.applyConfig()
@@ -174,7 +175,7 @@ struct SkyFormEditPage {
     .width('100%')
     .padding({ left: 12, right: 12, top: 10, bottom: 12 })
     .backgroundColor($r('sys.color.comp_background_secondary'))
-    .borderRadius(16)
+    .borderRadius(WIDGET_RADIUS_SURFACE)
   }
 
   build() {
@@ -217,7 +218,7 @@ struct SkyFormEditPage {
                 .alignItems(VerticalAlign.Center)
                 .padding({ left: 6, right: 6 })
                 .backgroundColor(this.planetMode === planetId ? ACCENT_BLUE : $r('sys.color.comp_background_tertiary'))
-                .borderRadius(12)
+                .borderRadius(WIDGET_RADIUS_ROW)
                 .onClick(() => {
                   this.planetMode = planetId
                   this.applyConfig()
@@ -234,7 +235,7 @@ struct SkyFormEditPage {
         .width('100%')
         .padding({ left: 12, right: 12, top: 10, bottom: 12 })
         .backgroundColor($r('sys.color.comp_background_secondary'))
-        .borderRadius(16)
+        .borderRadius(WIDGET_RADIUS_SURFACE)
         }
 
         // Section 2: Sky Theme Style (framed cards only)

@@ -18,6 +18,7 @@ import {
   StarfieldLayer,
   satelliteIconResource
 } from './WidgetVisuals'
+import { WIDGET_RADIUS_BADGE, WIDGET_RADIUS_CHIP, WIDGET_RADIUS_PILL, WIDGET_RADIUS_ROW } from './WidgetTokens'
 
 const satellitePassStorage: LocalStorage = new LocalStorage()
 
@@ -172,7 +173,7 @@ struct SatellitePassCard {
               .fontColor(satelliteVisualProfile(this.activePass().archetype).accentHex)
               .padding({ left: 5, right: 5, top: 2, bottom: 2 })
               .backgroundColor('#280B1830')
-              .borderRadius(8)
+              .borderRadius(WIDGET_RADIUS_BADGE)
           }
           .width('100%')
 
@@ -209,7 +210,7 @@ struct SatellitePassCard {
               .height(22)
               .padding({ left: 8, right: 8 })
               .backgroundColor(this.isReminded(this.activePass()) ? '#341A6E4E' : '#2E3B6DB8')
-              .borderRadius(11)
+              .borderRadius(WIDGET_RADIUS_ROW)
               .onClick(() => this.toggleReminder(this.activePass()))
           }
           .width('100%')
@@ -245,7 +246,7 @@ struct SatellitePassCard {
                 .fontColor(satelliteVisualProfile(this.activePass().archetype).accentHex)
                 .padding({ left: 6, right: 6, top: 2, bottom: 2 })
                 .backgroundColor('#2C13294E')
-                .borderRadius(8)
+                .borderRadius(WIDGET_RADIUS_BADGE)
               Text(this.magBadge(this.activePass()))
                 .fontSize(9.5)
                 .fontColor('#CFE4FF')
@@ -261,7 +262,7 @@ struct SatellitePassCard {
                     .height(26)
                     .textAlign(TextAlign.Center)
                     .backgroundColor('#28FFFFFF')
-                    .borderRadius(13)
+                    .borderRadius(WIDGET_RADIUS_PILL)
                     .onClick(() => this.stepPass(-1))
                   Text('›')
                     .fontSize(14)
@@ -271,7 +272,7 @@ struct SatellitePassCard {
                     .height(26)
                     .textAlign(TextAlign.Center)
                     .backgroundColor('#28FFFFFF')
-                    .borderRadius(13)
+                    .borderRadius(WIDGET_RADIUS_PILL)
                     .onClick(() => this.stepPass(1))
                 }
               }
@@ -320,7 +321,7 @@ struct SatellitePassCard {
                 .layoutWeight(1)
                 .height(33)
                 .backgroundColor(this.isReminded(this.activePass()) ? '#3A1A6E4E' : '#D62C62B8')
-                .borderRadius(16.5)
+                .borderRadius(WIDGET_RADIUS_PILL)
                 .onClick(() => this.toggleReminder(this.activePass()))
 
               Text('追踪 ↗')
@@ -332,7 +333,7 @@ struct SatellitePassCard {
                 .height(33)
                 .backgroundColor('#28163A6E')
                 .border({ width: 0.6, color: '#3C7AC8FF' })
-                .borderRadius(16.5)
+                .borderRadius(WIDGET_RADIUS_PILL)
                 .onClick(() => this.openPassInSky(this.activePass()))
             }
             .width('100%')
@@ -361,7 +362,7 @@ struct SatellitePassCard {
                   .fontColor(satelliteVisualProfile(this.activePass().archetype).accentHex)
                   .padding({ left: 6, right: 6, top: 2, bottom: 2 })
                   .backgroundColor('#2C13294E')
-                  .borderRadius(8)
+                  .borderRadius(WIDGET_RADIUS_BADGE)
               }
               Text(formatCountdownZh(this.activePass().startAt, Date.now()) + ' · ' +
                 formatShortDateZh(this.activePass().startAt) + ' · ' +
@@ -383,7 +384,7 @@ struct SatellitePassCard {
               .height(26)
               .padding({ left: 10, right: 10 })
               .backgroundColor(this.isReminded(this.activePass()) ? '#341A6E4E' : '#363F76C8')
-              .borderRadius(13)
+              .borderRadius(WIDGET_RADIUS_PILL)
               .onClick(() => this.toggleReminder(this.activePass()))
           }
           .width('100%')
@@ -440,7 +441,7 @@ struct SatellitePassCard {
               .width('100%')
               .padding({ left: 8, right: 8, top: 5, bottom: 5 })
               .backgroundColor(idx === this.activeIndex() ? '#2C274F8E' : '#18FFFFFF')
-              .borderRadius(10)
+              .borderRadius(WIDGET_RADIUS_CHIP)
               .onClick(() => this.openPassInSky(item))
             }, (item: CompactSatellitePass) => item.id + '_' + String(item.startAt))
           }

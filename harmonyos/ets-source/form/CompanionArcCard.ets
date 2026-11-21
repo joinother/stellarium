@@ -14,6 +14,7 @@ import {
   MiniPhaseStripView,
   StarfieldLayer
 } from './WidgetVisuals'
+import { WIDGET_RADIUS_CHIP, WIDGET_RADIUS_PILL } from './WidgetTokens'
 
 const companionArcStorage: LocalStorage = new LocalStorage()
 
@@ -221,7 +222,7 @@ struct CompanionArcCard {
               .height(28)
               .padding({ left: 9, right: 10 })
               .backgroundColor('#2CFFFFFF')
-              .borderRadius(14)
+              .borderRadius(WIDGET_RADIUS_PILL)
               .onClick(() => this.cyclePlanet())
             Blank()
             Text(this.rightStatLabel())
@@ -299,7 +300,7 @@ struct CompanionArcCard {
                   .height(28)
                   .padding({ left: 10, right: 10 })
                   .backgroundColor('#2CFFFFFF')
-                  .borderRadius(14)
+                  .borderRadius(WIDGET_RADIUS_PILL)
                   .maxLines(1)
                   .onClick(() => this.cyclePlanet())
                 Text(this.displayPhaseName())
@@ -341,7 +342,7 @@ struct CompanionArcCard {
               .height(32)
               .padding({ left: 10, right: 10 })
               .backgroundColor('#2E221604')
-              .borderRadius(10)
+              .borderRadius(WIDGET_RADIUS_CHIP)
               .border({ width: 0.6, color: '#44FFE09A' })
               .alignItems(VerticalAlign.Center)
             } else {
@@ -403,7 +404,7 @@ struct CompanionArcCard {
                   .justifyContent(FlexAlign.Center)
                   .alignItems(HorizontalAlign.Center)
                   .backgroundColor('#32090F1E')
-                  .borderRadius(10)
+                  .borderRadius(WIDGET_RADIUS_CHIP)
                   .border({ width: 0.5, color: '#2AFFE09A' })
                 }, (pair: string[], idx: number) => pair[0] + '_' + String(idx))
               }

@@ -3,6 +3,12 @@ import { StellariumBridgeResponse } from '../pages/StellariumTypes'
 import { AstronomyCalendarStore } from '../state/AstronomyCalendarStore'
 import { AstronomyCalendarEvent, CalendarNativeResponse, calendarMonth, calendarDays, calendarQuery, calendarNativeEvents } from '../state/AstronomyCalendarEvent'
 import { CalendarObserverContext, calendarPlanetName, calendarText } from '../state/AstronomyCalendarText'
+import {
+  NativeSatellitePassRecord,
+  isEarthCalendarPlanet,
+  monthOverlapsSatelliteWindow,
+  parseTonightSatellitePassesToCalendarEvents
+} from '../state/AstronomyCalendarFilter'
 import { AstronomyReminderResult } from '../qability/AstronomyReminderService'
 
 export interface AstronomyCalendarReminderResult extends AstronomyReminderResult {
@@ -14,6 +20,7 @@ export interface AstronomyCalendarHostHooks {
   remind(event: AstronomyCalendarEvent): Promise<AstronomyCalendarReminderResult>
   feedChanged(events: AstronomyCalendarEvent[]): void
   observerContext?(): CalendarObserverContext
+  onFilterChanged?(): void
 }
 
 export class AstronomyCalendarController {
@@ -25,6 +32,7 @@ export class AstronomyCalendarController {
   private language: string = 'zh'
   private response: CalendarNativeResponse | undefined = undefined
   private extraResponses: CalendarNativeResponse[] = []
+  private rawSatellitePasses: NativeSatellitePassRecord[] = []
 
   constructor(port: CommandPort, store: AstronomyCalendarStore, hooks: AstronomyCalendarHostHooks) {
     this.port = port
@@ -35,6 +43,61 @@ export class AstronomyCalendarController {
   private currentObserverPlanet(): string {
     const raw = this.hooks.observerContext?.()?.observerPlanet?.trim() ?? ''
     return raw.length > 0 ? raw : 'Earth'
+  }
+
+  private recomputeMonthDays(): void {
+    const range = calendarMonth(this.store.year, this.store.month)
+    const filteredMonth = this.store.filteredEvents().filter((event: AstronomyCalendarEvent) => {
+      return event.at >= range.start && event.at < range.end
+    })
+    this.store.days = calendarDays(range, filteredMonth)
+  }
+
+  private mergeEventsWithSatellites(baseEvents: AstronomyCalendarEvent[]): AstronomyCalendarEvent[] {
+    if (!isEarthCalendarPlanet(this.store.observerPlanet) || this.rawSatellitePasses.length === 0) {
+      return baseEvents
+    }
+    const startRange = calendarMonth(this.store.year, this.store.month)
+    const endRange = calendarMonth(this.store.throughYear, this.store.throughMonth)
+    const satEvents = parseTonightSatellitePassesToCalendarEvents(
+      this.rawSatellitePasses,
+      startRange.start,
+      endRange.end,
+      this.language
+    ) as AstronomyCalendarEvent[]
+    if (satEvents.length === 0) return baseEvents
+    const combined = baseEvents.concat(satEvents)
+    combined.sort((left: AstronomyCalendarEvent, right: AstronomyCalendarEvent) => left.at - right.at || left.id.localeCompare(right.id))
+    return combined
+  }
+
+  private fetchSatellitePassesIfApplicable(sequence: number, year: number, month: number, planet: string): void {
+    if (!isEarthCalendarPlanet(planet) || !monthOverlapsSatelliteWindow(year, month)) {
+      this.store.satellitePassesLoading = false
+      return
+    }
+    this.store.satellitePassesLoading = true
+    try {
+      this.port.requestInteractive('getTonightEvents', '', (response: StellariumBridgeResponse): void => {
+        if (this.disposed || sequence !== this.sequence) return
+        this.store.satellitePassesLoading = false
+        const payload = response as Record<string, Object>
+        const tonightObj = payload['tonight'] as Record<string, Object> | undefined
+        const rawList = tonightObj !== undefined && Array.isArray(tonightObj['satellitePasses'])
+          ? tonightObj['satellitePasses']
+          : payload['satellitePasses']
+        if (!Array.isArray(rawList) || rawList.length === 0) return
+        this.rawSatellitePasses = rawList as NativeSatellitePassRecord[]
+        const nonSat = this.store.events.filter((ev: AstronomyCalendarEvent) => ev.kind !== 'satellite-pass')
+        const merged = this.mergeEventsWithSatellites(nonSat)
+        this.store.events = merged
+        this.recomputeMonthDays()
+        this.store.filterRevision += 1
+        this.hooks.feedChanged(merged.slice())
+      })
+    } catch (_) {
+      this.store.satellitePassesLoading = false
+    }
   }
 
   loadMonth(year: number, month: number): void {
@@ -49,6 +112,8 @@ export class AstronomyCalendarController {
     this.store.observerPlanet = planet
     this.store.loadingMore = false
     this.extraResponses = []
+    this.rawSatellitePasses = []
+    this.store.satellitePassesLoading = false
     this.store.selectedDay = 0
     this.store.selectedEventId = ''
     this.store.events = []
@@ -75,11 +140,12 @@ export class AstronomyCalendarController {
           this.response = native
           this.store.sourceYear = year
           this.store.events = events
-          this.store.days = calendarDays(range, events)
+          this.recomputeMonthDays()
           this.store.loading = false
           this.store.loaded = true
           this.updateCoverage()
           this.hooks.feedChanged(events.slice())
+          this.fetchSatellitePassesIfApplicable(sequence, year, month, planet)
         } catch (_) {
           fail()
         }
@@ -98,8 +164,8 @@ export class AstronomyCalendarController {
         `Loaded local planetary alignments, companion phases, and seasonal events from ${label}; times use the device time zone (Earth meteors & satellites excluded).`)
       return
     }
-    this.store.coverage = calendarText(this.language, '已载入节气、主要月相、流星雨预计极大及行星事件；按设备时区显示。',
-      'Solar terms, principal lunar phases, estimated meteor peaks and planetary events loaded; times use the device time zone.')
+    this.store.coverage = calendarText(this.language, '已载入节气、主要月相、流星雨预计极大、行星事件及近 48 小时卫星过境；按设备时区显示。',
+      'Solar terms, principal lunar phases, estimated meteor peaks, planetary events and 48h satellite passes loaded; times use the device time zone.')
   }
 
   loadMore(): void {
@@ -124,9 +190,10 @@ export class AstronomyCalendarController {
           const native = response as CalendarNativeResponse
           const events = calendarNativeEvents(native, range, this.language, this.hooks.observerContext?.())
           this.extraResponses.push(native)
-          this.store.events = this.store.events.concat(events)
           this.store.throughYear = year
           this.store.throughMonth = month
+          const nonSat = this.store.events.filter((ev: AstronomyCalendarEvent) => ev.kind !== 'satellite-pass').concat(events)
+          this.store.events = this.mergeEventsWithSatellites(nonSat)
           this.store.loadingMore = false
           this.hooks.feedChanged(this.store.events.slice())
         } catch (_) { fail() }
@@ -144,17 +211,68 @@ export class AstronomyCalendarController {
       try {
         const range = calendarMonth(this.store.year, this.store.month)
         const ctx = this.hooks.observerContext?.()
-        this.store.events = calendarNativeEvents(this.response, range, language, ctx)
+        let rebuilt = calendarNativeEvents(this.response, range, language, ctx)
         for (const response of this.extraResponses) {
-          this.store.events = this.store.events.concat(calendarNativeEvents(response,
+          rebuilt = rebuilt.concat(calendarNativeEvents(response,
             calendarMonth(response.year as number, response.month as number), language, ctx))
         }
+        this.store.events = this.mergeEventsWithSatellites(rebuilt)
+        this.recomputeMonthDays()
         this.updateCoverage()
         this.hooks.feedChanged(this.store.events.slice())
       } catch (_) {
         this.reload()
       }
     }
+  }
+
+  toggleCategory(category: string): void {
+    if (this.disposed) return
+    const next = this.store.selectedCategories.slice()
+    const idx = next.indexOf(category)
+    if (idx >= 0) next.splice(idx, 1)
+    else next.push(category)
+    this.store.selectedCategories = next
+    this.store.selectedDay = 0
+    this.store.filterRevision += 1
+    this.recomputeMonthDays()
+    this.hooks.onFilterChanged?.()
+  }
+
+  setSatelliteSubFilter(mode: string): void {
+    if (this.disposed) return
+    const safe = (mode === 'stations' || mode === 'visible' || mode === 'high_alt') ? mode : 'all'
+    if (this.store.satelliteSubFilter === safe) return
+    this.store.satelliteSubFilter = safe
+    this.store.selectedDay = 0
+    this.store.filterRevision += 1
+    this.recomputeMonthDays()
+    this.hooks.onFilterChanged?.()
+  }
+
+  setHighlightOnly(enabled: boolean): void {
+    if (this.disposed || this.store.highlightOnly === enabled) return
+    this.store.highlightOnly = enabled
+    this.store.selectedDay = 0
+    this.store.filterRevision += 1
+    this.recomputeMonthDays()
+    this.hooks.onFilterChanged?.()
+  }
+
+  clearFilters(): void {
+    if (this.disposed) return
+    this.store.selectedCategories = []
+    this.store.satelliteSubFilter = 'all'
+    this.store.highlightOnly = false
+    this.store.selectedDay = 0
+    this.store.filterRevision += 1
+    this.recomputeMonthDays()
+    this.hooks.onFilterChanged?.()
+  }
+
+  goToCurrentMonth(): void {
+    const now = new Date()
+    this.loadMonth(now.getFullYear(), now.getMonth() + 1)
   }
 
   reload(): void {
@@ -234,6 +352,7 @@ export class AstronomyCalendarController {
     this.sequence++
     this.store.loading = false
     this.store.loadingMore = false
+    this.store.satellitePassesLoading = false
     this.store.reminderPendingId = ''
   }
 }

@@ -3032,7 +3032,10 @@ export struct WindowNativeNode {
           latitude: this.observerLatitude,
           bortleScale: this.layerViewStore.bortleScale,
           observerPlanet: this.sessionToolStore.observerPlanet
-        })
+        }),
+        onFilterChanged: (): void => {
+          this.saveAppSettings()
+        }
       }
       this.calendarController = new AstronomyCalendarController(this.commandPort(), this.calendarStore, hooks)
       this.calendarController.setLanguage(I18n.getLanguage())
@@ -4080,7 +4083,10 @@ export struct WindowNativeNode {
       eclipseMonths: this.astroStore.eclipseMonths,
       moonPhaseDays: this.astroStore.moonPhaseDays,
       touchPickRadiusVp: this.viewSettingsStore.touchPickRadiusVp,
-      uiFontScaleMode: this.uiFontScaleMode
+      uiFontScaleMode: this.uiFontScaleMode,
+      calendarFilterCategories: this.calendarStore.selectedCategories.join(','),
+      calendarHighlightOnly: this.calendarStore.highlightOnly,
+      calendarSatSubFilter: this.calendarStore.satelliteSubFilter
     }
     return next
   }
@@ -4208,6 +4214,11 @@ export struct WindowNativeNode {
     }))
     this.viewSettingsStore.touchPickRadiusVp = settings.touchPickRadiusVp
     this.uiFontScaleMode = settings.uiFontScaleMode
+    this.calendarStore.selectedCategories = settings.calendarFilterCategories.length > 0
+      ? settings.calendarFilterCategories.split(',').filter((v: string) => v.trim().length > 0)
+      : []
+    this.calendarStore.highlightOnly = settings.calendarHighlightOnly
+    this.calendarStore.satelliteSubFilter = settings.calendarSatSubFilter
     this.syncUiTypographyScale()
     this.callInteractive('setTouchPickRadius', settings.touchPickRadiusVp.toString(), () => {})
     if (this.startupBridgeImpl !== null) {
@@ -10197,7 +10208,12 @@ export struct WindowNativeNode {
           viewSky: (id: string) => this.calendarCtl().viewSky(id),
           remind: (id: string) => this.calendarCtl().remind(id),
           reload: () => this.calendarCtl().reload(),
-          loadMore: () => this.calendarCtl().loadMore()
+          loadMore: () => this.calendarCtl().loadMore(),
+          toggleCategory: (category: string) => this.calendarCtl().toggleCategory(category),
+          setSatelliteSubFilter: (mode: string) => this.calendarCtl().setSatelliteSubFilter(mode),
+          setHighlightOnly: (enabled: boolean) => this.calendarCtl().setHighlightOnly(enabled),
+          clearFilters: () => this.calendarCtl().clearFilters(),
+          goToCurrentMonth: () => this.calendarCtl().goToCurrentMonth()
         }
       })
     } else if (this.activePanel === 'astro') {

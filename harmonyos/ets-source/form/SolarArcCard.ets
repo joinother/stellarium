@@ -12,6 +12,7 @@ import {
   HorizonArcView,
   StarfieldLayer
 } from './WidgetVisuals'
+import { WIDGET_RADIUS_PILL, WIDGET_RADIUS_ROW } from './WidgetTokens'
 
 const solarArcStorage: LocalStorage = new LocalStorage()
 
@@ -195,7 +196,7 @@ struct SolarArcCard {
               .height(26)
               .padding({ left: 8, right: 9 })
               .backgroundColor('#38140C04')
-              .borderRadius(13)
+              .borderRadius(WIDGET_RADIUS_PILL)
               .onClick(() => this.cyclePlanet())
             Blank()
             Text(this.altLabel())
@@ -271,7 +272,7 @@ struct SolarArcCard {
                   .height(28)
                   .padding({ left: 10, right: 10 })
                   .backgroundColor('#38140C04')
-                  .borderRadius(14)
+                  .borderRadius(WIDGET_RADIUS_PILL)
                   .maxLines(1)
                   .onClick(() => this.cyclePlanet())
                 Text(this.selectedStageIndex >= 0
@@ -325,7 +326,7 @@ struct SolarArcCard {
                 .justifyContent(FlexAlign.Center)
                 .alignItems(HorizontalAlign.Center)
                 .backgroundColor(this.selectedStageIndex === idx ? '#FFD166' : '#32090F1E')
-                .borderRadius(11)
+                .borderRadius(WIDGET_RADIUS_ROW)
                 .border({
                   width: this.selectedStageIndex === idx ? 0 : 0.5,
                   color: '#2AFFE09A'

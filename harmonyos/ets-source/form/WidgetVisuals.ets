@@ -13,6 +13,7 @@ import {
   compassDirectionZh,
   satelliteVisualProfile
 } from './SatelliteVisualRegistry'
+import { WIDGET_RADIUS_CHIP } from './WidgetTokens'
 
 export function satelliteIconResource(archetype: SatelliteArchetype | string): Resource {
   const key = String(archetype).trim().toLowerCase()
@@ -517,7 +518,7 @@ export struct MiniPhaseStripView {
         .justifyContent(FlexAlign.Center)
         .alignItems(HorizontalAlign.Center)
         .backgroundColor(this.selectedIndex === index ? '#369EC5FF' : '#18FFFFFF')
-        .borderRadius(10)
+        .borderRadius(WIDGET_RADIUS_CHIP)
         .border({
           width: this.selectedIndex === index ? 1 : 0,
           color: this.selectedIndex === index ? '#B8DEFF' : Color.Transparent

@@ -33,6 +33,9 @@ export interface UiSettings {
   moonPhaseDays: number
   touchPickRadiusVp: number
   uiFontScaleMode: string
+  calendarFilterCategories: string
+  calendarHighlightOnly: boolean
+  calendarSatSubFilter: string
 }
 
 export function defaultUiSettings(): UiSettings {
@@ -58,7 +61,10 @@ export function defaultUiSettings(): UiSettings {
     eclipseMonths: 36,
     moonPhaseDays: 30,
     touchPickRadiusVp: 66,
-    uiFontScaleMode: 'system'
+    uiFontScaleMode: 'system',
+    calendarFilterCategories: '',
+    calendarHighlightOnly: false,
+    calendarSatSubFilter: 'all'
   }
 }
 
@@ -144,6 +150,12 @@ export function migrateUiSettings(raw: string): UiSettings {
   out.uiFontScaleMode = (rawFontMode === 'system' || rawFontMode === 'standard' || rawFontMode === 'large' || rawFontMode === 'xlarge')
     ? rawFontMode
     : defaults.uiFontScaleMode
+  out.calendarFilterCategories = strOf(obj['calendarFilterCategories'], defaults.calendarFilterCategories)
+  out.calendarHighlightOnly = boolOf(obj['calendarHighlightOnly'], defaults.calendarHighlightOnly)
+  const rawSatSub = strOf(obj['calendarSatSubFilter'], defaults.calendarSatSubFilter)
+  out.calendarSatSubFilter = (rawSatSub === 'all' || rawSatSub === 'stations' || rawSatSub === 'visible' || rawSatSub === 'high_alt')
+    ? rawSatSub
+    : defaults.calendarSatSubFilter
   return out
 }
 

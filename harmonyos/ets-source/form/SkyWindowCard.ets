@@ -13,6 +13,7 @@ import {
   StarfieldLayer,
   fallbackPlanetRows
 } from './WidgetVisuals'
+import { WIDGET_RADIUS_PILL, WIDGET_RADIUS_ROW } from './WidgetTokens'
 
 const skyWindowStorage: LocalStorage = new LocalStorage()
 
@@ -256,7 +257,7 @@ struct SkyWindowCard {
             .height(28)
             .padding({ left: 9, right: 10 })
             .backgroundColor('#38081224')
-            .borderRadius(14)
+            .borderRadius(WIDGET_RADIUS_PILL)
             .onClick(() => this.cyclePlanet())
 
             Blank()
@@ -336,7 +337,7 @@ struct SkyWindowCard {
                 .height(30)
                 .padding({ left: 10, right: 11 })
                 .backgroundColor('#3A071022')
-                .borderRadius(15)
+                .borderRadius(WIDGET_RADIUS_PILL)
                 .onClick(() => this.cyclePlanet())
 
                 if (this.numericOffsetHours() > 0 && this.timePreviewLabel.length > 0) {
@@ -348,7 +349,7 @@ struct SkyWindowCard {
                     .padding({ left: 8, right: 8 })
                     .textAlign(TextAlign.Center)
                     .backgroundColor('#48140D04')
-                    .borderRadius(13)
+                    .borderRadius(WIDGET_RADIUS_PILL)
                     .onClick(() => this.resetTime())
                 } else if (this.isStale()) {
                   Text('待刷新')
@@ -389,7 +390,7 @@ struct SkyWindowCard {
                     .layoutWeight(1)
                     .height(32)
                     .backgroundColor('#34061022')
-                    .borderRadius(16)
+                    .borderRadius(WIDGET_RADIUS_PILL)
                     .onClick(() => this.stepTime(-4))
 
                   Text(this.numericOffsetHours() > 0 ? '回此刻' : '时间预演')
@@ -400,7 +401,7 @@ struct SkyWindowCard {
                     .layoutWeight(1.1)
                     .height(34)
                     .backgroundColor('#28061022')
-                    .borderRadius(17)
+                    .borderRadius(WIDGET_RADIUS_PILL)
                     .onClick(() => this.resetTime())
 
                   Text('+4h ›')
@@ -411,7 +412,7 @@ struct SkyWindowCard {
                     .layoutWeight(1)
                     .height(32)
                     .backgroundColor('#34061022')
-                    .borderRadius(16)
+                    .borderRadius(WIDGET_RADIUS_PILL)
                     .onClick(() => this.stepTime(4))
                 }
                 .width('100%')
@@ -454,7 +455,7 @@ struct SkyWindowCard {
                 .layoutWeight(1)
                 .height(34)
                 .backgroundColor('#30FFFFFF')
-                .borderRadius(17)
+                .borderRadius(WIDGET_RADIUS_PILL)
                 .onClick(() => this.stepTime(-4))
               Text(this.numericOffsetHours() > 0 ? '回到此刻' : '48h 实时')
                 .fontSize(12)
@@ -464,7 +465,7 @@ struct SkyWindowCard {
                 .layoutWeight(1.2)
                 .height(34)
                 .backgroundColor('#22FFFFFF')
-                .borderRadius(17)
+                .borderRadius(WIDGET_RADIUS_PILL)
                 .onClick(() => this.resetTime())
               Text('+4h ›')
                 .fontSize(12)
@@ -474,13 +475,13 @@ struct SkyWindowCard {
                 .layoutWeight(1)
                 .height(34)
                 .backgroundColor('#30FFFFFF')
-                .borderRadius(17)
+                .borderRadius(WIDGET_RADIUS_PILL)
                 .onClick(() => this.stepTime(4))
             }
             .width('100%')
             .padding({ left: 6, right: 6, top: 5, bottom: 5 })
             .backgroundColor('#2A060D1E')
-            .borderRadius(20)
+            .borderRadius(WIDGET_RADIUS_PILL)
 
             Column({ space: 9 }) {
               Row() {
@@ -523,7 +524,7 @@ struct SkyWindowCard {
             .justifyContent(FlexAlign.SpaceEvenly)
             .padding({ left: 13, right: 13, top: 10, bottom: 10 })
             .backgroundColor('#2B060D1E')
-            .borderRadius(15)
+            .borderRadius(WIDGET_RADIUS_ROW)
 
             // Independent hotspot for upcoming astronomical event
             Row({ space: 8 }) {
@@ -547,7 +548,7 @@ struct SkyWindowCard {
             .width('100%')
             .padding({ left: 12, right: 12, top: 10, bottom: 10 })
             .backgroundColor('#36050B1A')
-            .borderRadius(13)
+            .borderRadius(WIDGET_RADIUS_ROW)
             .onClick(() => this.openCalendarEvent())
           }
         }

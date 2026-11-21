@@ -11,6 +11,7 @@ import {
   SolarSystemOrreryStage,
   StarfieldLayer
 } from './WidgetVisuals'
+import { WIDGET_RADIUS_CHIP, WIDGET_RADIUS_PILL } from './WidgetTokens'
 
 const solarSystemStorage: LocalStorage = new LocalStorage()
 
@@ -165,7 +166,7 @@ struct SolarSystemCard {
               .height(26)
               .padding({ left: 9, right: 9 })
               .backgroundColor('#364678C4')
-              .borderRadius(13)
+              .borderRadius(WIDGET_RADIUS_PILL)
               .onClick(() => this.toggleZoom())
           }
           .width('100%')
@@ -193,7 +194,7 @@ struct SolarSystemCard {
               .height(28)
               .padding({ left: 7, right: 7 })
               .backgroundColor('#24FFFFFF')
-              .borderRadius(14)
+              .borderRadius(WIDGET_RADIUS_PILL)
               .onClick(() => this.stepDays(-30))
 
             Text(this.numericDayOffset() === 0 ? '此刻' : (this.numericDayOffset() > 0 ? '+' + String(this.numericDayOffset()) + '天' : String(this.numericDayOffset()) + '天'))
@@ -204,7 +205,7 @@ struct SolarSystemCard {
               .layoutWeight(1)
               .height(28)
               .backgroundColor('#2C4678C4')
-              .borderRadius(14)
+              .borderRadius(WIDGET_RADIUS_PILL)
               .maxLines(1)
               .onClick(() => this.resetDays())
 
@@ -215,7 +216,7 @@ struct SolarSystemCard {
               .height(28)
               .padding({ left: 7, right: 7 })
               .backgroundColor('#24FFFFFF')
-              .borderRadius(14)
+              .borderRadius(WIDGET_RADIUS_PILL)
               .onClick(() => this.stepDays(30))
           }
           .width('100%')
@@ -274,7 +275,7 @@ struct SolarSystemCard {
               .width('100%')
               .height(30)
               .backgroundColor('#384678C4')
-              .borderRadius(15)
+              .borderRadius(WIDGET_RADIUS_PILL)
               .maxLines(1)
               .onClick(() => this.toggleZoom())
 
@@ -290,7 +291,7 @@ struct SolarSystemCard {
                 .layoutWeight(1)
                 .height(32)
                 .backgroundColor('#24FFFFFF')
-                .borderRadius(16)
+                .borderRadius(WIDGET_RADIUS_PILL)
                 .onClick(() => this.stepDays(-30))
 
               Text('今')
@@ -301,7 +302,7 @@ struct SolarSystemCard {
                 .width(30)
                 .height(32)
                 .backgroundColor('#344678C4')
-                .borderRadius(16)
+                .borderRadius(WIDGET_RADIUS_PILL)
                 .onClick(() => this.resetDays())
 
               Text('+1月')
@@ -312,7 +313,7 @@ struct SolarSystemCard {
                 .layoutWeight(1)
                 .height(32)
                 .backgroundColor('#24FFFFFF')
-                .borderRadius(16)
+                .borderRadius(WIDGET_RADIUS_PILL)
                 .onClick(() => this.stepDays(30))
             }
             .width('100%')
@@ -351,7 +352,7 @@ struct SolarSystemCard {
               .height(30)
               .padding({ left: 12, right: 12 })
               .backgroundColor('#384678C4')
-              .borderRadius(15)
+              .borderRadius(WIDGET_RADIUS_PILL)
               .onClick(() => this.toggleZoom())
           }
           .width('100%')
@@ -389,7 +390,7 @@ struct SolarSystemCard {
               .layoutWeight(1)
               .padding({ top: 5, bottom: 5 })
               .backgroundColor('#1EFFFFFF')
-              .borderRadius(10)
+              .borderRadius(WIDGET_RADIUS_CHIP)
               .alignItems(HorizontalAlign.Center)
             }, (p: OrreryPlanetState) => p.id)
           }
@@ -406,7 +407,7 @@ struct SolarSystemCard {
                 .layoutWeight(1)
                 .height(34)
                 .backgroundColor('#22FFFFFF')
-                .borderRadius(17)
+                .borderRadius(WIDGET_RADIUS_PILL)
                 .onClick(() => this.stepDays(-30))
 
               Text('此刻')
@@ -417,7 +418,7 @@ struct SolarSystemCard {
                 .layoutWeight(1)
                 .height(34)
                 .backgroundColor('#324678C4')
-                .borderRadius(17)
+                .borderRadius(WIDGET_RADIUS_PILL)
                 .onClick(() => this.resetDays())
 
               Text('+1月')
@@ -428,7 +429,7 @@ struct SolarSystemCard {
                 .layoutWeight(1)
                 .height(34)
                 .backgroundColor('#22FFFFFF')
-                .borderRadius(17)
+                .borderRadius(WIDGET_RADIUS_PILL)
                 .onClick(() => this.stepDays(30))
 
               Text('+1年')
@@ -438,7 +439,7 @@ struct SolarSystemCard {
                 .layoutWeight(0.9)
                 .height(34)
                 .backgroundColor('#18FFFFFF')
-                .borderRadius(17)
+                .borderRadius(WIDGET_RADIUS_PILL)
                 .onClick(() => this.stepDays(365))
             }
             .layoutWeight(1)
@@ -451,7 +452,7 @@ struct SolarSystemCard {
               .width(68)
               .height(34)
               .backgroundColor('#D82B64B8')
-              .borderRadius(17)
+              .borderRadius(WIDGET_RADIUS_PILL)
               .onClick(() => this.openOrreryInAstro())
           }
           .width('100%')
