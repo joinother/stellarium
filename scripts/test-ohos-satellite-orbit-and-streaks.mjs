@@ -74,3 +74,21 @@ test('satellite detail view surfaces orbital metrics, radio frequencies, TLE age
   assert.match(mainNodeEts, /hours: 48, limit: 5, minElevation: 10/);
   assert.match(mainNodeEts, /private jumpToSatellitePass\(pass: SatellitePass\): void/);
 });
+
+test('satellites render subtle zoom-adaptive micro-markers, readable shadow labels, and comfortable pick/frame UX', () => {
+  const satCtlEts = readFileSync(new URL('../harmonyos/ets-source/capability/SatelliteController.ets', import.meta.url), 'utf8');
+  // One-time migration upgrades legacy config.ini so existing installs get labels & selected orbit arcs
+  assert.match(satsCpp, /ohos_sat_ux_v2_migrated/);
+  assert.match(satStoreEts, /satLabels:\s*boolean\s*=\s*true/);
+  // Micro-marker participates in pickable() & progressively reveals faint/shadow satellites on zoom
+  assert.match(satHpp, /bool markerDrawn = false;/);
+  assert.match(satHpp, /return pointDrawn \|\| labelDrawn \|\| iconDrawn \|\| markerDrawn;/);
+  assert.match(satCpp, /shadowZoomReveal/);
+  assert.match(satCpp, /state\.iconDrawn = render\.iconDrawn \|\| render\.markerDrawn;/);
+  // Batched micro-marker draw (diamond + station solar wings + center core dot) & wider moving-target capture cone
+  assert.match(satsCpp, /struct SatMarkerCandidate/);
+  assert.match(satsCpp, /const double effectiveFov = qMin\(limitFov \* 1\.45, 12\.0\);/);
+  // Moving to a selected satellite keeps a comfortable framing FOV instead of blind 1.3 deg auto-zoom
+  assert.match(mainViewCpp, /selectedObj->getType\(\) == QLatin1String\("Satellite"\)/);
+  assert.match(satCtlEts, /const target = 44/);
+});

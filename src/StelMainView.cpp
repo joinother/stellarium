@@ -9236,7 +9236,19 @@ extern "C" __attribute__((visibility("default"))) const char* StellariumOhos_com
 				s_ohosHorizonLevelActive = false;
 				s_ohosPinchRollHeld = false;
 				ohosDeferSelectedAnchor(movementMgr->getAutoMoveDuration() + 0.15);
-				movementMgr->moveToObject(objectMgr->getSelectedObject().constFirst(), movementMgr->getAutoMoveDuration());
+				const StelObjectP selectedObj = objectMgr->getSelectedObject().constFirst();
+				if (selectedObj && selectedObj->getType() == QLatin1String("Satellite"))
+				{
+					// Satellites have sub-arcsecond angular radius; keep a comfortable sky FOV
+					// so both the satellite marker and its expanding orbit arc stay clearly visible.
+					movementMgr->moveToObject(selectedObj, movementMgr->getAutoMoveDuration(), StelMovementMgr::ZoomNone);
+					if (movementMgr->getCurrentFov() < 28.0)
+						movementMgr->zoomTo(44.0, 0.35f);
+				}
+				else
+				{
+					movementMgr->moveToObject(selectedObj, movementMgr->getAutoMoveDuration());
+				}
 				movementMgr->setFlagTracking(false);
 				result = selectedObjectJson(core);
 				result["ok"] = true;

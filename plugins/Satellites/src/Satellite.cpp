@@ -414,11 +414,18 @@ QVariantMap Satellite::getMap(void)
 float Satellite::getSelectPriority(const StelCore* core) const
 {
 	float limit = -10.f;
+	static const QString grpStations = QStringLiteral("space stations");
+	static const QString grpStationsShort = QStringLiteral("stations");
+	if (isISS || groups.contains(grpStations) || groups.contains(grpStationsShort))
+		limit = -12.5f;
+	else if (visibility == gSatWrapper::VISIBLE)
+		limit = -11.5f;
+
 	if (flagVFAltitude) // the visual filter is enabled
-		limit = (minVFAltitude<=height && height<=maxVFAltitude) ? -10.f : 50.f;
+		limit = (minVFAltitude<=height && height<=maxVFAltitude) ? limit : 50.f;
 
 	if (flagVFMagnitude) // the visual filter is enabled
-		limit = (((stdMag<99.) || (RCS>0.)) && ((maxVFMagnitude<=getVMagnitude(core)) && (getVMagnitude(core)<=minVFMagnitude))) ? -10.f : 50.f;
+		limit = (((stdMag<99.) || (RCS>0.)) && ((maxVFMagnitude<=getVMagnitude(core)) && (getVMagnitude(core)<=minVFMagnitude))) ? limit : 50.f;
 
 	return limit;
 }
@@ -1893,10 +1900,10 @@ StelObjectPickState Satellite::getPickState(const StelCore* core) const
 	state.pointDrawn = render.pointDrawn;
 	state.labelDrawn = render.labelDrawn;
 	state.outlineDrawn = false;
-	state.iconDrawn = render.iconDrawn;
+	state.iconDrawn = render.iconDrawn || render.markerDrawn;
 	state.landscapeVisible = render.landscapeVisible;
 	state.hasMagnitude = true;
-	state.magnitude = (render.pointDrawn || render.iconDrawn) ? render.magSat : render.txtMag;
+	state.magnitude = (render.pointDrawn || render.iconDrawn || render.markerDrawn) ? render.magSat : render.txtMag;
 	return state;
 }
 
@@ -1976,28 +1983,91 @@ SatelliteRenderState Satellite::getRenderState(const StelCore* core, const StelP
 
 	if (!iconicModeFlag)
 	{
-		if (hideInvisibleSatellitesFlag && visibility != gSatWrapper::VISIBLE)
+		static const QString grpStations = QStringLiteral("space stations");
+		static const QString grpStationsShort = QStringLiteral("stations");
+		static const QString grpCrewed = QStringLiteral("crewed");
+		const bool isSelected = orbitPreview || (ctx && !ctx->selectedId.isEmpty() && ctx->selectedId == id);
+		const bool isStation = isISS
+			|| groups.contains(grpStations)
+			|| groups.contains(grpStationsShort)
+			|| groups.contains(grpCrewed);
+		const double fovDeg = ctx ? ctx->fovDeg
+			: (core->getMovementMgr() ? core->getMovementMgr()->getCurrentFov() : 60.0);
+		const float zoomReveal = qBound(0.f, static_cast<float>((36.0 - fovDeg) / 24.0), 1.0f);
+		const float shadowZoomReveal = qBound(0.f, static_cast<float>((28.0 - fovDeg) / 18.0), 1.0f);
+
+		if (hideInvisibleSatellitesFlag && visibility != gSatWrapper::VISIBLE && !isSelected)
 		{
 			st.pointDrawn = false;
 			st.labelDrawn = false;
+			st.markerDrawn = false;
+			st.markerOpacity = 0.f;
 			st.txtMag = st.magSat;
 		}
 		else if (st.transitSunMoon)
 		{
 			st.pointDrawn = st.spriteSize > 0;
-			st.labelDrawn = showLabels;
+			st.markerDrawn = isSelected || isStation;
+			st.markerOpacity = isSelected ? 1.0f : 0.85f;
+			st.labelDrawn = showLabels || isSelected;
 			st.txtMag = st.magSat;
 		}
 		else
 		{
-			st.pointDrawn = st.magSat <= st.limitMag;
+			const bool sunlit = (visibility == gSatWrapper::VISIBLE);
+			const bool penumbra = (visibility == gSatWrapper::PENUMBRAL);
+			const float effectiveLimit = st.limitMag + 3.2f * zoomReveal;
+			st.pointDrawn = (sunlit || penumbra) && (st.magSat <= effectiveLimit);
+
+			// Tiered subtle satellite micro-marker:
+			// - Always crisp for selected satellite & space stations
+			// - Crisp for visible/bright sunlit satellites so they stand apart from stars
+			// - Progressively reveals faint & Earth-shadow satellites when zooming in (< 28 deg)
+			if (isSelected)
+			{
+				st.markerDrawn = true;
+				st.markerOpacity = 1.0f;
+			}
+			else if (isStation)
+			{
+				st.markerDrawn = true;
+				st.markerOpacity = sunlit ? 0.94f : (0.54f + 0.38f * zoomReveal);
+			}
+			else if (sunlit && st.magSat <= 5.2f)
+			{
+				st.markerDrawn = true;
+				st.markerOpacity = qBound(0.46f, 0.92f - qMax(0.f, st.magSat - 1.5f) * 0.12f, 0.92f);
+			}
+			else if (sunlit && st.pointDrawn)
+			{
+				st.markerDrawn = true;
+				st.markerOpacity = qBound(0.32f, 0.40f + 0.46f * zoomReveal, 0.86f);
+			}
+			else if (penumbra && (st.pointDrawn || zoomReveal > 0.12f))
+			{
+				st.markerDrawn = true;
+				st.markerOpacity = qBound(0.28f, 0.34f + 0.46f * zoomReveal, 0.80f);
+			}
+			else if (!sunlit && !penumbra && shadowZoomReveal > 0.05f)
+			{
+				st.markerDrawn = true;
+				st.markerOpacity = 0.28f + 0.56f * shadowZoomReveal;
+			}
+
 			float txtMag = st.magSat;
-			if (visibility == gSatWrapper::PENUMBRAL)
-				txtMag = st.magSat - 3.f;
-			else if (visibility != gSatWrapper::VISIBLE)
-				txtMag = st.magSat - 10.f;
+			if (isSelected || isStation)
+				txtMag = qMin(st.magSat, st.limitMag - 2.6f);
+			else if (penumbra)
+				txtMag = qMin(st.magSat - 3.f, st.limitMag - (0.6f + 1.4f * zoomReveal));
+			else if (!sunlit)
+				txtMag = (shadowZoomReveal > 0.05f)
+					? (st.limitMag - (0.4f + 1.8f * shadowZoomReveal))
+					: (st.magSat - 10.f);
+			else if (st.markerDrawn)
+				txtMag = qMin(st.magSat, st.limitMag - (0.8f + 1.2f * zoomReveal));
+
 			st.txtMag = txtMag;
-			st.labelDrawn = showLabels && (txtMag <= st.limitMag);
+			st.labelDrawn = isSelected || (showLabels && (st.markerDrawn || txtMag <= st.limitMag));
 		}
 	}
 	else
@@ -2104,12 +2174,12 @@ void Satellite::drawOrbit(StelCore *core, StelPainter& painter)
 		return;
 
 	const StelProjectorP prj = painter.getProjector();
-	const double fovDeg = qBound(0.5, core->getMovementMgr()->getCurrentFov(), 179.0);
+	const double fovDeg = qBound(0.02, core->getMovementMgr()->getCurrentFov(), 179.0);
 	const int vpH = prj ? prj->getViewportHeight() : 1080;
 	const double radPerPx = (fovDeg * M_PI / 180.0) / qMax(360.0, static_cast<double>(vpH));
 	const double screenScale = qBound(1.0, static_cast<double>(StelApp::getInstance().getScreenScale()), 3.5);
 	const double thicknessMul = qBound(1.0, static_cast<double>(orbitLineThickness), 4.0);
-	const double baseCoreW = qBound(0.00009, (isPreview ? 1.05 : 0.82) * screenScale * thicknessMul * radPerPx, 0.0042);
+	const double baseCoreW = qBound(1e-7, (isPreview ? 1.05 : 0.82) * screenScale * thicknessMul * radPerPx, 0.0042);
 
 	QVector<Vec3d> j2kPts(size);
 	QVector<double> cumArc(size, 0.0);
@@ -2147,7 +2217,7 @@ void Satellite::drawOrbit(StelCore *core, StelPainter& painter)
 	const int centerIdx = size / 2;
 	const float halfSpanIdx = qMax(1.0f, static_cast<float>(size - 1) * 0.5f);
 	const float revealSpanIdx = qMax(1.0f, revealT * halfSpanIdx);
-	const double dashPeriodRad = qBound(0.0055, 16.0 * screenScale * radPerPx, 0.036);
+	const double dashPeriodRad = qBound(1e-5, 16.0 * screenScale * radPerPx, 0.036);
 
 	// Blend sunlit color with custom orbitColor when a satellite specifies an explicit non-neutral tint.
 	const Vec3f sunlitBase(0.56f, 0.88f, 1.0f);

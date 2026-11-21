@@ -993,7 +993,9 @@ QList<StelObjectP> Satellites::searchAround(const Vec3d& av, double limitFov, co
 
 	Vec3d v(av);
 	v.normalize();
-	double cosLimFov = cos(limitFov * M_PI/180.);
+	// Slightly widen touch/click capture cone for moving satellites so fast LEO targets are easier to tap.
+	const double effectiveFov = qMin(limitFov * 1.45, 12.0);
+	const double cosLimFov = cos(effectiveFov * M_PI/180.);
 	Vec3d equPos;
 
 	for (const auto& sat : satellites)
@@ -1364,7 +1366,11 @@ void Satellites::restoreDefaultSettings()
 	conf->remove("");
 
 	conf->setValue("show_satellite_hints", true);
+#ifdef Q_OS_OHOS
+	conf->setValue("show_satellite_labels", true);
+#else
 	conf->setValue("show_satellite_labels", false);
+#endif
 #if defined(Q_OS_OHOS)
 	conf->setValue("updates_enabled", false);
 #else
@@ -1575,7 +1581,12 @@ void Satellites::loadSettings()
 	setLastUpdate(QDateTime::fromString(conf->value("last_update", "2001-05-25T12:00:00").toString(), Qt::ISODate));
 	nextAutomaticUpdateAttempt = QDateTime::fromString(conf->value("next_automatic_update_attempt").toString(), Qt::ISODate);
 	setFlagHintsVisible(conf->value("show_satellite_hints", true).toBool());
+#ifdef Q_OS_OHOS
+	const bool satUxV2Migrated = conf->value("ohos_sat_ux_v2_migrated", false).toBool();
+	Satellite::showLabels = conf->value("show_satellite_labels", true).toBool();
+#else
 	Satellite::showLabels = conf->value("show_satellite_labels", false).toBool();
+#endif
 #if defined(STELLARIUM_OHOS_OFFLINE)
 	updatesEnabled = false;
 #elif defined(Q_OS_OHOS)
@@ -1599,6 +1610,19 @@ void Satellites::loadSettings()
 	Satellite::orbitLineSegments = conf->value("orbit_line_segments", 180).toInt();
 	Satellite::orbitLineFadeSegments = conf->value("orbit_fade_segments", 6).toInt();
 	Satellite::orbitLineSegmentDuration = conf->value("orbit_segment_duration", 6).toInt();
+	if (!satUxV2Migrated)
+	{
+		// One-time upgrade for existing installs whose legacy config persisted labels=false / orbit_line_flag=false.
+		Satellite::showLabels = true;
+		Satellite::orbitLinesFlag = true;
+		Satellite::orbitLineSegments = qMax(Satellite::orbitLineSegments, 180);
+		Satellite::orbitLineSegmentDuration = qMin(Satellite::orbitLineSegmentDuration, 6);
+		conf->setValue("show_satellite_labels", true);
+		conf->setValue("orbit_line_flag", true);
+		conf->setValue("orbit_line_segments", Satellite::orbitLineSegments);
+		conf->setValue("orbit_segment_duration", Satellite::orbitLineSegmentDuration);
+		conf->setValue("ohos_sat_ux_v2_migrated", true);
+	}
 #else
 	Satellite::orbitLinesFlag = conf->value("orbit_line_flag", false).toBool();
 	Satellite::orbitLineSegments = conf->value("orbit_line_segments", 180).toInt();
@@ -4328,9 +4352,12 @@ void Satellites::draw(StelCore* core)
 	Satellite::viewportHalfspace = painter.getProjector()->getBoundingCap();
 
 	StelSkyDrawer* sd = core->getSkyDrawer();
+	const double currentFovDeg = core->getMovementMgr() ? core->getMovementMgr()->getCurrentFov() : 60.0;
 	Satellite::FrameDrawContext frameCtx;
 	frameCtx.limitMag = sd ? sd->getLimitMagnitude() : 0.f;
 	frameCtx.currentJD = core->getJD();
+	frameCtx.fovDeg = currentFovDeg;
+	frameCtx.selectedId = selectedId;
 	frameCtx.timeRateOk = true;
 	frameCtx.checkLandscape = false;
 	const PlanetP moonObj = GETSTELMODULE(SolarSystem)->getMoon();
@@ -4356,6 +4383,17 @@ void Satellites::draw(StelCore* core)
 		float opacity;
 		int rank; // higher is more important (selected > station/ISS > visible > others)
 	};
+	struct SatMarkerCandidate
+	{
+		const Satellite* sat;
+		float magSat;
+		float opacity;
+		Vec3f color;
+		bool isStation;
+		bool isSelected;
+		bool needsCenterDot;
+		int rank;
+	};
 	struct SatTransitDraw
 	{
 		const Satellite* sat;
@@ -4363,6 +4401,8 @@ void Satellites::draw(StelCore* core)
 	};
 	QVector<SatLabelCandidate> labelCandidates;
 	labelCandidates.reserve(128);
+	QVector<SatMarkerCandidate> markerCandidates;
+	markerCandidates.reserve(128);
 	QVector<SatTransitDraw> transitDraws;
 	QVector<Satellite*> orbitDraws;
 	QVector<const Satellite*> trailDraws;
@@ -4372,11 +4412,19 @@ void Satellites::draw(StelCore* core)
 		&& (!starMgr || starMgr->getFlagMotionTrails());
 
 	static const Vec3f whiteColor(1.f, 1.f, 1.f);
+	static const Vec3f markerSunlitColor(0.62f, 0.90f, 1.0f);
+	static const Vec3f markerPenumbraColor(1.0f, 0.80f, 0.44f);
+	static const Vec3f markerShadowColor(0.56f, 0.76f, 0.96f);
 	static const QString grpStations = QStringLiteral("space stations");
+	static const QString grpStationsShort = QStringLiteral("stations");
+	static const QString grpCrewed = QStringLiteral("crewed");
 	const bool drawOrbits = Satellite::orbitLinesFlag && core->getFlagClearSky();
 	const bool iconic = Satellite::iconicModeFlag;
 	const bool brightDaylight = core->isBrightDaylight();
 	const bool groundOccludes = core->getVisibleSkyArea().d > -0.99;
+	const bool legacyDarkInvisible = (Satellite::invisibleSatelliteColor[0] <= 0.25f
+		&& Satellite::invisibleSatelliteColor[1] <= 0.25f
+		&& Satellite::invisibleSatelliteColor[2] <= 0.25f);
 
 	if (!iconic && sd)
 		sd->preDrawPointSource(&painter);
@@ -4395,7 +4443,7 @@ void Satellites::draw(StelCore* core)
 
 		const SatelliteRenderState st = sat->getRenderState(core, prj.data(), true, &frameCtx);
 		sat->lastFrameOnScreen = st.projectable
-			&& (st.pointDrawn || (iconic && st.iconDrawn && sat->visibility == gSatWrapper::VISIBLE))
+			&& (st.pointDrawn || st.markerDrawn || (iconic && st.iconDrawn && sat->visibility == gSatWrapper::VISIBLE))
 			&& (sat->elAzPosition[2] >= -0.035);
 
 		if (!st.displayed || !st.orbitValid || !st.dateRangeOk || !st.timeRateOk || !st.afterLaunch
@@ -4407,12 +4455,25 @@ void Satellites::draw(StelCore* core)
 			if (drawSatTrails && sat->motionTrail.size() >= 2 && sat->elAzPosition[2] >= -0.02)
 				trailDraws.append(sat.data());
 			const bool isSelected = !selectedId.isEmpty() && sat->id == selectedId;
+			const bool isStation = sat->isISS
+				|| sat->groups.contains(grpStations)
+				|| sat->groups.contains(grpStationsShort)
+				|| sat->groups.contains(grpCrewed);
+			int rank = 0;
+			if (isSelected) rank = 4;
+			else if (isStation) rank = 3;
+			else if (sat->visibility == gSatWrapper::VISIBLE) rank = 2;
+			else if (sat->visibility == gSatWrapper::PENUMBRAL) rank = 1;
+
 			if (!iconic)
 			{
 				if (st.transitSunMoon)
 				{
 					if (st.pointDrawn)
 						transitDraws.append({sat.data(), st.spriteSize});
+					if (st.markerDrawn)
+						markerCandidates.append({sat.data(), st.magSat, st.markerOpacity * Satellite::hintBrightness,
+							markerSunlitColor, isStation, isSelected, !st.pointDrawn, rank});
 					if (st.labelDrawn)
 					{
 						const Vec3f lblCol = brightDaylight ? Satellite::transitSatelliteColor : whiteColor;
@@ -4433,21 +4494,30 @@ void Satellites::draw(StelCore* core)
 						sd->drawPointSource(&painter, vf.toVec3d(), rcMag, whiteColor * Satellite::hintBrightness,
 							true, qMin(1.0f, 1.0f - 0.9f * altAz[2]));
 					}
+					if (st.markerDrawn && core->getFlagClearSky())
+					{
+						Vec3f mCol = markerShadowColor;
+						if (sat->visibility == gSatWrapper::VISIBLE)
+							mCol = markerSunlitColor;
+						else if (sat->visibility == gSatWrapper::PENUMBRAL)
+							mCol = markerPenumbraColor;
+						markerCandidates.append({sat.data(), st.magSat, st.markerOpacity * Satellite::hintBrightness,
+							mCol, isStation, isSelected, !st.pointDrawn, rank});
+					}
 					if (st.labelDrawn)
 					{
-						const float labelOpacity = Satellite::hintBrightness * MarkerVisibility::magnitudeOpacity(st.txtMag, st.limitMag);
+						float labelOpacity = Satellite::hintBrightness * MarkerVisibility::magnitudeOpacity(st.txtMag, st.limitMag);
+						if (isSelected)
+							labelOpacity = qMax(labelOpacity, 0.96f * Satellite::hintBrightness);
+						else if (st.markerDrawn)
+							labelOpacity = qMax(labelOpacity, st.markerOpacity * 0.85f * Satellite::hintBrightness);
 						if (labelOpacity > 0.01f)
 						{
-							Vec3f lblCol = Satellite::invisibleSatelliteColor;
+							Vec3f lblCol = legacyDarkInvisible ? Vec3f(0.64f, 0.78f, 0.96f) : Satellite::invisibleSatelliteColor;
 							if (sat->visibility == gSatWrapper::VISIBLE)
-								lblCol = sat->hintColor;
+								lblCol = (sat->hintColor.normSquared() > 0.05f) ? sat->hintColor : markerSunlitColor;
 							else if (sat->visibility == gSatWrapper::PENUMBRAL)
-								lblCol = 0.5f * sat->hintColor;
-							int rank = 0;
-							if (isSelected) rank = 4;
-							else if (sat->isISS || sat->groups.contains(grpStations)) rank = 3;
-							else if (sat->visibility == gSatWrapper::VISIBLE) rank = 2;
-							else if (sat->visibility == gSatWrapper::PENUMBRAL) rank = 1;
+								lblCol = markerPenumbraColor;
 							labelCandidates.append({sat.data(), st.magSat, st.txtMag, lblCol, labelOpacity, rank});
 						}
 					}
@@ -4682,6 +4752,131 @@ void Satellites::draw(StelCore* core)
 		}
 	}
 
+	// Draw batched minimal instrument micro-markers (crisp diamond + solar wings for stations)
+	// so satellites stand apart from background stars and faint/shadow satellites remain visible on zoom.
+	if (!markerCandidates.isEmpty() && core->getFlagClearSky())
+	{
+		const int maxMarkers = (currentFovDeg >= 40.0) ? 28 : 72;
+		if (markerCandidates.size() > maxMarkers)
+		{
+			std::partial_sort(markerCandidates.begin(), markerCandidates.begin() + maxMarkers, markerCandidates.end(),
+				[](const SatMarkerCandidate& a, const SatMarkerCandidate& b) {
+					if (a.rank != b.rank) return a.rank > b.rank;
+					if (a.magSat != b.magSat) return a.magSat < b.magSat;
+					return a.sat->id < b.sat->id;
+				});
+			markerCandidates.resize(maxMarkers);
+		}
+
+		const double fovDeg = qBound(0.02, currentFovDeg, 179.0);
+		const int vpH = prj ? prj->getViewportHeight() : 1080;
+		const double radPerPx = (fovDeg * M_PI / 180.0) / qMax(360.0, static_cast<double>(vpH));
+		const double screenScale = qBound(1.0, static_cast<double>(StelApp::getInstance().getScreenScale()), 3.5);
+		const double strokeHalfW = qBound(1e-7, 0.58 * screenScale * radPerPx, 0.0018);
+		Vec3d zenithJ2k = core->altAzToJ2000(Vec3d(0., 0., 1.), StelCore::RefractionOff);
+		const double zn = zenithJ2k.norm();
+		if (zn > 1e-9) zenithJ2k /= zn;
+		else zenithJ2k = Vec3d(0., 0., 1.);
+
+		QVector<Vec3d> mVerts;
+		QVector<Vec4f> mCols;
+		mVerts.reserve(markerCandidates.size() * 64);
+		mCols.reserve(markerCandidates.size() * 64);
+
+		auto pushMarkerLine = [&](const Vec3d& a, const Vec3d& b, double halfW, const Vec4f& col) {
+			Vec3d dir = b - a;
+			Vec3d mid = a + b;
+			Vec3d side = mid ^ dir;
+			const double sn = side.norm();
+			if (sn <= 1e-10) return;
+			side /= sn;
+			const Vec3d p0L = a - side * halfW;
+			const Vec3d p0R = a + side * halfW;
+			const Vec3d p1L = b - side * halfW;
+			const Vec3d p1R = b + side * halfW;
+			mVerts.append(p0L); mCols.append(col);
+			mVerts.append(p0R); mCols.append(col);
+			mVerts.append(p1R); mCols.append(col);
+			mVerts.append(p0L); mCols.append(col);
+			mVerts.append(p1R); mCols.append(col);
+			mVerts.append(p1L); mCols.append(col);
+		};
+
+		for (const SatMarkerCandidate& mc : markerCandidates)
+		{
+			if (mc.opacity <= 0.01f)
+				continue;
+			Vec3d c = mc.sat->XYZ;
+			const double cn = c.norm();
+			if (cn <= 1e-10) continue;
+			c /= cn;
+
+			Vec3d right = c ^ zenithJ2k;
+			double rn = right.norm();
+			if (rn < 1e-5)
+			{
+				right = c ^ Vec3d(1., 0., 0.);
+				rn = right.norm();
+			}
+			right /= qMax(1e-9, rn);
+			Vec3d up = right ^ c;
+			up.normalize();
+
+			const double rPx = mc.isSelected ? 6.8 : (mc.isStation ? 6.2 : 4.6);
+			const double rad = qBound(1e-6, rPx * screenScale * radPerPx, 0.022);
+			const Vec4f col(mc.color[0], mc.color[1], mc.color[2], qBound(0.f, mc.opacity, 0.96f));
+
+			const Vec3d pN = c + up * rad;
+			const Vec3d pS = c - up * rad;
+			const Vec3d pE = c + right * rad;
+			const Vec3d pW = c - right * rad;
+
+			// Crisp hollow diamond (4 sides)
+			pushMarkerLine(pN, pE, strokeHalfW, col);
+			pushMarkerLine(pE, pS, strokeHalfW, col);
+			pushMarkerLine(pS, pW, strokeHalfW, col);
+			pushMarkerLine(pW, pN, strokeHalfW, col);
+
+			// Delicate horizontal solar-panel wing ticks for space stations & selected satellite
+			if (mc.isStation || mc.isSelected)
+			{
+				const double wingIn = rad * 1.18;
+				const double wingOut = rad * 2.15;
+				const Vec4f wingCol(mc.color[0], mc.color[1], mc.color[2], qBound(0.f, mc.opacity * 0.88f, 0.92f));
+				pushMarkerLine(c - right * wingOut, c - right * wingIn, strokeHalfW * 0.9, wingCol);
+				pushMarkerLine(c + right * wingIn, c + right * wingOut, strokeHalfW * 0.9, wingCol);
+			}
+
+			// Subtle crisp center core dot when eclipsed/faint so zoomed-in satellites never look hollow/empty
+			if (mc.needsCenterDot)
+			{
+				const double dotR = qBound(1e-7, 1.55 * screenScale * radPerPx, 0.005);
+				const Vec4f dotCol(mc.color[0], mc.color[1], mc.color[2], qBound(0.f, mc.opacity * 0.95f, 0.95f));
+				const Vec3d dN = c + up * dotR;
+				const Vec3d dS = c - up * dotR;
+				const Vec3d dE = c + right * dotR;
+				const Vec3d dW = c - right * dotR;
+				mVerts.append(dN); mCols.append(dotCol);
+				mVerts.append(dE); mCols.append(dotCol);
+				mVerts.append(dS); mCols.append(dotCol);
+				mVerts.append(dN); mCols.append(dotCol);
+				mVerts.append(dS); mCols.append(dotCol);
+				mVerts.append(dW); mCols.append(dotCol);
+			}
+		}
+
+		if (!mVerts.isEmpty())
+		{
+			painter.setBlending(true, GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+			painter.enableClientStates(true, false, true);
+			painter.setVertexPointer(3, GL_DOUBLE, mVerts.constData());
+			painter.setColorPointer(4, GL_FLOAT, mCols.constData());
+			painter.drawFromArray(StelPainter::Triangles, mVerts.size(), 0, true);
+			painter.setBlending(false);
+			painter.enableClientStates(false);
+		}
+	}
+
 	if (!transitDraws.isEmpty())
 	{
 		painter.setBlending(true);
@@ -4691,18 +4886,17 @@ void Satellites::draw(StelCore* core)
 			painter.drawSprite2dMode(td.sat->XYZ, td.spriteSize);
 	}
 
-	// Cap queued labels to the top 64 highest-priority / brightest satellites so
-	// QFontMetrics and ScreenLabelLayout never choke on 5,000+ Starlink labels.
-	constexpr int kMaxSatelliteLabels = 64;
-	if (labelCandidates.size() > kMaxSatelliteLabels)
+	// Adaptive label cap: clean & uncluttered at wide FOV (top 20), deeper detail when zoomed in (top 48).
+	const int maxSatelliteLabels = (currentFovDeg >= 40.0) ? 20 : 48;
+	if (labelCandidates.size() > maxSatelliteLabels)
 	{
-		std::partial_sort(labelCandidates.begin(), labelCandidates.begin() + kMaxSatelliteLabels, labelCandidates.end(),
+		std::partial_sort(labelCandidates.begin(), labelCandidates.begin() + maxSatelliteLabels, labelCandidates.end(),
 			[](const SatLabelCandidate& a, const SatLabelCandidate& b) {
 				if (a.rank != b.rank) return a.rank > b.rank;
 				if (a.magSat != b.magSat) return a.magSat < b.magSat;
 				return a.sat->id < b.sat->id;
 			});
-		labelCandidates.resize(kMaxSatelliteLabels);
+		labelCandidates.resize(maxSatelliteLabels);
 	}
 	for (const SatLabelCandidate& lc : labelCandidates)
 	{

@@ -21,7 +21,7 @@ export class SatelliteStore {
   satPanelSection: string = 'main'
   satGroups: string[] = []
   activeSatGroup: string = ''
-  satLabels: boolean = false
+  satLabels: boolean = true
   satOrbitLines: boolean = true
   satHints: boolean = false
   satIconicMode: boolean = false

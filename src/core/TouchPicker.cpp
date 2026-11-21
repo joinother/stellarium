@@ -210,7 +210,7 @@ double typePriorForObject(const StelObjectP& object, bool nebulaHints)
 	if (type == QLatin1String("Planet"))
 		return 1.0;
 	if (type == QLatin1String("Satellite"))
-		return 0.7;
+		return 1.15;
 	if (type == QLatin1String("Nebula"))
 		return nebulaHints ? 0.4 : -0.3;
 	if (type == QLatin1String("Constellation") || type == QLatin1String("Asterism"))
@@ -805,7 +805,8 @@ PickResult TouchPicker::pickAt(const StelCore* core, int xVp, int yVp, int skyW,
 	{
 		if (StelObjectModule* objectModule = dynamic_cast<StelObjectModule*>(module))
 		{
-			const QList<StelObjectP> objects = objectModule->searchAround(tapDirection, fovRadiusDeg, core);
+			const double satSearchDeg = qMax(fovRadiusDeg * 1.4, 0.12);
+			const QList<StelObjectP> objects = objectModule->searchAround(tapDirection, satSearchDeg, core);
 			for (const StelObjectP& object : objects)
 			{
 				const StelObjectPickState state = object->getPickState(core);
@@ -819,12 +820,12 @@ PickResult TouchPicker::pickAt(const StelCore* core, int xVp, int yVp, int skyW,
 
 				double rVp = 0.0;
 				if (state.iconDrawn)
-					rVp = qMax(11.0 / ctx.dpr / 2.0, 3.0);
+					rVp = qMax(14.0 / ctx.dpr, 8.5);
 				else if (state.pointDrawn && state.hasMagnitude)
 				{
 					RCMag rc;
 					if (core->getSkyDrawer()->computeRCMag(state.magnitude, &rc) && rc.radius > 0.f)
-						rVp = rc.radius / ctx.dpr;
+						rVp = qMax(static_cast<double>(rc.radius / ctx.dpr), 5.0);
 				}
 
 				LabelTarget label;
@@ -849,7 +850,14 @@ PickResult TouchPicker::pickAt(const StelCore* core, int xVp, int yVp, int skyW,
 				diagnostics.limitMag = core->getSkyDrawer()->getLimitMagnitude();
 				diagnostics.visibility = QStringLiteral("UNKNOWN");
 
-				addCandidate(candidates, ctx, core, object, screenVp, rVp, state.magnitude,
+				// When a satellite renders an explicit visual micro-marker/icon on screen,
+				// do not penalize its touch-pick score with an eclipsed mag=17 value so faint
+				// background stars cannot steal taps directly on the satellite marker.
+				const double pickMag = (state.iconDrawn && state.hasMagnitude && state.magnitude > 3.5)
+					? 3.5
+					: state.magnitude;
+
+				addCandidate(candidates, ctx, core, object, screenVp, rVp, pickMag,
 					state.hasMagnitude, typePriorForObject(object, false), label, true, diagnostics);
 			}
 		}
@@ -899,6 +907,10 @@ PickResult TouchPicker::pickAt(const StelCore* core, int xVp, int yVp, int skyW,
 				priorityRadiusVp = -1.0;
 			else if (faintMinorBody)
 				priorityRadiusVp = profile.touch ? 8.0 : 4.0;
+		}
+		else if (candidate.type == QLatin1String("Satellite"))
+		{
+			priorityRadiusVp = profile.touch ? 22.0 : 10.0;
 		}
 		else if (candidate.type == QLatin1String("Nebula"))
 		{

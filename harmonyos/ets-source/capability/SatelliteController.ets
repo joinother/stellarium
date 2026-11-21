@@ -284,12 +284,12 @@ export class SatelliteController {
     }, 0, 100, 15)
   }
 
-  // 跳转后若视角过窄，拉远到 16° 以便框入月球(卫星)。
+  // 跳转后若视角过窄，拉远到 44° 以便同时看清卫星微标与展开轨道弧。
   frameSatellite(): void {
     this.port.requestWhenReady('getSessionState', '', (r: StellariumBridgeResponse) => {
       const fov = (r.fovDeg ?? 0)
-      if (fov > 0 && fov < 12) {
-        const target = 16
+      if (fov > 0 && fov < 30) {
+        const target = 44
         this.port.requestWhenReady('zoomBy', (target / fov).toFixed(3) + '|0', () => {})
       }
     })

@@ -130,6 +130,8 @@ struct SatelliteRenderState
 	bool pointDrawn = false;
 	bool labelDrawn = false;
 	bool iconDrawn = false;
+	bool markerDrawn = false;
+	float markerOpacity = 0.f;
 	int spriteSize = 0;
 	float magSat = 99.f;
 	float txtMag = 99.f;
@@ -137,7 +139,7 @@ struct SatelliteRenderState
 	gSatWrapper::Visibility visibility = gSatWrapper::UNKNOWN;
 	Vec3d screenWin;
 
-	bool rendered() const { return pointDrawn || labelDrawn || iconDrawn; }
+	bool rendered() const { return pointDrawn || labelDrawn || iconDrawn || markerDrawn; }
 	bool pickable() const
 	{
 		return displayed && orbitValid && dateRangeOk && timeRateOk && afterLaunch
@@ -350,6 +352,8 @@ public:
 		bool hasMoon = false;
 		float limitMag = 0.f;
 		double currentJD = 0.0;
+		double fovDeg = 60.0;
+		QString selectedId;
 		bool timeRateOk = true;
 		bool checkLandscape = false;
 	};
