@@ -264,6 +264,10 @@ public:
 	QString getStationComplexName() const { return stationComplexName; }
 	QString getStationComplexParentId() const { return stationComplexParentId; }
 	QString getStationComplexRole() const { return stationComplexRole; }
+	//! Returns the parent spacecraft/station if this object was deployed on-orbit (derived from metadata or COSPAR prefix).
+	QString getDeployedFromI18n() const;
+	//! Returns verified on-orbit deployment date (YYYY-MM-DD) when known; empty when TLE-only.
+	QString getDeploymentDate() const;
 	QVariantMap getOrbitLineStatus() const;
 	void updateOrbitLines();
 	//! Returns the (COSPAR) International Designator.
@@ -428,6 +432,8 @@ private:
 	//! Optional exact launch date supplied by an enriched local catalog.
 	//! TLE/COSPAR data normally only provide the launch year.
 	QString launchDate;
+	QString deployedFrom;
+	QString deploymentDate;
 	QString launchOperator;
 	QString launchVehicle;
 	QString mission;

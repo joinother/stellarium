@@ -126,3 +126,19 @@ test('dynamic space station complexes deduplicate sky rendering, group catalog r
   assert.match(mainNodeEts, /this\.objectDetailStore\.selectedStationComplex = result\.stationComplex/);
   assert.match(mainNodeEts, /onSelectComplexMember:\s*\(member: StationComplexMember\)/);
 });
+
+test('station-deployed cubesats surface parent spacecraft, verified deployment date, and clarify mother launch year', () => {
+  const satPanelEts = readFileSync(new URL('../harmonyos/ets-source/panels/panels/SatellitesPanel.ets', import.meta.url), 'utf8');
+  assert.match(satHpp, /QString getDeployedFromI18n\(\) const;/);
+  assert.match(satHpp, /QString getDeploymentDate\(\) const;/);
+  assert.match(satCpp, /findVerifiedDeployment/);
+  assert.match(satCpp, /desig\.startsWith\(QLatin1String\("1998-067"\)\)/);
+  assert.match(satCpp, /desig\.startsWith\(QLatin1String\("2021-035"\)\)/);
+  assert.match(satCpp, /母体空间站发射年份/);
+  assert.match(satsCpp, /item\.insert\("deployedFrom", deployedFrom\)/);
+  assert.match(mainViewCpp, /appendText\(QStringLiteral\("deployedFrom"\)/);
+  assert.match(mainViewCpp, /appendText\(QStringLiteral\("deploymentDate"\)/);
+  assert.match(structRowsEts, /case 'deployedFrom': return '释放母体'/);
+  assert.match(structRowsEts, /case 'deploymentDate': return '在轨释放时间'/);
+  assert.match(satPanelEts, /释放自 · /);
+});

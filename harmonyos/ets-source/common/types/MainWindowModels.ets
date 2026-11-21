@@ -662,6 +662,8 @@ export interface SatelliteListItem {
   complexParentId?: string
   complexParentName?: string
   complexMembers?: StationComplexMember[]
+  deployedFrom?: string
+  deploymentDate?: string
 }
 export interface SatelliteSource {
   index: number

@@ -2409,6 +2409,17 @@ QVariantMap Satellites::getCatalogSummary(const QString& group, const QString& q
 			item.insert("complexParentId", satellite->stationComplexParentId);
 			item.insert("complexParentName", primaryNames.value(satellite->stationComplexParentId));
 		}
+		else
+		{
+			const QString deployedFrom = satellite->getDeployedFromI18n();
+			if (!deployedFrom.isEmpty())
+			{
+				item.insert("deployedFrom", deployedFrom);
+				const QString deploymentDate = satellite->getDeploymentDate();
+				if (!deploymentDate.isEmpty())
+					item.insert("deploymentDate", deploymentDate);
+			}
+		}
 
 		if (isPriorityPrimary)
 			priorityItems.append(item);

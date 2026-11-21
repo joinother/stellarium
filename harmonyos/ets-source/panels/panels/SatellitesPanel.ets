@@ -402,6 +402,12 @@ export struct SatellitesPanel {
                       .fontColor(this.c.accent)
                       .maxLines(1)
                       .textOverflow({ overflow: TextOverflow.Ellipsis })
+                  } else if ((item.deployedFrom ?? '').length > 0) {
+                    Text('释放自 · ' + (item.deployedFrom ?? '') + ((item.deploymentDate ?? '').length > 0 ? ' · ' + (item.deploymentDate ?? '') : ''))
+                      .fontSize(10)
+                      .fontColor(this.c.tertiary)
+                      .maxLines(1)
+                      .textOverflow({ overflow: TextOverflow.Ellipsis })
                   }
                 }.alignItems(HorizontalAlign.Start).layoutWeight(1)
               }.width('100%').onClick(() => { this.onSearchObject(item) })

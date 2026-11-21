@@ -4353,6 +4353,8 @@ QJsonObject selectedObjectJson(StelCore* core = nullptr, bool includeDetails = f
 						.arg(stationComplexInfo.value(QStringLiteral("memberCount")).toInt());
 					appendField(QStringLiteral("stationComplex"), QStringLiteral("satellite"), complexSummary);
 				}
+				appendText(QStringLiteral("deployedFrom"), QStringLiteral("satellite"), QStringLiteral("deployed-from"));
+				appendText(QStringLiteral("deploymentDate"), QStringLiteral("satellite"), QStringLiteral("deployment-date"));
 				appendLocalizedText(QStringLiteral("description"), QStringLiteral("satellite"), QStringLiteral("description"));
 				appendText(QStringLiteral("launchDate"), QStringLiteral("satellite"), QStringLiteral("launch-date"));
 				appendText(QStringLiteral("launchOperator"), QStringLiteral("satellite"), QStringLiteral("launch-operator"));

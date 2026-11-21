@@ -88,6 +88,8 @@ function detailFieldLabel(key: string): string {
     case 'tailLength': return '彗尾长度'
     case 'comaDiameter': return '彗发直径'
     case 'stationComplex': return '所属组合体'
+    case 'deployedFrom': return '释放母体'
+    case 'deploymentDate': return '在轨释放时间'
     case 'description': return '说明'
     case 'launchDate': return '发射日期 / 年份'
     case 'launchOperator': return '运营方'

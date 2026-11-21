@@ -146,6 +146,8 @@ Satellite::Satellite(const QString& identifier, const QVariantMap& map)
 	// values given them above.
 	description = map.value("description", description).toString().trimmed();
 	launchDate = map.value("launchDate", map.value("launch-date")).toString().trimmed();
+	deployedFrom = map.value("deployedFrom", map.value("deployed-from")).toString().trimmed();
+	deploymentDate = map.value("deploymentDate", map.value("deployment-date")).toString().trimmed();
 	launchOperator = map.value("operator", map.value("launchOperator")).toString().trimmed();
 	launchVehicle = map.value("launchVehicle", map.value("launch-vehicle")).toString().trimmed();
 	mission = map.value("mission").toString().trimmed();
@@ -374,6 +376,88 @@ QString Satellite::getNameI18n() const
 	return q_(name);
 }
 
+namespace {
+
+struct VerifiedDeploymentRecord
+{
+	const char* noradId;
+	const char* deployedFromZhCN;
+	const char* deployedFromZhTW;
+	const char* deployedFromEn;
+	const char* deploymentDate;
+};
+
+const VerifiedDeploymentRecord* findVerifiedDeployment(const QString& satId)
+{
+	static const VerifiedDeploymentRecord kRecords[] = {
+		// Verified ISS on-orbit releases / CubeSat deployments (JAXA J-SSOD, NanoRacks NRCSD, EVA release)
+		{"66052", "国际空间站（星辰号/探索号出舱释放）", "國際空間站（星辰號/探索號出艙釋放）", "ISS (Zvezda/Poisk EVA release)", "2025-10-16"},
+		{"66906", "国际空间站（NanoRacks 气闸舱部署器）", "國際空間站（NanoRacks 氣閘艙部署器）", "ISS (NanoRacks NRCSD)", "2025-12-02"},
+		{"67683", "国际空间站（希望号实验舱 J-SSOD）", "國際空間站（希望號實驗艙 J-SSOD）", "ISS (Kibo J-SSOD)", "2026-02-03"},
+		{"67684", "国际空间站（希望号实验舱 J-SSOD）", "國際空間站（希望號實驗艙 J-SSOD）", "ISS (Kibo J-SSOD)", "2026-02-03"},
+		{"67685", "国际空间站（希望号实验舱 J-SSOD）", "國際空間站（希望號實驗艙 J-SSOD）", "ISS (Kibo J-SSOD)", "2026-02-03"},
+		{"67686", "国际空间站（希望号实验舱 J-SSOD）", "國際空間站（希望號實驗艙 J-SSOD）", "ISS (Kibo J-SSOD)", "2026-02-03"},
+		{"67687", "国际空间站（希望号实验舱 J-SSOD）", "國際空間站（希望號實驗艙 J-SSOD）", "ISS (Kibo J-SSOD)", "2026-02-03"},
+		{"67688", "国际空间站（希望号实验舱 J-SSOD）", "國際空間站（希望號實驗艙 J-SSOD）", "ISS (Kibo J-SSOD)", "2026-02-03"},
+	};
+	for (const auto& rec : kRecords)
+	{
+		if (satId == QLatin1String(rec.noradId))
+			return &rec;
+	}
+	return nullptr;
+}
+
+} // namespace
+
+QString Satellite::getDeployedFromI18n() const
+{
+	if (isStationComplexPrimary() || isStationComplexMember())
+		return QString();
+	if (!deployedFrom.isEmpty())
+		return deployedFrom;
+
+	const QString appLang = StelApp::getInstance().getLocaleMgr().getAppLanguage();
+	const bool isZh = appLang.startsWith(QLatin1String("zh"), Qt::CaseInsensitive);
+	const bool traditional = isZh && (appLang.compare(QStringLiteral("zh_TW"), Qt::CaseInsensitive) == 0
+		|| appLang.compare(QStringLiteral("zh_HK"), Qt::CaseInsensitive) == 0
+		|| appLang.compare(QStringLiteral("zh_MO"), Qt::CaseInsensitive) == 0);
+
+	if (const VerifiedDeploymentRecord* rec = findVerifiedDeployment(id))
+		return QString::fromUtf8(isZh ? (traditional ? rec->deployedFromZhTW : rec->deployedFromZhCN) : rec->deployedFromEn);
+
+	// Automatic COSPAR parent-spacecraft derivation for any on-orbit station-deployed object:
+	// Objects released from a space station inherit the station's COSPAR launch prefix with piece != "A".
+	const QString desig = internationalDesignator.trimmed().toUpper();
+	if (desig.startsWith(QLatin1String("1998-067")) && desig != QLatin1String("1998-067A") && id != QLatin1String("25544"))
+		return isZh ? (traditional ? QStringLiteral("國際空間站（ISS）") : QStringLiteral("国际空间站（ISS）"))
+		            : QStringLiteral("International Space Station (ISS)");
+	if (desig.startsWith(QLatin1String("2021-035")) && desig != QLatin1String("2021-035A") && id != QLatin1String("48274"))
+		return isZh ? (traditional ? QStringLiteral("天宮空間站（CSS）") : QStringLiteral("天宫空间站（CSS）"))
+		            : QStringLiteral("Tiangong Space Station (CSS)");
+	if (desig.startsWith(QLatin1String("1986-017")) && desig != QLatin1String("1986-017A") && id != QLatin1String("16609"))
+		return isZh ? (traditional ? QStringLiteral("和平號空間站（Mir）") : QStringLiteral("和平号空间站（Mir）"))
+		            : QStringLiteral("Mir Space Station");
+	if (desig.startsWith(QLatin1String("2011-053")) && desig != QLatin1String("2011-053A") && id != QLatin1String("37820"))
+		return isZh ? (traditional ? QStringLiteral("天宮一號（Tiangong-1）") : QStringLiteral("天宫一号（Tiangong-1）"))
+		            : QStringLiteral("Tiangong-1");
+	if (desig.startsWith(QLatin1String("2016-057")) && desig != QLatin1String("2016-057A") && id != QLatin1String("41765"))
+		return isZh ? (traditional ? QStringLiteral("天宮二號（Tiangong-2）") : QStringLiteral("天宫二号（Tiangong-2）"))
+		            : QStringLiteral("Tiangong-2");
+	return QString();
+}
+
+QString Satellite::getDeploymentDate() const
+{
+	if (isStationComplexPrimary() || isStationComplexMember())
+		return QString();
+	if (!deploymentDate.isEmpty())
+		return deploymentDate;
+	if (const VerifiedDeploymentRecord* rec = findVerifiedDeployment(id))
+		return QString::fromUtf8(rec->deploymentDate);
+	return QString();
+}
+
 QVariantMap Satellite::getMap(void)
 {
 	QVariantMap map;
@@ -388,6 +472,10 @@ QVariantMap Satellite::getMap(void)
 		map["description"] = description;
 	if (!launchDate.isEmpty())
 		map["launchDate"] = launchDate;
+	if (!deployedFrom.isEmpty())
+		map["deployedFrom"] = deployedFrom;
+	if (!deploymentDate.isEmpty())
+		map["deploymentDate"] = deploymentDate;
 	if (!launchOperator.isEmpty())
 		map["operator"] = launchOperator;
 	if (!launchVehicle.isEmpty())
@@ -709,13 +797,27 @@ QVariantMap Satellite::getInfoMap(const StelCore *core) const
 
 	if (!internationalDesignator.isEmpty())
 		map.insert("international-designator", internationalDesignator);
+	const QString resolvedDeployedFrom = getDeployedFromI18n();
+	const QString resolvedDeploymentDate = getDeploymentDate();
+	if (!resolvedDeployedFrom.isEmpty())
+	{
+		map.insert("deployed-from", resolvedDeployedFrom);
+		map.insert("deployment-date", !resolvedDeploymentDate.isEmpty()
+			? resolvedDeploymentDate
+			: QStringLiteral("标准 TLE 未含释放日期"));
+	}
 	if (!launchDate.isEmpty())
 		map.insert("launch-date", launchDate);
 	if (launchYear > 0)
 	{
 		map.insert("launch-year", launchYear);
 		if (launchDate.isEmpty())
-			map.insert("launch-date", QString::number(launchYear));
+		{
+			if (!resolvedDeployedFrom.isEmpty())
+				map.insert("launch-date", QStringLiteral("%1（母体空间站发射年份）").arg(launchYear));
+			else
+				map.insert("launch-date", QString::number(launchYear));
+		}
 	}
 	map.insert("launch-date-precision", launchDate.isEmpty() ? QStringLiteral("year") : QStringLiteral("day"));
 	if (!launchOperator.isEmpty())
