@@ -10,6 +10,7 @@ import { TonightPlanet, TonightShower, WutTarget, EphemerisRow, RtsCalendarDay, 
 import { HELIOCENTRIC_PLANET_ORBITS, CELESTIAL_POSITION_CATEGORIES, PHENOMENA_START_OPTIONS, HeliocentricOrbit, CelestialPositionCategory, PhenomenaStartOption } from '../../pages/MainWindowModels'
 import { I18n } from '../../pages/I18n'
 import { UI_RADIUS_CARD, UI_RADIUS_CONTROL, UI_RADIUS_PILL, UI_OPTION_ANIMATION_MS } from '../../common/ui/UiTokens'
+import { uiFadeUpTransition } from '../../common/ui/UiMotion'
 import { InfoTipButton } from '../../common/ui/InfoTipButton'
 import { uiChipPaddingV, uiControlHeight, uiFontSize } from '../../common/ui/UiTypography'
 import { tintMatrixFor } from '../../common/ui/IconTint'
@@ -131,6 +132,8 @@ export interface AstroPanelHost {
   selectAstroFilter: (key: string, value: string) => void
   selectAstroGroup: (group: number) => void
   selectAstroTab: (tab: number) => void
+  switchObserverPlanet: (planetEn: string) => void
+  openCalendarsPanel: () => void
   wutCategoryTitle: () => string
   wutTargetSubtitle: (target: WutTarget) => string
   wutTargetTitle: (target: WutTarget) => string
@@ -233,6 +236,8 @@ function noopAstroPanelHost(): AstroPanelHost {
     selectAstroFilter: () => {},
     selectAstroGroup: () => {},
     selectAstroTab: () => {},
+    switchObserverPlanet: () => {},
+    openCalendarsPanel: () => {},
     wutCategoryTitle: () => '',
     wutTargetSubtitle: () => '',
     wutTargetTitle: () => ''
@@ -250,6 +255,7 @@ export struct AstroPanel {
   @ObjectLink sessionToolStore: SessionToolStore
   @State c: ThemeSlots = DEFAULT_SLOTS
   @State private contextExpanded: boolean = false
+  @State private planetSwitcherExpanded: boolean = false
   scroller: Scroller = new Scroller()
   host: AstroPanelHost = noopAstroPanelHost()
 
@@ -267,6 +273,32 @@ export struct AstroPanel {
 
   private pv(base: number): number {
     return uiChipPaddingV(base, this.controlScale)
+  }
+
+  private quickObserverPlanets(): string[] {
+    return ['Earth', 'Moon', 'Mars', 'Mercury', 'Venus', 'Jupiter', 'Saturn', 'Uranus', 'Neptune', 'Pluto']
+  }
+
+  private phenomenaBodyChoices(): string[] {
+    const obs = (this.store.observerPlanet || 'Earth').toLowerCase()
+    const all: string[] = ['all', 'Sun', 'Moon', 'Mercury', 'Venus', 'Earth', 'Mars', 'Jupiter', 'Saturn', 'Uranus', 'Neptune', 'Pluto']
+    return all.filter((b: string) => b === 'all' || b.toLowerCase() !== obs)
+  }
+
+  private eclipseRowTitle(e: EclipseItem): string {
+    if (e.occulter !== undefined && e.occulter.length > 0) {
+      return e.kind === 'solar'
+        ? (e.occulter + '日' + (e.type ?? '食'))
+        : (e.occulter + '卫' + (e.type ?? '食'))
+    }
+    return ((e.kind === 'solar') ? '日' : '月') + (e.type ?? '')
+  }
+
+  private eclipseRowAccentLabel(e: EclipseItem): string {
+    if (e.occulter !== undefined && e.occulter.length > 0) {
+      return e.kind === 'solar' ? '遮日' : '卫食'
+    }
+    return e.kind === 'solar' ? '日食' : '月食'
   }
 
   build() {
@@ -330,15 +362,36 @@ export struct AstroPanel {
         }.width('100%').scrollable(ScrollDirection.Horizontal).scrollBar(BarState.Off)
           .margin({ bottom: 8 })
 
-        // 紧凑可折叠观测上下文栏 + 内联导出 CSV（默认仅占单行，把顶部黄金空间还给内容区）
-        Column({ space: 4 }) {
+        // 紧凑可折叠观测上下文栏 + 顶栏一键切换星体观测点 + 内联导出 CSV
+        Column({ space: 6 }) {
           Row({ space: 6 }) {
+            // 观测星体快切胶囊（无需离开天文计算即可直切 地球 / 月球 / 火星 / 木星 / 土星 等）
+            Row({ space: 4 }) {
+              Text(this.store.planetSwitching ? '切换中…' : (this.store.observerPlanetZh + (this.planetSwitcherExpanded ? ' ▴' : ' ▾')))
+                .fontSize(this.fs(11))
+                .fontWeight(FontWeight.Medium)
+                .fontColor(this.store.isEarthObserver() ? this.c.accent : this.c.onAccent)
+                .maxLines(1)
+            }
+              .id('astro-planet-switcher')
+              .constraintSize({ minHeight: this.ch(30) })
+              .padding({ left: 10, right: 10, top: 4, bottom: 4 })
+              .backgroundColor(this.store.isEarthObserver() ? this.c.softStrong : this.c.accent)
+              .border({ width: 0.6, color: this.c.accent })
+              .borderRadius(UI_RADIUS_PILL)
+              .alignItems(VerticalAlign.Center)
+              .clickEffect({ level: ClickEffectLevel.LIGHT, scale: 0.96 })
+              .onClick(() => {
+                this.getUIContext().animateTo({ duration: 180, curve: Curve.EaseOut }, () => {
+                  this.planetSwitcherExpanded = !this.planetSwitcherExpanded
+                })
+              })
+
             Row({ space: 5 }) {
               Text(this.store.astroContext !== undefined
-                ? ((this.store.astroContext.observerLocation !== undefined && this.store.astroContext.observerLocation.length > 0 ? this.store.astroContext.observerLocation : '当前观测地')
+                ? ((this.store.astroContext.observerLocation !== undefined && this.store.astroContext.observerLocation.length > 0 ? this.store.astroContext.observerLocation : this.store.observerPlanetZh)
                   + ' · ' + this.host.fmtClock(this.store.astroContext.localTime)
-                  + ' · ☉ ' + this.host.fmtNum(this.store.astroContext.sunAltitude, 0, '°')
-                  + '  ☾ ' + this.host.fmtNum(this.store.astroContext.moonIllumination, 0, '%'))
+                  + ' · ☉ ' + this.host.fmtNum(this.store.astroContext.sunAltitude, 0, '°'))
                 : '离线天文计算')
                 .fontSize(this.fs(11))
                 .fontColor(this.c.text)
@@ -359,13 +412,13 @@ export struct AstroPanel {
                 })
               })
 
-            Button(this.store.astroExporting ? '保存中…' : '导出 CSV')
-              .fontSize(this.fs(10))
+            Button(this.store.astroExporting ? '保存中…' : '导出')
+              .fontSize(this.fs(10.5))
               .maxFontScale(1.2)
               .fontColor(this.c.text)
               .backgroundColor(this.c.bg)
               .borderRadius(UI_RADIUS_PILL)
-              .constraintSize({ minHeight: this.ch(34) })
+              .constraintSize({ minHeight: this.ch(30) })
               .padding({ left: 10, right: 10, top: 4, bottom: 4 })
               .enabled(!this.store.astroExporting)
               .clickEffect({ level: ClickEffectLevel.LIGHT, scale: 0.97 })
@@ -373,6 +426,44 @@ export struct AstroPanel {
           }
             .width('100%')
             .alignItems(VerticalAlign.Center)
+
+          if (this.planetSwitcherExpanded) {
+            Column({ space: 4 }) {
+              Row({ space: 6 }) {
+                Text('切换观测星体（自动按目标星体视角重算星食、凌日、天象与年历）')
+                  .fontSize(this.fs(10))
+                  .fontColor(this.c.sub)
+                  .layoutWeight(1)
+                  .maxLines(1)
+                  .textOverflow({ overflow: TextOverflow.Ellipsis })
+              }.width('100%')
+              Scroll() {
+                Row({ space: 6 }) {
+                  ForEach(this.quickObserverPlanets(), (pEn: string) => {
+                    Text(planetZh(pEn))
+                      .id('astro-planet-' + pEn)
+                      .fontSize(this.fs(11.5))
+                      .fontWeight(this.store.observerPlanet.toLowerCase() === pEn.toLowerCase() ? FontWeight.Medium : FontWeight.Normal)
+                      .fontColor(this.store.observerPlanet.toLowerCase() === pEn.toLowerCase() ? this.c.onAccent : this.c.text)
+                      .padding({ left: 11, right: 11, top: this.pv(6), bottom: this.pv(6) })
+                      .backgroundColor(this.store.observerPlanet.toLowerCase() === pEn.toLowerCase() ? this.c.accent : this.c.bg)
+                      .border({ width: 0.5, color: this.store.observerPlanet.toLowerCase() === pEn.toLowerCase() ? this.c.accent : this.c.border })
+                      .borderRadius(UI_RADIUS_PILL)
+                      .clickEffect({ level: ClickEffectLevel.LIGHT, scale: 0.96 })
+                      .onClick(() => {
+                        this.host.switchObserverPlanet(pEn)
+                        this.getUIContext().animateTo({ duration: 160, curve: Curve.EaseOut }, () => {
+                          this.planetSwitcherExpanded = false
+                        })
+                      })
+                  }, (pEn: string) => pEn)
+                }.padding({ left: 1, right: 2 })
+              }.width('100%').scrollable(ScrollDirection.Horizontal).scrollBar(BarState.Off)
+            }
+              .width('100%')
+              .padding({ top: 4, bottom: 2 })
+              .transition(uiFadeUpTransition())
+          }
 
           if (this.contextExpanded && this.store.astroContext !== undefined) {
             Column({ space: 3 }) {
@@ -406,7 +497,10 @@ export struct AstroPanel {
           .borderRadius(UI_RADIUS_CONTROL)
           .margin({ bottom: 8 })
 
-        AstroSelectionGuide({ visible: this.host.astroNeedsSelectedObject() && !this.host.hasSelectedObject(), onOpenPicker: () => { this.host.openAstroTargetPicker() } })
+        AstroSelectionGuide({
+          visible: (this.store.astroTab === 2 || this.store.astroTab === 4 || (this.store.astroTab === 1 && this.store.ephemerisMode < 2)) && this.objectDetailStore.selectedName.length === 0,
+          onOpenPicker: () => { this.host.openAstroTargetPicker() }
+        })
         Scroll(this.scroller) {
           Column({ space: 0 }) {
             if (this.store.astroTab === 0) {
@@ -960,14 +1054,21 @@ export struct AstroPanel {
               }
               }
             } else if (this.store.astroTab === 3) {
-              Text(I18n.t('i0128')).fontSize(this.fs(14)).fontWeight(FontWeight.Medium).fontColor(this.c.text).width('100%').margin({ top: 2, bottom: 8 })
+              Row({ space: 6 }) {
+                Text(this.store.isEarthObserver() ? I18n.t('i0128') : (this.store.observerPlanetZh + '视角 · 天象预报'))
+                  .fontSize(this.fs(14)).fontWeight(FontWeight.Medium).fontColor(this.c.text).layoutWeight(1)
+                InfoTipButton({
+                  title: '多星体天象预报',
+                  tip: '自动按当前观测星体视角计算合、冲、大距、方照、留点与近日/远日点；在火星、木星等外行星上可直接计算地球东/西大距与合日。'
+                })
+              }.width('100%').alignItems(VerticalAlign.Center).margin({ top: 2, bottom: 8 })
               Column({ space: 8 }) {
                 Column({ space: 4 }) {
                   Text('计算对象').fontSize(this.fs(11)).fontColor(this.c.sub).width('100%')
                   Scroll() {
                     Row({ space: 6 }) {
-                      ForEach(['all', 'Sun', 'Moon', 'Mercury', 'Venus', 'Mars', 'Jupiter', 'Saturn', 'Uranus', 'Neptune', 'Pluto'], (body: string) => {
-                        Text(this.host.phenomenaBodyName(body)).fontSize(this.fs(11))
+                      ForEach(this.phenomenaBodyChoices(), (body: string) => {
+                        Text(body === 'Earth' ? '地球' : this.host.phenomenaBodyName(body)).fontSize(this.fs(11))
                           .fontColor(this.store.phenomenaPrimary === body ? this.c.onAccent : this.c.sub)
                           .padding({ left: 10, right: 10, top: this.pv(6), bottom: this.pv(6) })
                           .backgroundColor(this.store.phenomenaPrimary === body ? this.c.accent : this.c.bg)
@@ -978,7 +1079,7 @@ export struct AstroPanel {
                             this.store.phenomenaPrimary = body
                             if (this.store.phenomenaTarget === body) this.store.phenomenaTarget = 'all'
                           })
-                      }, (body: string) => body)
+                      }, (body: string) => this.store.observerPlanet + ':' + body)
                     }
                   }.width('100%').scrollable(ScrollDirection.Horizontal).scrollBar(BarState.Off)
                 }.width('100%').alignItems(HorizontalAlign.Start)
@@ -988,9 +1089,9 @@ export struct AstroPanel {
                     Text('比较对象').fontSize(this.fs(11)).fontColor(this.c.sub).width('100%')
                     Scroll() {
                       Row({ space: 6 }) {
-                        ForEach(['all', 'Sun', 'Moon', 'Mercury', 'Venus', 'Mars', 'Jupiter', 'Saturn', 'Uranus', 'Neptune', 'Pluto'], (body: string) => {
+                        ForEach(this.phenomenaBodyChoices(), (body: string) => {
                           if (body !== this.store.phenomenaPrimary) {
-                            Text(this.host.phenomenaBodyName(body)).fontSize(this.fs(11))
+                            Text(body === 'Earth' ? '地球' : this.host.phenomenaBodyName(body)).fontSize(this.fs(11))
                               .fontColor(this.store.phenomenaTarget === body ? this.c.onAccent : this.c.sub)
                               .padding({ left: 10, right: 10, top: this.pv(6), bottom: this.pv(6) })
                               .backgroundColor(this.store.phenomenaTarget === body ? this.c.accent : this.c.bg)
@@ -999,7 +1100,7 @@ export struct AstroPanel {
                               .clickEffect({ level: ClickEffectLevel.LIGHT, scale: 0.97 })
                               .onClick(() => { this.store.phenomenaTarget = body })
                           }
-                        }, (body: string) => body)
+                        }, (body: string) => this.store.observerPlanet + ':tgt:' + body)
                       }
                     }.width('100%').scrollable(ScrollDirection.Horizontal).scrollBar(BarState.Off)
                   }.width('100%').alignItems(HorizontalAlign.Start)
@@ -2044,13 +2145,26 @@ export struct AstroPanel {
                 }
               }
             } else if (this.store.astroTab === 7) {
-              Text(I18n.t('i0132')).fontSize(this.fs(13)).fontColor(this.c.text).width('100%').margin({ top: 4, bottom: 8 })
-              Row({ space: 4 }) {
-                ForEach(['日月食', '行星凌日'], (label: string, index: number) => {
-                  Text(label).fontSize(this.fs(10)).fontColor(this.store.eclipseMode === index ? this.c.onAccent : this.c.sub)
-                    .padding({ left: 10, right: 10, top: 5, bottom: 5 })
-                    .backgroundColor(this.store.eclipseMode === index ? this.c.accent : this.c.bg).animation({ duration: UI_OPTION_ANIMATION_MS, curve: Curve.EaseOut })
-                    .borderRadius(UI_RADIUS_CONTROL)
+              Row({ space: 6 }) {
+                Text(this.store.isEarthObserver() ? I18n.t('i0132') : (this.store.observerPlanetZh + ' · 星食与凌日'))
+                  .fontSize(this.fs(14)).fontWeight(FontWeight.Medium).fontColor(this.c.text).layoutWeight(1)
+                InfoTipButton({
+                  title: '多星体星食与凌日',
+                  tip: '在地球计算高精度贝塞尔日食/月食与水金凌日；在月球推算地球食日；在火星、木星、土星等星体推算天然卫星遮日/卫食以及内行星（含地球）凌日。点顶栏星体胶囊可随时切换观测点。'
+                })
+              }.width('100%').alignItems(VerticalAlign.Center).margin({ top: 4, bottom: 8 })
+              Row({ space: 6 }) {
+                ForEach(this.store.isEarthObserver() ? ['日月食', '行星凌日'] : ['星食与卫食', '内行星凌日'], (label: string, index: number) => {
+                  Text(label).fontSize(this.fs(11.5))
+                    .fontWeight(this.store.eclipseMode === index ? FontWeight.Medium : FontWeight.Normal)
+                    .fontColor(this.store.eclipseMode === index ? this.c.onAccent : this.c.sub)
+                    .textAlign(TextAlign.Center)
+                    .layoutWeight(1)
+                    .constraintSize({ minHeight: this.ch(34) })
+                    .padding({ left: 10, right: 10, top: 6, bottom: 6 })
+                    .backgroundColor(this.store.eclipseMode === index ? this.c.accent : Color.Transparent)
+                    .animation({ duration: UI_OPTION_ANIMATION_MS, curve: Curve.EaseOut })
+                    .borderRadius(UI_RADIUS_CONTROL - 2)
                     .clickEffect({ level: ClickEffectLevel.LIGHT, scale: 0.97 })
                     .onClick(() => {
                       if (this.store.eclipseMode !== index) {
@@ -2059,21 +2173,22 @@ export struct AstroPanel {
                         else this.host.loadPlanetaryTransits()
                       }
                     })
-                }, (label: string) => label)
-              }.width('100%').padding({ left: 2, right: 2 }).margin({ bottom: 8 })
+                }, (label: string, index: number) => this.store.observerPlanet + ':mode:' + index.toString() + ':' + label)
+              }.width('100%').padding(3).backgroundColor(this.c.soft).borderRadius(UI_RADIUS_CONTROL).margin({ bottom: 8 })
               if (this.store.eclipseMode === 0) {
               Row({ space: 6 }) {
-                Button('计算日月食').fontSize(this.fs(11)).fontColor(this.c.text).backgroundColor(this.c.bg)
-                  .borderRadius(UI_RADIUS_PILL).constraintSize({ minHeight: this.ch(30) }).padding({ left: 10, right: 10 })
+                Button(this.store.isEarthObserver() ? '计算日月食' : ('计算' + this.store.observerPlanetZh + '星食'))
+                  .fontSize(this.fs(12)).fontWeight(FontWeight.Medium).fontColor(this.c.onAccent).backgroundColor(this.c.accent)
+                  .borderRadius(UI_RADIUS_PILL).constraintSize({ minHeight: this.ch(36) }).padding({ left: 14, right: 14 })
                   .clickEffect({ level: ClickEffectLevel.LIGHT, scale: 0.97 })
                   .onClick(() => { this.host.reloadEclipses() })
-              }.width('100%').padding({ left: 4, right: 4 }).margin({ bottom: 6 })
-              Text('预测范围').fontSize(this.fs(10)).fontColor(this.c.sub).width('100%').padding({ left: 2 }).margin({ bottom: 3 })
-              Row({ space: 4 }) {
+              }.width('100%').padding({ left: 2, right: 2 }).margin({ bottom: 8 })
+              Text('预测范围').fontSize(this.fs(11)).fontColor(this.c.sub).width('100%').padding({ left: 2 }).margin({ bottom: 4 })
+              Row({ space: 6 }) {
                 ForEach([12, 36, 60], (months: number) => {
-                  Text(months === 12 ? '未来 1 年' : '未来 ' + (months / 12).toString() + ' 年').fontSize(this.fs(10))
+                  Text(months === 12 ? '未来 1 年' : '未来 ' + (months / 12).toString() + ' 年').fontSize(this.fs(11))
                     .fontColor(this.store.eclipseMonths === months ? this.c.onAccent : this.c.sub)
-                    .padding({ left: 9, right: 9, top: 4, bottom: 4 })
+                    .padding({ left: 11, right: 11, top: this.pv(6), bottom: this.pv(6) })
                     .backgroundColor(this.store.eclipseMonths === months ? this.c.accent : this.c.bg).animation({ duration: UI_OPTION_ANIMATION_MS, curve: Curve.EaseOut })
                     .borderRadius(UI_RADIUS_CONTROL)
                     .clickEffect({ level: ClickEffectLevel.LIGHT, scale: 0.97 })
@@ -2084,14 +2199,14 @@ export struct AstroPanel {
                       }
                     })
                 }, (months: number) => months.toString())
-              }.width('100%').padding({ left: 2, right: 2 }).margin({ bottom: 6 })
-              Text('开始日期').fontSize(this.fs(10)).fontColor(this.c.sub).width('100%').padding({ left: 2 }).margin({ bottom: 3 })
+              }.width('100%').padding({ left: 2, right: 2 }).margin({ bottom: 8 })
+              Text('开始日期').fontSize(this.fs(11)).fontColor(this.c.sub).width('100%').padding({ left: 2 }).margin({ bottom: 4 })
               Scroll() {
-                Row({ space: 4 }) {
+                Row({ space: 6 }) {
                   ForEach([0, 1, 7, 30], (offsetDays: number) => {
-                    Text(this.host.eclipseStartOptionLabel(offsetDays)).fontSize(this.fs(10))
+                    Text(this.host.eclipseStartOptionLabel(offsetDays)).fontSize(this.fs(11))
                       .fontColor(this.store.eclipseStartOffsetDays === offsetDays ? this.c.onAccent : this.c.sub)
-                      .padding({ left: 9, right: 9, top: 4, bottom: 4 })
+                      .padding({ left: 10, right: 10, top: this.pv(6), bottom: this.pv(6) })
                       .backgroundColor(this.store.eclipseStartOffsetDays === offsetDays ? this.c.accent : this.c.bg).animation({ duration: UI_OPTION_ANIMATION_MS, curve: Curve.EaseOut })
                       .borderRadius(UI_RADIUS_CONTROL)
                       .clickEffect({ level: ClickEffectLevel.LIGHT, scale: 0.97 })
@@ -2102,115 +2217,125 @@ export struct AstroPanel {
                         }
                       })
                   }, (offsetDays: number) => offsetDays.toString())
-                  Button(this.store.eclipseStartOffsetDays < 0 ? this.host.eclipseStartOptionLabel(-1) : '指定日期').fontSize(this.fs(10))
+                  Button(this.store.eclipseStartOffsetDays < 0 ? this.host.eclipseStartOptionLabel(-1) : '指定日期').fontSize(this.fs(11))
                     .fontColor(this.store.eclipseStartOffsetDays < 0 ? this.c.onAccent : this.c.sub)
-                    .constraintSize({ minHeight: this.ch(34) }).padding({ left: 9, right: 9, top: 4, bottom: 4 })
+                    .constraintSize({ minHeight: this.ch(34) }).padding({ left: 10, right: 10, top: 4, bottom: 4 })
                     .backgroundColor(this.store.eclipseStartOffsetDays < 0 ? this.c.accent : this.c.bg).animation({ duration: UI_OPTION_ANIMATION_MS, curve: Curve.EaseOut })
                     .borderRadius(UI_RADIUS_CONTROL)
                     .clickEffect({ level: ClickEffectLevel.LIGHT, scale: 0.97 })
                     .onClick(() => { this.host.chooseEclipseStartDate() })
                 }.padding({ left: 2, right: 2 })
-              }.width('100%').scrollable(ScrollDirection.Horizontal).scrollBar(BarState.Off).margin({ bottom: 6 })
-              Text('事件类别').fontSize(this.fs(10)).fontColor(this.c.sub).width('100%').padding({ left: 2 }).margin({ bottom: 3 })
-              Row({ space: 4 }) {
-                ForEach(['全部', '日食', '月食'], (label: string, index: number) => {
-                  Text(label).fontSize(this.fs(10)).fontColor(this.store.eclipseKindFilter === index ? this.c.onAccent : this.c.sub)
-                    .padding({ left: 9, right: 9, top: 4, bottom: 4 })
+              }.width('100%').scrollable(ScrollDirection.Horizontal).scrollBar(BarState.Off).margin({ bottom: 8 })
+              Text('事件类别').fontSize(this.fs(11)).fontColor(this.c.sub).width('100%').padding({ left: 2 }).margin({ bottom: 4 })
+              Row({ space: 6 }) {
+                ForEach(this.store.isEarthObserver() ? ['全部', '日食', '月食'] : ['全部', '遮日/凌日', '卫食'], (label: string, index: number) => {
+                  Text(label).fontSize(this.fs(11)).fontColor(this.store.eclipseKindFilter === index ? this.c.onAccent : this.c.sub)
+                    .padding({ left: 11, right: 11, top: this.pv(6), bottom: this.pv(6) })
                     .backgroundColor(this.store.eclipseKindFilter === index ? this.c.accent : this.c.bg).animation({ duration: UI_OPTION_ANIMATION_MS, curve: Curve.EaseOut })
                     .borderRadius(UI_RADIUS_CONTROL).clickEffect({ level: ClickEffectLevel.LIGHT, scale: 0.97 })
                     .onClick(() => { this.store.eclipseKindFilter = index })
-                }, (label: string) => label)
-              }.width('100%').padding({ left: 2, right: 2 }).margin({ bottom: 6 })
-              Text('食的类型').fontSize(this.fs(10)).fontColor(this.c.sub).width('100%').padding({ left: 2 }).margin({ bottom: 3 })
-              Row({ space: 3 }) {
+                }, (label: string, index: number) => this.store.observerPlanet + ':kind:' + index.toString() + ':' + label)
+              }.width('100%').padding({ left: 2, right: 2 }).margin({ bottom: 8 })
+              Text('食的类型').fontSize(this.fs(11)).fontColor(this.c.sub).width('100%').padding({ left: 2 }).margin({ bottom: 4 })
+              Row({ space: 5 }) {
                 ForEach(['全部', '全食', '环食', '偏食', '半影食'], (label: string, index: number) => {
-                  Text(label).fontSize(this.fs(10)).fontColor(this.store.eclipseTypeFilter === index ? this.c.onAccent : this.c.sub)
-                    .padding({ left: 7, right: 7, top: 4, bottom: 4 })
+                  Text(label).fontSize(this.fs(10.5)).fontColor(this.store.eclipseTypeFilter === index ? this.c.onAccent : this.c.sub)
+                    .padding({ left: 8, right: 8, top: this.pv(5), bottom: this.pv(5) })
                     .backgroundColor(this.store.eclipseTypeFilter === index ? this.c.accent : this.c.bg).animation({ duration: UI_OPTION_ANIMATION_MS, curve: Curve.EaseOut })
                     .borderRadius(UI_RADIUS_CONTROL).clickEffect({ level: ClickEffectLevel.LIGHT, scale: 0.97 })
                     .onClick(() => { this.store.eclipseTypeFilter = index })
                 }, (label: string) => label)
-              }.width('100%').padding({ left: 2, right: 2 }).margin({ bottom: 6 })
-              Text('从' + this.host.eclipseStartOptionLabel(this.store.eclipseStartOffsetDays) + '开始的未来 ' + (this.store.eclipseMonths / 12).toString() + ' 年日食与月食（点击可把时间跳到食甚时刻）。')
-                .fontSize(this.fs(10)).fontColor(this.c.sub).width('100%').padding({ left: 2 }).margin({ bottom: 4 })
+              }.width('100%').padding({ left: 2, right: 2 }).margin({ bottom: 8 })
               if (this.store.eclipseLoading) {
                 Row({ space: 8 }) {
                   LoadingProgress().width(22).height(22).color(this.c.accent)
-                  Text('正在推算日月食…').fontSize(this.fs(11)).fontColor(this.c.sub)
+                  Text('正在推算' + this.store.observerPlanetZh + '星食…').fontSize(this.fs(11.5)).fontColor(this.c.sub)
                 }.width('100%').padding({ left: 8 }).margin({ top: 6, bottom: 6 })
               } else if (this.store.eclipseError.length > 0) {
-                Text(this.store.eclipseError).fontSize(this.fs(11)).fontColor(this.c.sub).width('100%').padding({ left: 8 }).margin({ top: 6 })
+                Text(this.store.eclipseError).fontSize(this.fs(11.5)).fontColor(this.c.sub).width('100%').padding({ left: 8 }).margin({ top: 6 })
+              } else if (this.store.eclipseNote.length > 0 && this.store.eclipseData.length === 0) {
+                Text(this.store.eclipseNote).fontSize(this.fs(11.5)).fontColor(this.c.sub).width('100%').padding(10).backgroundColor(this.c.bg).borderRadius(UI_RADIUS_CONTROL).margin({ top: 6 })
               } else if (this.store.eclipseData.length === 0) {
-                Text('点击“计算日月食”生成预测。').fontSize(this.fs(11)).fontColor(this.c.sub).width('100%').padding({ left: 8 }).margin({ top: 6 })
+                Text('点击上方按钮生成星食预测（点任意结果可平滑前往食甚时刻）。').fontSize(this.fs(11.5)).fontColor(this.c.sub).width('100%').padding({ left: 8 }).margin({ top: 6 })
               } else if (this.host.filteredEclipses().length === 0) {
-                Text('当前筛选条件下没有日月食。').fontSize(this.fs(11)).fontColor(this.c.sub).width('100%').padding({ left: 8 }).margin({ top: 6 })
+                Text('当前筛选条件下没有星食事件。').fontSize(this.fs(11.5)).fontColor(this.c.sub).width('100%').padding({ left: 8 }).margin({ top: 6 })
               }
               ForEach(this.host.filteredEclipses(), (e: EclipseItem) => {
-                Column({ space: 1 }) {
-                  Row() {
-                    Text(((e.kind === 'solar') ? '日' : '月') + (e.type ?? ''))
-                      .fontSize(this.fs(11)).fontColor(this.c.accent).width(56)
-                    Text(this.host.fmtDateTime(e.date)).fontSize(this.fs(11)).fontColor(this.c.text).layoutWeight(1)
-                    Text('食分 ' + (e.magnitude ?? 0).toFixed(2)).fontSize(this.fs(10)).fontColor(this.c.sub).width(62)
-                  }.width('100%').padding({ left: 8, right: 8 })
+                Column({ space: 3 }) {
+                  Row({ space: 6 }) {
+                    Text(this.eclipseRowTitle(e))
+                      .fontSize(this.fs(12)).fontWeight(FontWeight.Medium).fontColor(this.c.accent).constraintSize({ minWidth: 60 })
+                    Text(this.host.fmtDateTime(e.date)).fontSize(this.fs(11.5)).fontColor(this.c.text).layoutWeight(1).maxLines(1).textOverflow({ overflow: TextOverflow.Ellipsis })
+                    Text('食分 ' + (e.magnitude ?? 0).toFixed(2)).fontSize(this.fs(10.5)).fontColor(this.c.sub)
+                  }.width('100%')
                   if (e.kind === 'solar' && e.saros !== undefined) {
                     Text('沙罗周期 ' + (e.saros ?? 0).toString() + '   ' + (Math.abs(e.pathWidthKm ?? 0) > 0.1
                       ? '中心路径宽 ' + Math.abs(e.pathWidthKm ?? 0).toFixed(0) + ' 千米' : '非中心食'))
-                      .fontSize(this.fs(10)).fontColor(this.c.sub).width('100%').padding({ left: 12 }).maxLines(1)
+                      .fontSize(this.fs(10.5)).fontColor(this.c.sub).width('100%').maxLines(1)
                   }
-                  if (e.durationMin !== undefined && Math.abs(e.durationMin ?? 0) > 0.001) {
+                  if (e.durationMin !== undefined && Math.abs(e.durationMin ?? 0) > 0.001 && e.centralLat !== undefined) {
                     Text('中心食持续 ' + Math.abs(e.durationMin ?? 0).toFixed(1) + ' 分钟   中心点 '
                       + (e.centralLat ?? 0).toFixed(1) + '°, ' + (e.centralLng ?? 0).toFixed(1) + '°   路径偏离 ' + (e.gamma ?? 0).toFixed(3))
-                      .fontSize(this.fs(10)).fontColor(this.c.sub).width('100%').padding({ left: 12 })
+                      .fontSize(this.fs(10.5)).fontColor(this.c.sub).width('100%')
+                  } else if (e.durationMin !== undefined && Math.abs(e.durationMin ?? 0) > 0.001) {
+                    Text('预计持续约 ' + Math.abs(e.durationMin ?? 0).toFixed(1) + ' 分钟')
+                      .fontSize(this.fs(10.5)).fontColor(this.c.sub).width('100%')
                   }
                   if (e.kind === 'lunar') {
-                    Text('沙罗周期 ' + (e.saros ?? 0).toString() + '   路径偏离 ' + (e.gamma ?? 0).toFixed(3)
-                      + '   半影食分 ' + (e.penumbralMagnitude ?? 0).toFixed(2)
-                      + '   本影食分 ' + (e.umbralMagnitude ?? 0).toFixed(2))
-                      .fontSize(this.fs(10)).fontColor(this.c.sub).width('100%').padding({ left: 12 }).maxLines(1)
-                    Text((e.visibility ?? '本地条件未知') + '   月亮高度 ' + (e.localMoonAltitude ?? 0).toFixed(1) + '°')
-                      .fontSize(this.fs(10)).fontColor(this.c.accent).width('100%').padding({ left: 12 })
+                    if (e.saros !== undefined) {
+                      Text('沙罗周期 ' + (e.saros ?? 0).toString() + '   路径偏离 ' + (e.gamma ?? 0).toFixed(3)
+                        + '   半影 ' + (e.penumbralMagnitude ?? 0).toFixed(2)
+                        + '   本影 ' + (e.umbralMagnitude ?? 0).toFixed(2))
+                        .fontSize(this.fs(10.5)).fontColor(this.c.sub).width('100%').maxLines(1)
+                    } else {
+                      Text('本影食分 ' + (e.umbralMagnitude ?? 0).toFixed(2) + '   半影食分 ' + (e.penumbralMagnitude ?? 0).toFixed(2))
+                        .fontSize(this.fs(10.5)).fontColor(this.c.sub).width('100%')
+                    }
+                    Text((e.visibility ?? '本地条件未知') + '   目标高度 ' + (e.localMoonAltitude ?? 0).toFixed(1) + '°')
+                      .fontSize(this.fs(10.5)).fontColor(this.c.accent).width('100%')
                   }
                   if (e.kind === 'solar' && e.localVisible === true) {
-                    Text('本地食甚 ' + this.host.fmtClock(e.localMax) + '   食分 ' + (e.localMagnitude ?? 0).toFixed(2)
-                      + '   太阳高度 ' + (e.localSunAltitude ?? 0).toFixed(1) + '°')
-                      .fontSize(this.fs(10)).fontColor(this.c.accent).width('100%').padding({ left: 12 })
-                    Text((e.localFirstContactLabel ?? '初亏') + ' ' + this.host.fmtClock(e.localFirstContact)
-                      + '   ' + (e.localLastContactLabel ?? '复圆') + ' ' + this.host.fmtClock(e.localLastContact))
-                      .fontSize(this.fs(10)).fontColor(this.c.sub).width('100%').padding({ left: 12 })
+                    Text('本地食甚 ' + this.host.fmtClock(e.localMax) + '   太阳高度 ' + (e.localSunAltitude ?? 0).toFixed(1) + '°')
+                      .fontSize(this.fs(10.5)).fontColor(this.c.accent).width('100%')
+                    if (e.localFirstContact !== undefined && e.localLastContact !== undefined) {
+                      Text((e.localFirstContactLabel ?? '初亏') + ' ' + this.host.fmtClock(e.localFirstContact)
+                        + '   ' + (e.localLastContactLabel ?? '复圆') + ' ' + this.host.fmtClock(e.localLastContact))
+                        .fontSize(this.fs(10.5)).fontColor(this.c.sub).width('100%')
+                    }
                     if (e.localCentralType !== undefined) {
                       Text('本地' + e.localCentralType + '：' + this.host.fmtClock(e.localCentralStart)
                         + ' - ' + this.host.fmtClock(e.localCentralEnd))
-                        .fontSize(this.fs(10)).fontColor(this.c.sub).width('100%').padding({ left: 12 })
+                        .fontSize(this.fs(10.5)).fontColor(this.c.sub).width('100%')
                     }
                   } else if (e.kind === 'solar' && e.localVisible === false) {
-                    Text('本地不可见').fontSize(this.fs(10)).fontColor(this.c.sub).width('100%').padding({ left: 12 })
+                    Text('当前地点地平线以下（全球其他经度可见）').fontSize(this.fs(10.5)).fontColor(this.c.sub).width('100%')
                   }
-                  if (e.note !== undefined) {
-                    Text(e.note ?? '').fontSize(this.fs(10)).fontColor(this.c.sub).width('100%').padding({ left: 12 })
+                  if (e.note !== undefined && e.note.length > 0) {
+                    Text(e.note ?? '').fontSize(this.fs(10.5)).fontColor(this.c.sub).width('100%')
                   }
-                }.width('100%').padding({ top: 4, bottom: 4 }).backgroundColor(this.c.bg).borderRadius(UI_RADIUS_CONTROL).margin({ bottom: 2 })
+                }.width('100%').padding({ left: 10, right: 10, top: 8, bottom: 8 }).backgroundColor(this.c.bg).borderRadius(UI_RADIUS_CONTROL).margin({ bottom: 4 })
                 .clickEffect({ level: ClickEffectLevel.LIGHT, scale: 0.97 })
-                .onClick(() => { if (e.jd !== undefined) this.host.jumpToJdSmooth(e.jd, ((e.kind === 'solar') ? '日' : '月') + (e.type ?? '食')) })
-              }, (e: EclipseItem, index: number) => e.jd !== undefined ? e.jd.toFixed(6) : index.toString())
+                .onClick(() => { if (e.jd !== undefined) this.host.jumpToJdSmooth(e.jd, this.eclipseRowTitle(e)) })
+              }, (e: EclipseItem, index: number) => (e.jd !== undefined ? e.jd.toFixed(6) : index.toString()) + ':' + (e.occulter ?? ''))
               } else {
                 Row({ space: 6 }) {
-                  Button('计算行星凌日').fontSize(this.fs(11)).fontColor(this.c.text).backgroundColor(this.c.bg)
-                    .borderRadius(UI_RADIUS_PILL).constraintSize({ minHeight: this.ch(30) }).padding({ left: 10, right: 10 })
+                  Button('计算' + this.store.observerPlanetZh + '视角凌日').fontSize(this.fs(12)).fontWeight(FontWeight.Medium).fontColor(this.c.onAccent).backgroundColor(this.c.accent)
+                    .borderRadius(UI_RADIUS_PILL).constraintSize({ minHeight: this.ch(36) }).padding({ left: 14, right: 14 })
                     .clickEffect({ level: ClickEffectLevel.LIGHT, scale: 0.97 })
                     .onClick(() => {
                       this.store.planetaryTransitData = []
                       this.store.planetaryTransitError = ''
+                      this.store.planetaryTransitNote = ''
                       this.store.planetaryTransitLoaded = false
                       this.host.loadPlanetaryTransits()
                     })
-                }.width('100%').padding({ left: 4, right: 4 }).margin({ bottom: 6 })
-                Text('预测范围').fontSize(this.fs(10)).fontColor(this.c.sub).width('100%').padding({ left: 2 }).margin({ bottom: 3 })
-                Row({ space: 4 }) {
+                }.width('100%').padding({ left: 2, right: 2 }).margin({ bottom: 8 })
+                Text('预测范围').fontSize(this.fs(11)).fontColor(this.c.sub).width('100%').padding({ left: 2 }).margin({ bottom: 4 })
+                Row({ space: 6 }) {
                   ForEach([5, 20, 50], (years: number) => {
-                    Text('未来 ' + years.toString() + ' 年').fontSize(this.fs(10))
+                    Text('未来 ' + years.toString() + ' 年').fontSize(this.fs(11))
                       .fontColor(this.store.planetaryTransitYears === years ? this.c.onAccent : this.c.sub)
-                      .padding({ left: 9, right: 9, top: 4, bottom: 4 })
+                      .padding({ left: 11, right: 11, top: this.pv(6), bottom: this.pv(6) })
                       .backgroundColor(this.store.planetaryTransitYears === years ? this.c.accent : this.c.bg).animation({ duration: UI_OPTION_ANIMATION_MS, curve: Curve.EaseOut })
                       .borderRadius(UI_RADIUS_CONTROL)
                       .clickEffect({ level: ClickEffectLevel.LIGHT, scale: 0.97 })
@@ -2219,56 +2344,75 @@ export struct AstroPanel {
                           this.store.planetaryTransitYears = years
                           this.store.planetaryTransitData = []
                           this.store.planetaryTransitError = ''
+                          this.store.planetaryTransitNote = ''
                           this.store.planetaryTransitLoaded = false
                           this.host.loadPlanetaryTransits()
                         }
                       })
                   }, (years: number) => years.toString())
-                }.width('100%').padding({ left: 2, right: 2 }).margin({ bottom: 6 })
-                Text('水星或金星从太阳圆面前通过。接触时刻和可见时长均按当前观测地点计算。')
-                  .fontSize(this.fs(10)).fontColor(this.c.sub).width('100%').padding({ left: 2 }).margin({ bottom: 4 })
+                }.width('100%').padding({ left: 2, right: 2 }).margin({ bottom: 8 })
                 if (this.store.planetaryTransitLoading) {
                   Row({ space: 8 }) {
                     LoadingProgress().width(22).height(22).color(this.c.accent)
-                    Text('正在推算行星凌日…').fontSize(this.fs(11)).fontColor(this.c.sub)
+                    Text('正在推算' + this.store.observerPlanetZh + '视角内行星凌日…').fontSize(this.fs(11.5)).fontColor(this.c.sub)
                   }.width('100%').padding({ left: 8 }).margin({ top: 6, bottom: 6 })
                 } else if (!this.store.planetaryTransitLoaded) {
-                  Text('点击“计算行星凌日”开始推算。').fontSize(this.fs(11)).fontColor(this.c.sub).width('100%').padding({ left: 8 }).margin({ top: 6 })
+                  Text('点击上方按钮推算内行星凌日（如在火星可推算水星、金星与地球凌日）。').fontSize(this.fs(11.5)).fontColor(this.c.sub).width('100%').padding({ left: 8 }).margin({ top: 6 })
                 } else if (this.store.planetaryTransitError.length > 0) {
-                  Text(this.store.planetaryTransitError).fontSize(this.fs(11)).fontColor(this.c.sub).width('100%').padding({ left: 8 }).margin({ top: 6 })
+                  Text(this.store.planetaryTransitError).fontSize(this.fs(11.5)).fontColor(this.c.sub).width('100%').padding({ left: 8 }).margin({ top: 6 })
+                } else if (this.store.planetaryTransitNote.length > 0 && this.store.planetaryTransitData.length === 0) {
+                  Text(this.store.planetaryTransitNote).fontSize(this.fs(11.5)).fontColor(this.c.sub).width('100%').padding(10).backgroundColor(this.c.bg).borderRadius(UI_RADIUS_CONTROL).margin({ top: 6 })
                 } else if (this.store.planetaryTransitData.length === 0) {
-                  Text('未来 ' + this.store.planetaryTransitYears.toString() + ' 年内没有水星或金星凌日。').fontSize(this.fs(11)).fontColor(this.c.sub).width('100%').padding({ left: 8 }).margin({ top: 6 })
+                  Text('未来 ' + this.store.planetaryTransitYears.toString() + ' 年内未出现内行星凌日，可扩大至 50 年范围。').fontSize(this.fs(11.5)).fontColor(this.c.sub).width('100%').padding({ left: 8 }).margin({ top: 6 })
                 }
                 ForEach(this.store.planetaryTransitData, (transit: PlanetaryTransitItem) => {
-                  Column({ space: 2 }) {
-                    Row() {
-                      Text((transit.planet ?? '行星') + '凌日').fontSize(this.fs(11)).fontColor(this.c.accent).width(60)
-                      Text(this.host.fmtDateTime(transit.date)).fontSize(this.fs(11)).fontColor(this.c.text).layoutWeight(1)
-                      Text('食分 ' + (transit.magnitude ?? 0).toFixed(3)).fontSize(this.fs(10)).fontColor(this.c.sub).width(68)
-                    }.width('100%').padding({ left: 8, right: 8 })
-                    Text('C1 ' + this.host.fmtClock(transit.firstContact) + '   C2 ' + this.host.fmtClock(transit.secondContact)
-                      + '   食甚 ' + this.host.fmtClock(transit.middle) + '   C3 ' + this.host.fmtClock(transit.thirdContact) + '   C4 ' + this.host.fmtClock(transit.lastContact))
-                      .fontSize(this.fs(10)).fontColor(this.c.sub).width('100%').padding({ left: 12, right: 8 }).maxLines(2)
+                  Column({ space: 3 }) {
+                    Row({ space: 6 }) {
+                      Text((transit.planet ?? '行星') + '凌日').fontSize(this.fs(12)).fontWeight(FontWeight.Medium).fontColor(this.c.accent).constraintSize({ minWidth: 64 })
+                      Text(this.host.fmtDateTime(transit.date)).fontSize(this.fs(11.5)).fontColor(this.c.text).layoutWeight(1).maxLines(1).textOverflow({ overflow: TextOverflow.Ellipsis })
+                      Text('食分 ' + (transit.magnitude ?? 0).toFixed(3)).fontSize(this.fs(10.5)).fontColor(this.c.sub)
+                    }.width('100%')
+                    Text('C1 ' + this.host.fmtClock(transit.firstContact) + '   食甚 ' + this.host.fmtClock(transit.middle) + '   C4 ' + this.host.fmtClock(transit.lastContact))
+                      .fontSize(this.fs(10.5)).fontColor(this.c.sub).width('100%').maxLines(2)
                     Text('最小距日中心 ' + (transit.minimumSeparation ?? 0).toFixed(3) + '°   全程 ' + (transit.durationMin ?? 0).toFixed(1) + ' 分钟')
-                      .fontSize(this.fs(10)).fontColor(this.c.sub).width('100%').padding({ left: 12 })
+                      .fontSize(this.fs(10.5)).fontColor(this.c.sub).width('100%')
                     if (transit.localVisible === true) {
                       Text('本地可见 ' + (transit.observableDurationMin ?? 0).toFixed(1) + ' 分钟   食甚太阳高度 ' + (transit.sunAltitude ?? 0).toFixed(1) + '°')
-                        .fontSize(this.fs(10)).fontColor(this.c.accent).width('100%').padding({ left: 12 })
+                        .fontSize(this.fs(10.5)).fontColor(this.c.accent).width('100%')
                     } else {
-                      Text('本地不可见（食甚太阳高度 ' + (transit.sunAltitude ?? 0).toFixed(1) + '°）')
-                        .fontSize(this.fs(10)).fontColor(this.c.sub).width('100%').padding({ left: 12 })
+                      Text('当前地点不可见（食甚太阳高度 ' + (transit.sunAltitude ?? 0).toFixed(1) + '°）')
+                        .fontSize(this.fs(10.5)).fontColor(this.c.sub).width('100%')
                     }
-                  }.width('100%').padding({ top: 5, bottom: 5 }).backgroundColor(this.c.bg).borderRadius(UI_RADIUS_CONTROL).margin({ bottom: 3 })
+                  }.width('100%').padding({ left: 10, right: 10, top: 8, bottom: 8 }).backgroundColor(this.c.bg).borderRadius(UI_RADIUS_CONTROL).margin({ bottom: 4 })
                   .clickEffect({ level: ClickEffectLevel.LIGHT, scale: 0.97 })
                   .onClick(() => { if (transit.jd !== undefined) this.host.jumpToJdSmooth(transit.jd, (transit.planet ?? '行星') + '凌日') })
                 }, (transit: PlanetaryTransitItem, index: number) => transit.jd !== undefined ? transit.jd.toFixed(6) : index.toString())
               }
             } else if (this.store.astroTab === 8) {
-              Text(I18n.t('i0133')).fontSize(this.fs(13)).fontColor(this.c.text).width('100%').margin({ top: 4, bottom: 8 })
-              Button(I18n.t('i0240')).fontSize(this.fs(11)).fontColor(this.c.text).backgroundColor(this.c.bg)
-                .borderRadius(UI_RADIUS_PILL).constraintSize({ minHeight: this.ch(30) }).padding({ left: 10, right: 10 })
-                .clickEffect({ level: ClickEffectLevel.LIGHT, scale: 0.97 })
-                .onClick(() => { this.host.loadAlmanac() })
+              Row({ space: 6 }) {
+                Text(this.store.isEarthObserver() ? I18n.t('i0133') : (this.store.observerPlanetZh + '年历与太阳日'))
+                  .fontSize(this.fs(14)).fontWeight(FontWeight.Medium).fontColor(this.c.text).layoutWeight(1)
+                Button('世界多历法 →')
+                  .id('astro-open-calendars-btn')
+                  .fontSize(this.fs(11))
+                  .fontColor(this.c.accent)
+                  .backgroundColor(this.c.softStrong)
+                  .borderRadius(UI_RADIUS_PILL)
+                  .constraintSize({ minHeight: this.ch(32) })
+                  .padding({ left: 10, right: 10 })
+                  .clickEffect({ level: ClickEffectLevel.LIGHT, scale: 0.97 })
+                  .onClick(() => { this.host.openCalendarsPanel() })
+              }.width('100%').alignItems(VerticalAlign.Center).margin({ top: 4, bottom: 8 })
+              Row({ space: 8 }) {
+                Button(I18n.t('i0240')).fontSize(this.fs(11.5)).fontColor(this.c.text).backgroundColor(this.c.bg)
+                  .borderRadius(UI_RADIUS_PILL).constraintSize({ minHeight: this.ch(34) }).padding({ left: 12, right: 12 })
+                  .clickEffect({ level: ClickEffectLevel.LIGHT, scale: 0.97 })
+                  .onClick(() => { this.host.loadAlmanac() })
+                if (!this.store.isEarthObserver()) {
+                  Text('太阳日约 ' + this.store.almanacSolarDayHours.toFixed(1) + ' 小时 · 已隐藏地球节气')
+                    .fontSize(this.fs(10.5)).fontColor(this.c.sub).layoutWeight(1).maxLines(1).textOverflow({ overflow: TextOverflow.Ellipsis })
+                }
+              }.width('100%').alignItems(VerticalAlign.Center).margin({ bottom: 6 })
               if (this.store.almanacLoading) {
                 Row({ space: 8 }) {
                   LoadingProgress().width(20).height(20).color(this.c.accent)
@@ -2280,7 +2424,9 @@ export struct AstroPanel {
                 Text('尚未生成年历。').fontSize(this.fs(11)).fontColor(this.c.sub).width('100%').padding({ left: 8 }).margin({ top: 8 })
               } else if (this.store.almanacData.size > 0) {
                 if (this.store.almanacSeasons.length > 0) {
-                  Text((this.store.almanacSeasonYear.length > 0 ? this.store.almanacSeasonYear + ' 年' : '本年') + '四季节点')
+                  Text(this.store.isEarthObserver()
+                    ? ((this.store.almanacSeasonYear.length > 0 ? this.store.almanacSeasonYear + ' 年' : '本年') + '四季节点')
+                    : (this.store.observerPlanetZh + '四季节点（按日心黄经 Ls 推算）'))
                     .fontSize(this.fs(11)).fontColor(this.c.sub).width('100%').padding({ left: 2 }).margin({ bottom: 2 })
                   ForEach(this.store.almanacSeasons, (event: SeasonEvent) => {
                     Row({ space: 6 }) {
@@ -2337,11 +2483,12 @@ export struct AstroPanel {
                   .width('100%').height(0.5)
                   .backgroundColor(this.c.border)
                   .margin({ top: 4, bottom: 4 })
-                Text(I18n.t('s0373')).fontSize(this.fs(11)).fontColor(this.c.sub).width('100%').padding({ left: 2 }).margin({ bottom: 2 })
-                InfoRow({ label: I18n.t('s0367'), value: this.host.jdToDateStr(this.store.almanacData.get('moonRise') ?? '0') })
-                InfoRow({ label: I18n.t('s0368'), value: this.host.jdToDateStr(this.store.almanacData.get('moonSet') ?? '0') })
+                Text(this.store.isEarthObserver() ? I18n.t('s0373') : (this.store.almanacCompanionNameZh + '升落与相位'))
+                  .fontSize(this.fs(11)).fontColor(this.c.sub).width('100%').padding({ left: 2 }).margin({ bottom: 2 })
+                InfoRow({ label: this.store.isEarthObserver() ? I18n.t('s0367') : (this.store.almanacCompanionNameZh + '升起'), value: this.host.jdToDateStr(this.store.almanacData.get('moonRise') ?? '0') })
+                InfoRow({ label: this.store.isEarthObserver() ? I18n.t('s0368') : (this.store.almanacCompanionNameZh + '落下'), value: this.host.jdToDateStr(this.store.almanacData.get('moonSet') ?? '0') })
                 InfoRow({ label: I18n.t('s0701'), value: this.host.jdToDateStr(this.store.almanacData.get('moonTransit') ?? '0') })
-                InfoRow({ label: I18n.t('s0369'), value: parseFloat(this.store.almanacData.get('moonPhase') ?? '0').toFixed(1) + '%' })
+                InfoRow({ label: this.store.isEarthObserver() ? I18n.t('s0369') : '被照面比例', value: parseFloat(this.store.almanacData.get('moonPhase') ?? '0').toFixed(1) + '%' })
               }
             } else {
               Text('月相预报').fontSize(this.fs(13)).fontColor(this.c.text).width('100%').margin({ top: 4, bottom: 2 })

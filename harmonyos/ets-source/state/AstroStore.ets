@@ -175,6 +175,14 @@ export class AstroStore {
   astroContext: AstroCalcContext | undefined = undefined
   astroCalcSnapshot: string = ''
   tonightAstro: TonightEvents | null = null
+  // 多星体天文计算上下文状态（支持在天文计算面板顶栏一键切换观测星体）
+  observerPlanet: string = 'Earth'
+  observerPlanetZh: string = '地球'
+  planetSwitching: boolean = false
+  almanacCompanionNameZh: string = '月球'
+  almanacSolarDayHours: number = 24
+  eclipseNote: string = ''
+  planetaryTransitNote: string = ''
 
   // 宿主在 aboutToAppear 注入纯跨域读取 / 格式化 hooks；桥与请求序号在 AstroCalcController。
   private hooks: AstroHostHooks | null = null
@@ -556,5 +564,41 @@ export class AstroStore {
   almanacHoursLabel(key: string): string {
     const value = this.almanacData.get(key) ?? ''
     return value.length > 0 ? parseFloat(value).toFixed(1) + ' 小时' : '--'
+  }
+
+  isEarthObserver(): boolean {
+    const p = (this.observerPlanet || 'Earth').trim().toLowerCase()
+    return p.length === 0 || p === 'earth'
+  }
+
+  // 切换观测星体后清空受观测点影响的缓存结果，并确保天象计算目标不与观测星体自身冲突。
+  invalidateForPlanetChange(nextPlanetEn: string, nextPlanetZh: string): void {
+    this.observerPlanet = nextPlanetEn
+    this.observerPlanetZh = nextPlanetZh
+    this.eclipseData = []
+    this.eclipseError = ''
+    this.eclipseNote = ''
+    this.planetaryTransitData = []
+    this.planetaryTransitError = ''
+    this.planetaryTransitNote = ''
+    this.planetaryTransitLoaded = false
+    this.phenomenaData = []
+    this.phenomenaHint = ''
+    if (this.phenomenaPrimary.toLowerCase() === nextPlanetEn.toLowerCase()) {
+      this.phenomenaPrimary = 'all'
+    }
+    if (this.phenomenaTarget.toLowerCase() === nextPlanetEn.toLowerCase()) {
+      this.phenomenaTarget = 'all'
+    }
+    this.almanacData = new Map()
+    this.almanacSeasons = []
+    this.almanacSolarTerms = []
+    this.almanacError = ''
+    this.planetPositions = []
+    this.celestialPositions = []
+    this.ephemerisData = []
+    this.rtsData = new Map()
+    this.rtsCalendarData = []
+    this.tonightAstro = null
   }
 }

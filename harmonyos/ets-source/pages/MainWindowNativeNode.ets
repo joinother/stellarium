@@ -128,6 +128,10 @@ import { accentForNightMode, slotsForNightMode, stellariumTheme, AstroColors, DE
 import { TimeWheelController } from '../state/TimeWheelController'
 import { BookmarkStore } from '../state/BookmarkStore'
 import { BookmarkPanel } from '../panels/panels/BookmarkPanel'
+import { CalendarsStore } from '../state/CalendarsStore'
+import { CalendarsPanel } from '../panels/panels/CalendarsPanel'
+import { MinorBodiesStore } from '../state/MinorBodiesStore'
+import { MinorBodiesPanel } from '../panels/panels/MinorBodiesPanel'
 import { SearchStore } from '../state/SearchStore'
 import { ObjectDetailStore } from '../state/ObjectDetailStore'
 import { GyroStore } from '../state/GyroStore'
@@ -1468,6 +1472,8 @@ export struct WindowNativeNode {
   @State private mosaicStore: MosaicStore = new MosaicStore()
   @State private equationOfTimeStore: EquationOfTimeStore = new EquationOfTimeStore()
   @State private archaeoStore: ArchaeoStore = new ArchaeoStore()
+  @State private calendarsStore: CalendarsStore = new CalendarsStore()
+  @State private minorBodiesStore: MinorBodiesStore = new MinorBodiesStore()
   // 卫星（Satellites）
   // SatellitesPanel 改为 @ObjectLink 订阅该 store，刷新粒度不再落在宿主整棵树上。
   // 下面两个"资源目录健康"字段与星表域共用、且不是卫星面板的入参，故仍由宿主持有。
@@ -1899,6 +1905,8 @@ export struct WindowNativeNode {
     // 两者消费方均为 @ObjectLink，字段赋值即刷新，该域无 publish* 发布点，onChanged 传空实现。
     this.mosaicStore.attachPort(hostPort, () => {})
     this.archaeoStore.attachPort(hostPort, () => {})
+    this.calendarsStore.bind(hostPort, (msg: string) => { this.flashHint(msg) }, () => { this.refreshState() })
+    this.minorBodiesStore.bind(hostPort, (msg: string) => { this.flashHint(msg) })
     // 插件管理 / 命令控制台 / 均时差 / 星云贴图四域复用同一实例。其消费方均为
     // @ObjectLink，字段赋值即刷新，四个域都无 publish* 发布点，故 onChanged 传空实现。
     this.pluginStore.attachPort(hostPort, () => {})
@@ -4974,6 +4982,10 @@ export struct WindowNativeNode {
         this.pluginFeatureCtl().ensurePluginLoaded('Scenery3d', () => { this.sceneryStore.loadScenery3d() })
       } else if (panel === 'nebulaTextures') {
         this.pluginFeatureCtl().ensurePluginLoaded('NebulaTextures', () => { this.nebulaTextureStore.loadNebulaTextureStatus() })
+      } else if (panel === 'calendars') {
+        this.pluginFeatureCtl().ensurePluginLoaded('Calendars', () => { this.calendarsStore.load() })
+      } else if (panel === 'minorBodies') {
+        this.pluginFeatureCtl().ensurePluginLoaded('SolarSystemEditor', () => { this.minorBodiesStore.load() })
       } else if (panel === 'skyCultureMaker') {
         this.skyCultureMakerStore.loadSkyCultureMakerDraft()
       } else if (panel === 'pointerCoordinates') {
@@ -9499,12 +9511,11 @@ export struct WindowNativeNode {
             this.panelContent()
           }
             .width('100%')
-            .height('100%')
             .opacity(this.panelRouteOpacity)
             .translate({ x: this.panelRouteOffsetX, y: 0 })
         }
           .width('100%')
-          .padding({ top: this.panelTopChromeHeight(false), left: 18, right: 18, bottom: 18 })
+          .padding({ top: this.panelTopChromeHeight(false), left: 18, right: 18, bottom: 24 })
       // Keep the route host stable. Changing its id on every navigation makes
       // ArkUI replace the node and bypass the explicit out/swap/in animation.
       .id('panel-content-' + this.i18nLang)
@@ -10322,6 +10333,8 @@ export struct WindowNativeNode {
           selectAstroFilter: (key: string, value: string) => { this.astroCalcCtl().selectAstroFilter(key, value) },
           selectAstroGroup: (group: number) => { this.astroCalcCtl().selectAstroGroup(group) },
           selectAstroTab: (tab: number) => { this.astroCalcCtl().selectAstroTab(tab) },
+          switchObserverPlanet: (planetEn: string) => { this.astroCalcCtl().switchObserverPlanet(planetEn) },
+          openCalendarsPanel: () => { this.openSubPanel('calendars') },
           wutCategoryTitle: () => this.wutStore.wutCategoryTitle(),
           wutTargetSubtitle: (target: WutTarget) => this.searchStore.wutTargetSubtitle(target),
           wutTargetTitle: (target: WutTarget) => this.wutTargetTitle(target),
@@ -10476,6 +10489,25 @@ export struct WindowNativeNode {
         onSetConflictAvoidance: (value: boolean) => { this.nebulaTextureCtl().setNebulaTextureFlag('setNebulaTextureConflictAvoidance', value, this.nebulaTextureStore.nebulaTextureStatus?.avoidAreaConflict === true) },
         onGoto: (imageUrl: string) => { this.nebulaTextureCtl().gotoNebulaTexture(imageUrl) },
         onRemove: (imageUrl: string) => { this.nebulaTextureCtl().removeNebulaTexture(imageUrl) }
+      })
+    } else if (this.activePanel === 'calendars') {
+      CalendarsPanel({
+        store: this.calendarsStore,
+        onChooseGregorianDate: (onAccept: (y: number, m: number, d: number) => void) => {
+          this.getUIContext().showDatePickerDialog({
+            start: new Date(1582, 9, 15),
+            end: new Date(2100, 11, 31),
+            selected: new Date(),
+            onDateAccept: (val: Date) => {
+              onAccept(val.getFullYear(), val.getMonth() + 1, val.getDate())
+            }
+          })
+        }
+      })
+    } else if (this.activePanel === 'minorBodies') {
+      MinorBodiesPanel({
+        store: this.minorBodiesStore,
+        onLocateObject: (englishName: string) => { this.searchObject(englishName, '', '', 'center') }
       })
     } else if (this.activePanel === 'scripts') {
       ScriptsPanel({

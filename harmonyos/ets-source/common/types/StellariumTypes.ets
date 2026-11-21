@@ -891,6 +891,45 @@ export interface StellariumBridgeResponse {
   preview?: Object
   accepted?: boolean
   conflictAction?: string
+  // ---- 多星体天文计算 + 世界历法 + 小天体目录 ----
+  observerPlanet?: string
+  observerPlanetZh?: string
+  isEarth?: boolean
+  companionName?: string
+  companionNameZh?: string
+  companionAltitude?: number
+  companionAzimuth?: number
+  companionIllumination?: number
+  note?: string
+  calendars?: CalendarRowItem[]
+  overlayEnabled?: boolean
+  rataDie?: number
+  totalCount?: number
+  matchedCount?: number
+  counts?: Record<string, number>
+  bundledCometsAvailable?: boolean
+  importedName?: string
+}
+
+export interface CalendarRowItem {
+  id: string
+  nameZh: string
+  nameEn: string
+  category: string
+  formatted: string
+  parts?: number[]
+  partStrings?: string[]
+}
+
+export interface MinorBodyItem {
+  englishName: string
+  name: string
+  category: string
+  typeZh: string
+  magnitude: number
+  distanceAU: number
+  observerDistanceAU: number
+  periodDays: number
 }
 
 // 多波段 HiPS 数据集（getSpectralDatasets 返回）
@@ -1072,6 +1111,14 @@ export interface AstroCalcContext {
   jd?: number
   localTime?: string
   observerLocation?: string
+  observerPlanet?: string
+  observerPlanetZh?: string
+  isEarth?: boolean
+  companionName?: string
+  companionNameZh?: string
+  companionAltitude?: number
+  companionAzimuth?: number
+  companionIllumination?: number
   timeZone?: string
   latitude?: number
   longitude?: number
@@ -1190,6 +1237,9 @@ export interface PhenomenonItem {
 export interface EclipseItem {
   kind?: string
   type?: string
+  occulter?: string
+  observerPlanet?: string
+  observerPlanetZh?: string
   jd?: number
   date?: string
   magnitude?: number
@@ -1216,9 +1266,11 @@ export interface EclipseItem {
   visibility?: string
   note?: string
 }
-// 水星、金星凌日：接触时刻和可见性均以当前观测地点计算。
+// 行星凌日：接触时刻和可见性均按当前观测星体与地点计算。
 export interface PlanetaryTransitItem {
   planet?: string
+  observerPlanet?: string
+  observerPlanetZh?: string
   jd?: number
   date?: string
   firstContact?: string

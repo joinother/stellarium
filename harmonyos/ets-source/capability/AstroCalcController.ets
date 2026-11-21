@@ -16,6 +16,7 @@ import { EphemerisStore } from '../state/EphemerisStore'
 import { WutStore } from '../state/WutStore'
 import { SearchStore } from '../state/SearchStore'
 import { astroTabItemsForGroup, astroGroupForTab, dateToJD, planetPairBodyName } from '../common/derive/astro'
+import { planetZh } from '../common/derive/labels'
 import { BehaviorHostHooks } from './ControllerHooks'
 
 // 宿主 → 控制器回注：UI（DatePicker / animateTo / Scroller）、壳层路由与保留宿主方法。
@@ -1091,15 +1092,21 @@ export class AstroCalcController {
       port.requestWhenReady('getEclipses', JSON.stringify(options), (r: StellariumBridgeResponse) => {
         if (requestId !== this.eclipseLoadSequence) return
         this.astroStore.eclipseLoading = false
+        if (typeof r.observerPlanet === 'string' && r.observerPlanet.length > 0) {
+          this.astroStore.observerPlanet = r.observerPlanet
+          this.astroStore.observerPlanetZh = typeof r.observerPlanetZh === 'string' && r.observerPlanetZh.length > 0
+            ? r.observerPlanetZh : planetZh(r.observerPlanet)
+        }
+        this.astroStore.eclipseNote = typeof r.note === 'string' ? r.note : ''
         if (r.ok === true && r.eclipses !== undefined) {
           this.astroStore.eclipseData = r.eclipses as Array<EclipseItem>
           return
         }
-        this.astroStore.eclipseError = r.error ?? '日月食计算未能完成，请重试。'
+        this.astroStore.eclipseError = r.error ?? '星食计算未能完成，请重试。'
       }, () => {
         if (requestId !== this.eclipseLoadSequence) return
         this.astroStore.eclipseLoading = false
-        this.astroStore.eclipseError = '日月食计算时间较长，请缩短预测范围后重试。'
+        this.astroStore.eclipseError = '星食计算时间较长，请缩短预测范围后重试。'
       }, 0, 100, 200)
     }, () => {
       if (requestId !== this.eclipseLoadSequence) return
@@ -1158,11 +1165,17 @@ export class AstroCalcController {
       port.requestWhenReady('getPlanetaryTransits', JSON.stringify({ years: this.astroStore.planetaryTransitYears }), (r: StellariumBridgeResponse) => {
         if (requestId !== this.planetaryTransitRequestSequence) return
         this.astroStore.planetaryTransitLoading = false
+        if (typeof r.observerPlanet === 'string' && r.observerPlanet.length > 0) {
+          this.astroStore.observerPlanet = r.observerPlanet
+          this.astroStore.observerPlanetZh = typeof r.observerPlanetZh === 'string' && r.observerPlanetZh.length > 0
+            ? r.observerPlanetZh : planetZh(r.observerPlanet)
+        }
+        this.astroStore.planetaryTransitNote = typeof r.note === 'string' ? r.note : ''
         if (r.ok === true && r.planetaryTransits !== undefined) {
           this.astroStore.planetaryTransitData = r.planetaryTransits as Array<PlanetaryTransitItem>
           this.astroStore.planetaryTransitError = ''
         } else {
-          this.astroStore.planetaryTransitError = '行星凌日只能按地球上的当前观测地点计算。'
+          this.astroStore.planetaryTransitError = r.error ?? '行星凌日计算未能完成，请重试。'
         }
         this.astroStore.planetaryTransitLoaded = true
       }, () => {
@@ -1265,6 +1278,15 @@ export class AstroCalcController {
         data.set('daylightHours', av['daylightHours'] !== undefined ? String(av['daylightHours']) : '')
         data.set('nightHours', av['nightHours'] !== undefined ? String(av['nightHours']) : '')
         data.set('moonPhase', av['moonPhase'] !== undefined ? String(av['moonPhase']) : '0')
+        if (typeof av['observerPlanet'] === 'string' && (av['observerPlanet'] as string).length > 0) {
+          this.astroStore.observerPlanet = av['observerPlanet'] as string
+          this.astroStore.observerPlanetZh = typeof av['observerPlanetZh'] === 'string' && (av['observerPlanetZh'] as string).length > 0
+            ? (av['observerPlanetZh'] as string) : planetZh(this.astroStore.observerPlanet)
+        }
+        this.astroStore.almanacCompanionNameZh = typeof av['companionNameZh'] === 'string' && (av['companionNameZh'] as string).length > 0
+          ? (av['companionNameZh'] as string) : '月球'
+        const solarDayVal = Number(av['solarDayHours'])
+        this.astroStore.almanacSolarDayHours = Number.isFinite(solarDayVal) && solarDayVal > 0 ? solarDayVal : 24
         this.astroStore.almanacData = data
         if (Array.isArray(av['seasonEvents'])) this.astroStore.almanacSeasons = av['seasonEvents'] as Array<SeasonEvent>
         if (Array.isArray(av['solarTerms'])) this.astroStore.almanacSolarTerms = av['solarTerms'] as Array<SeasonEvent>
@@ -1410,10 +1432,29 @@ export class AstroCalcController {
         this.astroStore.astroContext = undefined
         return
       }
+      const nextPlanet = typeof r.observerPlanet === 'string' && r.observerPlanet.length > 0 ? r.observerPlanet : 'Earth'
+      const nextPlanetZh = typeof r.observerPlanetZh === 'string' && r.observerPlanetZh.length > 0
+        ? r.observerPlanetZh : planetZh(nextPlanet)
+      const prevPlanet = this.astroStore.observerPlanet
+      if (prevPlanet.toLowerCase() !== nextPlanet.toLowerCase()) {
+        this.tabResultCacheKeys.clear()
+        this.astroStore.invalidateForPlanetChange(nextPlanet, nextPlanetZh)
+      } else {
+        this.astroStore.observerPlanet = nextPlanet
+        this.astroStore.observerPlanetZh = nextPlanetZh
+      }
       this.astroStore.astroContext = {
         jd: r.jd as number,
         localTime: r.localTime as string,
         observerLocation: r.observerLocation as string,
+        observerPlanet: nextPlanet,
+        observerPlanetZh: nextPlanetZh,
+        isEarth: r.isEarth !== false && nextPlanet.toLowerCase() === 'earth',
+        companionName: typeof r.companionName === 'string' ? r.companionName : undefined,
+        companionNameZh: typeof r.companionNameZh === 'string' ? r.companionNameZh : undefined,
+        companionAltitude: r.companionAltitude !== undefined ? Number(r.companionAltitude) : undefined,
+        companionAzimuth: r.companionAzimuth !== undefined ? Number(r.companionAzimuth) : undefined,
+        companionIllumination: r.companionIllumination !== undefined ? Number(r.companionIllumination) : undefined,
         timeZone: r.timeZone as string,
         latitude: Number(r.latitude),
         longitude: Number(r.longitude),
@@ -1435,19 +1476,48 @@ export class AstroCalcController {
     })
   }
 
+  // 在天文计算面板顶栏直接切换观测星体，立即清空缓存并重算当前页签。
+  switchObserverPlanet(planetEn: string): void {
+    const normalized = planetEn.trim()
+    if (normalized.length === 0) return
+    if (this.astroStore.observerPlanet.toLowerCase() === normalized.toLowerCase()) return
+    const port = this.port
+    if (port === null) return
+    const zh = planetZh(normalized)
+    this.astroStore.planetSwitching = true
+    port.requestInteractive('setObserverPlanet', normalized, (r: StellariumBridgeResponse) => {
+      this.astroStore.planetSwitching = false
+      if (r.ok === true) {
+        this.tabResultCacheKeys.clear()
+        this.astroStore.invalidateForPlanetChange(normalized, zh)
+        this.astroContextRequestPending = false
+        this.loadAstroCalcContext()
+        this.loadAstroTab(this.astroStore.astroTab, true)
+        this.hooks.refreshState()
+        this.hooks.flashHint('已切换观测星体：' + zh)
+      } else {
+        this.hooks.flashHint(r.error ?? '切换观测星体失败')
+      }
+    }, () => {
+      this.astroStore.planetSwitching = false
+      this.hooks.flashHint('切换观测星体失败，请重试')
+    })
+  }
+
   // 宿主关闭天文面板时作废在途上下文请求：只递增序号、不复位 pending。
   cancelAstroCalcContext(): void {
     ++this.astroContextRequestSequence
   }
 
-  // 构建页签缓存键：覆盖观测地、模拟时刻（按小时分桶）、选中天体与页签核心参数。
+  // 构建页签缓存键：覆盖观测星体、观测地、模拟时刻（按小时分桶）、选中天体与页签核心参数。
   private buildTabCacheKey(id: number): string {
     const ctx = this.astroStore.astroContext
+    const planetKey = this.astroStore.observerPlanet || 'Earth'
     const loc = ctx !== undefined ? (ctx.observerLocation ?? '') : ''
     const jdVal = ctx !== undefined && ctx.jd !== undefined ? ctx.jd : 0
     const jdBucket = Number.isFinite(jdVal) && jdVal > 0 ? Math.floor(jdVal * 24).toString() : '0'
     const sel = this.hooks.selectedObjectName()
-    const base = `${id}|${loc}|${jdBucket}|${sel}`
+    const base = `${id}|${planetKey}|${loc}|${jdBucket}|${sel}`
     if (id === 0) {
       return `${base}|${this.astroStore.positionMode}|${this.astroStore.celestialPositionCategory}|${this.astroStore.celestialPositionMagnitude}|${this.astroStore.celestialPositionHorizontal}`
     }

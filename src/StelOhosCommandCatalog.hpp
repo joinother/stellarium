@@ -56,7 +56,8 @@ inline QStringList names()
             "triggerAction,unloadPlugin,validateNebulaTexture,closeSpectralView,zoomBy,zoomStep,getCommandCatalog,getCommandSchema,getCommandStatus,"
 			"saveSkyCultureMakerDraft,resetSkyCultureMakerDraft,addSkyCultureMakerConstellation,updateSkyCultureMakerConstellation,removeSkyCultureMakerConstellation,"
 			"addSkyCultureMakerLine,addSkyCultureMakerSelectedStar,importSkyCultureMakerArtwork,setSkyCultureMakerArtworkAnchor,removeSkyCultureMakerArtwork,"
-			"undoSkyCultureMakerEdit,validateSkyCultureMakerDraft,exportSkyCultureMaker,importSkyCultureMaker").split(',');
+			"undoSkyCultureMakerEdit,validateSkyCultureMakerDraft,exportSkyCultureMaker,importSkyCultureMaker,"
+			"getCalendarsData,setCalendarSetting,getMinorBodies,importMinorBodies").split(',');
 }
 
 inline QString categoryFor(const QString& name)
@@ -356,7 +357,27 @@ inline QJsonObject item(const QString& name)
 	}
 	else if (name == "getWutTargets") value["examplePayload"] = "{\"category\":\"planets\"}";
 	else if (name == "getPolarScopeData") value["description"] = QStringLiteral("读取实时极轴镜分划数据，包括天极/极星屏幕投影、时角和钟面位置；星空由 Stellarium 原生渲染");
-	else if (name == "getAstroCalcContext") value["description"] = QStringLiteral("读取离线天文计算上下文，包括观测地点、时区、儒略日、平/视恒星时、时间方程和太阳/月球当前高度方位");
+	else if (name == "getAstroCalcContext") value["description"] = QStringLiteral("读取离线天文计算上下文，包括观测星体、地点、时区、儒略日、平/视恒星时、时间方程和太阳/伴星当前高度方位");
+	else if (name == "getCalendarsData")
+	{
+		value["description"] = QStringLiteral("读取当前或指定儒略日的世界多历法对照（公历、儒略历、中国农历、伊斯兰历、希伯来历、波斯历、藏历、印度历、玛雅历等）");
+		value["examplePayload"] = "{\"jd\":2460780.0}";
+	}
+	else if (name == "setCalendarSetting")
+	{
+		value["description"] = QStringLiteral("切换世界历法屏幕叠加显示，或按公历/儒略历日期跳转星图时刻（enabled|1、jumpGregorian|2026-06-21、jumpJulian|1582-10-04）");
+		value["examplePayload"] = "enabled|1";
+	}
+	else if (name == "getMinorBodies")
+	{
+		value["description"] = QStringLiteral("离线查询已加载的太阳系小天体（彗星、小行星、矮行星、外海王星天体）与实时星等、日心距离和轨道周期");
+		value["examplePayload"] = "{\"category\":\"comet\",\"query\":\"\",\"limit\":80}";
+	}
+	else if (name == "importMinorBodies")
+	{
+		value["description"] = QStringLiteral("离线管理太阳系小天体目录：一键导入内置千颗彗星库、解析 MPC 单行轨道根数、移除自定义小天体或恢复默认目录");
+		value["examplePayload"] = "{\"action\":\"importBundledComets\"}";
+	}
 	else if (name == "setPolarScopeOverlay")
 	{
 		value["description"] = QStringLiteral("在原生星图渲染帧中显示或隐藏极轴镜分划；payload 使用 active|水平翻转|垂直翻转");

@@ -1,5 +1,31 @@
 > **身份图例**：本文件真机记录中出现的 `com.cnchensh.stellarium` 是**本机调试签名身份**（本机 DevEco 自动生成，非发布身份）；发布身份为 `com.joinother.skyinstrument`。构建脚本 `build-ohos-hap-windows.ps1 -Install` 从产物 `pack.info` 读取实际包名，仓库不写死任何签名身份（见 `docs/harmonyos/release/BUNDLE-IDENTITY-CLEANUP.md`）。
 
+## [2026-11-21] 天文计算多星体引擎与顶栏快切重塑、插件中心阶段 2/3 整改（世界多历法 + 太阳系小天体）及平板面板竖向滚动根因修复
+
+- **修改文件：** `src/StelMainView.cpp`、`src/StelOhosCommandCatalog.hpp`、`harmonyos/ets-source/common/types/StellariumTypes.ets`、`harmonyos/ets-source/common/derive/labels.ets`、`harmonyos/ets-source/common/derive/actions.ets`、`harmonyos/ets-source/state/AstroStore.ets`、`harmonyos/ets-source/state/CalendarsStore.ets`（新增）、`harmonyos/ets-source/state/MinorBodiesStore.ets`（新增）、`harmonyos/ets-source/capability/AstroCalcController.ets`、`harmonyos/ets-source/panels/astro/AstroPanel.ets`、`harmonyos/ets-source/panels/panels/CalendarsPanel.ets`（新增）、`harmonyos/ets-source/panels/panels/MinorBodiesPanel.ets`（新增）、`harmonyos/ets-source/panels/panels/ArchaeoLinesPanel.ets`、`harmonyos/ets-source/panels/panels/MeteorShowersPanel.ets`、`harmonyos/ets-source/panels/panels/Scenery3dPanel.ets`、`harmonyos/ets-source/panels/panels/NebulaTexturesPanel.ets`、`harmonyos/ets-source/panels/panels/NavStarsPanel.ets`、`harmonyos/ets-source/panels/panels/MosaicCameraPanel.ets`、`harmonyos/ets-source/panels/panels/AngleMeasurePanel.ets`、`harmonyos/ets-source/panels/panels/TelescopePanel.ets`、`harmonyos/ets-source/panels/view/PointerCoordinatesPanel.ets`、`harmonyos/ets-source/pages/MainWindowNativeNode.ets`、`docs/harmonyos/json/ui-contract-baseline.json`、`scripts/test-ohos-astrocalc-multiworld.mjs`（新增）、`scripts/test-ohos-plugin-panels-phase23.mjs`（新增）、`docs/harmonyos/CHANGELOG.md`。
+- **核心改动：**
+  1. **天文计算多星体引擎与界面重塑（主线 A）：**
+     - **C++ 多星体算法全覆盖（`src/StelMainView.cpp`）：**
+       - `getEclipses` 保留地球高精度贝塞尔日月食路径，并在外星观测点新增**卫星视角母星食日**（月球观测地球遮挡太阳，按满月朔望月直跳毫秒级出结果）与**行星视角天然卫星遮日/凌日及卫食**（火星火卫一/火卫二、木星伽利略卫星、土星土卫六等、天王/海王/冥王星主卫星，采用行星中心坐标与缓存日心向量实现毫秒级计算）；
+       - `getPlanetaryTransits` 解除原"仅限地球观测"报错限制，采用会合周期直跳下合精化算法，支持在火星、木星、土星等外行星上推算内行星（含地球）凌日时刻、接触点与本地可见时长；
+       - `getPhenomena` 加入 `"Earth"` 并自动排除当前观测星体自身，在火星等外行星可直接推算地球大距与冲合；
+       - `getAlmanac` 与 `getAstroCalcContext` 全面适配外星观测点：输出当地太阳日时长（如火星 `24.7h`、月球 `708.7h`）、主伴星（如火卫一/地球/土卫六）升中天落与相位、按日心太阳黄经 $L_s$ 推算的行星四季节点，并在外星自动隐藏地球二十四节气。
+     - **天文计算顶栏星体快切与自适应 UI（`AstroPanel.ets`、`AstroCalcController.ets`、`AstroStore.ets`）：**
+       - 顶部上下文栏新增观测星体快切胶囊（`地球 ▾` / `火星 ▾` / `月球 ▾`），无需离开天文计算即可一键切换太阳系十大观测点，自动清空旧星体缓存并重算当前页签；
+       - Tab 3（天象）、Tab 7（星食与凌日）、Tab 8（年历）全部自适应观测星体文案、筛选与直达按钮，并修复 `AstroSelectionGuide` 在 Tab 7/8 不跟随 `@ObjectLink` 响应式隐藏的问题。
+  2. **插件中心阶段 2 & 3 整改（主线 B）：**
+     - **阶段 3 新增 2 套原生离线插件面板（打通已编译进引擎的 `Calendars` 与 `SolarSystemEditor`）：**
+       - **世界多历法（`CalendarsPanel.ets` + `getCalendarsData` / `setCalendarSetting`）：** 实时换算公历、儒略历、ISO 周历、中国农历干支、藏历、伊斯兰历、希伯来历、波斯历、印度历、玛雅历等 18 种世界历法（清理原版 HTML 标签），支持屏幕历法叠加开关、公历/儒略历日期跳转与历史经典天文节点一键直达；
+       - **太阳系小天体目录（`MinorBodiesPanel.ets` + `getMinorBodies` / `importMinorBodies`）：** 按视星等排序离线浏览已加载的 477+ 颗彗星/小行星/矮行星/外海王星天体并一键定位，支持离线一键导入随包内置的 `ssystem_1000comets.ini` 千颗彗星库、粘贴 MPC 单行轨道根数离线导入及二次确认恢复默认目录；
+       - 在插件中心（`labels.ets`）与「天体数据 Hub」（`actions.ets`）正式激活 `Calendars` 与 `SolarSystemEditor` 一级控制面板入口。
+     - **阶段 2 统一抛光 9 套既有插件面板：** `ArchaeoLinesPanel`、`MeteorShowersPanel`、`Scenery3dPanel`、`NebulaTexturesPanel`、`NavStarsPanel`、`MosaicCameraPanel`、`AngleMeasurePanel`、`PointerCoordinatesPanel`、`TelescopePanel` 全面升级至 `UI_RADIUS_CARD (16vp)` / `UI_RADIUS_CONTROL (12vp)` 同心圆角、接入 `InfoTipButton` `ⓘ` 收纳大段解释与作者来源信息、接入 `uiFontSize` / `uiControlHeight` 与 `ClickEffectLevel.LIGHT`，并消除 `MeteorShowersPanel` 中 `duration + springMotion` 动效反模式。
+  3. **平板端面板竖向滑动根因修复（`MainWindowNativeNode.ets` + 11 套插件面板）：**
+     - 定位并移除平板浮动面板 `floatingPanel()` 内层 `Column` 遗留的 `.height('100%')`（此前 PR #11 仅移除了手机端 `compactPanel()` 的同类限制，导致平板端 `Scroll(this.widePanelScroller)` 内所有依赖宿主滚动的面板被锁死在 100% 视口高度而无法上下滑动）；
+     - 同步移除 11 套插件面板外层冗余嵌套 `Scroll().layoutWeight(1)`，统一共享宿主单层滚动并自动联动华为标题栏渐进动态模糊，且在 `test-ohos-astrocalc-multiworld.mjs` 增加防回退回归断言。
+- **验证与真机实测（MatePad Mini `192.168.31.234:42713`，`com.joinother.skyinstrument`）：**
+  - 主机验证：全部 19 套自动化契约与单元测试 100% 通过（`check-ohos-ui-contract.mjs` 39 面板 / 71 锚点一致，`check-ohos-command-catalog.mjs` 435 命令一致，新增 `test-ohos-astrocalc-multiworld.mjs` 与 `test-ohos-plugin-panels-phase23.mjs`）。
+  - 真机实拍与手势实测：验证平板端 `AstroPanel`（火星顶栏星体快切、火卫一卫全食/日环食卡片、月球 708.7h 太阳日年历）、`CalendarsPanel`（18 种历法清洁排版）、`MinorBodiesPanel`（477 颗小天体目录与千颗彗星导入）及 `MeteorShowersPanel` / `Scenery3dPanel` 全部上下滑动流畅、标题栏渐进模糊正常、`hilog` 零应用报错。
+
 ## [2026-11-21] 天象日历多维筛选模块（含近 48h 卫星过境与外星视角自适应）及桌面卡片全家桶圆角令牌统一
 
 - **修改文件：** `harmonyos/ets-source/state/AstronomyCalendarFilter.ts`（新增）、`harmonyos/ets-source/state/AstronomyCalendarEvent.ts`、`harmonyos/ets-source/state/AstronomyCalendarStore.ets`、`harmonyos/ets-source/state/SettingsRepository.ets`、`harmonyos/ets-source/capability/AstronomyCalendarController.ets`、`harmonyos/ets-source/panels/panels/AstronomyCalendarPanel.ets`、`harmonyos/ets-source/pages/MainWindowNativeNode.ets`、`harmonyos/ets-source/form/WidgetTokens.ts`（新增）、`harmonyos/ets-source/form/CelestialEventsCard.ets`、`harmonyos/ets-source/form/CompanionArcCard.ets`、`harmonyos/ets-source/form/SatellitePassCard.ets`、`harmonyos/ets-source/form/SkyFormEditPage.ets`、`harmonyos/ets-source/form/SkyLiveFormPage.ets`、`harmonyos/ets-source/form/SkyWindowCard.ets`、`harmonyos/ets-source/form/SolarArcCard.ets`、`harmonyos/ets-source/form/SolarSystemCard.ets`、`harmonyos/ets-source/form/WidgetVisuals.ets`、`scripts/test-ohos-calendar-filter.mjs`（新增）、`scripts/test-ohos-design-system-and-infotip.mjs`、`docs/harmonyos/CHANGELOG.md`。

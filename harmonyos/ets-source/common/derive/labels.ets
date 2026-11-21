@@ -322,6 +322,8 @@ export function pluginHostName(panel: string): string {
   if (panel === 'angleMeasure') return I18n.t('panel_angle_measure')
   if (panel === 'nebulaTextures') return I18n.t('nebula_texture_title')
   if (panel === 'skyCultureMaker') return I18n.t('sky_culture_maker_title')
+  if (panel === 'calendars') return I18n.getLanguage().startsWith('zh') ? '世界多历法' : 'World Calendars'
+  if (panel === 'minorBodies') return I18n.getLanguage().startsWith('zh') ? '太阳系小天体' : 'Minor Bodies'
   return panel
 }
 
@@ -339,6 +341,7 @@ export function pluginCategoryFor(id: string): string {
   if (id === 'Satellites' || id === 'MeteorShowers' || id === 'Scenery3d' ||
     id === 'Exoplanets' || id === 'Pulsars' || id === 'Quasars' ||
     id === 'Novae' || id === 'Supernovae' || id === 'Calendars' ||
+    id === 'SolarSystemEditor' ||
     id === 'Observability' || id === 'ObjectVisibility') {
     return 'data'
   }
@@ -365,7 +368,7 @@ export function pluginConciseSummary(id: string, fallbackDesc: string): string {
     case 'Quasars': return '探索遥远高红移类星体星表，快速跳转至星图对应深空区域。'
     case 'Novae': return '查阅历史明亮新星记录与爆发位置，重现历史天象。'
     case 'Supernovae': return '定位历史上著名超新星爆发位置与星等演化信息。'
-    case 'Calendars': return '对照公历、农历干支及多种历法节令，结合历表推演日期。'
+    case 'Calendars': return '实时换算公历、儒略历、中国农历干支、藏历、伊斯兰历、希伯来历、玛雅历等 18 种世界历法。'
     case 'Observability':
     case 'ObjectVisibility': return '分析目标全年的最佳观测窗口、中天高度与可观测时长曲线。'
     case 'SkyCultureMaker': return '绘制与导出自定义星座连线、边界与星官文化资源包。'
@@ -375,7 +378,7 @@ export function pluginConciseSummary(id: string, fallbackDesc: string): string {
     case 'RemoteControl': return '开启局域网 Web 远程控制台，用电脑浏览器或脚本遥控星图。'
     case 'TextUserInterface':
     case 'Text User Interface': return '通过快捷命令列表一键触发高级星图开关与专业指令。'
-    case 'SolarSystemEditor': return '管理小行星与彗星轨道根数（桌面配置模块，移动端规划接入中）。'
+    case 'SolarSystemEditor': return '离线浏览已加载彗星、小行星与矮行星，一键导入内置千颗彗星库或 MPC 单行轨道根数。'
     case 'RemoteSync': return '局域网多设备星图视角同步模块（当前离线模式未启用）。'
     case 'OnlineQueries': return '在线天文数据库检索模块（离线版为保护隐私已停用）。'
     case 'Planes': return '实时民航航班叠加模块（需在线航班源，离线版已停用）。'
@@ -398,7 +401,8 @@ export function pluginFeatureRoute(id: string): PluginFeatureRoute {
   if (id === 'TelescopeControl') return { panel: 'telescope', kind: 'control' }
   if (id === 'EquationOfTime') return { panel: 'time', kind: 'host' }
   if (id === 'TimeNavigator') return { panel: 'time', kind: 'host' }
-  if (id === 'Calendars') return { panel: 'astro', kind: 'host', astroTab: 8 }
+  if (id === 'Calendars') return { panel: 'calendars', kind: 'control' }
+  if (id === 'SolarSystemEditor') return { panel: 'minorBodies', kind: 'control' }
   if (id === 'Observability') return { panel: 'astro', kind: 'host', astroTab: 4, graphMode: 3 }
   if (id === 'ObjectVisibility') return { panel: 'astro', kind: 'host', astroTab: 4, graphMode: 3 }
   if (id === 'TextUserInterface' || id === 'Text User Interface') return { panel: 'commands', kind: 'host' }
@@ -414,7 +418,7 @@ export function pluginFeatureRoute(id: string): PluginFeatureRoute {
   if (id === 'OnlineQueries' || id === 'RemoteSync') {
     return { panel: '', kind: 'offline' }
   }
-  if (id === 'LensDistortionEstimator' || id === 'SolarSystemEditor' || id === 'Vts' ||
+  if (id === 'LensDistortionEstimator' || id === 'Vts' ||
     id === 'Oculus' || id === 'SimpleDrawLine' || id === 'HelloStelModule') {
     return { panel: '', kind: 'unavailable' }
   }
@@ -585,6 +589,12 @@ export function panelTitleFor(activePanel: string, configTab: number, isExpanded
   }
   if (activePanel === 'skyCultureMaker') {
     return I18n.t('sky_culture_maker_title')
+  }
+  if (activePanel === 'calendars') {
+    return I18n.getLanguage().startsWith('zh') ? '世界多历法' : 'World Calendars'
+  }
+  if (activePanel === 'minorBodies') {
+    return I18n.getLanguage().startsWith('zh') ? '太阳系小天体' : 'Minor Bodies'
   }
   if (activePanel === 'pointerCoordinates') {
     return I18n.t('p_pointer_coordinates')
