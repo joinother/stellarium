@@ -3787,6 +3787,8 @@ void Satellites::updateObserverLocation(const StelLocation &loc)
 	forceFullUpdate = true;
 	motionTrailActivity = 0.0;
 	motionTrailIdleSec = 0.0;
+	smoothedTimeVelSecPerSec = 0.0;
+	timeStepIdleSec = 0.0;
 	for (const auto& sat : std::as_const(satellites))
 	{
 		if (sat)
@@ -4491,21 +4493,30 @@ void Satellites::update(double deltaTime)
 
 	const quint32 tick = updateFrameCounter++;
 	const double dJD = JD - lastUpdateJD;
-	const double absRateX = (std::fabs(dJD) * 86400.0) / dtSec;
+	const double signedRateX = (dJD * 86400.0) / dtSec;
+	const double absRateX = std::fabs(signedRateX);
+	const double coreRateX = core->getTimeRate() * 86400.0;
 	const bool timeScrubJump = std::abs(dJD) > (5.0 / 86400.0)
 		|| qAbs(core->getTimeRate()) > (10.0 / 86400.0);
 
-	// Update snappy satellite streak envelope (smoothstep(clamp(2t, 0, 1)) at draw time)
+	// Track smooth signed simulated time velocity with a 95ms grace window to absorb
+	// asynchronous 16ms UI wheel ticks without stuttering or frame-to-frame dropouts.
 	if (std::fabs(dJD) > 0.015)
 	{
 		// Large single-frame calendar teleport: clear streak activity immediately
 		motionTrailActivity = 0.0;
 		motionTrailIdleSec = 0.0;
+		smoothedTimeVelSecPerSec = 0.0;
+		timeStepIdleSec = 0.0;
 	}
-	else if (absRateX > 16.0 || qAbs(core->getTimeRate()) * 86400.0 > 16.0)
+	else if (absRateX > 16.0 || std::fabs(coreRateX) > 16.0)
 	{
 		motionTrailIdleSec = 0.0;
-		const double effRate = qMax(absRateX, qAbs(core->getTimeRate()) * 86400.0);
+		timeStepIdleSec = 0.0;
+		const double instSignedRate = (absRateX >= std::fabs(coreRateX)) ? signedRateX : coreRateX;
+		const double effRate = std::fabs(instSignedRate);
+		const double velAttack = 1.0 - std::exp(-dtSec / 0.040);
+		smoothedTimeVelSecPerSec += (qBound(-20000.0, instSignedRate, 20000.0) - smoothedTimeVelSecPerSec) * velAttack;
 		// Perceptual log10 compression matching rapid orbital angular rates
 		const double targetAct = qBound(0.0, std::log10(qMax(1.0, effRate - 15.0)) / 2.6, 1.0);
 		const double attack = 1.0 - std::exp(-dtSec / 0.032);
@@ -4514,11 +4525,17 @@ void Satellites::update(double deltaTime)
 	else
 	{
 		motionTrailIdleSec += dtSec;
-		if (motionTrailIdleSec >= 0.045)
+		timeStepIdleSec += dtSec;
+		if (motionTrailIdleSec >= 0.095)
 		{
-			motionTrailActivity *= std::exp(-dtSec / 0.085);
+			const double decay = std::exp(-dtSec / 0.095);
+			motionTrailActivity *= decay;
+			smoothedTimeVelSecPerSec *= decay;
 			if (motionTrailActivity < 0.004)
+			{
 				motionTrailActivity = 0.0;
+				smoothedTimeVelSecPerSec = 0.0;
+			}
 		}
 	}
 #ifdef Q_OS_OHOS
@@ -4572,8 +4589,10 @@ void Satellites::update(double deltaTime)
 		// on the active render thread avoids waking all worker cores every frame
 		// (which otherwise triggers thermal throttling and starves GL draw calls).
 		static const QString grpStations = QStringLiteral("space stations");
+		static const QString grpStationsShort = QStringLiteral("stations");
 		static const QString grpVisual = QStringLiteral("visual");
 		const bool fastMotion = timeScrubJump || motionTrailActivity > 0.02;
+		const double curFovDeg = core->getMovementMgr() ? core->getMovementMgr()->getCurrentFov() : 60.0;
 		QVector<Satellite*> batch;
 		batch.reserve(1024);
 		for (int i = 0; i < satellites.size(); ++i)
@@ -4585,19 +4604,19 @@ void Satellites::update(double deltaTime)
 				|| sat == selectedSat
 				|| sat->isISS
 				|| sat->orbitDisplayed
-				|| sat->groups.contains(grpStations);
+				|| sat->lastFrameOnScreen
+				|| sat->groups.contains(grpStations)
+				|| sat->groups.contains(grpStationsShort);
 			if (tier0)
 			{
 				batch.append(sat);
 				continue;
 			}
 			quint32 stride = 64u;
-			if (sat->lastFrameOnScreen)
-				stride = fastMotion ? 1u : 3u;
-			else if (fastMotion && sat->elAzPosition[2] >= -0.02 && (sat->stdMag < 6.0 || sat->groups.contains(grpVisual)))
-				stride = 1u;
+			if (fastMotion && sat->elAzPosition[2] >= -0.025)
+				stride = (sat->stdMag < 9.5 || sat->groups.contains(grpVisual)) ? 1u : 2u;
 			else if (sat->elAzPosition[2] >= -0.035)
-				stride = fastMotion ? 6u : 16u;
+				stride = (curFovDeg < 30.0) ? 4u : 12u;
 			if (((static_cast<quint32>(i) + tick) % stride) == 0u)
 				batch.append(sat);
 		}
@@ -4761,7 +4780,7 @@ void Satellites::draw(StelCore* core)
 
 		if (st.projectable)
 		{
-			if (drawSatTrails && sat->motionTrail.size() >= 2 && sat->elAzPosition[2] >= -0.02)
+			if (drawSatTrails && sat->position.normSquared() > 1e6 && sat->velocity.normSquared() > 1e-4 && sat->elAzPosition[2] >= -0.02)
 				trailDraws.append(sat.data());
 			const bool isSelected = !selectedId.isEmpty() && sat->id == selectedId;
 			const bool isStation = sat->isISS
@@ -4900,6 +4919,25 @@ void Satellites::draw(StelCore* core)
 				satTrailVerts.append(b0); satTrailColors.append(cb0);
 			};
 
+			// Precompute observer ellipsoid frame once per draw call for analytic Keplerian streaks
+			const StelLocation& obsLoc = core->getCurrentLocation();
+			const double radLat = obsLoc.getLatitude() * M_PI_180;
+			const double sinLat = std::sin(radLat);
+			const double cosLat = std::cos(radLat);
+			const double theta0 = gTime(core->getJD()).toThetaLMST(obsLoc.getLongitude() * M_PI_180);
+			constexpr double kEarthRadiusKm = 6378.137;
+			constexpr double kEarthFlat = 1.0 / 298.257223563;
+			const double flatC = 1.0 / std::sqrt(1.0 + kEarthFlat * (kEarthFlat - 2.0) * sinLat * sinLat);
+			const double flatS = (1.0 - kEarthFlat) * (1.0 - kEarthFlat) * flatC;
+			const double rObs = (kEarthRadiusKm * flatC + obsLoc.altitude / 1000.0) * cosLat;
+			const double zObs = (kEarthRadiusKm * flatS + obsLoc.altitude / 1000.0) * sinLat;
+			constexpr double kMuEarth = 398600.4418;        // km^3 / s^2
+			constexpr double kOmegaEarth = 7.2921150e-5;    // rad / s
+			// Smooth exposure span driven by EMA-filtered signed time rate (zero frame-history stutter!)
+			const double rawSpanSec = smoothedTimeVelSecPerSec * 0.042;
+			const double signedSpanSec = qBound(-38.0, rawSpanSec, 38.0);
+			if (std::fabs(signedSpanSec) > 0.15)
+			{
 			for (const Satellite* sat : trailDraws)
 			{
 				const bool sunlit = (sat->visibility == gSatWrapper::VISIBLE);
@@ -4907,39 +4945,56 @@ void Satellites::draw(StelCore* core)
 				// Only sunlit & penumbral satellites draw sharp bright streaks; skip eclipsed dark bodies.
 				if (!sunlit && !penumbra)
 					continue;
-				const int rawN = sat->motionTrail.size();
-				if (rawN < 2)
+				const Vec3d& r0 = sat->position;
+				const Vec3d& v0 = sat->velocity;
+				const double rNorm = r0.norm();
+				if (!std::isfinite(rNorm) || rNorm < 1000.0)
 					continue;
+				const Vec3d a0 = r0 * (-kMuEarth / (rNorm * rNorm * rNorm));
 
-				rawPts.resize(rawN);
-				for (int k = 0; k < rawN; ++k)
-				{
-					Vec3d p = core->altAzToJ2000(sat->motionTrail[k].altAzUnit, StelCore::RefractionOff);
-					const double pn = p.norm();
-					rawPts[k] = (pn > 1e-10) ? (p / pn) : sat->XYZ;
-				}
-
-				// Trim backwards from the leading head so total streak length stays tight & razor-sharp.
+				// Evaluate 9 smooth evenly-spaced points backwards along the exact 2nd-order Keplerian arc
+				// from current epoch (k=0 -> head at dt=0) to trailing tail (k=8 -> dt=-signedSpanSec),
+				// then trim cleanly at maxArcRad so streaks stay uniform, silky, and zero-stutter.
+				constexpr int kSamples = 9;
 				trimmedPts.clear();
-				trimmedPts.append(rawPts.last());
+				trimmedPts.append(sat->XYZ);
 				double accumArc = 0.0;
-				for (int k = rawN - 2; k >= 0; --k)
+				for (int k = 1; k < kSamples; ++k)
 				{
+					const double dt = -signedSpanSec * (static_cast<double>(k) / static_cast<double>(kSamples - 1));
+					const Vec3d rSat = r0 + v0 * dt + a0 * (0.5 * dt * dt);
+					const double theta = theta0 + kOmegaEarth * dt;
+					const double sinT = std::sin(theta);
+					const double cosT = std::cos(theta);
+					const Vec3d slant(rSat[0] - rObs * cosT, rSat[1] - rObs * sinT, rSat[2] - zObs);
+					Vec3d elAz(
+						sinLat * cosT * slant[0] + sinLat * sinT * slant[1] - cosLat * slant[2],
+						-sinT * slant[0] + cosT * slant[1],
+						cosLat * cosT * slant[0] + cosLat * sinT * slant[1] + sinLat * slant[2]);
+					const double en = elAz.norm();
+					if (en < 1e-6)
+						break;
+					elAz /= en;
+					Vec3d p = core->altAzToJ2000(elAz, StelCore::RefractionOff);
+					const double pn = p.norm();
+					if (pn < 1e-10)
+						break;
+					p /= pn;
+
 					const Vec3d& prev = trimmedPts.last();
-					const Vec3d& cur = rawPts[k];
-					const double segAng = std::acos(qBound(-1.0, prev.dot(cur), 1.0));
+					const double segAng = std::acos(qBound(-1.0, prev.dot(p), 1.0));
 					if (segAng < 1e-6)
 						continue;
 					if (accumArc + segAng >= maxArcRad)
 					{
 						const double frac = qBound(0.0, (maxArcRad - accumArc) / segAng, 1.0);
-						Vec3d cut = prev * (1.0 - frac) + cur * frac;
+						Vec3d cut = prev * (1.0 - frac) + p * frac;
 						const double cn = cut.norm();
 						if (cn > 1e-10)
 							trimmedPts.append(cut / cn);
 						break;
 					}
-					trimmedPts.append(cur);
+					trimmedPts.append(p);
 					accumArc += segAng;
 				}
 				if (trimmedPts.size() < 2)
@@ -5046,6 +5101,7 @@ void Satellites::draw(StelCore* core)
 						satTrailVerts.append(pF); satTrailColors.append(hEdge);
 					}
 				}
+			}
 			}
 
 			if (!satTrailVerts.isEmpty())

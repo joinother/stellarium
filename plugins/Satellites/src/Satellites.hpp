@@ -998,6 +998,8 @@ private:
 	// Fast time-scrubbing satellite motion trail envelope
 	double motionTrailActivity = 0.0;
 	double motionTrailIdleSec = 0.0;
+	double smoothedTimeVelSecPerSec = 0.0;
+	double timeStepIdleSec = 0.0;
 	QVector<Vec3d> satTrailVerts;
 	QVector<Vec4f> satTrailColors;
 

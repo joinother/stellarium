@@ -210,7 +210,13 @@ void StelSkyDrawer::init()
 		"uniform sampler2D tex;\n"
 		"void main(void)\n"
 		"{\n"
-		"    FRAG_COLOR = texture2D(tex, texc)*vec4(outColor, 1.);\n"
+		"    mediump vec4 t = texture2D(tex, texc);\n"
+		"    mediump float g = t.r;\n"
+		"    mediump float lum = max(outColor.r, max(outColor.g, outColor.b));\n"
+		"    mediump float coreHot = smoothstep(0.60, 0.98, g) * smoothstep(0.55, 0.98, lum) * 0.56;\n"
+		"    mediump vec3 rgb = mix(outColor, vec3(lum), coreHot);\n"
+		"    mediump float haloBoost = 1.0 + 0.34 * smoothstep(0.03, 0.40, g) * (1.0 - smoothstep(0.42, 0.84, g));\n"
+		"    FRAG_COLOR = vec4(rgb * g * haloBoost, t.a);\n"
 		"}\n";
 	fshader.compileSourceCode(StelOpenGL::globalShaderPrefix(StelOpenGL::FRAGMENT_SHADER) + fsrc);
 	if (!fshader.log().isEmpty()) { qWarning() << "StelSkyDrawer::init(): Warnings while compiling fshader: " << fshader.log(); }
@@ -1036,6 +1042,31 @@ void StelSkyDrawer::initColorTableFromConfigFile(QSettings* conf)
 			else
 				c =Vec3f(s);
 			color_map[bV100*0.01f] = Gamma(eye->getDisplayGamma(),c);
+		}
+	}
+
+	if (color_map.size() <= 1)
+	{
+		// Rich, physically monotonic blackbody O-B-A-F-G-K-M spectral color stops.
+		// Replaces legacy washed-out pastel entries (including the non-monotonic blue
+		// rebound above B-V +1.5) so O/B sapphires, A ice-blues, F ivories, G golds,
+		// K ambers, and M fiery reds read vividly across both stars and star trails.
+		static const struct { float bv; float r; float g; float b; } kSpectralStops[] = {
+			{ -0.40f, 0.38f, 0.62f, 1.00f }, // O-type deep sapphire blue
+			{ -0.20f, 0.48f, 0.72f, 1.00f }, // B-type electric blue (Spica, Rigel, Bellatrix)
+			{ -0.05f, 0.68f, 0.84f, 1.00f }, // B9/A0 crisp glacial blue-white (Sirius, Vega)
+			{  0.10f, 0.86f, 0.93f, 1.00f }, // A-type cool crystal white (Altair, Deneb)
+			{  0.30f, 0.98f, 0.98f, 0.92f }, // F-type warm ivory-white (Procyon, Canopus)
+			{  0.55f, 1.00f, 0.92f, 0.68f }, // F8/G2 solar warm champagne-gold
+			{  0.80f, 1.00f, 0.82f, 0.46f }, // G8/K0 rich golden yellow (Capella, Pollux)
+			{  1.15f, 1.00f, 0.66f, 0.28f }, // K2/K5 vibrant amber-orange (Arcturus, Aldebaran)
+			{  1.55f, 1.00f, 0.48f, 0.17f }, // M0/M2 fiery orange-red (Betelgeuse, Antares)
+			{  2.10f, 1.00f, 0.34f, 0.12f }, // Late M / carbon deep ruby-amber
+			{  3.50f, 1.00f, 0.26f, 0.10f }, // Coolest carbon stars
+		};
+		for (const auto& stop : kSpectralStops)
+		{
+			color_map[stop.bv] = Gamma(eye->getDisplayGamma(), Vec3f(stop.r, stop.g, stop.b));
 		}
 	}
 

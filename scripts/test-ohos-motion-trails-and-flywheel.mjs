@@ -115,3 +115,30 @@ test('C++ star and satellite motion trails implement true spherical arcs, smooth
   assert.doesNotMatch(wheelSrc, /INERTIA_TIME_CONSTANT_MS/);
   assert.match(wheelSrc, /FLYWHEEL_ACCUMULATE_GAIN/);
 });
+
+test('vivid star spectral coloration, uniform photographic star trails, satellite selection suppression, and zero-stutter satellite cadence', () => {
+  const read = path => readFileSync(new URL('../' + path, import.meta.url), 'utf8');
+  const skyDrawer = read('src/core/StelSkyDrawer.cpp');
+  const starMgr = read('src/core/modules/StarMgr.cpp');
+  const satsCpp = read('plugins/Satellites/src/Satellites.cpp');
+  const mainView = read('src/StelMainView.cpp');
+
+  // Rich physically-monotonic B-V palette + chromatic halo / incandescent core fragment shader
+  assert.match(skyDrawer, /kSpectralStops/);
+  assert.match(skyDrawer, /coreHot/);
+  assert.match(skyDrawer, /haloBoost/);
+
+  // Suppress star trails when an artificial satellite is selected; uniform photographic ribbon otherwise
+  assert.match(starMgr, /const bool satelliteSelected = objectMgr && !objectMgr->getSelectedObject\("Satellite"\)\.isEmpty\(\);/);
+  assert.match(starMgr, /&& !satelliteSelected;/);
+  assert.match(starMgr, /auto endCapAlpha = \[\]\(float u\)/);
+  assert.doesNotMatch(starMgr, /1\.0 - 0\.56 \* static_cast<double>\(u0\)/);
+
+  // Zero-stutter satellite propagation: all on-screen satellites update every frame + analytic Keplerian streaks
+  assert.match(satsCpp, /\|\| sat->lastFrameOnScreen/);
+  assert.match(satsCpp, /smoothedTimeVelSecPerSec/);
+  assert.match(satsCpp, /constexpr double kMuEarth = 398600\.4418;/);
+
+  // HarmonyOS keeps interactive refresh rate when deeply zoomed in or tracking a selected satellite
+  assert.match(mainView, /const bool zoomedLiveMotion = fabs\(timeRate\) > 0\.0/);
+});

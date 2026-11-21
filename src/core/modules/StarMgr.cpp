@@ -1394,20 +1394,27 @@ void StarMgr::draw(StelCore* core)
 	const float starStreakScale = core->getFlagClearSky()? 1.0f:0.6f;
 	
 	// Draw all the stars of all the selected zones
+	const double absTrailArc = std::fabs(m_smoothedTrailAngleRad);
 	const bool collectTrails = flagMotionTrails
 		&& core->getFlagClearSky()
-		&& std::fabs(m_smoothedTrailAngleRad) > 0.0022;
+		&& absTrailArc > 0.0022;
+	float trailPointCrossfade = 0.0f;
 	if (collectTrails)
 	{
+		const float fadeS = static_cast<float>(qBound(0.0, (absTrailArc - 0.0022) / 0.015, 1.0));
+		trailPointCrossfade = fadeS * fadeS * (3.0f - 2.0f * fadeS);
 		m_trailSamples.clear();
 		if (m_trailSamples.capacity() < 1500)
 			m_trailSamples.reserve(1500);
 	}
+	const float pointRadiusAtten = 1.0f - 0.58f * trailPointCrossfade;
+	const float pointLumAtten = 1.0f - 0.72f * trailPointCrossfade;
 	for (const auto* z : std::as_const(gridLevels))
 	{
 		int limitMagIndex=RCMAG_TABLE_SIZE;
 		// overshoot by 7 mag because some stars (like HIP 16757) can get brighter than its catalogs min magnitude
 		const float mag_min = 0.001f*z->mag_min - 7.f;
+		const bool fadePointsForTrails = collectTrails && z->level <= 1;
 		for (int i=0;i<RCMAG_TABLE_SIZE;++i)
 		{
 			const float mag = mag_min+0.05*i;  // 0.05 mag MagStepIncrement
@@ -1428,8 +1435,8 @@ void StarMgr::draw(StelCore* core)
 				}
 				break;
 			}
-			rcmag_table[i].radius *= starsFader.getInterstate() * starStreakScale;
-			rcmag_table[i].luminance *= starStreakScale;
+			rcmag_table[i].radius *= starsFader.getInterstate() * starStreakScale * (fadePointsForTrails ? pointRadiusAtten : 1.0f);
+			rcmag_table[i].luminance *= starStreakScale * (fadePointsForTrails ? pointLumAtten : 1.0f);
 		}
 		lastMaxSearchLevel = z->level;
 
@@ -1534,9 +1541,11 @@ void StarMgr::update(double deltaTime)
 	m_timeSinceLastJdChange += dt;
 
 	StelMovementMgr* mmgr = core->getMovementMgr();
+	const bool satelliteSelected = objectMgr && !objectMgr->getSelectedObject("Satellite").isEmpty();
 	const bool diurnalViewActive = mmgr
 		&& mmgr->getMountMode() == StelMovementMgr::MountAltAzimuthal
-		&& !mmgr->getFlagTracking();
+		&& !mmgr->getFlagTracking()
+		&& !satelliteSelected;
 
 	if (!diurnalViewActive || !core->getFlagClearSky())
 	{
@@ -1637,9 +1646,9 @@ void StarMgr::drawMotionTrails(StelCore* core, StelPainter& sPainter)
 	axis /= axisNorm;
 
 	// Adaptive arc subdivision: guarantees smooth curved arcs around the celestial pole & wide FOV
-	const int segs = (absArc > 0.19) ? 12 : ((absArc > 0.10) ? 9 : ((absArc > 0.045) ? 6 : 4));
-	double cosT[13];
-	double sinT[13];
+	const int segs = (absArc > 0.19) ? 16 : ((absArc > 0.10) ? 12 : ((absArc > 0.045) ? 9 : 6));
+	double cosT[17];
+	double sinT[17];
 	for (int k = 0; k <= segs; ++k)
 	{
 		const double theta = arcRad * (static_cast<double>(k) / static_cast<double>(segs));
@@ -1661,38 +1670,47 @@ void StarMgr::drawMotionTrails(StelCore* core, StelPainter& sPainter)
 		m_trailColors.reserve(estimatedVerts);
 	}
 
-	Vec3d arcPts[13];
-	Vec3d sideVecs[13];
+	Vec3d arcPts[17];
+	Vec3d sideVecs[17];
 
-	auto appendRibbon = [&](double widthScale, float alphaScale, float whiteMixHead, const Vec3f& baseColor, float starLum, double baseHalfW) {
+	// Uniform long-exposure photographic star trail profile:
+	// constant width, constant spectral color, and even luminance across the body,
+	// with only a brief smooth anti-aliased feather at the two endpoints.
+	auto endCapAlpha = [](float u) -> float {
+		const float cap = 0.08f;
+		if (u < cap)
+		{
+			const float t = qBound(0.f, u / cap, 1.f);
+			return t * t * (3.f - 2.f * t);
+		}
+		if (u > 1.0f - cap)
+		{
+			const float t = qBound(0.f, (1.0f - u) / cap, 1.f);
+			return t * t * (3.f - 2.f * t);
+		}
+		return 1.0f;
+	};
+
+	auto appendRibbon = [&](double widthScale, float alphaScale, float whiteMix, const Vec3f& baseColor, float starLum, double baseHalfW) {
+		const double hw = baseHalfW * widthScale;
+		const Vec3f col(
+			baseColor[0] * (1.f - whiteMix) + whiteMix,
+			baseColor[1] * (1.f - whiteMix) + whiteMix,
+			baseColor[2] * (1.f - whiteMix) + whiteMix);
 		for (int k = 0; k < segs; ++k)
 		{
 			const float u0 = static_cast<float>(k) / static_cast<float>(segs);
 			const float u1 = static_cast<float>(k + 1) / static_cast<float>(segs);
 
-			const double hw0 = baseHalfW * widthScale * (1.0 - 0.56 * static_cast<double>(u0));
-			const double hw1 = baseHalfW * widthScale * (1.0 - 0.56 * static_cast<double>(u1));
+			const Vec3d p0L = arcPts[k] - sideVecs[k] * hw;
+			const Vec3d p0R = arcPts[k] + sideVecs[k] * hw;
+			const Vec3d p1L = arcPts[k + 1] - sideVecs[k + 1] * hw;
+			const Vec3d p1R = arcPts[k + 1] + sideVecs[k + 1] * hw;
 
-			const Vec3d p0L = arcPts[k] - sideVecs[k] * hw0;
-			const Vec3d p0R = arcPts[k] + sideVecs[k] * hw0;
-			const Vec3d p1L = arcPts[k + 1] - sideVecs[k + 1] * hw1;
-			const Vec3d p1R = arcPts[k + 1] + sideVecs[k + 1] * hw1;
-
-			const float fade0 = std::pow(1.0f - u0, 1.55f);
-			const float fade1 = std::pow(1.0f - u1, 1.55f);
-
-			const float w0 = whiteMixHead * (1.0f - u0);
-			const float w1 = whiteMixHead * (1.0f - u1);
-			const Vec4f c0(
-				baseColor[0] * (1.f - w0) + w0,
-				baseColor[1] * (1.f - w0) + w0,
-				baseColor[2] * (1.f - w0) + w0,
-				qBound(0.f, starLum * globalOpacity * alphaScale * fade0, 0.95f));
-			const Vec4f c1(
-				baseColor[0] * (1.f - w1) + w1,
-				baseColor[1] * (1.f - w1) + w1,
-				baseColor[2] * (1.f - w1) + w1,
-				qBound(0.f, starLum * globalOpacity * alphaScale * fade1, 0.95f));
+			const float a0 = qBound(0.f, starLum * globalOpacity * alphaScale * endCapAlpha(u0), 0.92f);
+			const float a1 = qBound(0.f, starLum * globalOpacity * alphaScale * endCapAlpha(u1), 0.92f);
+			const Vec4f c0(col[0], col[1], col[2], a0);
+			const Vec4f c1(col[0], col[1], col[2], a1);
 
 			m_trailVerts.append(p0L); m_trailColors.append(c0);
 			m_trailVerts.append(p0R); m_trailColors.append(c0);
@@ -1742,17 +1760,20 @@ void StarMgr::drawMotionTrails(StelCore* core, StelPainter& sPainter)
 		}
 
 		const Vec3f bvColor = StelSkyDrawer::indexToColor(sample.bvIndex);
-		const float lum = qBound(0.08f, sample.luminance, 1.0f);
-		// Match sleek astrophotography width: razor-fine for faint stars, glowing crisp needle for bright stars
-		const double pxRadius = qBound(0.50, static_cast<double>(sample.radius) * 0.34, 1.45) * screenScale;
-		const double baseHalfW = qBound(0.00008, pxRadius * radPerPx, 0.0022);
+		const float invRadiusAtten = 1.0f / qMax(0.25f, 1.0f - 0.58f * (fadeS * fadeS * (3.0f - 2.0f * fadeS)));
+		const float invLumAtten = 1.0f / qMax(0.20f, 1.0f - 0.72f * (fadeS * fadeS * (3.0f - 2.0f * fadeS)));
+		const float restoredRadius = sample.radius * invRadiusAtten;
+		const float lum = qBound(0.12f, sample.luminance * invLumAtten, 1.0f);
+		// Uniform photographic star-trail width proportional to star brightness
+		const double pxRadius = qBound(0.45, static_cast<double>(restoredRadius) * 0.30, 1.35) * screenScale;
+		const double baseHalfW = qBound(0.00007, pxRadius * radPerPx, 0.0020);
 
-		// Crisp spectral-tinted core streak
-		appendRibbon(1.0, 0.78f, 0.34f, bvColor, lum, baseHalfW);
-		// Soft luminous halo sheath on brightest stars (e.g., Altair, Vega, Sirius, Aldebaran)
-		if (sample.radius >= 1.75f && lum >= 0.45f)
+		// Uniform spectral-colored photographic core arc
+		appendRibbon(1.0, 0.78f, 0.08f, bvColor, lum, baseHalfW);
+		// Soft chromatic sheath on bright stars for smooth anti-aliased edge
+		if (restoredRadius >= 1.75f && lum >= 0.45f)
 		{
-			appendRibbon(2.35, 0.24f, 0.0f, bvColor, lum, baseHalfW);
+			appendRibbon(2.10, 0.24f, 0.0f, bvColor, lum, baseHalfW);
 		}
 	}
 

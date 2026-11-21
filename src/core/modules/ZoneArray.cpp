@@ -563,7 +563,7 @@ void SpecialZoneArray<Star>::draw(StelPainter* sPainter, int index, bool isInsid
 		}
 
 		const bool starDrawn = drawer->drawPointSource(sPainter, v, *tmpRcmag, s->getBVIndex(), !isInsideViewport, twinkleFactor);
-		if (starDrawn && trailSamples && trailSamples->size() < 1500 && tmpRcmag->luminance >= 0.055f && tmpRcmag->radius >= 0.35f)
+		if (starDrawn && trailSamples && trailSamples->size() < 1500 && tmpRcmag->luminance >= 0.015f && tmpRcmag->radius >= 0.15f)
 		{
 			trailSamples->append({ v, tmpRcmag->radius, tmpRcmag->luminance, static_cast<unsigned char>(s->getBVIndex()) });
 		}

@@ -24340,9 +24340,15 @@ bool StelMainView::needsMaxFPS() const
 	// The fps is also kept to max if the timerate is higher than normal speed.
 	const double timeRate = stelApp->getCore()->getTimeRate();
 #if defined(__OHOS__)
+	StelMovementMgr* moveMgr = stelApp->getCore()->getMovementMgr();
+	StelObjectMgr* objMgr = GETSTELMODULE(StelObjectMgr);
+	const bool satelliteSelected = objMgr && !objMgr->getSelectedObject("Satellite").isEmpty();
+	const bool zoomedLiveMotion = fabs(timeRate) > 0.0
+		&& ((moveMgr && moveMgr->getCurrentFov() < 28.0) || satelliteSelected);
 	return (now - lastEventTimeSec < 0.8) || s_ohosPanInertiaActive || s_ohosPinchActive ||
 		s_ohosPinchSettleActive || s_gyroTransitionActive ||
-		stelApp->getCore()->getMovementMgr()->getFlagAutoMove() ||
+		(moveMgr && moveMgr->getFlagAutoMove()) ||
+		zoomedLiveMotion ||
 		ohosTelescopeMarkerAnimating() || fabs(timeRate) > StelCore::JD_SECOND;
 #else
 	return (now - lastEventTimeSec < 4.0) || fabs(timeRate) > StelCore::JD_SECOND;
