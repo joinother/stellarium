@@ -76,7 +76,7 @@ export class PluginFeatureController {
         finish()
         callback()
       } else {
-        this.port.requestInteractive('loadPlugin', pluginName, (loadResult: StellariumBridgeResponse) => {
+        this.port.requestWhenReady('loadPlugin', pluginName, (loadResult: StellariumBridgeResponse) => {
           finish()
           if (loadResult.ok === true) {
             this.updatePluginLoadedItem(pluginName, true)
@@ -94,12 +94,12 @@ export class PluginFeatureController {
           finish()
           this.hooks.flashHint(I18n.t('plugin_load_failed'))
           if (failureCallback !== undefined) failureCallback()
-        })
+        }, 0, 150, 40)
       }
     }, () => {
       finish()
       if (failureCallback !== undefined) failureCallback()
-    }, 0, 100, 15)
+    }, 0, 150, 30)
   }
 
   // 把指定插件列表项的 loaded 标记整体重赋值。

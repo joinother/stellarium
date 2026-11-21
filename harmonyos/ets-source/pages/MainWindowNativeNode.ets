@@ -2077,9 +2077,8 @@ export struct WindowNativeNode {
     // OHOS 没有 PC 位置对话框中的“自动启用大气”选项：固定开启，返回地球时由核心
     // 恢复用户保存的大气/雾偏好。
     this.commandPort().requestWhenReady('applyEnvironmentDefaults', '', () => { this.refreshState() })
-    // 启动恢复上次观测点（含 GPS 定点）：不再每次重启回退引擎默认北京。引擎未就绪由
-    // setLocation 内的 callNativeWhenReady 重试兜底（起经位置控制器）。
-    this.locationCtl().restoreObserverLocation()
+    // 持久化观测点恢复统一在 StartupBridge.runStartupBridgeTasks() 中于引擎就绪后执行，
+    // 不在 aboutToAppear 提前下发（否则早于 Qt 核心初始化，1s 超时后误弹「切换观测点失败」）。
     this.timeStore.attachPort(hostPort, () => {})
     this.timeStore.attachHooks({
       // TimeStore 在 getNightMode 首次入队时记录该序号，回包到达时用它校验快照年龄。
@@ -2776,7 +2775,7 @@ export struct WindowNativeNode {
           setScriptMetadata: (raw: Object | undefined): void => { this.scriptPlaybackCtl().setScriptMetadata(raw) },
           reloadConfigurationSettings: (): void => { this.settingsCtl().loadConfigurationSettings() },
           // 引擎启动确认后由 StartupBridge 调用；立即读引擎状态，不排队、不延时。
-          refreshRuntimeState: (): void => { this.engineReady = true; this.refreshStateNow(); this.syncStarBrightnessFromEngine(); this.consumeCardRoute(); void this.notificationCtl().refreshSubscriptions(); this.scheduleCardSnapshotSync(1800) },
+          refreshRuntimeState: (): void => { this.engineReady = true; this.refreshStateNow(); this.callInteractive('setTouchPickRadius', this.viewSettingsStore.touchPickRadiusVp.toString(), () => {}); this.syncStarBrightnessFromEngine(); this.consumeCardRoute(); void this.notificationCtl().refreshSubscriptions(); this.scheduleCardSnapshotSync(1800) },
           // Startbridge 的「引擎就绪」以 StelApp::isInitialized() 为准：
           // 出帧就绪可能早于 init 完成，提前投放查询会在 init 期间堆积重试链。
           enginePresentationReady: (): boolean => isEngineReady()
@@ -4283,9 +4282,11 @@ export struct WindowNativeNode {
     this.calendarStore.satelliteSubFilter = settings.calendarSatSubFilter
     this.calendarStore.regionId = settings.calendarRegionId
     this.syncUiTypographyScale()
-    this.callInteractive('setTouchPickRadius', settings.touchPickRadiusVp.toString(), () => {})
-    if (this.startupBridgeImpl !== null) {
-      this.startupBridge().restoreStartupSettings()
+    if (this.engineReady) {
+      this.callInteractive('setTouchPickRadius', settings.touchPickRadiusVp.toString(), () => {})
+      if (this.startupBridgeImpl !== null) {
+        this.startupBridge().restoreStartupSettings()
+      }
     }
   }
 

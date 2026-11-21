@@ -232,7 +232,9 @@ export class LocationController {
     const complete = (response: StellariumBridgeResponse): void => {
       this.sessionToolStore.observerPlanetPending = false
       if (response.ok !== true) {
-        this.hooks.flashHint(I18n.t('loc_apply_failed'))
+        if (!silent) {
+          this.hooks.flashHint(I18n.t('loc_apply_failed'))
+        }
         this.hooks.loadObserverInfo()
         return
       }
@@ -251,7 +253,7 @@ export class LocationController {
     }
     this.port.requestWhenReady('setObserverPlanet',
       `${targetPlanet}|${latitude}|${longitude}|${Math.round(normalizedAltitude)}|${name.replace(/\|/g, ' ')}`,
-      complete, complete, 0, 100, 10)
+      complete, complete, 0, 150, 30)
   }
 
   private commitLocation(name: string, latitude: number, longitude: number, altitude: number, targetPlanet: string, source: string): void {
