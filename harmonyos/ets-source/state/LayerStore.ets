@@ -21,6 +21,7 @@ export class LayerStore {
   forcedStarTwinkle: boolean = false
   bigStarHalo: boolean = true
   starSpiky: boolean = false
+  starMotionTrails: boolean = true
   zodiacalLight: boolean = true
 
   // —— 太阳系 ——

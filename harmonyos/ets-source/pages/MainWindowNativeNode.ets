@@ -5334,6 +5334,7 @@ export struct WindowNativeNode {
       if (inside) {
         this.timeWheelTouchStartX = x
         this.timeWheelTouchStartY = y
+        this.wheel().captureSpinOnTouchDown()
       }
       return
     }
@@ -5347,8 +5348,9 @@ export struct WindowNativeNode {
       const dy = y - this.timeWheelTouchStartY
       if (Math.abs(dx) < 6 && Math.abs(dy) < 6) return
       if (Math.abs(dx) <= Math.abs(dy) * 1.2) {
-        // 竖向翻看：退出时间轮路由，交给面板 Scroll。
+        // 竖向翻看：退出时间轮路由，交给面板 Scroll，并恢复原先飞轮自转。
         this.timeWheelTouchPending = false
+        this.wheel().resumeCapturedSpinIfVerticalScroll()
         return
       }
       this.timeWheelTouchPending = false
@@ -5362,10 +5364,17 @@ export struct WindowNativeNode {
       return
     }
     if (event.type === TouchType.Up || event.type === TouchType.Cancel) {
+      const wasPending = this.timeWheelTouchPending
       const wasDragging = this.timeWheelTouchDragging
       this.timeWheelTouchPending = false
       this.timeWheelTouchDragging = false
-      if (!wasDragging) return
+      if (!wasDragging) {
+        if (wasPending) {
+          // 轻点正在旋转的时间轴：稳稳刹停飞轮。
+          this.wheel().brakeFromTap()
+        }
+        return
+      }
       this.wheel().endPan(event.type === TouchType.Cancel)
       if (event.type === TouchType.Cancel && this.timeWheelHapticEnabled) this.haptics().endRuler()
       this.timeWheelHapticStarted = false
@@ -8465,6 +8474,7 @@ export struct WindowNativeNode {
     if (result.forcedStarTwinkle !== undefined) this.layerStore.forcedStarTwinkle = result.forcedStarTwinkle === true
     if (result.bigStarHalo !== undefined) this.layerStore.bigStarHalo = result.bigStarHalo === true
     if (result.starSpiky !== undefined) this.layerStore.starSpiky = result.starSpiky === true
+    if (result.starMotionTrails !== undefined) this.layerStore.starMotionTrails = result.starMotionTrails === true
     if (result.meteorZhr !== undefined) this.layerViewStore.meteorZhr = Math.round(result.meteorZhr as number)
     if (result.meteorZhrMax !== undefined) this.layerViewStore.meteorZhrMax = Math.max(1000, Math.round(result.meteorZhrMax as number))
     if (result.meteorDrawSuppression !== undefined) this.layerViewStore.meteorDrawSuppression = result.meteorDrawSuppression as string

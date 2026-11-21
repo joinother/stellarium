@@ -64,9 +64,17 @@ export class TimeWheelStore {
   }
 
   dateAtFraction(baseMs: number, steps: number): Date {
+    const local = new Date(baseMs)
+    // 选中日期（年 / 月 / 日）时，严格只改日历日期，时针、分针、秒针保持完全静止。
+    if (this.timeWheelUnit === 'day') {
+      const daySteps = Math.round(steps)
+      if (daySteps !== 0) {
+        local.setUTCDate(local.getUTCDate() + daySteps)
+      }
+      return local
+    }
     const wholeSteps = steps >= 0 ? Math.floor(steps) : Math.ceil(steps)
     const fractionalSteps = steps - wholeSteps
-    const local = new Date(baseMs)
     this.shiftDate(local, wholeSteps)
     if (fractionalSteps === 0) { return local }
     const next = new Date(local.getTime())

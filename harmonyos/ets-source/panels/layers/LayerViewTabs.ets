@@ -255,6 +255,12 @@ export struct LayerSkyTab {
       if (this.layerStore.starTwinkle) {
         LayerSwitchRow({ label: '无大气时保持闪烁', isOn: this.layerStore.forcedStarTwinkle, onToggle: (value: boolean) => { this.onToggleLayer('forcedStarTwinkle', 'setSkyDisplayForcedTwinkle', value) } })
       }
+      LayerSwitchRow({
+        label: '调时星轨拖尾',
+        infoTip: '快速拨动时间轴、快进或倒带时，恒星与人造卫星沿真实周日与轨道弧线自然拉出光谱拖尾，停下后平滑收拢为锐利星点；拖动视角不产生伪拖尾。',
+        isOn: this.layerStore.starMotionTrails,
+        onToggle: (value: boolean) => { this.onSetSkyDisplay('starMotionTrails', value) }
+      })
       // ── 天空：天空背景与天象 ──
       Row().width('100%').height(0.5).backgroundColor(this.c.border).margin({ top: 5, bottom: 8 })
       Text('天空').fontSize(11).fontColor(this.c.sub).width('100%').margin({ bottom: 6 }).padding({ left: 2 })

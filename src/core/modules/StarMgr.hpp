@@ -38,6 +38,14 @@ class QSettings;
 class ZoneArray;
 struct HipIndexStruct;
 
+struct StarTrailSample
+{
+	Vec3d posJ2000;
+	float radius;
+	float luminance;
+	unsigned char bvIndex;
+};
+
 static const int RCMAG_TABLE_SIZE = 512;
 
 typedef struct
@@ -159,6 +167,11 @@ class StarMgr : public StelObjectModule
 		   WRITE setFlagHIPDesignation
 		   NOTIFY flagHIPDesignationChanged
 		   )
+	Q_PROPERTY(bool flagMotionTrails
+		   READ getFlagMotionTrails
+		   WRITE setFlagMotionTrails
+		   NOTIFY flagMotionTrailsChanged
+		   )
 
 public:
 	StarMgr(void);
@@ -179,8 +192,9 @@ public:
 	void draw(StelCore* core) override;
 
 	//! Update any time-dependent features.
-	//! Includes fading in and out stars and labels when they are turned on and off.
-	void update(double deltaTime) override {labelsFader.update(static_cast<int>(deltaTime*1000)); starsFader.update(static_cast<int>(deltaTime*1000));}
+	//! Includes fading in and out stars and labels when they are turned on and off,
+	//! plus smooth velocity-coupled diurnal motion trails during rapid time scrubbing.
+	void update(double deltaTime) override;
 
 	//! Used to determine the order in which the various StelModules are drawn.
 	double getCallOrder(StelModuleActionName actionName) const override;
@@ -298,6 +312,12 @@ public slots:
 	void setFlagHIPDesignation(const bool flag);
 	//! Get flag for usage Hipparcos catalog designations of stars.
 	static bool getFlagHIPDesignation(void) {return flagHIPDesignation; }
+
+	//! Enable or disable diurnal star & satellite motion trails during fast time scrubbing.
+	void setFlagMotionTrails(bool enabled);
+	bool getFlagMotionTrails() const { return flagMotionTrails; }
+	//! Current smoothed diurnal trail arc length in degrees (signed by time direction).
+	double getCurrentTrailAngleDeg() const;
 
 	//! Show additional star names.
 	void setFlagAdditionalNames(bool flag);
@@ -514,6 +534,7 @@ signals:
 	void flagVarStarsDesignationChanged(const bool flag);
 	void flagHIPDesignationChanged(const bool flag);
 	void flagAdditionalNamesDisplayedChanged(const bool displayed);
+	void flagMotionTrailsChanged(const bool enabled);
 	void labelsAmountChanged(double a);
 
 private:
@@ -665,6 +686,19 @@ private:
 	QString starConfigFileFullPath;
 	QVariantMap starSettings;
 	QVariantList catalogsDescription;
+
+	// Diurnal motion trails during rapid time scrubbing / fast-forward
+	void drawMotionTrails(StelCore* core, StelPainter& sPainter);
+	bool flagMotionTrails = true;
+	bool m_hasPrevTrailJDE = false;
+	double m_prevTrailJDE = 0.0;
+	double m_timeSinceLastJdChange = 0.0;
+	QString m_prevTrailObserverKey;
+	double m_smoothedAngularVel = 0.0;
+	double m_smoothedTrailAngleRad = 0.0;
+	QVector<StarTrailSample> m_trailSamples;
+	QVector<Vec3d> m_trailVerts;
+	QVector<Vec4f> m_trailColors;
 };
 
 

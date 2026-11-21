@@ -1,13 +1,12 @@
 import { TimeWheelStore } from './TimeWheelStore'
 
-// 惯性参数：原实现 0.90/16ms 的衰减只相当于约 152ms 时间常数，
-// 快速甩动时约 0.7 秒就停；现在改为约 420ms 时间常数，并提高
-// 初速度和最长持续时间，让快速甩动滑得更远、更自然。
-const INERTIA_VELOCITY_SCALE: number = 0.68
-const INERTIA_MAX_VELOCITY: number = 4.0
-const INERTIA_TIME_CONSTANT_MS: number = 420
-const INERTIA_STOP_VELOCITY: number = 0.03
-const INERTIA_MAX_DURATION_MS: number = 1800
+// 飞轮（「抽陀螺」）参数：无自动阻尼、无时长上限，连续同向甩动逐次叠加速度；
+// 反向甩动减速或反转；轻触/按住转轴即稳稳刹停。
+const FLYWHEEL_VELOCITY_SCALE: number = 0.78
+const FLYWHEEL_ACCUMULATE_GAIN: number = 0.92
+const FLYWHEEL_MAX_VELOCITY: number = 14.0
+const FLYWHEEL_START_VELOCITY: number = 0.06
+const FLYWHEEL_BRAKE_VELOCITY: number = 0.04
 
 // 时间轮只处理横向拖动。竖向滑动属于面板 Scroll（向下翻看时间设置），
 // 不能在 Down 上抢走手势、暂停时间或在轻微 x 抖动时改时间。
@@ -51,6 +50,9 @@ export class TimeWheelController {
   private inertiaLastMs: number = 0
   private inertiaStartedAt: number = 0
   private inertiaActive: boolean = false
+  private preTouchSpinVelocity: number = 0
+  private capturedSpinOnDown: boolean = false
+  private lastSentLocalMs: number = Number.NaN
   private lastVisualVelocity: number = 0
   // Haptic cadence is intentionally based on drag motion, not time-unit steps:
   // hour/month dragging needs hundreds of pixels per unit, so step-based ticks
@@ -83,9 +85,51 @@ export class TimeWheelController {
     return this.store.timeWheelDragging || this.inertiaActive
   }
 
+  isSpinning(): boolean {
+    return this.inertiaActive
+  }
+
+  // 轻触或起手落在正在旋转的时间轴上时，先暂存当前转速并暂停定时器：
+  // 若随后抬手（轻点）则刹停；若同向快甩则把新甩速叠加到原转速上（「抽陀螺」）。
+  captureSpinOnTouchDown(): boolean {
+    if (!this.inertiaActive) {
+      this.preTouchSpinVelocity = 0
+      this.capturedSpinOnDown = false
+      return false
+    }
+    this.preTouchSpinVelocity = this.inertiaVelocity
+    this.capturedSpinOnDown = true
+    this.pauseInertiaTimerOnly()
+    return true
+  }
+
+  brakeFromTap(): void {
+    if (!this.capturedSpinOnDown && !this.inertiaActive) { return }
+    this.capturedSpinOnDown = false
+    this.preTouchSpinVelocity = 0
+    this.stopInertia(true)
+  }
+
+  resumeCapturedSpinIfVerticalScroll(): void {
+    if (!this.capturedSpinOnDown || Math.abs(this.preTouchSpinVelocity) < FLYWHEEL_START_VELOCITY) {
+      this.capturedSpinOnDown = false
+      this.preTouchSpinVelocity = 0
+      return
+    }
+    const resumeVel = this.preTouchSpinVelocity
+    this.capturedSpinOnDown = false
+    this.preTouchSpinVelocity = 0
+    this.launchFlywheel(resumeVel)
+  }
+
   selectUnit(unit: string): void {
+    this.stopInertia(true)
     this.store.timeWheelUnit = unit
     this.store.timeWheelDragging = false
+    if (this.store.isCalendar()) {
+      // 选中日期（年 / 月 / 日）后立即冻结时钟走时，确保调整日期时时分秒完全静止。
+      this.onStopSpeed()
+    }
     this.rebaseTrack()
   }
 
@@ -106,7 +150,11 @@ export class TimeWheelController {
 
   // PanGesture 已确认横向意图后调用：直接进入拖动，不再做方向判定。
   beginPan(x: number, y: number): void {
-    this.stopInertia()
+    if (!this.capturedSpinOnDown) {
+      this.preTouchSpinVelocity = this.inertiaActive ? this.inertiaVelocity : 0
+    }
+    this.capturedSpinOnDown = false
+    this.pauseInertiaTimerOnly()
     this.touchPending = false
     this.pendingGestureBaseMs = Date.UTC(this.store.timeWheelYear, this.store.timeWheelMonth - 1,
       this.store.timeWheelDay, this.store.timeWheelHour, this.store.timeWheelMinute, this.store.timeWheelSecond)
@@ -126,7 +174,7 @@ export class TimeWheelController {
   }
 
   private handleDown(x: number, y: number): void {
-    this.stopInertia()
+    this.captureSpinOnTouchDown()
     // 先只记录起点，等 Move 判断方向。竖向手势必须留给面板 Scroll。
     this.touchPending = true
     this.touchStartX = x
@@ -149,9 +197,11 @@ export class TimeWheelController {
       if (Math.abs(totalDx) <= Math.abs(totalDy) * WHEEL_HORIZONTAL_RATIO) {
         // 竖向翻看：放弃时间轮手势，既不暂停时间也不改时间。
         this.touchPending = false
+        this.resumeCapturedSpinIfVerticalScroll()
         return
       }
       this.touchPending = false
+      this.capturedSpinOnDown = false
       this.beginWheelDrag()
       // 继续走下面的拖动分支，把本次 Move 的完整位移应用上去。
     }
@@ -188,8 +238,9 @@ export class TimeWheelController {
 
   private handleEnd(cancelled: boolean): void {
     if (this.touchPending && !this.store.timeWheelDragging) {
-      // 纯点击/竖向滑动，从未进入时间轮拖动。
+      // 纯点击落在正在旋转的轴上：立刻刹停；未旋转则无副作用。
       this.touchPending = false
+      this.brakeFromTap()
       return
     }
     this.touchPending = false
@@ -200,6 +251,7 @@ export class TimeWheelController {
     if (!cancelled) {
       this.startInertia()
     } else {
+      this.preTouchSpinVelocity = 0
       this.stopInertia()
     }
   }
@@ -277,10 +329,22 @@ export class TimeWheelController {
     if (this.store.timeWheelSecond !== second) { this.store.timeWheelSecond = second }
     if (refreshTicks) { this.store.refreshTicks() }
     if (sendNative) {
-      const targetJd = local.getTime() / 86400000.0 + 2440587.5 - this.getUtcOffsetHours() / 24.0
-      this.onSeek(targetJd)
-      this.lastNativePushMs = Date.now()
+      const localMs = local.getTime()
+      if (localMs !== this.lastSentLocalMs || !this.store.isCalendar()) {
+        this.lastSentLocalMs = localMs
+        const targetJd = localMs / 86400000.0 + 2440587.5 - this.getUtcOffsetHours() / 24.0
+        this.onSeek(targetJd)
+        this.lastNativePushMs = Date.now()
+      }
     }
+  }
+
+  private pauseInertiaTimerOnly(): void {
+    if (this.inertiaTimer !== 0) {
+      clearInterval(this.inertiaTimer)
+      this.inertiaTimer = 0
+    }
+    this.inertiaActive = false
   }
 
   private stopInertia(applyFinal: boolean = false): void {
@@ -291,27 +355,62 @@ export class TimeWheelController {
     const shouldApply = applyFinal && this.inertiaActive && this.gestureBaseMs > 0
     this.inertiaActive = false
     this.inertiaVelocity = 0
+    this.preTouchSpinVelocity = 0
+    this.capturedSpinOnDown = false
     if (shouldApply) {
-      // 不做整刻度吸附：当前时间可以停在轴的任意位置，转轮中央是一条
-      // 由时间决定的虚拟中心线，而不是某个刻度的中心。
       this.applyDate(this.store.dateAtFraction(this.gestureBaseMs, this.gestureSteps), false, true)
     }
   }
 
   private startInertia(): void {
-    this.stopInertia()
-    const rawVelocity = this.lastVisualVelocity * INERTIA_VELOCITY_SCALE
-    const initialVelocity = Math.max(-INERTIA_MAX_VELOCITY,
-      Math.min(INERTIA_MAX_VELOCITY, rawVelocity))
-    if (Math.abs(initialVelocity) < 0.06 || this.gestureBaseMs <= 0) { return }
+    const prevSpin = this.preTouchSpinVelocity
+    this.preTouchSpinVelocity = 0
+    this.capturedSpinOnDown = false
+    this.pauseInertiaTimerOnly()
+
+    const flickVelocity = this.lastVisualVelocity * FLYWHEEL_VELOCITY_SCALE
+    // 若用户在松手前停住手指（慢拖/按住刹停），直接停止而不延续旧转速
+    if (Math.abs(flickVelocity) < FLYWHEEL_BRAKE_VELOCITY || this.gestureBaseMs <= 0) {
+      this.inertiaVelocity = 0
+      return
+    }
+
+    let nextVelocity = 0
+    if (prevSpin !== 0) {
+      if ((flickVelocity > 0 && prevSpin > 0) || (flickVelocity < 0 && prevSpin < 0)) {
+        // 同向连续甩动：像抽陀螺一样逐次叠加速度
+        nextVelocity = prevSpin + flickVelocity * FLYWHEEL_ACCUMULATE_GAIN
+      } else {
+        // 反向甩动：抵消并可反向加速
+        nextVelocity = prevSpin + flickVelocity * 1.15
+      }
+    } else {
+      nextVelocity = flickVelocity
+    }
+
+    nextVelocity = Math.max(-FLYWHEEL_MAX_VELOCITY, Math.min(FLYWHEEL_MAX_VELOCITY, nextVelocity))
+    if (Math.abs(nextVelocity) < FLYWHEEL_START_VELOCITY) {
+      this.inertiaVelocity = 0
+      return
+    }
+    this.launchFlywheel(nextVelocity)
+  }
+
+  private launchFlywheel(velocity: number): void {
+    this.pauseInertiaTimerOnly()
+    if (this.gestureBaseMs <= 0) {
+      this.gestureBaseMs = Date.UTC(this.store.timeWheelYear, this.store.timeWheelMonth - 1,
+        this.store.timeWheelDay, this.store.timeWheelHour, this.store.timeWheelMinute, this.store.timeWheelSecond)
+      this.gestureSteps = 0
+    }
     this.inertiaActive = true
-    this.inertiaVelocity = initialVelocity
+    this.inertiaVelocity = velocity
     this.inertiaLastMs = Date.now()
     this.inertiaStartedAt = this.inertiaLastMs
     this.lastInertiaHapticMs = this.inertiaLastMs
     this.inertiaTimer = setInterval(() => {
       if (!this.inertiaActive || this.store.timeWheelDragging) {
-        this.stopInertia()
+        this.pauseInertiaTimerOnly()
         return
       }
       const now = Date.now()
@@ -332,12 +431,7 @@ export class TimeWheelController {
       if (Math.abs(this.store.timeWheelVisualOffset) >= this.store.tickSpacing * 8) {
         this.rebaseTrackAtCenter()
       }
-      // 时间常数衰减：与帧间隔无关，快速甩动不会被 16ms 定时器粒度影响。
-      this.inertiaVelocity *= Math.exp(-frameMs / INERTIA_TIME_CONSTANT_MS)
-      if (now - this.inertiaStartedAt >= INERTIA_MAX_DURATION_MS ||
-        Math.abs(this.inertiaVelocity) < INERTIA_STOP_VELOCITY) {
-        this.stopInertia(true)
-      }
+      // 无阻尼飞轮匀速持续旋转，直到用户再次拨动、点按刹停或切换单位/关闭面板。
     }, 16) as number
   }
 

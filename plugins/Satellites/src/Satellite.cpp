@@ -1487,6 +1487,7 @@ void Satellite::setNewTleElements(const QString& tle1, const QString& tle2)
 	pSatWrapper = new gSatWrapper(id, tle1, tle2);
 	orbitPoints.clear();
 	visibilityPoints.clear();
+	clearMotionTrail();
 	
 	parseInternationalDesignator(tle1);
 	calculateEpochFromLine1(tle1);
@@ -1519,6 +1520,7 @@ void Satellite::update(const StelCore *core, const double JD, bool updateOrbit)
 			range = 0.;
 			rangeRate = 0.;
 			visibility = gSatWrapper::UNKNOWN;
+			clearMotionTrail();
 			return;
 		}
 		position                 = pSatWrapper->getTEMEPos();
@@ -1537,6 +1539,50 @@ void Satellite::update(const StelCore *core, const double JD, bool updateOrbit)
 		pSatWrapper->getSlantRange(range, rangeRate);
 		visibility = pSatWrapper->getVisibilityPredict();
 		hasUpdatedOnce = true;
+
+		// Record bounded local-horizon motion sample for fast time-scrubbing ribbons.
+		// Never connects across horizon crossings, large calendar teleports, or time reversals.
+		if (elAzPosition[2] < -0.025)
+		{
+			if (!motionTrail.isEmpty())
+				clearMotionTrail();
+		}
+		else
+		{
+			const double dJD = JD - motionTrailLastJD;
+			if (motionTrail.isEmpty() || std::fabs(dJD) > 0.015)
+			{
+				motionTrail.clear();
+				motionTrail.append({ elAzPosition, JD, visibility });
+				motionTrailLastJD = JD;
+				motionTrailDir = 0;
+			}
+			else if (std::fabs(dJD) > (0.35 / 86400.0))
+			{
+				const int dir = (dJD > 0.0) ? 1 : -1;
+				const double cosAng = motionTrail.last().altAzUnit.dot(elAzPosition);
+				if ((motionTrailDir != 0 && dir != motionTrailDir) || cosAng < 0.70)
+				{
+					motionTrail.clear();
+					motionTrail.append({ elAzPosition, JD, visibility });
+					motionTrailLastJD = JD;
+					motionTrailDir = dir;
+				}
+				else if (cosAng < 0.9999994)
+				{
+					motionTrail.append({ elAzPosition, JD, visibility });
+					motionTrailLastJD = JD;
+					motionTrailDir = dir;
+					// Keep bounded short window (~6 min simulated time, max 12 samples)
+					const double maxSpanDays = 0.0042;
+					while (motionTrail.size() > 12 ||
+					       (motionTrail.size() > 2 && std::fabs(JD - motionTrail.first().jd) > maxSpanDays))
+					{
+						motionTrail.removeFirst();
+					}
+				}
+			}
+		}
 
 		// Compute phase angle via dot product (algebraically identical to spherical law of cosines,
 		// using the frame-precomputed Sun unit vector when called from Satellites::update()).

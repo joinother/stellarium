@@ -4661,6 +4661,11 @@ QJsonObject currentStateJson()
 		result["grsDrift"] = ssystem->getGrsDrift();
 		result["grsJd"] = ssystem->getGrsJD();
 	}
+	if (StarMgr* starMgr = GETSTELMODULE(StarMgr))
+	{
+		result["starMotionTrails"] = starMgr->getFlagMotionTrails();
+		result["starMotionTrailAngleDeg"] = starMgr->getCurrentTrailAngleDeg();
+	}
 	if (LandscapeMgr* landscape = GETSTELMODULE(LandscapeMgr))
 	{
 		StelModule* scenery = StelApp::getInstance().getModuleMgr().getModule("Scenery3d", true);
@@ -13061,6 +13066,11 @@ extern "C" __attribute__((visibility("default"))) const char* StellariumOhos_com
 			else if (setting == "forcedStarTwinkle") drawer->setFlagForcedTwinkle(enabled);
 			else if (setting == "bigStarHalo") drawer->setFlagDrawBigStarHalo(enabled);
 			else if (setting == "starSpiky") drawer->setFlagStarSpiky(enabled);
+			else if (setting == "starMotionTrails")
+			{
+				if (StarMgr* starMgr = GETSTELMODULE(StarMgr))
+					starMgr->setFlagMotionTrails(enabled);
+			}
 			else if (setting == "twinkleAmount")
 			{
 				bool ok = false;

@@ -114,7 +114,8 @@ public:
 					  const RCMag* rcmag_table, int limitMagIndex, StelCore* core,
 					  float maxMagStarName, float names_brightness,
 					  const QVector<SphericalCap>& boundingCaps,
-					  const bool withAberration, const Vec3d vel, const double withParallax, const Vec3d diffPos, const bool withCommonNameI18n) const = 0;
+					  const bool withAberration, const Vec3d vel, const double withParallax, const Vec3d diffPos, const bool withCommonNameI18n,
+					  QVector<StarTrailSample>* trailSamples = nullptr) const = 0;
 
 	//! Get whether or not the catalog was successfully loaded.
 	//! @return @c true if at least one zone was loaded, otherwise @c false
@@ -187,7 +188,8 @@ protected:
 		  const RCMag *rcmag_table, int limitMagIndex, StelCore* core,
 		  float maxMagStarName, float names_brightness,
 		  const QVector<SphericalCap>& boundingCaps,
-		  const bool withAberration, const Vec3d vel, const double withParallax, const Vec3d diffPos, const bool withCommonNameI18n) const override;
+		  const bool withAberration, const Vec3d vel, const double withParallax, const Vec3d diffPos, const bool withCommonNameI18n,
+		  QVector<StarTrailSample>* trailSamples = nullptr) const override;
 
 	void searchAround(const StelCore* core, int index, const Vec3d &v, const double withParallax, 
 					  const Vec3d diffPos, double cosLimFov, QList<StelObjectP > &result) override;

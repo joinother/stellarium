@@ -435,7 +435,8 @@ void SpecialZoneArray<Star>::draw(StelPainter* sPainter, int index, bool isInsid
 				  int limitMagIndex, StelCore* core, float maxMagStarName, float names_brightness,
 				  const QVector<SphericalCap> &boundingCaps,
 				  const bool withAberration, const Vec3d vel, const double withParallax, const Vec3d diffPos,
-				  const bool withCommonNameI18n) const
+				  const bool withCommonNameI18n,
+				  QVector<StarTrailSample>* trailSamples) const
 {
 	StelSkyDrawer* drawer = core->getSkyDrawer();
 	Vec3d v;
@@ -561,7 +562,12 @@ void SpecialZoneArray<Star>::draw(StelPainter* sPainter, int index, bool isInsid
 			twinkleFactor=qMin(1.0, 1.0-0.9*altAz[2]); // suppress twinkling in higher altitudes. Keep 0.1 twinkle amount in zenith.
 		}
 
-		if (drawer->drawPointSource(sPainter, v, *tmpRcmag, s->getBVIndex(), !isInsideViewport, twinkleFactor) && core->getFlagClearSky() && s->hasName() && extinctedMagIndex < maxMagStarName && s->hasComponentID()<=1)
+		const bool starDrawn = drawer->drawPointSource(sPainter, v, *tmpRcmag, s->getBVIndex(), !isInsideViewport, twinkleFactor);
+		if (starDrawn && trailSamples && trailSamples->size() < 1500 && tmpRcmag->luminance >= 0.055f && tmpRcmag->radius >= 0.35f)
+		{
+			trailSamples->append({ v, tmpRcmag->radius, tmpRcmag->luminance, static_cast<unsigned char>(s->getBVIndex()) });
+		}
+		if (starDrawn && core->getFlagClearSky() && s->hasName() && extinctedMagIndex < maxMagStarName && s->hasComponentID()<=1)
 		{
 			const float offset = tmpRcmag->radius*0.7f;
 			const Vec3f color = StelSkyDrawer::indexToColor(s->getBVIndex())*0.75f;

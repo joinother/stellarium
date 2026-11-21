@@ -282,6 +282,7 @@ export class LayerController {
     else if (setting === 'forcedStarTwinkle') this.layerStore.forcedStarTwinkle = value as boolean
     else if (setting === 'bigStarHalo') this.layerStore.bigStarHalo = value as boolean
     else if (setting === 'starSpiky') this.layerStore.starSpiky = value as boolean
+    else if (setting === 'starMotionTrails') this.layerStore.starMotionTrails = value as boolean
     else if (setting === 'bortleScale') this.layerViewStore.bortleScale = Math.round(value as number)
     else if (setting === 'meteorZhr') this.layerViewStore.meteorZhr = Math.round(value as number)
     else if (setting === 'zodiacalLight') this.layerStore.zodiacalLight = value as boolean

@@ -36,6 +36,7 @@
 #include "StelFileMgr.hpp"
 #include "StelModuleMgr.hpp"
 #include "StelCore.hpp"
+#include "StelMovementMgr.hpp"
 #include "StelPainter.hpp"
 #include "StelJsonParser.hpp"
 #include "ZoneArray.hpp"
@@ -401,6 +402,7 @@ void StarMgr::init()
 	setFlagDblStarsDesignation(conf->value("astro/flag_star_designation_dbl", false).toBool());
 	setFlagVarStarsDesignation(conf->value("astro/flag_star_designation_var", false).toBool());
 	setFlagHIPDesignation(conf->value("astro/flag_star_designation_hip", false).toBool());
+	setFlagMotionTrails(conf->value("stars/flag_motion_trails", true).toBool());
 
 	objectMgr->registerStelObjectMgr(this);
 	texPointer = StelApp::getInstance().getTextureManager().createTexture(StelFileMgr::getInstallationDir()+"/textures/pointeur2.png");   // Load pointer texture
@@ -1392,6 +1394,15 @@ void StarMgr::draw(StelCore* core)
 	const float starStreakScale = core->getFlagClearSky()? 1.0f:0.6f;
 	
 	// Draw all the stars of all the selected zones
+	const bool collectTrails = flagMotionTrails
+		&& core->getFlagClearSky()
+		&& std::fabs(m_smoothedTrailAngleRad) > 0.0022;
+	if (collectTrails)
+	{
+		m_trailSamples.clear();
+		if (m_trailSamples.capacity() < 1500)
+			m_trailSamples.reserve(1500);
+	}
 	for (const auto* z : std::as_const(gridLevels))
 	{
 		int limitMagIndex=RCMAG_TABLE_SIZE;
@@ -1439,21 +1450,322 @@ void StarMgr::draw(StelCore* core)
 		if (withParallax) {
 			diffPos = core->getParallaxDiff(core->getJDE());
 		}
+		QVector<StarTrailSample>* levelTrailSink = (collectTrails && z->level <= 1) ? &m_trailSamples : nullptr;
 		for (GeodesicSearchInsideIterator it1(*geodesic_search_result,z->level);(zone = it1.next()) >= 0;)
-			z->draw(&sPainter, zone, true, rcmag_table, limitMagIndex, core, maxMagStarName, names_brightness, viewportCaps, withAberration, vel, withParallax, diffPos, currentSkycultureUsesCommonStarnames);
+			z->draw(&sPainter, zone, true, rcmag_table, limitMagIndex, core, maxMagStarName, names_brightness, viewportCaps, withAberration, vel, withParallax, diffPos, currentSkycultureUsesCommonStarnames, levelTrailSink);
 		for (GeodesicSearchBorderIterator it1(*geodesic_search_result,z->level);(zone = it1.next()) >= 0;)
-			z->draw(&sPainter, zone, false, rcmag_table, limitMagIndex, core, maxMagStarName,names_brightness, viewportCaps, withAberration, vel, withParallax, diffPos, currentSkycultureUsesCommonStarnames);
+			z->draw(&sPainter, zone, false, rcmag_table, limitMagIndex, core, maxMagStarName,names_brightness, viewportCaps, withAberration, vel, withParallax, diffPos, currentSkycultureUsesCommonStarnames, levelTrailSink);
 		// always check the last zone because it is a global zone
-		z->draw(&sPainter, (20<<(z->level<<1)), false, rcmag_table, limitMagIndex, core, maxMagStarName, names_brightness, viewportCaps, withAberration, vel, withParallax, diffPos, currentSkycultureUsesCommonStarnames);
+		z->draw(&sPainter, (20<<(z->level<<1)), false, rcmag_table, limitMagIndex, core, maxMagStarName, names_brightness, viewportCaps, withAberration, vel, withParallax, diffPos, currentSkycultureUsesCommonStarnames, levelTrailSink);
 	}
 	exit_loop:
 
 	// Finish drawing many stars
 	skyDrawer->postDrawPointSource(&sPainter);
+
+	if (collectTrails && !m_trailSamples.isEmpty())
+		drawMotionTrails(core, sPainter);
+
 	sPainter.flushSkyLabels();
 
 	if (objectMgr->getFlagSelectedObjectPointer())
 		drawPointer(sPainter, core);
+}
+
+void StarMgr::setFlagMotionTrails(bool enabled)
+{
+	if (flagMotionTrails != enabled)
+	{
+		flagMotionTrails = enabled;
+		if (!flagMotionTrails)
+		{
+			m_smoothedAngularVel = 0.0;
+			m_smoothedTrailAngleRad = 0.0;
+		}
+		StelApp::immediateSave("stars/flag_motion_trails", enabled);
+		emit flagMotionTrailsChanged(enabled);
+	}
+}
+
+double StarMgr::getCurrentTrailAngleDeg() const
+{
+	return m_smoothedTrailAngleRad * M_180_PI;
+}
+
+void StarMgr::update(double deltaTime)
+{
+	labelsFader.update(static_cast<int>(deltaTime * 1000));
+	starsFader.update(static_cast<int>(deltaTime * 1000));
+
+	if (!flagMotionTrails)
+	{
+		m_smoothedAngularVel = 0.0;
+		m_smoothedTrailAngleRad = 0.0;
+		m_hasPrevTrailJDE = false;
+		return;
+	}
+
+	const double dt = qBound(0.001, deltaTime, 0.12);
+	StelCore* core = StelApp::getInstance().getCore();
+	if (!core)
+		return;
+
+	const double jde = core->getJDE();
+	const StelLocation& loc = core->getCurrentLocation();
+	const QString observerKey = QStringLiteral("%1|%2|%3")
+		.arg(loc.planetName)
+		.arg(qRound(loc.getLatitude() * 100.0))
+		.arg(qRound(loc.getLongitude() * 100.0));
+
+	// Discontinuity guard: reset trails immediately when observer planet or coordinates change.
+	if (!m_hasPrevTrailJDE || observerKey != m_prevTrailObserverKey)
+	{
+		m_hasPrevTrailJDE = true;
+		m_prevTrailJDE = jde;
+		m_prevTrailObserverKey = observerKey;
+		m_timeSinceLastJdChange = 0.0;
+		m_smoothedAngularVel = 0.0;
+		m_smoothedTrailAngleRad = 0.0;
+		return;
+	}
+
+	const double deltaJD = jde - m_prevTrailJDE;
+	m_prevTrailJDE = jde;
+	m_timeSinceLastJdChange += dt;
+
+	StelMovementMgr* mmgr = core->getMovementMgr();
+	const bool diurnalViewActive = mmgr
+		&& mmgr->getMountMode() == StelMovementMgr::MountAltAzimuthal
+		&& !mmgr->getFlagTracking();
+
+	if (!diurnalViewActive || !core->getFlagClearSky())
+	{
+		const double decay = std::exp(-dt / 0.10);
+		m_smoothedAngularVel *= decay;
+		m_smoothedTrailAngleRad *= decay;
+		return;
+	}
+
+	// Compute observer planet's true sidereal angular rate [rad / day]
+	double siderealDay = 0.99726968; // Earth fallback
+	if (const PlanetP planet = core->getCurrentPlanet())
+	{
+		const double sd = planet->getSiderealDay();
+		if (std::isfinite(sd) && std::fabs(sd) > 1e-4)
+			siderealDay = sd;
+	}
+	const double siderealRadPerDay = (2.0 * M_PI) / siderealDay;
+
+	const bool hasStep = std::fabs(deltaJD) > 1e-7;
+	if (hasStep)
+	{
+		const double stepElapsed = qBound(dt, m_timeSinceLastJdChange, 0.16);
+		m_timeSinceLastJdChange = 0.0;
+
+		// Cold one-shot calendar jump (e.g., jumping to another year while idle): do not flash bogus arcs.
+		if (std::fabs(deltaJD) > 0.45 && std::fabs(m_smoothedAngularVel) < 0.05)
+		{
+			m_smoothedAngularVel = 0.0;
+			m_smoothedTrailAngleRad = 0.0;
+			return;
+		}
+
+		double deltaTheta = deltaJD * siderealRadPerDay;
+		// For integer-day calendar scrubbing (same wall clock HH:MM:SS across consecutive days),
+		// wrap full 2pi rotations so trails follow the exact physical ~0.9856 deg/day seasonal drift!
+		if (std::fabs(deltaJD) >= 0.85)
+		{
+			double wrapped = std::fmod(deltaTheta + M_PI, 2.0 * M_PI);
+			if (wrapped < 0.0) wrapped += 2.0 * M_PI;
+			deltaTheta = wrapped - M_PI;
+		}
+		else
+		{
+			deltaTheta = qBound(-0.45, deltaTheta, 0.45);
+		}
+
+		const double instOmega = qBound(-8.0, deltaTheta / stepElapsed, 8.0);
+		const double attack = 1.0 - std::exp(-dt / 0.055);
+		m_smoothedAngularVel += (instOmega - m_smoothedAngularVel) * attack;
+	}
+	else if (m_timeSinceLastJdChange >= 0.095)
+	{
+		// Grace window (95ms) absorbs periodic 16-60ms wheel/transition ticks without pulsing;
+		// once truly idle, decay smoothly back into crisp pinpoint stars.
+		const double decay = std::exp(-dt / 0.13);
+		m_smoothedAngularVel *= decay;
+	}
+
+	// Deadzone keeps 1x real-time and gentle slow speeds razor-crisp pinpoints;
+	// above ~2.3 deg/s (~550x real-time or active time scrubbing), smoothly expand up to ~15 deg arcs.
+	const double deadzone = 0.040; // rad/s
+	const double absOmega = std::fabs(m_smoothedAngularVel);
+	double targetAngle = 0.0;
+	if (absOmega > deadzone)
+	{
+		const double sign = (m_smoothedAngularVel >= 0.0) ? 1.0 : -1.0;
+		const double maxArcRad = 0.265; // ~15.2 deg tasteful cinematic ceiling
+		const double rawArc = (absOmega - deadzone) * 0.115;
+		targetAngle = sign * maxArcRad * std::tanh(rawArc / maxArcRad);
+	}
+
+	const double tau = (std::fabs(targetAngle) > std::fabs(m_smoothedTrailAngleRad)) ? 0.055 : 0.135;
+	const double alpha = 1.0 - std::exp(-dt / tau);
+	m_smoothedTrailAngleRad += (targetAngle - m_smoothedTrailAngleRad) * alpha;
+	if (std::fabs(m_smoothedTrailAngleRad) < 1e-4 && std::fabs(targetAngle) < 1e-4)
+		m_smoothedTrailAngleRad = 0.0;
+}
+
+void StarMgr::drawMotionTrails(StelCore* core, StelPainter& sPainter)
+{
+	const double arcRad = m_smoothedTrailAngleRad;
+	const double absArc = std::fabs(arcRad);
+	if (absArc <= 0.0022 || m_trailSamples.isEmpty())
+		return;
+
+	// Smoothstep global alpha envelope for silky emergence and retraction
+	const float fadeS = static_cast<float>(qBound(0.0, (absArc - 0.0022) / 0.015, 1.0));
+	const float globalOpacity = fadeS * fadeS * (3.0f - 2.0f * fadeS) * starsFader.getInterstate();
+	if (globalOpacity <= 0.005f)
+		return;
+
+	// True instantaneous celestial rotation pole in J2000 (works for Earth and all observer planets)
+	Vec3d axis = core->equinoxEquToJ2000(Vec3d(0.0, 0.0, 1.0), StelCore::RefractionOff);
+	const double axisNorm = axis.norm();
+	if (axisNorm < 1e-9)
+		return;
+	axis /= axisNorm;
+
+	// Adaptive arc subdivision: guarantees smooth curved arcs around the celestial pole & wide FOV
+	const int segs = (absArc > 0.19) ? 12 : ((absArc > 0.10) ? 9 : ((absArc > 0.045) ? 6 : 4));
+	double cosT[13];
+	double sinT[13];
+	for (int k = 0; k <= segs; ++k)
+	{
+		const double theta = arcRad * (static_cast<double>(k) / static_cast<double>(segs));
+		cosT[k] = std::cos(theta);
+		sinT[k] = std::sin(theta);
+	}
+
+	const double fovDeg = qBound(0.5, core->getMovementMgr()->getCurrentFov(), 179.0);
+	const int vpH = sPainter.getProjector() ? sPainter.getProjector()->getViewportHeight() : 1080;
+	const double radPerPx = (fovDeg * M_PI / 180.0) / qMax(360.0, static_cast<double>(vpH));
+	const double screenScale = qBound(1.0, static_cast<double>(StelApp::getInstance().getScreenScale()), 3.5);
+
+	m_trailVerts.clear();
+	m_trailColors.clear();
+	const int estimatedVerts = m_trailSamples.size() * segs * 6 + 1024;
+	if (m_trailVerts.capacity() < estimatedVerts)
+	{
+		m_trailVerts.reserve(estimatedVerts);
+		m_trailColors.reserve(estimatedVerts);
+	}
+
+	Vec3d arcPts[13];
+	Vec3d sideVecs[13];
+
+	auto appendRibbon = [&](double widthScale, float alphaScale, float whiteMixHead, const Vec3f& baseColor, float starLum, double baseHalfW) {
+		for (int k = 0; k < segs; ++k)
+		{
+			const float u0 = static_cast<float>(k) / static_cast<float>(segs);
+			const float u1 = static_cast<float>(k + 1) / static_cast<float>(segs);
+
+			const double hw0 = baseHalfW * widthScale * (1.0 - 0.56 * static_cast<double>(u0));
+			const double hw1 = baseHalfW * widthScale * (1.0 - 0.56 * static_cast<double>(u1));
+
+			const Vec3d p0L = arcPts[k] - sideVecs[k] * hw0;
+			const Vec3d p0R = arcPts[k] + sideVecs[k] * hw0;
+			const Vec3d p1L = arcPts[k + 1] - sideVecs[k + 1] * hw1;
+			const Vec3d p1R = arcPts[k + 1] + sideVecs[k + 1] * hw1;
+
+			const float fade0 = std::pow(1.0f - u0, 1.55f);
+			const float fade1 = std::pow(1.0f - u1, 1.55f);
+
+			const float w0 = whiteMixHead * (1.0f - u0);
+			const float w1 = whiteMixHead * (1.0f - u1);
+			const Vec4f c0(
+				baseColor[0] * (1.f - w0) + w0,
+				baseColor[1] * (1.f - w0) + w0,
+				baseColor[2] * (1.f - w0) + w0,
+				qBound(0.f, starLum * globalOpacity * alphaScale * fade0, 0.95f));
+			const Vec4f c1(
+				baseColor[0] * (1.f - w1) + w1,
+				baseColor[1] * (1.f - w1) + w1,
+				baseColor[2] * (1.f - w1) + w1,
+				qBound(0.f, starLum * globalOpacity * alphaScale * fade1, 0.95f));
+
+			m_trailVerts.append(p0L); m_trailColors.append(c0);
+			m_trailVerts.append(p0R); m_trailColors.append(c0);
+			m_trailVerts.append(p1R); m_trailColors.append(c1);
+
+			m_trailVerts.append(p0L); m_trailColors.append(c0);
+			m_trailVerts.append(p1R); m_trailColors.append(c1);
+			m_trailVerts.append(p1L); m_trailColors.append(c1);
+		}
+	};
+
+	for (const StarTrailSample& sample : std::as_const(m_trailSamples))
+	{
+		const Vec3d& v = sample.posJ2000;
+		const double aDotV = axis.dot(v);
+		// Skip stars essentially on the exact celestial pole (angular displacement < 0.03 deg)
+		const Vec3d aCrossV = axis ^ v;
+		const double sinDistPole = aCrossV.norm();
+		if (sinDistPole * absArc < 0.0005)
+			continue;
+
+		const Vec3d projAxis = axis * aDotV;
+		for (int k = 0; k <= segs; ++k)
+		{
+			// Rodrigues' rotation formula around celestial pole (zero trig calls per star!)
+			arcPts[k] = v * cosT[k] + aCrossV * sinT[k] + projAxis * (1.0 - cosT[k]);
+		}
+
+		Vec3d lastSide(1., 0., 0.);
+		for (int k = 0; k <= segs; ++k)
+		{
+			const int kp = qMax(0, k - 1);
+			const int kn = qMin(segs, k + 1);
+			Vec3d tangent = arcPts[kn] - arcPts[kp];
+			Vec3d side = arcPts[k] ^ tangent;
+			const double sn = side.norm();
+			if (sn > 1e-10)
+			{
+				side /= sn;
+				lastSide = side;
+			}
+			else
+			{
+				side = lastSide;
+			}
+			sideVecs[k] = side;
+		}
+
+		const Vec3f bvColor = StelSkyDrawer::indexToColor(sample.bvIndex);
+		const float lum = qBound(0.08f, sample.luminance, 1.0f);
+		// Match sleek astrophotography width: razor-fine for faint stars, glowing crisp needle for bright stars
+		const double pxRadius = qBound(0.50, static_cast<double>(sample.radius) * 0.34, 1.45) * screenScale;
+		const double baseHalfW = qBound(0.00008, pxRadius * radPerPx, 0.0022);
+
+		// Crisp spectral-tinted core streak
+		appendRibbon(1.0, 0.78f, 0.34f, bvColor, lum, baseHalfW);
+		// Soft luminous halo sheath on brightest stars (e.g., Altair, Vega, Sirius, Aldebaran)
+		if (sample.radius >= 1.75f && lum >= 0.45f)
+		{
+			appendRibbon(2.35, 0.24f, 0.0f, bvColor, lum, baseHalfW);
+		}
+	}
+
+	if (m_trailVerts.isEmpty())
+		return;
+
+	sPainter.setBlending(true, GL_SRC_ALPHA, GL_ONE);
+	sPainter.enableClientStates(true, false, true);
+	sPainter.setVertexPointer(3, GL_DOUBLE, m_trailVerts.constData());
+	sPainter.setColorPointer(4, GL_FLOAT, m_trailColors.constData());
+	sPainter.drawFromArray(StelPainter::Triangles, m_trailVerts.size(), 0, true);
+	sPainter.setBlending(false);
+	sPainter.enableClientStates(false);
 }
 
 

@@ -990,6 +990,12 @@ private:
 #endif
 	QMultiMap<QString, QString> satSuperGroupsMap;
 
+	// Fast time-scrubbing satellite motion trail envelope
+	double motionTrailActivity = 0.0;
+	double motionTrailIdleSec = 0.0;
+	QVector<Vec3d> satTrailVerts;
+	QVector<Vec4f> satTrailColors;
+
 	static QString SatellitesCatalogVersion;
 
 private slots:

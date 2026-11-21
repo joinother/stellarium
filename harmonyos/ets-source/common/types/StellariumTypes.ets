@@ -759,6 +759,8 @@ export interface StellariumBridgeResponse {
   forcedStarTwinkle?: boolean
   bigStarHalo?: boolean
   starSpiky?: boolean
+  starMotionTrails?: boolean
+  starMotionTrailAngleDeg?: number
   twinkleAmount?: number
   bortleScale?: number
   meteorZhr?: number

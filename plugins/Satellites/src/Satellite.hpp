@@ -295,6 +295,8 @@ public:
 
 	// when the observer location changes we need to
 	void recalculateOrbitLines(void);
+	//! Clear transient motion trail history (on location/TLE/discontinuity invalidation).
+	void clearMotionTrail() { motionTrail.clear(); motionTrailLastJD = 0.; motionTrailDir = 0; }
 	
 	void setNew() {newlyAdded = true;}
 	bool isNew() const {return newlyAdded;}
@@ -526,6 +528,17 @@ private:
 	QList<Vec4d> orbitPoints; //orbit points represented by ElAzPos vectors and altitudes
 	QList<gSatWrapper::Visibility> visibilityPoints; //orbit visibility points
 	QMap<gSatWrapper::Visibility, QString> visibilityDescription;
+
+	// Bounded recent AltAz motion trail for fast time-scrubbing ribbons
+	struct SatMotionSample
+	{
+		Vec3d altAzUnit;
+		double jd;
+		gSatWrapper::Visibility visibility;
+	};
+	QVector<SatMotionSample> motionTrail;
+	double motionTrailLastJD = 0.;
+	int motionTrailDir = 0;
 };
 
 typedef QSharedPointer<Satellite> SatelliteP;
