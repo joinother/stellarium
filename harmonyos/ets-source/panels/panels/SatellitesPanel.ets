@@ -739,7 +739,7 @@ export struct SatellitesPanel {
         if (this.satelliteStore.satUpdateSettings.updatesEnabled && !this.satelliteStore.satOffline) {
           Row({ space: 6 }) {
             Text(this.isZh() ? '刷新周期' : 'Interval').fontSize(12).fontColor(this.c.sub).layoutWeight(1)
-            ForEach([12, 24, 72], (hours: number) => {
+            ForEach([2, 6, 12, 24], (hours: number) => {
               Text(`${hours}h`)
                 .fontSize(11.5)
                 .fontWeight(this.satelliteStore.satUpdateSettings.updateFrequencyHours === hours ? FontWeight.Medium : FontWeight.Normal)

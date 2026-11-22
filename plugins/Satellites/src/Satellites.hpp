@@ -123,6 +123,7 @@ struct TleSource
 	QString mirrorStatus;
 	QByteArray mirrorSha256;
 	qint64 mirrorBytes = 0;
+	bool skippedUnchanged = false;
 };
 
 //! @ingroup satellites

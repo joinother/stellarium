@@ -233,6 +233,33 @@ static QDateTime satelliteManifestDate(const QJsonValue& value)
 	return QDateTime::fromString(text, Qt::ISODateWithMs);
 }
 
+static QHash<QString, QByteArray> loadCachedSatelliteMirrorSha256()
+{
+	QHash<QString, QByteArray> out;
+	const QByteArray raw = StelApp::getInstance().getSettings()->value("Satellites/mirror_source_sha256").toString().toUtf8();
+	if (raw.isEmpty()) return out;
+	const QJsonDocument doc = QJsonDocument::fromJson(raw);
+	if (!doc.isObject()) return out;
+	const QJsonObject obj = doc.object();
+	for (auto it = obj.constBegin(); it != obj.constEnd(); ++it)
+	{
+		const QByteArray digest = it.value().toString().toLatin1().toLower();
+		if (digest.size() == 64) out.insert(it.key(), digest);
+	}
+	return out;
+}
+
+static void saveCachedSatelliteMirrorSha256(const QHash<QString, QByteArray>& hashes)
+{
+	QJsonObject obj;
+	for (auto it = hashes.constBegin(); it != hashes.constEnd(); ++it)
+		obj.insert(it.key(), QString::fromLatin1(it.value()));
+	QSettings* settings = StelApp::getInstance().getSettings();
+	settings->setValue("Satellites/mirror_source_sha256",
+		QString::fromUtf8(QJsonDocument(obj).toJson(QJsonDocument::Compact)));
+	settings->sync();
+}
+
 static void applySatelliteManifest(const QByteArray& payload, TleSourceList& sources, const QDateTime& now)
 {
 	for (TleSource& source : sources)
@@ -240,6 +267,7 @@ static void applySatelliteManifest(const QByteArray& payload, TleSourceList& sou
 		source.mirrorStatus = isSatelliteMirror(source.url) ? QStringLiteral("unavailable") : QString();
 		source.mirrorSha256.clear();
 		source.mirrorBytes = 0;
+		source.skippedUnchanged = false;
 	}
 	if (payload.isEmpty() || payload.size() > satelliteManifestMaxBytes) return;
 	const QJsonDocument document = QJsonDocument::fromJson(payload);
@@ -849,8 +877,10 @@ void Satellites::init()
 	createSuperGroupsList();
 
 	updateState = CompleteNoUpdates;
-	connect(this, &Satellites::updateStateChanged, this, [](UpdateState state) {
+	connect(this, &Satellites::updateStateChanged, this, [this](UpdateState state) {
 		if (state == Updating) return;
+		if (state == CompleteNoUpdates)
+			markLastUpdate();
 		QSettings* settings = StelApp::getInstance().getSettings();
 		settings->setValue("Satellites/last_check_at", QDateTime::currentDateTimeUtc().toString(Qt::ISODateWithMs));
 		settings->setValue("Satellites/last_check_result", static_cast<int>(state));
@@ -1437,9 +1467,11 @@ void Satellites::restoreDefaultTleSources()
 		else
 			urls << url;
 	}
+#if !defined(Q_OS_OHOS) && !defined(__OHOS__)
 	// Other sources and supplemental data from Celestrack
 	urls << "https://www.amsat.org/amsat/ftp/keps/current/nasabare.txt"
 	      << "https://mmccants.org/tles/classfd.zip";
+#endif
 
 	saveTleSources(urls);
 }
@@ -1458,7 +1490,7 @@ void Satellites::restoreDefaultSettings()
 #else
 	conf->setValue("show_satellite_labels", false);
 #endif
-#if defined(Q_OS_OHOS)
+#if defined(STELLARIUM_OHOS_OFFLINE)
 	conf->setValue("updates_enabled", false);
 #else
 	conf->setValue("updates_enabled", true);
@@ -1469,7 +1501,11 @@ void Satellites::restoreDefaultSettings()
 	conf->setValue("invisible_satellite_color", "0.2,0.2,0.2");
 	conf->setValue("transit_satellite_color", "0.0,0.0,0.0");
 	conf->setValue("hint_font_size", 10);
+#if defined(Q_OS_OHOS)
+	conf->setValue("update_frequency_hours", 2);
+#else
 	conf->setValue("update_frequency_hours", 72);
+#endif
 #ifdef Q_OS_OHOS
 	conf->setValue("orbit_line_flag", true);
 	conf->setValue("orbit_line_segments", 180);
@@ -1636,8 +1672,8 @@ void Satellites::loadSettings()
 		}
 	}
 
-#if defined(__OHOS__)
-	// 老配置里存的是 celestrak.org 直连地址；迁移到镜像，避免国内刷新超时/403。
+#if defined(Q_OS_OHOS) || defined(__OHOS__)
+	// 老配置里存的是 celestrak.org/amsat/mmccants 境外直连地址；迁移/清理到境内镜像，避免刷新超时/403。
 	{
 		QStringList migrated;
 		bool changed = false;
@@ -1645,6 +1681,12 @@ void Satellites::loadSettings()
 		{
 			const bool autoAdd = entry.startsWith(QStringLiteral("1,"));
 			const QString url = autoAdd ? entry.mid(2) : entry;
+			if (url.contains(QStringLiteral("amsat.org"), Qt::CaseInsensitive)
+				|| url.contains(QStringLiteral("mmccants.org"), Qt::CaseInsensitive))
+			{
+				changed = true;
+				continue;
+			}
 			const QString mirrored = ohosMirrorTleUrl(url);
 			if (mirrored != url)
 				changed = true;
@@ -1652,9 +1694,10 @@ void Satellites::loadSettings()
 		}
 		if (changed)
 		{
+			updateUrls = migrated;
 			conf->endGroup();
 			saveTleSources(migrated);
-			qWarning() << "[Satellites] migrated CelesTrak sources to the OHOS mirror";
+			qWarning() << "[Satellites] migrated CelesTrak sources to the OHOS mirror and removed legacy direct URLs";
 			conf->beginGroup("Satellites");
 		}
 	}
@@ -1663,7 +1706,11 @@ void Satellites::loadSettings()
 	// NOTE: Providing default values AND using restoreDefaultSettings() to create the section seems redundant. --BM 
 	
 	// updater related settings...
+#if defined(Q_OS_OHOS)
+	updateFrequencyHours = conf->value("update_frequency_hours", 2).toInt();
+#else
 	updateFrequencyHours = conf->value("update_frequency_hours", 72).toInt();
+#endif
 	// last update default is the first Towel Day.  <3 DA
 	setLastUpdate(QDateTime::fromString(conf->value("last_update", "2001-05-25T12:00:00").toString(), Qt::ISODate));
 	nextAutomaticUpdateAttempt = QDateTime::fromString(conf->value("next_automatic_update_attempt").toString(), Qt::ISODate);
@@ -1677,7 +1724,16 @@ void Satellites::loadSettings()
 #if defined(STELLARIUM_OHOS_OFFLINE)
 	updatesEnabled = false;
 #elif defined(Q_OS_OHOS)
-	updatesEnabled = conf->value("updates_enabled", false).toBool();
+	updatesEnabled = conf->value("updates_enabled", true).toBool();
+	if (!conf->value("ohos_sat_update_2h_migrated", false).toBool())
+	{
+		if (updateFrequencyHours >= 72 || updateFrequencyHours <= 0)
+			updateFrequencyHours = 2;
+		updatesEnabled = true;
+		conf->setValue("update_frequency_hours", updateFrequencyHours);
+		conf->setValue("updates_enabled", true);
+		conf->setValue("ohos_sat_update_2h_migrated", true);
+	}
 #else
 	updatesEnabled = conf->value("updates_enabled", true).toBool();
 #endif
@@ -3647,6 +3703,7 @@ void Satellites::updateFromOnlineSources()
 		request.setAttribute(QNetworkRequest::CacheLoadControlAttribute, QNetworkRequest::AlwaysNetwork);
 		QNetworkReply* reply = downloadMgr->get(request);
 		reply->setProperty("satelliteManifest", true);
+		reply->setProperty("satelliteScheduledUpdate", scheduledUpdate);
 		reply->setReadBufferSize(satelliteManifestMaxBytes + 1);
 		connect(reply, &QNetworkReply::readyRead, reply, [reply]() {
 			QByteArray payload = reply->property("manifestPayload").toByteArray();
@@ -3707,7 +3764,7 @@ void Satellites::pumpSourceDownloads()
 	{
 		const int index = nextDownloadIndex++;
 		const TleSource& source = updateSources.at(index);
-		if (source.mirrorStatus == QStringLiteral("unavailable"))
+		if (source.mirrorStatus == QStringLiteral("unavailable") || source.skippedUnchanged)
 		{
 			++numberDownloadsComplete;
 			continue;
@@ -3741,6 +3798,19 @@ void Satellites::saveDownloadedUpdate(QNetworkReply* reply)
 		if (reply->error() != QNetworkReply::NoError || reply->attribute(QNetworkRequest::HttpStatusCodeAttribute).toInt() != 200) payload.clear();
 		const QDateTime now = QDateTime::currentDateTimeUtc();
 		applySatelliteManifest(payload, updateSources, now);
+		if (reply->property("satelliteScheduledUpdate").toBool())
+		{
+			const QHash<QString, QByteArray> cachedHashes = loadCachedSatelliteMirrorSha256();
+			for (TleSource& source : updateSources)
+			{
+				if (!source.mirrorSha256.isEmpty()
+					&& (source.mirrorStatus == QStringLiteral("fresh") || source.mirrorStatus == QStringLiteral("stale"))
+					&& cachedHashes.value(source.url.path()) == source.mirrorSha256)
+				{
+					source.skippedUnchanged = true;
+				}
+			}
+		}
 		StelApp::getInstance().getSettings()->setValue("Satellites/mirror_checked_at", now.toString(Qt::ISODateWithMs));
 		saveMirrorSummary();
 		startSourceDownloads();
@@ -3822,8 +3892,16 @@ void Satellites::finishDownloadBatch()
 	// All files have been downloaded, finish the update
 	TleDataHash newData;
 	bool complete = !updateSources.isEmpty();
+	int skippedUnchangedCount = 0;
+	QHash<QString, QByteArray> cachedHashes = loadCachedSatelliteMirrorSha256();
+	bool hashesDirty = false;
 	for (int i = 0; i < updateSources.count(); i++)
 	{
+		if (updateSources[i].skippedUnchanged)
+		{
+			++skippedUnchangedCount;
+			continue;
+		}
 		if (!updateSources[i].mirrorStatus.isEmpty() && updateSources[i].mirrorStatus != QStringLiteral("fresh")) complete = false;
 		if (!updateSources[i].file)
 		{
@@ -3833,9 +3911,18 @@ void Satellites::finishDownloadBatch()
 		if (updateSources[i].file->open(QFile::ReadOnly|QFile::Text))
 		{
 			parseDataFile(*updateSources[i].file, newData, updateSources[i].addNew, updateSources[i].url.toString(QUrl::None));
-			complete = updateSources[i].file->property("tleParseComplete").toBool() && complete;
-			if (!updateSources[i].file->property("tleParseComplete").toBool() && !updateSources[i].mirrorStatus.isEmpty())
+			const bool parsedOk = updateSources[i].file->property("tleParseComplete").toBool();
+			complete = parsedOk && complete;
+			if (!parsedOk && !updateSources[i].mirrorStatus.isEmpty())
 				updateSources[i].mirrorStatus = QStringLiteral("unavailable");
+			else if (parsedOk && !updateSources[i].mirrorSha256.isEmpty())
+			{
+				if (cachedHashes.value(updateSources[i].url.path()) != updateSources[i].mirrorSha256)
+				{
+					cachedHashes.insert(updateSources[i].url.path(), updateSources[i].mirrorSha256);
+					hashesDirty = true;
+				}
+			}
 			updateSources[i].file->close();
 		}
 		else
@@ -3847,11 +3934,19 @@ void Satellites::finishDownloadBatch()
 		delete updateSources[i].file;
 		updateSources[i].file = nullptr;
 	}
+	if (hashesDirty)
+		saveCachedSatelliteMirrorSha256(cachedHashes);
 	saveMirrorSummary();
 	updateSources.clear();
 	if (!newData.isEmpty())
 	{
 		updateSatellites(newData, complete);
+	}
+	else if (skippedUnchangedCount > 0)
+	{
+		updateState = CompleteNoUpdates;
+		emit updateStateChanged(updateState);
+		emit tleUpdateComplete(0, satellites.count(), 0, 0);
 	}
 	else
 	{

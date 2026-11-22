@@ -1,9 +1,9 @@
 [Unit]
-Description=Refresh SkyInstrument mirror every 3 hours
+Description=Refresh SkyInstrument mirror every 2 hours
 
 [Timer]
 OnBootSec=3min
-OnUnitActiveSec=3h
+OnUnitActiveSec=2h
 AccuracySec=1min
 Persistent=true
 

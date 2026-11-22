@@ -40,8 +40,8 @@ export class SatelliteStore {
   satCatalogSource: string = ''
   satSources: SatelliteSource[] = []
   satUpdateSettings: SatelliteUpdateSettings = {
-    updatesEnabled: false, autoAddEnabled: false, autoRemoveEnabled: false,
-    autoDisplayEnabled: true, updateFrequencyHours: 72, secondsToUpdate: 0, updateState: 1
+    updatesEnabled: true, autoAddEnabled: false, autoRemoveEnabled: false,
+    autoDisplayEnabled: true, updateFrequencyHours: 2, secondsToUpdate: 0, updateState: 1
   }
   satSourceInput: string = ''
   satTleFileInput: string = ''
@@ -50,7 +50,7 @@ export class SatelliteStore {
   // 来源编辑：-1 表示无；editing 控制保存/新增文案，expanded 控制展开行。
   expandedSatelliteSourceIndex: number = -1
   editingSatelliteSourceIndex: number = -1
-  satUpdateFrequencyInput: string = '72'
+  satUpdateFrequencyInput: string = '2'
   satelliteListLoading: boolean = false
   satelliteCatalogHealth: CatalogHealthEntry = {}
 
