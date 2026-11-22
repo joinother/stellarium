@@ -462,3 +462,20 @@ test('in-app satellite pass alert renders rounded 3D orthographic Earth orbit ca
   assert.ok(notifSrc.includes('onPreviewSatPassCard'), 'NotificationSection must expose preview pass card button');
   assert.ok(!notifSrc.includes('RegionScopePicker'), 'NotificationSection must not expose custom region picker');
 });
+
+test('calendar eclipse map integrates Petal Maps fullscreen explorer with Mercator overlay, polyline path, and offline fallback', () => {
+  const modalSrc = read('panels/calendar/CalendarEclipsePetalModal.ets');
+  assert.ok(modalSrc.includes("from '@kit.MapKit'"), 'eclipse modal must use HarmonyOS Map Kit');
+  assert.ok(modalSrc.includes('addImageOverlay'), 'eclipse modal must render Web Mercator eclipse PixelMap overlay');
+  assert.ok(modalSrc.includes('addPolyline'), 'solar eclipse modal must render central totality path polyline');
+  assert.ok(modalSrc.includes('rectifyCoordinate'), 'observer blue pin must rectify WGS84 to GCJ02 inside China');
+  assert.ok(modalSrc.includes("$rawfile('stellarium/textures/earth_cmap.png')"), 'offline fallback must use bundled physical earth_cmap.png');
+  assert.ok(!modalSrc.includes('worldmap.jpg'), 'eclipse modal must never reference uncertified political worldmap.jpg');
+
+  const visualsSrc = read('panels/calendar/CalendarEventVisuals.ets');
+  assert.ok(visualsSrc.includes('CalendarEclipsePetalModal({'), 'CalendarEclipseMapCard must mount CalendarEclipsePetalModal');
+  assert.ok(visualsSrc.includes('onlineMapAllowed'), 'CalendarEclipseMapCard must honor privacy/online gate');
+
+  const calSrc = read('panels/panels/AstronomyCalendarPanel.ets');
+  assert.ok(calSrc.includes('onlineMapAllowed: this.onlineMapAllowed'), 'AstronomyCalendarPanel must forward onlineMapAllowed');
+});

@@ -1,11 +1,14 @@
 import { Theme } from '@kit.ArkUI'
+import { connection } from '@kit.NetworkKit'
 import { DEFAULT_SLOTS, ThemeSlots, slotsFromTheme } from '../../state/StellariumTheme'
 import { AstronomyCalendarEvent, CalendarEclipseMapData } from '../../state/AstronomyCalendarEvent'
 import { calendarText } from '../../state/AstronomyCalendarText'
 import { UI_RADIUS_CARD, UI_RADIUS_PILL } from '../../common/ui/UiTokens'
+import { CalendarEclipsePetalModal } from './CalendarEclipsePetalModal'
 
-// 日食 / 月食全球可见区域地图卡片（基于真实贝塞尔食带网格与月下点球面几何绘制，
-// 叠加离线世界底图、当前定位蓝点，支持点击全屏双指缩放查看）。
+// 日食 / 月食全球可见区域地图卡片（基于真实贝塞尔食带网格与月下点球面几何绘制：
+// 内嵌卡采用纯自然地貌 earth_cmap.png 离线秒开预览，点击全屏后在线态优先挂载华为花瓣地图支持缩放至城市查看，
+// 离线/未授权/异常时无缝回退至双指缩放全球平图）。
 @Component
 export struct CalendarEclipseMapCard {
   @Prop event: AstronomyCalendarEvent | undefined = undefined
@@ -14,19 +17,12 @@ export struct CalendarEclipseMapCard {
   @Prop observerLat: number = 39.9
   @Prop observerLon: number = 116.4
   @Prop earthMapUri: string = ''
+  @Prop onlineMapAllowed: boolean = false
   @State private c: ThemeSlots = DEFAULT_SLOTS
   @State private zoomOpen: boolean = false
-  @State private zoomScale: number = 1.0
-  @State private baseZoomScale: number = 1.0
-  @State private panX: number = 0
-  @State private panY: number = 0
-  @State private basePanX: number = 0
-  @State private basePanY: number = 0
 
   private inlineSettings: RenderingContextSettings = new RenderingContextSettings(true)
   private inlineCtx: CanvasRenderingContext2D = new CanvasRenderingContext2D(this.inlineSettings)
-  private modalSettings: RenderingContextSettings = new RenderingContextSettings(true)
-  private modalCtx: CanvasRenderingContext2D = new CanvasRenderingContext2D(this.modalSettings)
 
   onWillApplyTheme(theme: Theme): void {
     this.c = slotsFromTheme(theme)
@@ -193,29 +189,31 @@ export struct CalendarEclipseMapCard {
     }
   }
 
+  private canOpenPetalMap(): boolean {
+    if (!this.onlineMapAllowed) return false
+    try {
+      return connection.hasDefaultNetSync()
+    } catch (_err) {
+      return true
+    }
+  }
+
   @Builder
-  mapCanvasLayer(isModal: boolean) {
+  mapCanvasLayer() {
     Stack({ alignContent: Alignment.Center }) {
-      if (this.earthMapUri.length > 0) {
-        Image(this.earthMapUri)
-          .width('100%')
-          .height('100%')
-          .objectFit(ImageFit.Fill)
-          .saturate(this.c.isNight ? 0.15 : 0.35)
-          .brightness(this.c.isNight ? 0.45 : 1.18)
-          .contrast(0.88)
-          .accessibilityLevel('no')
-      } else {
-        Row()
-          .width('100%')
-          .height('100%')
-          .backgroundColor(this.c.isNight ? '#1A0808' : '#7D93AE')
-      }
-      Canvas(isModal ? this.modalCtx : this.inlineCtx)
+      Image($rawfile('stellarium/textures/earth_cmap.png'))
+        .width('100%')
+        .height('100%')
+        .objectFit(ImageFit.Fill)
+        .saturate(this.c.isNight ? 0.15 : 0.35)
+        .brightness(this.c.isNight ? 0.45 : 1.18)
+        .contrast(0.88)
+        .accessibilityLevel('no')
+      Canvas(this.inlineCtx)
         .width('100%')
         .height('100%')
         .onReady(() => {
-          this.drawOverlay(isModal ? this.modalCtx : this.inlineCtx)
+          this.drawOverlay(this.inlineCtx)
         })
     }
       .width('100%')
@@ -225,77 +223,29 @@ export struct CalendarEclipseMapCard {
 
   @Builder
   zoomModalBuilder() {
-    Stack({ alignContent: Alignment.TopEnd }) {
-      Column({ space: 14 }) {
-        Blank()
-        Stack({ alignContent: Alignment.Center }) {
-          this.mapCanvasLayer(true)
-        }
-          .width('100%')
-          .scale({ x: this.zoomScale, y: this.zoomScale })
-          .translate({ x: this.panX, y: this.panY })
-          .gesture(
-            GestureGroup(GestureMode.Parallel,
-              PinchGesture({ fingers: 2 })
-                .onActionStart(() => { this.baseZoomScale = this.zoomScale })
-                .onActionUpdate((ev: GestureEvent) => {
-                  this.zoomScale = Math.max(1.0, Math.min(4.0, this.baseZoomScale * ev.scale))
-                  if (this.zoomScale <= 1.02) { this.panX = 0; this.panY = 0 }
-                }),
-              PanGesture({ fingers: 1 })
-                .onActionStart(() => { this.basePanX = this.panX; this.basePanY = this.panY })
-                .onActionUpdate((ev: GestureEvent) => {
-                  if (this.zoomScale <= 1.02) return
-                  const maxPan = 220 * (this.zoomScale - 1)
-                  this.panX = Math.max(-maxPan, Math.min(maxPan, this.basePanX + ev.offsetX))
-                  this.panY = Math.max(-maxPan * 0.6, Math.min(maxPan * 0.6, this.basePanY + ev.offsetY))
-                })
-            )
-          )
-          .onClick(() => {
-            if (this.zoomScale > 1.2) {
-              this.zoomScale = 1.0; this.panX = 0; this.panY = 0
-            } else {
-              this.zoomScale = 2.2
-            }
-          })
-        Text(this.t('双指缩放或轻点放大 · 蓝点为当前观测位置', 'Pinch or tap to zoom · Blue dot marks your location'))
-          .fontSize(12)
-          .fontColor('#B8C4DA')
-        Blank()
-      }
-        .width('100%')
-        .height('100%')
-        .padding({ left: 12, right: 12, top: 48, bottom: 32 })
-        .backgroundColor('rgba(6, 9, 16, 0.96)')
-
-      Button('✕', { type: ButtonType.Circle })
-        .width(40)
-        .height(40)
-        .fontSize(16)
-        .fontColor('#F3F5FA')
-        .backgroundColor('rgba(255, 255, 255, 0.14)')
-        .margin({ top: 44, right: 20 })
-        .onClick(() => {
-          this.zoomOpen = false
-          this.zoomScale = 1.0
-          this.panX = 0
-          this.panY = 0
-        })
-    }
-      .width('100%')
-      .height('100%')
+    CalendarEclipsePetalModal({
+      event: this.event,
+      mapData: this.mapData,
+      language: this.language,
+      observerLat: this.observerLat,
+      observerLon: this.observerLon,
+      earthMapUri: this.earthMapUri,
+      onlineMapAllowed: this.onlineMapAllowed,
+      onClose: () => { this.zoomOpen = false }
+    })
   }
 
   build() {
     Column({ space: 8 }) {
       Stack({ alignContent: Alignment.BottomEnd }) {
-        this.mapCanvasLayer(false)
-        Text(this.t('点击放大', 'Tap to zoom'))
+        this.mapCanvasLayer()
+        Text(this.canOpenPetalMap()
+          ? this.t('花瓣地图探索 ↗', 'Open Petal Maps ↗')
+          : this.t('点击放大', 'Tap to zoom'))
           .fontSize(10)
           .fontColor('#EEF3FC')
           .padding({ left: 8, right: 8, top: 3, bottom: 3 })
-          .backgroundColor('rgba(10, 14, 24, 0.68)')
+          .backgroundColor('rgba(10, 14, 24, 0.72)')
           .borderRadius(UI_RADIUS_PILL)
           .margin({ right: 8, bottom: 8 })
           .hitTestBehavior(HitTestMode.None)

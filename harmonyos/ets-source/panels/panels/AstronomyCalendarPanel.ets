@@ -90,6 +90,7 @@ export struct AstronomyCalendarPanel {
   @Prop observerLatitude: number = 39.9
   @Prop observerLongitude: number = 116.4
   @Prop earthMapUri: string = ''
+  @Prop onlineMapAllowed: boolean = false
   @Prop activeLiveViewEventId: string = ''
   @Prop liveViewStatusText: string = ''
   @Prop remoteFeedStatus: string = ''
@@ -989,7 +990,8 @@ export struct AstronomyCalendarPanel {
                 language: this.language,
                 observerLat: this.observerLatitude,
                 observerLon: this.observerLongitude,
-                earthMapUri: this.earthMapUri
+                earthMapUri: this.earthMapUri,
+                onlineMapAllowed: this.onlineMapAllowed
               })
               Text(calendarEclipseScienceNote(this.language, event.kind === 'solar-eclipse' ? 'solar-eclipse' : 'lunar-eclipse', event.subtype))
                 .fontSize(this.panelFontSize - 1)

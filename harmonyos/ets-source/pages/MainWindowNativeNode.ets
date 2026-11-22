@@ -11381,6 +11381,7 @@ export struct WindowNativeNode {
         observerLatitude: this.observerLatLive,
         observerLongitude: this.observerLonLive,
         earthMapUri: this.stellariumFilesDir().length > 0 ? ('file://' + this.stellariumFilesDir() + '/stellarium/textures/earth_cmap.png') : '',
+        onlineMapAllowed: this.privacyNativeStartupAllowed && this.applicationInForeground && hasCurrentPrivacyConsent(),
         activeLiveViewEventId: this.liveViewActiveEventId,
         liveViewStatusText: this.liveViewStatusText,
         remoteFeedStatus: this.remoteCalendarFeedStatus,
