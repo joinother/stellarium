@@ -409,7 +409,9 @@ export class SensorController {
   }
 
   stopGyroscope(updateStatus: boolean): void {
-    this.port.fire('cancelGyroViewTransition')
+    // 先置位禁用并退订全部传感器，再发 cancelGyroViewTransition，避免退订瞬间尾部回调把
+    // 倾斜的 setGyroView 排在取消命令之后导致退出陀螺仪后地平线歪斜且无法自动回正。
+    this.gyroStore.gyroscopeEnabled = false
     const mode = this.gyroUsingRotationVector ? 'rotation-vector' : (this.gyroOrientationSubscribed ? 'orientation-fallback' : 'none')
     const elapsedMs = this.gyroStartMs > 0 ? Math.max(1, Date.now() - this.gyroStartMs) : 1
     hilog.info(0x0000, 'StellariumArkUI', '[gyro-probe] stop mode=%{public}s callbacks=%{public}s valid=%{public}s dispatch=%{public}s invalid=%{public}s gravity=%{public}s magnetic=%{public}s elapsedMs=%{public}s',
@@ -439,6 +441,7 @@ export class SensorController {
       } catch (error) {
       }
     }
+    this.port.fire('cancelGyroViewTransition')
     this.gyroOrientationSubscribed = false
     this.gyroRotationSubscribed = false
     this.gyroGravitySubscribed = false

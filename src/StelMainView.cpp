@@ -3499,6 +3499,17 @@ QString runOhosCommandOnQtThread(const QString& key, const std::function<QJsonOb
 			result["pending"] = true;
 			return QString::fromUtf8(QJsonDocument(result).toJson(QJsonDocument::Compact));
 		}
+		if (cmdName == "cancelGyroViewTransition")
+		{
+			// Drop any latest-value setGyroView queued in the same frame so it
+			// cannot run after cancelGyroViewTransition and leave the horizon tilted.
+			QMutexLocker qlock(&s_ohosCmdQueueMutex);
+			s_pendingGyroCommand = {};
+			s_ohosCmdQueue.append([command]() { command(); });
+			result["ok"] = true;
+			result["queued"] = true;
+			return QString::fromUtf8(QJsonDocument(result).toJson(QJsonDocument::Compact));
+		}
 		if (cmdName == "setTimeToJD")
 		{
 			QMutexLocker qlock(&s_ohosCmdQueueMutex);
@@ -14389,10 +14400,28 @@ extern "C" __attribute__((visibility("default"))) const char* StellariumOhos_com
 
 		if (commandName == "cancelGyroViewTransition")
 		{
+			{
+				QMutexLocker qlock(&s_ohosCmdQueueMutex);
+				s_pendingGyroCommand = {};
+			}
 			s_gyroTransitionArmed = false;
 			s_gyroTransitionActive = false;
 			s_gyroViewActive = false;
 			s_gyroHasPreviousUp = false;
+			s_ohosPinchRollHeld = false;
+			// Exiting gyro leaves the mount up-vector tilted at the device's last roll angle.
+			// Arm smooth horizon leveling so the sky glides back to horizontal automatically.
+			if (StelCore* core = StelApp::getInstance().getCore())
+			{
+				if (StelMovementMgr* mvmgr = core->getMovementMgr())
+				{
+					if (ohosCurrentMountHorizonRollAbsRad(mvmgr) > 0.002)
+					{
+						s_ohosHorizonLevelActive = true;
+						markOhosInteraction();
+					}
+				}
+			}
 			// Resume a saved view lock from the camera position where the user
 			// stopped using the gyro; correcting against an old anchor would jump.
 			if (s_viewLock)
