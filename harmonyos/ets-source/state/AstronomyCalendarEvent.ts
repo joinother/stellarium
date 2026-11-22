@@ -47,6 +47,11 @@ export interface AstronomyCalendarEvent {
   satVisible?: boolean
   satDurationSec?: number
   satAzimuthSummary?: string
+  satStartAt?: number
+  satEndAt?: number
+  satStartAz?: number
+  satEndAz?: number
+  satMag?: number
   // Eclipse & greatest-elongation enrichment
   eclipseMagnitude?: number
   umbralMagnitude?: number
@@ -67,6 +72,13 @@ export interface AstronomyCalendarEvent {
   earthHelioLonDeg?: number
   planetHelioLonDeg?: number
   orbitRatio?: number
+  // Dynamic remote calendar overlay metadata (static skyinstrument.cn feed)
+  isRemote?: boolean
+  remoteBadge?: string
+  remoteRevision?: number
+  remoteHighlight?: boolean
+  remoteEndAt?: number
+  remoteEnriched?: boolean
 }
 
 export interface CalendarNativeEvent {
@@ -107,6 +119,13 @@ export interface CalendarNativeEvent {
   earthHelioLonDeg?: number
   planetHelioLonDeg?: number
   orbitRatio?: number
+  // Dynamic remote calendar overlay metadata (static skyinstrument.cn feed)
+  isRemote?: boolean
+  remoteBadge?: string
+  remoteRevision?: number
+  remoteHighlight?: boolean
+  remoteEndAt?: number
+  remoteEnriched?: boolean
 }
 
 // 44/44 全量流星雨标准中文译名（覆盖内置 MeteorShowers.json 全部流星群，杜绝任何英文残余）

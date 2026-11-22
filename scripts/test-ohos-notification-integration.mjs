@@ -400,3 +400,42 @@ test('search panel embeds calendar preview strip and dock menu remembers calenda
   assert.match(backBlock, /this\.activePanel === 'calendar' && this\.calendarStore\.selectedEventId\.length > 0/);
   assert.match(backBlock, /this\.restoreScrollKeyAsync\('calendar:list'/);
 });
+
+test('layer-1 TIMER live view complies with SDK timer/flight layout and module.json5 drops unused sensor permissions', () => {
+  const liveViewSrc = read('capability/LiveViewController.ets');
+  assert.ok(liveViewSrc.includes("event: 'TIMER'"), 'live view must target TIMER scenario');
+  assert.ok(liveViewSrc.includes('CapsuleType.CAPSULE_TYPE_TIMER'), 'capsule must use official CAPSULE_TYPE_TIMER enum');
+  assert.ok(liveViewSrc.includes('${placeholder.timer}'), 'live view must use system native timer placeholder');
+  assert.ok(liveViewSrc.includes('LayoutType.LAYOUT_TYPE_FLIGHT'), 'satellite passes should render FlightLayout rise/set extension');
+  assert.ok(liveViewSrc.includes('ExtensionType.EXTENSION_TYPE_CAPSULE_TEXT'), 'TIMER spec requires auxiliary status text');
+  assert.ok(liveViewSrc.includes('liveViewManager.stopLiveView(stopView)'), 'stopLiveView must pass a LiveView object');
+
+  const moduleJsonText = read('../module.json5').replace(/^\s*\/\/.*$/gm, '');
+  const moduleJson = JSON.parse(moduleJsonText);
+  const permNames = moduleJson.module.requestPermissions.map(p => p.name);
+  assert.ok(!permNames.includes('ohos.permission.ACCELEROMETER'), 'unused ACCELEROMETER permission should be removed');
+  assert.ok(!permNames.includes('ohos.permission.GYROSCOPE'), 'unused GYROSCOPE permission should be removed');
+  const qAbility = moduleJson.module.abilities.find(a => a.name === 'QAbility');
+  const homeSkill = qAbility.skills.find(s => Array.isArray(s.entities) && s.entities.includes('entity.system.home'));
+  assert.ok(homeSkill !== undefined && homeSkill.uris === undefined, 'home skill must not mix uris per Push Kit skill rules');
+});
+
+test('settings panel defaults to Device & Privacy (-1) and resolves more as route parent for back navigation', () => {
+  const actionsSrc = read('common/derive/actions.ets');
+  const routeParentFn = actionsSrc.slice(
+    actionsSrc.indexOf('export function panelRouteParent('),
+    actionsSrc.indexOf('export function inferredPanelRouteDirection(')
+  );
+  assert.match(routeParentFn, /moreActions\(\)\.some\(\(item: ShellAction\) => item\.panel === panel\)\) return 'more'/);
+
+  assert.match(main, /@State private configTab: number = -1/);
+  const setPanelHead = main.slice(main.indexOf('private setPanel('), main.indexOf('const currentPanel = this.activePanel'));
+  assert.match(setPanelHead, /this\.activePanel === 'more' && routeDirection >= 0/);
+  assert.match(setPanelHead, /this\.configTab = -1/);
+
+  const canGoBackBlock = block(main, '  private canGoBackPanel(', '  private handlePanelBackTap(');
+  assert.match(canGoBackBlock, /this\.panelNavigationDepth > 0 \|\| panelRouteParent\(this\.activePanel\)\.length > 0/);
+
+  const settingsLoad = main.slice(main.indexOf("} else if (panel === 'settings') {"), main.indexOf("} else if (panel === 'place') {"));
+  assert.match(settingsLoad, /if \(this\.configTab === -1\) void this\.notificationCtl\(\)\.refreshStatus\(\)/);
+});

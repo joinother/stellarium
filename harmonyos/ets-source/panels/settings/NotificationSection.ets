@@ -100,6 +100,8 @@ export struct NotificationSection {
   @Prop astronomySubscriptionStatus: string = ''
   @Prop satelliteSubscriptionStatus: string = ''
   @Prop pushTokenText: string
+  @Prop liveViewActiveTitle: string = ''
+  @Prop liveViewStatusText: string = ''
   @State c: ThemeSlots = DEFAULT_SLOTS
 
   onRequestAccess: () => void = () => {}
@@ -130,6 +132,9 @@ export struct NotificationSection {
   onScheduleCalendarAt: (timestamp: number) => void = () => {}
   onScheduleAlarm: (hour: number, minute: number) => void = () => {}
   onFetchPushToken: () => void = () => {}
+  onStartSatLiveView: () => void = () => {}
+  onStartDarkAdaptLiveView: () => void = () => {}
+  onStopLiveView: () => void = () => {}
 
   aboutToAppear(): void { this.syncToggles() }
 
@@ -587,6 +592,53 @@ export struct NotificationSection {
         .padding({ bottom: 8 })
         .backgroundColor(this.c.bg)
         .border({ width: 1, color: this.c.dividerSoft })
+        .borderRadius(UI_RADIUS_CARD)
+
+      // 5.5 实况窗倒计时（标准 TIMER 场景：状态栏胶囊 + 锁屏卡片）
+      Column({ space: 6 }) {
+        Row({ space: 6 }) {
+          Row({ space: 2 }) {
+            Text(this.tr('实况窗倒计时', 'Live View Countdown'))
+              .fontSize(panelFontSize(13, this.readableUi))
+              .fontWeight(FontWeight.Medium)
+              .fontColor(this.c.text)
+            InfoTipButton({
+              title: this.tr('实况窗倒计时', 'Live View Countdown'),
+              tip: this.tr('采用鸿蒙系统原生计时（TIMER）实况窗：在状态栏胶囊与锁屏卡片同步展示过境升起/落下方位、最大仰角与实时倒计时，退后台零耗电。调测阶段需在 AGC 实况窗白名单登记测试设备并满 24 小时生效。',
+                'Uses native HarmonyOS TIMER Live View for status-bar capsule and lock-screen countdown with rise/set azimuth and peak elevation.')
+            })
+          }.layoutWeight(1).alignItems(VerticalAlign.Center)
+          if (this.liveViewActiveTitle.length > 0) {
+            this.action(this.tr('停止实况窗', 'Stop'), true, () => { this.onStopLiveView() })
+          }
+        }.width('100%')
+        if (this.liveViewActiveTitle.length > 0) {
+          Text(this.tr('当前运行中：', 'Active: ') + this.liveViewActiveTitle)
+            .fontSize(panelFontSize(11, this.readableUi))
+            .fontColor(this.c.accent)
+            .width('100%')
+        } else {
+          Text(this.tr('当卫星过境临近 30 分钟内，星图顶部也会主动提示一键开启实况窗。',
+            'An in-app prompt also appears within 30 min of an upcoming satellite pass.'))
+            .fontSize(panelFontSize(10, this.readableUi))
+            .fontColor(this.c.sub)
+            .width('100%')
+        }
+        Row({ space: 8 }) {
+          this.action(this.tr('空间站过境实况窗', 'Station Pass Live View'), true, () => { this.onStartSatLiveView() })
+          this.action(this.tr('暗适应 20 分钟', 'Dark Adapt 20m'), true, () => { this.onStartDarkAdaptLiveView() })
+        }.width('100%')
+        if (this.liveViewStatusText.length > 0) {
+          Text(this.liveViewStatusText)
+            .fontSize(panelFontSize(10, this.readableUi))
+            .fontColor(this.c.sub)
+            .width('100%')
+        }
+      }
+        .width('100%')
+        .padding({ left: 12, right: 10, top: 9, bottom: 9 })
+        .backgroundColor(this.c.bg)
+        .border({ width: 1, color: this.liveViewActiveTitle.length > 0 ? this.c.accent : this.c.dividerSoft })
         .borderRadius(UI_RADIUS_CARD)
 
       // 6. 桌面小组件工作台快捷入口

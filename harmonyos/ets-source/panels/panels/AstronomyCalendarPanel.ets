@@ -16,6 +16,7 @@ import {
   monthOverlapsSatelliteWindow
 } from '../../state/AstronomyCalendarFilter'
 import { AstronomyCalendarReminderResult } from '../../capability/AstronomyCalendarController'
+import { isEventEligibleForLiveView } from '../../capability/LiveViewController'
 import {
   normalizeCanonicalEventId,
   normalizeTimingMode,
@@ -49,6 +50,9 @@ export interface AstronomyCalendarPanelHost {
   subscribeCurrentFilter?(): void
   clearFilters?(): void
   goToCurrentMonth?(): void
+  startLiveView?(event: AstronomyCalendarEvent): void
+  stopLiveView?(): void
+  syncRemoteFeed?(): void
 }
 
 interface SatelliteSubOption {
@@ -87,6 +91,10 @@ export struct AstronomyCalendarPanel {
   @Prop observerLatitude: number = 39.9
   @Prop observerLongitude: number = 116.4
   @Prop earthMapUri: string = ''
+  @Prop activeLiveViewEventId: string = ''
+  @Prop liveViewStatusText: string = ''
+  @Prop remoteFeedStatus: string = ''
+  @Prop remoteFeedSyncing: boolean = false
   @State private c: ThemeSlots = DEFAULT_SLOTS
   @State private viewMode: 'list' | 'grid' = 'list'
   @State private transitionDir: number = 1
@@ -128,6 +136,7 @@ export struct AstronomyCalendarPanel {
   }
 
   private eventPriority(event: AstronomyCalendarEvent): number {
+    if (event.isRemote === true) return 0
     if (event.kind === 'solar-eclipse' || event.kind === 'lunar-eclipse') return 0
     if (event.kind === 'meteor-peak' || event.kind === 'companion-eclipse') return 0
     if (event.kind === 'satellite-pass') return event.satVisible === true ? 0 : 1
@@ -148,6 +157,8 @@ export struct AstronomyCalendarPanel {
 
   private eventDotColor(event: AstronomyCalendarEvent): ResourceColor {
     if (this.c.isNight) return this.c.accent
+    if (event.isRemote === true || event.kind === 'aurora-alert' || event.kind === 'comet-event' ||
+      event.kind === 'spaceflight' || event.kind === 'transient' || event.kind === 'editorial') return '#CE93D8'
     if (event.kind === 'solar-eclipse' || event.kind === 'lunar-eclipse' || event.kind === 'companion-eclipse') return '#FF7043'
     if (event.kind === 'satellite-pass') return '#4DD0E1'
     if (event.kind === 'meteor-peak') return '#64B5F6'
@@ -620,10 +631,84 @@ export struct AstronomyCalendarPanel {
       .clip(true)
   }
 
+  private remoteGradientColors(kind: string): Array<[ResourceColor, number]> {
+    if (this.c.isNight) {
+      return [['#260908', 0.0], ['#140404', 1.0]]
+    }
+    if (kind === 'aurora-alert') {
+      return [['#0F3530', 0.0], ['#1E1B42', 0.55], ['#0F1326', 1.0]]
+    }
+    if (kind === 'comet-event') {
+      return [['#122B4A', 0.0], ['#162040', 0.58], ['#0C1428', 1.0]]
+    }
+    if (kind === 'spaceflight') {
+      return [['#1B2748', 0.0], ['#2B1F3A', 0.58], ['#121324', 1.0]]
+    }
+    return [['#241C42', 0.0], ['#151C36', 0.6], ['#0E1426', 1.0]]
+  }
+
+  private remoteAccentHex(kind: string): ResourceColor {
+    if (this.c.isNight) return this.c.text
+    if (kind === 'aurora-alert') return '#7DF9C6'
+    if (kind === 'comet-event') return '#8AD8FF'
+    if (kind === 'spaceflight') return '#FFD180'
+    return '#E1B7FF'
+  }
+
+  @Builder
+  remoteDynamicCard(event: AstronomyCalendarEvent, detail: boolean) {
+    Stack({ alignContent: Alignment.BottomStart }) {
+      Column()
+        .width('100%')
+        .height(detail ? 172 : 108)
+        .linearGradient({
+          angle: 135,
+          colors: this.remoteGradientColors(event.kind)
+        })
+      Column({ space: 6 }) {
+        Row({ space: 6 }) {
+          Text(event.remoteBadge && event.remoteBadge.length > 0
+            ? event.remoteBadge
+            : this.t('动态天象', 'Live Alert'))
+            .fontSize(this.panelFontSize - 4)
+            .fontWeight(FontWeight.Medium)
+            .fontColor(this.remoteAccentHex(event.kind))
+            .padding({ left: 7, right: 7, top: 2, bottom: 2 })
+            .backgroundColor(this.c.isNight ? this.c.softStrong : 'rgba(255,255,255,0.12)')
+            .borderRadius(UI_RADIUS_PILL)
+          Text(this.t('云端实时', 'Live'))
+            .fontSize(this.panelFontSize - 4)
+            .fontColor(this.c.isNight ? this.c.sub : '#D8C9F2')
+            .padding({ left: 7, right: 7, top: 2, bottom: 2 })
+            .backgroundColor(this.c.isNight ? this.c.bg : 'rgba(206,147,216,0.18)')
+            .borderRadius(UI_RADIUS_PILL)
+        }
+        Text(this.date(event))
+          .fontSize(this.panelFontSize - 2)
+          .fontColor(this.c.isNight ? this.c.sub : '#C8D2E8')
+        Text(event.title)
+          .fontSize(this.panelFontSize + (detail ? 6 : 2))
+          .fontWeight(FontWeight.Medium)
+          .fontColor(this.c.isNight ? this.c.text : '#F4F7FC')
+          .maxLines(2)
+          .textOverflow({ overflow: TextOverflow.Ellipsis })
+      }
+        .alignItems(HorizontalAlign.Start)
+        .width('100%')
+        .padding({ left: 16, right: 16, top: 12, bottom: 14 })
+    }
+      .width('100%')
+      .borderRadius(UI_RADIUS_CARD)
+      .border({ width: 1, color: this.c.isNight ? this.c.border : 'rgba(206,147,216,0.32)' })
+      .clip(true)
+  }
+
   @Builder
   eventCard(event: AstronomyCalendarEvent, detail: boolean) {
     if (event.kind === 'satellite-pass') {
       this.satellitePassCard(event, detail)
+    } else if (event.isRemote === true) {
+      this.remoteDynamicCard(event, detail)
     } else {
       Stack({ alignContent: Alignment.BottomStart }) {
         if (detail) {
@@ -643,7 +728,17 @@ export struct AstronomyCalendarPanel {
           }
         }
         Column({ space: 6 }) {
-          Text(this.date(event)).fontSize(this.panelFontSize - 2).fontColor(this.c.isNight ? this.c.sub : '#C3CCDB')
+          Row({ space: 6 }) {
+            Text(this.date(event)).fontSize(this.panelFontSize - 2).fontColor(this.c.isNight ? this.c.sub : '#C3CCDB')
+            if (event.remoteEnriched === true) {
+              Text(event.remoteBadge && event.remoteBadge.length > 0 ? event.remoteBadge : this.t('观星攻略', 'Guide'))
+                .fontSize(this.panelFontSize - 4)
+                .fontColor(this.c.isNight ? this.c.text : '#E1B7FF')
+                .padding({ left: 6, right: 6, top: 1, bottom: 1 })
+                .backgroundColor(this.c.isNight ? this.c.softStrong : 'rgba(206,147,216,0.22)')
+                .borderRadius(UI_RADIUS_PILL)
+            }
+          }.alignItems(VerticalAlign.Center)
           Text(event.title).fontSize(this.panelFontSize + (detail ? 7 : 3)).fontWeight(FontWeight.Medium)
             .fontColor(this.c.isNight ? this.c.text : '#F1F3F7').maxLines(2).textOverflow({ overflow: TextOverflow.Ellipsis })
         }.alignItems(HorizontalAlign.Start).width('72%').padding(18)
@@ -704,6 +799,41 @@ export struct AstronomyCalendarPanel {
               language: this.language,
               onSelectRegion: (rid: string) => { this.host.setRegionId?.(rid) }
             })
+            // 云端动态天象同步条（静态只读拉取 + SHA-256 校验，端侧按纬度过滤，不上传位置）
+            Row({ space: 6 }) {
+              Circle({ width: 6, height: 6 })
+                .fill(this.c.isNight ? this.c.accent : '#CE93D8')
+              Text(this.remoteFeedStatus.length > 0
+                ? this.remoteFeedStatus
+                : this.t('云端动态天象 · 自动静默同步', 'Live astronomy feed · auto sync'))
+                .fontSize(this.panelFontSize - 3)
+                .fontColor(this.c.sub)
+                .maxLines(1)
+                .textOverflow({ overflow: TextOverflow.Ellipsis })
+                .layoutWeight(1)
+              InfoTipButton({
+                title: this.t('云端动态天象', 'Live Astronomy Feed'),
+                tip: this.t('打开应用时从自有境内镜像 skyinstrument.cn 只读静态检查地磁极光预警、新彗星、航天发射与观星攻略，经 SHA-256 校验后自动合并入日历。地区筛选在设备本地完成，不上传经纬度或设备标识。',
+                  'Checks skyinstrument.cn read-only static feed on launch for aurora alerts, comets, spaceflight & observing notes with SHA-256 verification. Region filtering runs locally with zero location upload.')
+              })
+              Button(this.remoteFeedSyncing ? this.t('同步中…', 'Syncing…') : this.t('同步', 'Sync'),
+                { type: ButtonType.Normal })
+                .height(28)
+                .padding({ left: 10, right: 10 })
+                .fontSize(this.panelFontSize - 3)
+                .fontColor(this.c.text)
+                .backgroundColor(this.c.softStrong)
+                .borderRadius(UI_RADIUS_PILL)
+                .enabled(!this.remoteFeedSyncing)
+                .clickEffect({ level: ClickEffectLevel.LIGHT })
+                .onClick(() => { this.host.syncRemoteFeed?.() })
+            }
+              .width('100%')
+              .alignItems(VerticalAlign.Center)
+              .padding({ left: 10, right: 8, top: 6, bottom: 6 })
+              .backgroundColor(this.c.soft)
+              .border({ width: 0.6, color: this.c.border })
+              .borderRadius(UI_RADIUS_CONTROL)
           }
 
           // 天象分类与条件筛选栏（自动适配地球 / 外星视角，实时同步列表与月历圆点）
@@ -805,6 +935,59 @@ export struct AstronomyCalendarPanel {
                 .padding({ left: 10, right: 10, top: 7, bottom: 7 })
                 .backgroundColor(this.c.soft)
                 .borderRadius(UI_RADIUS_CONTROL)
+            }
+            if (this.activeLiveViewEventId === event.id || isEventEligibleForLiveView(event)) {
+              Column({ space: 4 }) {
+                Row({ space: 8 }) {
+                  Column({ space: 2 }) {
+                    Text(this.activeLiveViewEventId === event.id
+                      ? this.t('实况窗倒计时运行中', 'Live View Countdown Active')
+                      : this.t('实况窗倒计时（锁屏 / 胶囊）', 'Live View Countdown'))
+                      .fontSize(this.panelFontSize - 1)
+                      .fontWeight(FontWeight.Medium)
+                      .fontColor(this.c.text)
+                    Text(event.kind === 'satellite-pass'
+                      ? this.t('在状态栏与锁屏持续显示升起方位、仰角与精准倒计时',
+                        'Shows rise/set direction, peak elevation & countdown on lock screen')
+                      : this.t('在状态栏与锁屏同步倒计时，点击直达星图',
+                        'Live countdown on status bar & lock screen; tap to return'))
+                      .fontSize(this.panelFontSize - 3)
+                      .fontColor(this.c.sub)
+                      .maxLines(2)
+                  }
+                    .alignItems(HorizontalAlign.Start)
+                    .layoutWeight(1)
+                  Button(this.activeLiveViewEventId === event.id
+                    ? this.t('停止实况窗', 'Stop')
+                    : this.t('开启实况窗', 'Live View'), { type: ButtonType.Capsule })
+                    .height(34)
+                    .padding({ left: 12, right: 12 })
+                    .fontSize(this.panelFontSize - 2)
+                    .fontColor(this.activeLiveViewEventId === event.id ? this.c.text : this.c.onAccent)
+                    .backgroundColor(this.activeLiveViewEventId === event.id ? this.c.softStrong : this.c.accent)
+                    .clickEffect({ level: ClickEffectLevel.LIGHT })
+                    .onClick(() => {
+                      if (this.activeLiveViewEventId === event.id) {
+                        this.host.stopLiveView?.()
+                      } else {
+                        this.host.startLiveView?.(event)
+                      }
+                    })
+                }
+                  .width('100%')
+                  .alignItems(VerticalAlign.Center)
+                if (this.liveViewStatusText.length > 0) {
+                  Text(this.liveViewStatusText)
+                    .fontSize(this.panelFontSize - 3)
+                    .fontColor(this.c.sub)
+                    .width('100%')
+                }
+              }
+                .width('100%')
+                .padding({ left: 10, right: 10, top: 8, bottom: 8 })
+                .backgroundColor(this.c.soft)
+                .border({ width: 0.8, color: this.activeLiveViewEventId === event.id ? this.c.accent : this.c.border })
+                .borderRadius(UI_RADIUS_CARD)
             }
             Text(event.body).fontSize(this.panelFontSize + 1).lineHeight(this.panelFontSize * 1.8)
               .fontColor(this.c.text).width('100%')

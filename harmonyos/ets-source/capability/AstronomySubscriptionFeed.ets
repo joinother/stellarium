@@ -1,10 +1,14 @@
 import { I18n } from './I18n'
 import { AstronomyCalendarEvent, CalendarMonth, CalendarNativeResponse, calendarMonth, calendarNativeEvents, calendarQuery } from '../state/AstronomyCalendarEvent'
 import { AstronomySubscriptionCategory, AstronomySubscriptionFeed } from '../qability/AstronomySubscriptionPolicy'
+import { RemoteCalendarEntry, mergeRemoteCalendarEvents } from '../state/RemoteCalendarFeed'
 
 export interface SubscriptionObserver {
   key: string
   satelliteIds?: string[]
+  latitude?: number
+  longitude?: number
+  regionId?: string
 }
 
 export interface SubscriptionSatellitePass {
@@ -52,6 +56,7 @@ export function decodeSubscriptionNativeResponse(json: string): SubscriptionNati
 export interface SubscriptionNativeHooks {
   request(command: string, payload: string): Promise<SubscriptionNativeResponse>
   observer(): Promise<SubscriptionObserver | undefined>
+  remoteEntries?(): RemoteCalendarEntry[]
 }
 
 interface SubscriptionMonthCacheEntry {
@@ -121,6 +126,21 @@ export class AstronomySubscriptionFeedLoader {
         events.push(...await this.loadMonth(range, language))
         if (generation !== this.cacheGeneration) throw new Error('Subscription month cache invalidated')
         cursor.setMonth(cursor.getMonth() + 1)
+      }
+      const remoteEntries = this.hooks.remoteEntries !== undefined ? this.hooks.remoteEntries() : []
+      if (remoteEntries.length > 0) {
+        const obs = await this.hooks.observer().catch((): undefined => undefined)
+        const merged = mergeRemoteCalendarEvents(events, remoteEntries, {
+          rangeStart: from,
+          rangeEnd: until,
+          observerPlanet: 'Earth',
+          observerLatitude: obs?.latitude,
+          observerLongitude: obs?.longitude,
+          regionId: obs?.regionId,
+          language: language,
+          nowMs: Date.now()
+        })
+        return { events: merged, generatedAt: Date.now() }
       }
       return { events: events, generatedAt: Date.now() }
     }

@@ -231,6 +231,7 @@ export function panelRouteParent(panel: string): string {
   if (observingHubActions().some((item: ShellAction) => item.panel === panel)) return 'observeHub'
   if (skyDataHubActions().some((item: ShellAction) => item.panel === panel)) return 'dataHub'
   if (automationHubActions().some((item: ShellAction) => item.panel === panel)) return 'automationHub'
+  if (moreActions().some((item: ShellAction) => item.panel === panel)) return 'more'
   return ''
 }
 

@@ -2,7 +2,7 @@
 // Kept free of ArkUI imports so both ArkTS panels/stores and Node host test suites can run it directly.
 
 export type CalendarFilterCategory =
-  'moon' | 'planet' | 'meteor' | 'solar' | 'satellite' | 'companion' | 'eclipse' | 'season'
+  'moon' | 'planet' | 'meteor' | 'solar' | 'satellite' | 'companion' | 'eclipse' | 'season' | 'dynamic'
 
 export type CalendarSatelliteSubFilter = 'all' | 'stations' | 'visible' | 'high_alt'
 
@@ -25,6 +25,14 @@ export interface CalendarFilterableEvent {
   satVisible?: boolean
   satDurationSec?: number
   satAzimuthSummary?: string
+  satStartAt?: number
+  satEndAt?: number
+  satStartAz?: number
+  satEndAz?: number
+  satMag?: number
+  isRemote?: boolean
+  remoteHighlight?: boolean
+  remoteBadge?: string
 }
 
 export interface CalendarFilterState {
@@ -76,7 +84,7 @@ export function calendarFilterToSubscriptionMapping(
   }
   return {
     meteor: active.includes('meteor'),
-    planet: active.includes('planet') || active.includes('eclipse'),
+    planet: active.includes('planet') || active.includes('eclipse') || active.includes('dynamic'),
     moon: active.includes('moon') || active.includes('companion'),
     solarTerm: active.includes('solar') || active.includes('season'),
     satellite: active.includes('satellite'),
@@ -110,6 +118,7 @@ export interface NativeSatellitePassRecord {
 }
 
 export const EARTH_CALENDAR_CATEGORIES: CalendarFilterCategoryMeta[] = [
+  { id: 'dynamic', labelZh: '动态天象', labelEn: 'Live Alerts', dotHex: '#CE93D8' },
   { id: 'eclipse', labelZh: '日月食', labelEn: 'Eclipses', dotHex: '#FF7043' },
   { id: 'moon', labelZh: '月相', labelEn: 'Moon', dotHex: '#E0E6F2' },
   { id: 'planet', labelZh: '行星', labelEn: 'Planets', dotHex: '#FFB74D' },
@@ -135,6 +144,8 @@ export function calendarCategoriesForPlanet(observerPlanet: string): CalendarFil
 }
 
 export function calendarCategoryOfKind(kind: string): CalendarFilterCategory {
+  if (kind === 'aurora-alert' || kind === 'comet-event' || kind === 'spaceflight' ||
+    kind === 'transient' || kind === 'editorial') return 'dynamic'
   if (kind === 'solar-eclipse' || kind === 'lunar-eclipse' || kind === 'companion-eclipse') return 'eclipse'
   if (kind === 'moon-phase') return 'moon'
   if (kind === 'meteor-peak') return 'meteor'
@@ -146,6 +157,8 @@ export function calendarCategoryOfKind(kind: string): CalendarFilterCategory {
 }
 
 export function isHighlightCalendarEvent(event: CalendarFilterableEvent): boolean {
+  if (event.remoteHighlight === true) return true
+  if (event.kind === 'aurora-alert' || event.kind === 'comet-event' || event.kind === 'spaceflight') return true
   if (event.kind === 'solar-eclipse' || event.kind === 'lunar-eclipse' ||
     event.kind === 'meteor-peak' || event.kind === 'companion-eclipse') return true
   if (event.kind === 'moon-phase' || event.kind === 'companion-phase') return event.isSupermoon === true
@@ -344,7 +357,12 @@ export function parseTonightSatellitePassesToCalendarEvents(
       satMaxAlt: maxAlt,
       satVisible: visible,
       satDurationSec: durationSec,
-      satAzimuthSummary: azSummary
+      satAzimuthSummary: azSummary,
+      satStartAt: startAt,
+      satEndAt: endAt,
+      satStartAz: Math.round(startAz),
+      satEndAz: Math.round(endAz),
+      satMag: mag
     })
   }
   return out.sort((a: CalendarFilterableEvent, b: CalendarFilterableEvent) => a.at - b.at)

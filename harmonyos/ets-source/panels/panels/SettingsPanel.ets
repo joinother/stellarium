@@ -179,6 +179,11 @@ export struct SettingsPanel {
   changePassLead: (delta: number) => void = () => {}
   fetchPushToken: () => void = () => {}
   @Prop pushTokenText: string
+  @Prop liveViewActiveTitle: string = ''
+  @Prop liveViewStatusText: string = ''
+  startSatLiveView: () => void = () => {}
+  startDarkAdaptLiveView: () => void = () => {}
+  stopLiveView: () => void = () => {}
   clearAstronomyReminders: () => void = () => {}
   keyboardShortcutQueryChange: (value: string) => void = () => {}
   keyboardShortcutSelectChange: (item: KeyboardShortcutItem) => void = () => {}
@@ -341,7 +346,12 @@ export struct SettingsPanel {
               onDndEndChange: (m: number) => { this.setNotificationDndEnd(m) },
               onLeadChange: (d: number) => { this.changePassLead(d) },
               pushTokenText: this.pushTokenText,
+              liveViewActiveTitle: this.liveViewActiveTitle,
+              liveViewStatusText: this.liveViewStatusText,
               onFetchPushToken: () => { this.fetchPushToken() },
+              onStartSatLiveView: () => { this.startSatLiveView() },
+              onStartDarkAdaptLiveView: () => { this.startDarkAdaptLiveView() },
+              onStopLiveView: () => { this.stopLiveView() },
               onClearReminders: () => { this.clearAstronomyReminders() }
             })
             Row().width('100%').height(0.5).backgroundColor(this.c.border).margin({ top: 5, bottom: 8 })

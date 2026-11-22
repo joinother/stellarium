@@ -13,6 +13,11 @@ import {
 } from '../state/AstronomyCalendarFilter'
 import { findObserverRegionPreset, normalizeObserverRegionId } from '../state/ObserverRegionScope'
 import { AstronomyReminderResult } from '../qability/AstronomyReminderService'
+import {
+  RemoteCalendarEntry,
+  countRemoteDynamicEvents,
+  mergeRemoteCalendarEvents
+} from '../state/RemoteCalendarFeed'
 
 export interface AstronomyCalendarReminderResult extends AstronomyReminderResult {
   message?: string
@@ -24,6 +29,7 @@ export interface AstronomyCalendarHostHooks {
   feedChanged(events: AstronomyCalendarEvent[]): void
   observerContext?(): CalendarObserverContext
   onFilterChanged?(): void
+  remoteEntries?(): RemoteCalendarEntry[]
 }
 
 export class AstronomyCalendarController {
@@ -70,21 +76,59 @@ export class AstronomyCalendarController {
   }
 
   private mergeEventsWithSatellites(baseEvents: AstronomyCalendarEvent[]): AstronomyCalendarEvent[] {
-    if (!isEarthCalendarPlanet(this.store.observerPlanet) || this.rawSatellitePasses.length === 0) {
-      return baseEvents
-    }
+    let working = baseEvents
     const startRange = calendarMonth(this.store.year, this.store.month)
     const endRange = calendarMonth(this.store.throughYear, this.store.throughMonth)
-    const satEvents = parseTonightSatellitePassesToCalendarEvents(
-      this.rawSatellitePasses,
-      startRange.start,
-      endRange.end,
-      this.language
-    ) as AstronomyCalendarEvent[]
-    if (satEvents.length === 0) return baseEvents
-    const combined = baseEvents.concat(satEvents)
-    combined.sort((left: AstronomyCalendarEvent, right: AstronomyCalendarEvent) => left.at - right.at || left.id.localeCompare(right.id))
-    return combined
+    if (isEarthCalendarPlanet(this.store.observerPlanet) && this.rawSatellitePasses.length > 0) {
+      const satEvents = parseTonightSatellitePassesToCalendarEvents(
+        this.rawSatellitePasses,
+        startRange.start,
+        endRange.end,
+        this.language
+      ) as AstronomyCalendarEvent[]
+      if (satEvents.length > 0) {
+        working = working.concat(satEvents)
+      }
+    }
+    const remoteEntries = this.hooks.remoteEntries !== undefined ? this.hooks.remoteEntries() : []
+    if (remoteEntries.length > 0) {
+      const ctx = this.effectiveObserverContext()
+      working = mergeRemoteCalendarEvents(working, remoteEntries, {
+        rangeStart: startRange.start,
+        rangeEnd: endRange.end,
+        observerPlanet: this.store.observerPlanet,
+        observerLatitude: ctx?.latitude,
+        observerLongitude: ctx?.longitude,
+        regionId: this.store.regionId,
+        language: this.language
+      })
+    } else {
+      working.sort((left: AstronomyCalendarEvent, right: AstronomyCalendarEvent) => left.at - right.at || left.id.localeCompare(right.id))
+    }
+    return working
+  }
+
+  private rebuildFromLoadedResponses(): void {
+    if (this.response === undefined) return
+    const range = calendarMonth(this.store.year, this.store.month)
+    const ctx = this.effectiveObserverContext()
+    let rebuilt = calendarNativeEvents(this.response, range, this.language, ctx)
+    for (const extra of this.extraResponses) {
+      rebuilt = rebuilt.concat(calendarNativeEvents(extra,
+        calendarMonth(extra.year as number, extra.month as number), this.language, ctx))
+    }
+    this.store.events = this.mergeEventsWithSatellites(rebuilt)
+    this.recomputeMonthDays()
+    this.updateCoverage()
+    this.store.filterRevision += 1
+    this.hooks.feedChanged(this.store.events.slice())
+  }
+
+  refreshRemoteOverlay(): void {
+    if (this.disposed || this.response === undefined) return
+    try {
+      this.rebuildFromLoadedResponses()
+    } catch (_) {}
   }
 
   private fetchSatellitePassesIfApplicable(sequence: number, year: number, month: number, planet: string): void {
@@ -104,12 +148,16 @@ export class AstronomyCalendarController {
           : payload['satellitePasses']
         if (!Array.isArray(rawList) || rawList.length === 0) return
         this.rawSatellitePasses = rawList as NativeSatellitePassRecord[]
-        const nonSat = this.store.events.filter((ev: AstronomyCalendarEvent) => ev.kind !== 'satellite-pass')
-        const merged = this.mergeEventsWithSatellites(nonSat)
-        this.store.events = merged
-        this.recomputeMonthDays()
-        this.store.filterRevision += 1
-        this.hooks.feedChanged(merged.slice())
+        if (this.response !== undefined) {
+          this.rebuildFromLoadedResponses()
+        } else {
+          const nonSat = this.store.events.filter((ev: AstronomyCalendarEvent) => ev.kind !== 'satellite-pass' && ev.isRemote !== true)
+          const merged = this.mergeEventsWithSatellites(nonSat)
+          this.store.events = merged
+          this.recomputeMonthDays()
+          this.store.filterRevision += 1
+          this.hooks.feedChanged(merged.slice())
+        }
       })
     } catch (_) {
       this.store.satellitePassesLoading = false
@@ -153,7 +201,8 @@ export class AstronomyCalendarController {
     this.response = undefined
 
     const applyLoaded = (native: CalendarNativeResponse, fromCache: boolean): void => {
-      const events = calendarNativeEvents(native, range, this.language, this.effectiveObserverContext())
+      const baseEvents = calendarNativeEvents(native, range, this.language, this.effectiveObserverContext())
+      const events = this.mergeEventsWithSatellites(baseEvents)
       this.response = native
       this.store.sourceYear = year
       this.store.events = events
@@ -206,6 +255,7 @@ export class AstronomyCalendarController {
 
   private updateCoverage(): void {
     const planet = this.store.observerPlanet || 'Earth'
+    const remoteCount = countRemoteDynamicEvents(this.store.events)
     if (planet.toLowerCase() !== 'earth') {
       const label = calendarPlanetName(this.language, planet)
       this.store.coverage = calendarText(this.language,
@@ -213,8 +263,11 @@ export class AstronomyCalendarController {
         `Loaded local planetary alignments, companion phases, and seasonal events from ${label}; times use the device time zone (Earth meteors & satellites excluded).`)
       return
     }
-    this.store.coverage = calendarText(this.language, '已载入日月食、节气、主要月相、流星雨极大、行星/亮星合相及近 48 小时卫星过境；按设备时区显示。',
-      'Eclipses, solar terms, lunar phases, meteor peaks, planetary/star alignments and 48h satellite passes loaded; times use the device time zone.')
+    const remoteSuffixZh = remoteCount > 0 ? `，另含 ${remoteCount} 条云端动态天象` : ''
+    const remoteSuffixEn = remoteCount > 0 ? `, plus ${remoteCount} live alert(s)` : ''
+    this.store.coverage = calendarText(this.language,
+      `已载入日月食、节气、主要月相、流星雨极大、行星/亮星合相及近 48 小时卫星过境${remoteSuffixZh}；按设备时区显示。`,
+      `Eclipses, solar terms, lunar phases, meteor peaks, planetary/star alignments and 48h satellite passes${remoteSuffixEn} loaded; times use the device time zone.`)
   }
 
   loadMore(onDone?: () => void): void {
@@ -226,14 +279,18 @@ export class AstronomyCalendarController {
     const planet = this.store.observerPlanet || 'Earth'
     const sequence = this.sequence
     const appendNative = (native: CalendarNativeResponse): void => {
-      const events = calendarNativeEvents(native, range, this.language, this.effectiveObserverContext())
       this.extraResponses.push(native)
       this.store.throughYear = year
       this.store.throughMonth = month
-      const nonSat = this.store.events.filter((ev: AstronomyCalendarEvent) => ev.kind !== 'satellite-pass').concat(events)
-      this.store.events = this.mergeEventsWithSatellites(nonSat)
+      if (this.response !== undefined) {
+        this.rebuildFromLoadedResponses()
+      } else {
+        const events = calendarNativeEvents(native, range, this.language, this.effectiveObserverContext())
+        const nonSat = this.store.events.filter((ev: AstronomyCalendarEvent) => ev.kind !== 'satellite-pass' && ev.isRemote !== true).concat(events)
+        this.store.events = this.mergeEventsWithSatellites(nonSat)
+        this.hooks.feedChanged(this.store.events.slice())
+      }
       this.store.loadingMore = false
-      this.hooks.feedChanged(this.store.events.slice())
       if (onDone !== undefined) onDone()
     }
 

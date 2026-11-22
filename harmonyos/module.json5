@@ -55,7 +55,11 @@
               "entity.system.home"
             ],
             "actions": [
-              "action.system.home",
+              "action.system.home"
+            ]
+          },
+          {
+            "actions": [
               "ohos.want.action.sendData"
             ],
             "uris": [
@@ -88,12 +92,6 @@
                 "maxFileSupported": 10
               }
             ]
-          }
-        ],
-        "metadata": [
-          {
-            "name": "enable.remove.starting.window",
-            "value": "true"
           }
         ],
         "continuable": false
@@ -149,24 +147,6 @@
       {
         "name": "ohos.permission.LOCATION",
         "reason": "$string:stellarium_permission_reason_location",
-        "usedScene": {
-          "abilities": [
-            "QAbility"
-          ],
-          "when": "inuse"
-        }
-      },
-      {
-        "name": "ohos.permission.ACCELEROMETER",
-        "usedScene": {
-          "abilities": [
-            "QAbility"
-          ],
-          "when": "inuse"
-        }
-      },
-      {
-        "name": "ohos.permission.GYROSCOPE",
         "usedScene": {
           "abilities": [
             "QAbility"

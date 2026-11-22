@@ -14,7 +14,7 @@ const read = (rel) => readFileSync(new URL('../' + rel, import.meta.url), 'utf8'
 
 test('Earth and off-Earth worlds expose appropriate calendar filter categories', () => {
   const earthCats = calendarCategoriesForPlanet('Earth').map(c => c.id);
-  assert.deepEqual(earthCats, ['eclipse', 'moon', 'planet', 'meteor', 'solar', 'satellite']);
+  assert.deepEqual(earthCats, ['dynamic', 'eclipse', 'moon', 'planet', 'meteor', 'solar', 'satellite']);
 
   const marsCats = calendarCategoriesForPlanet('Mars').map(c => c.id);
   assert.deepEqual(marsCats, ['planet', 'companion', 'eclipse', 'season']);

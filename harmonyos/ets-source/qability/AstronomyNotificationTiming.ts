@@ -110,6 +110,7 @@ export interface TimingEventInput {
   separationDegrees?: number
   observerPlanet?: string
   satMaxAlt?: number
+  remoteHighlight?: boolean
 }
 
 export interface TimingOptions {
@@ -153,6 +154,10 @@ export function topicOfEventKind(kind: string): NotificationTopicId {
 }
 
 export function isMajorAstronomyEvent(event: TimingEventInput): boolean {
+  if (event.remoteHighlight === true || event.kind === 'aurora-alert' ||
+    event.kind === 'comet-event' || event.kind === 'spaceflight' || event.kind === 'transient') {
+    return true
+  }
   if (event.kind === 'meteor-peak' || event.kind === 'solar-eclipse' ||
     event.kind === 'lunar-eclipse' || event.kind === 'companion-eclipse') {
     return true

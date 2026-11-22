@@ -109,6 +109,18 @@ export struct SearchCalendarStrip {
         }
           .width('100%')
           .height('100%')
+      } else if (event.isRemote === true) {
+        Column()
+          .width('100%')
+          .height('100%')
+          .linearGradient({
+            angle: 135,
+            colors: this.c.isNight
+              ? [['#250806', 0.0], ['#140404', 1.0]]
+              : (event.kind === 'aurora-alert'
+                ? [['#0F3B34', 0.0], ['#211D47', 0.6], ['#101326', 1.0]]
+                : [['#1B254A', 0.0], ['#291C42', 0.6], ['#101324', 1.0]])
+          })
       } else {
         // calendar_*_detail.svg 为 396×240（1.65:1），天体圆盘中心在 x≈64% 处；
         // 按高 124vp 展开（宽 205vp）并微移对齐，让日/月/行星圆盘恰好居中落在 114×124 卡片中央。

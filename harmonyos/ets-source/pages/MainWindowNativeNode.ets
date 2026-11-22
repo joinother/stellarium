@@ -14,6 +14,8 @@ import { AstronomyCalendarController, AstronomyCalendarHostHooks, AstronomyCalen
 import { AstronomyCalendarStore } from '../state/AstronomyCalendarStore'
 import { AstronomyCalendarCache } from '../state/AstronomyCalendarCache'
 import { AstronomyCalendarEvent } from '../state/AstronomyCalendarEvent'
+import { RemoteCalendarEntry } from '../state/RemoteCalendarFeed'
+import { RemoteCalendarFeedService } from '../capability/RemoteCalendarFeedService'
 import { CalendarObserverContext } from '../state/AstronomyCalendarText'
 import { AstronomyCalendarPanel } from '../panels/panels/AstronomyCalendarPanel'
 import { WidgetStudioPanel } from '../panels/panels/WidgetStudioPanel'
@@ -84,6 +86,16 @@ import { NotificationController, NotificationHostHooks, SyncedWidgetReminderEntr
 import { AstronomyQuietHours } from '../qability/AstronomyNotificationPolicy'
 import { AstronomySubscriptionFeedLoader, SubscriptionNativeResponse, SubscriptionObserver, decodeSubscriptionNativeResponse } from '../capability/AstronomySubscriptionFeed'
 import { PushTokenFetcher, PushTokenResult } from '../capability/PushTokenFetcher'
+import {
+  LiveViewController,
+  LiveViewCountdownRequest,
+  LiveViewActiveSnapshot,
+  LiveViewStartResult,
+  buildLiveViewRequestFromCalendarEvent,
+  buildDarkAdaptLiveViewRequest,
+  buildDemoSatellitePassLiveViewRequest,
+  isEventEligibleForLiveView
+} from '../capability/LiveViewController'
 import { SurveyController, SurveyHostHooks } from '../capability/SurveyController'
 import { ARController, ARHostHooks } from '../capability/ARController'
 import { KeyboardShortcutController, KeyboardShortcutHostHooks, KeyboardShortcutInputHooks } from '../capability/KeyboardShortcutController'
@@ -1159,6 +1171,14 @@ export struct WindowNativeNode {
   private landingTimeResetTimer: number = 0
   @State private landingBannerEventId: string = ''
   @State private landingBannerEventAt: string = ''
+  // 标准实况窗（TIMER 场景）状态与应用内临近卫星过境提醒条。
+  @State private liveViewActiveEventId: string = ''
+  @State private liveViewActiveTitle: string = ''
+  @State private liveViewStatusText: string = ''
+  @State private satPromptEvent: AstronomyCalendarEvent | undefined = undefined
+  @State private satPromptDismissedId: string = ''
+  private liveViewControllerImpl: LiveViewController | undefined = undefined
+  private satPromptScanTimer: number = 0
   // 作为 .cat「打开方式」被拉起时由 QAbility 写入；此处消费并导入（见 handleOpenCatalogUri）。
   @Watch('onOpenCatalogUriChanged')
   @StorageLink('stellariumOpenCatalogUri')
@@ -1427,7 +1447,7 @@ export struct WindowNativeNode {
   @State private splashGone: boolean = false
   private startupViewportCheckedAt: number = 0
   @State private viewTab: number = 0  // View面板子标签索引
-  @State private configTab: number = 0  // 统一设置面板子标签索引；默认显示主设置
+  @State private configTab: number = -1  // 统一设置面板子标签索引；默认显示首位「设备与隐私」
   @State private timeSettingsStore: TimeSettingsStore = new TimeSettingsStore()
   @State private ephemerisStore: EphemerisStore = new EphemerisStore()
   @State private timeSettingsPending: boolean = false
@@ -1551,6 +1571,8 @@ export struct WindowNativeNode {
   // objectDetailConnectorAnimateGeometry 是宿主 @State（指向线过渡开关），控制器经 hooks 写入。
   @State private objectDetailConnectorAnimateGeometry: boolean = false
   private foregroundRefreshPaused: boolean = false
+  @State private remoteCalendarFeedStatus: string = ''
+  @State private remoteCalendarFeedSyncing: boolean = false
   // Structured details are loaded after a new target is drawn. Keeping this
   // timer separate from the live-value poll prevents it from delaying panning.
   private lastSafeNavigationPayload: string = ''
@@ -1602,7 +1624,10 @@ export struct WindowNativeNode {
     this.objectModelRendererCtl().setForeground(foreground)
     if (foreground) {
       // 回前台时引擎可能已被外部（CLI/配置）改变；引擎就绪后立即同步一次 UI store。
-      if (this.engineReady) this.refreshStateNow()
+      if (this.engineReady) {
+        this.refreshStateNow()
+        this.syncRemoteCalendarFeed(false)
+      }
       if (this.foregroundRefreshPaused) {
         this.foregroundRefreshPaused = false
         if (this.activePanel === 'time' && this.panelVisible) {
@@ -2565,6 +2590,12 @@ export struct WindowNativeNode {
   aboutToDisappear(): void {
     this.calendarController?.dispose()
     this.calendarController = undefined
+    this.liveViewControllerImpl?.dispose()
+    this.liveViewControllerImpl = undefined
+    if (this.satPromptScanTimer !== 0) {
+      clearInterval(this.satPromptScanTimer)
+      this.satPromptScanTimer = 0
+    }
     this.guideCtl().stopGuideTimer()
     this.guideCtl().resetJourneyFlags()
     this.guideCtl().stopPlayer()
@@ -2794,7 +2825,7 @@ export struct WindowNativeNode {
           setScriptMetadata: (raw: Object | undefined): void => { this.scriptPlaybackCtl().setScriptMetadata(raw) },
           reloadConfigurationSettings: (): void => { this.settingsCtl().loadConfigurationSettings() },
           // 引擎启动确认后由 StartupBridge 调用；立即读引擎状态，不排队、不延时。
-          refreshRuntimeState: (): void => { this.engineReady = true; this.refreshStateNow(); this.callInteractive('setTouchPickRadius', this.viewSettingsStore.touchPickRadiusVp.toString(), () => {}); this.syncStarBrightnessFromEngine(); this.consumeCardRoute(); void this.notificationCtl().refreshSubscriptions(); this.scheduleCardSnapshotSync(1800); setTimeout(() => { this.ensureCalendarPreviewLoaded() }, 600) },
+          refreshRuntimeState: (): void => { this.engineReady = true; this.refreshStateNow(); this.callInteractive('setTouchPickRadius', this.viewSettingsStore.touchPickRadiusVp.toString(), () => {}); this.syncStarBrightnessFromEngine(); this.consumeCardRoute(); void this.notificationCtl().refreshSubscriptions(); this.scheduleCardSnapshotSync(1800); setTimeout(() => { this.ensureCalendarPreviewLoaded(); this.syncRemoteCalendarFeed(false) }, 600) },
           // Startbridge 的「引擎就绪」以 StelApp::isInitialized() 为准：
           // 出帧就绪可能早于 init 完成，提前投放查询会在 init 期间堆积重试链。
           enginePresentationReady: (): boolean => isEngineReady()
@@ -2878,7 +2909,17 @@ export struct WindowNativeNode {
           const altitude = response.altitude
           if (response.ok !== true || response.planet !== 'Earth' || typeof latitude !== 'number' || typeof longitude !== 'number' ||
             typeof altitude !== 'number' || !Number.isFinite(latitude) || !Number.isFinite(longitude) || !Number.isFinite(altitude)) return undefined
-          return { key: `${latitude.toFixed(5)}:${longitude.toFixed(5)}:${altitude.toFixed(0)}` }
+          return {
+            key: `${latitude.toFixed(5)}:${longitude.toFixed(5)}:${altitude.toFixed(0)}`,
+            latitude: latitude,
+            longitude: longitude,
+            regionId: this.calendarStore.regionId
+          }
+        },
+        remoteEntries: (): RemoteCalendarEntry[] => {
+          const dir = this.stellariumFilesDir()
+          if (dir.length > 0) RemoteCalendarFeedService.getInstance().initDir(dir)
+          return RemoteCalendarFeedService.getInstance().getEntries()
         }
       })
       const hooks: NotificationHostHooks = {
@@ -3063,10 +3104,55 @@ export struct WindowNativeNode {
     }
   }
 
+  private syncRemoteCalendarFeed(force: boolean): void {
+    const dir = this.stellariumFilesDir()
+    const svc = RemoteCalendarFeedService.getInstance()
+    if (dir.length > 0) {
+      svc.initDir(dir)
+    }
+    if (this.remoteCalendarFeedStatus.length === 0) {
+      this.remoteCalendarFeedStatus = svc.summaryText(this.i18nLang)
+    }
+    const onlineAllowed = !OFFLINE_APPGALLERY_BUILD && this.privacyNativeStartupAllowed &&
+      this.applicationInForeground && hasCurrentPrivacyConsent()
+    if (!force && !onlineAllowed) return
+    if (force) {
+      this.remoteCalendarFeedSyncing = true
+    }
+    void svc.syncIfDue(onlineAllowed, force).then((res) => {
+      this.remoteCalendarFeedSyncing = false
+      const isZh = this.i18nLang.toLowerCase().startsWith('zh')
+      const statusText = isZh ? res.statusZh : res.statusEn
+      if (statusText.length > 0) {
+        this.remoteCalendarFeedStatus = statusText
+      }
+      if (force) {
+        this.flashHint(statusText)
+      }
+      if (res.changed) {
+        if (this.calendarController !== undefined) {
+          this.calendarController.refreshRemoteOverlay()
+        }
+        if (this.scheduleCardSnapshotSync !== undefined) {
+          this.scheduleCardSnapshotSync(300)
+        }
+        if (this.engineReady && this.notificationControllerImpl !== null) {
+          void this.notificationControllerImpl.refreshSubscriptions()
+        }
+      }
+    }).catch(() => {
+      this.remoteCalendarFeedSyncing = false
+    })
+  }
+
   private calendarCtl(): AstronomyCalendarController {
     const dir = this.stellariumFilesDir()
     if (dir.length > 0) {
       AstronomyCalendarCache.getInstance().initDir(dir)
+      RemoteCalendarFeedService.getInstance().initDir(dir)
+      if (this.remoteCalendarFeedStatus.length === 0) {
+        this.remoteCalendarFeedStatus = RemoteCalendarFeedService.getInstance().summaryText(this.i18nLang)
+      }
     }
     if (this.calendarController === undefined) {
       const hooks: AstronomyCalendarHostHooks = {
@@ -3086,7 +3172,9 @@ export struct WindowNativeNode {
           const showerCode = event.showerCode?.trim() ?? ''
           const rawTarget = event.target?.trim() ?? ''
           let searchArg = rawTarget
-          if (isSat && satId.length > 0) {
+          if (rawTarget === 'North' || rawTarget === 'South' || rawTarget === 'East' || rawTarget === 'West') {
+            searchArg = ''
+          } else if (isSat && satId.length > 0) {
             searchArg = `object|Satellite|${satId}`
           } else if (isMeteor && showerCode.length > 0) {
             searchArg = `object|MeteorShower|${showerCode}`
@@ -3158,6 +3246,9 @@ export struct WindowNativeNode {
               this.calendarCtl().loadMore()
             }
           }
+          if (this.refreshUpcomingSatellitePassPrompt !== undefined) {
+            this.refreshUpcomingSatellitePassPrompt(events)
+          }
         },
         observerContext: (): CalendarObserverContext => ({
           latitude: this.observerLatitude,
@@ -3167,7 +3258,8 @@ export struct WindowNativeNode {
         }),
         onFilterChanged: (): void => {
           this.saveAppSettings()
-        }
+        },
+        remoteEntries: (): RemoteCalendarEntry[] => RemoteCalendarFeedService.getInstance().getEntries()
       }
       this.calendarController = new AstronomyCalendarController(this.commandPort(), this.calendarStore, hooks)
       this.calendarController.setLanguage(I18n.getLanguage())
@@ -4615,6 +4707,139 @@ export struct WindowNativeNode {
     this.landingTimeResetConfirmed = false
   }
 
+  private liveViewCtl(): LiveViewController {
+    if (this.liveViewControllerImpl === undefined) {
+      this.liveViewControllerImpl = new LiveViewController((snap: LiveViewActiveSnapshot) => {
+        this.liveViewActiveEventId = snap.running ? snap.eventId : ''
+        this.liveViewActiveTitle = snap.running ? snap.title : ''
+      })
+      void this.liveViewControllerImpl.syncActiveState()
+    }
+    return this.liveViewControllerImpl
+  }
+
+  private startLiveViewForRequest(req: LiveViewCountdownRequest, silentIfUnauthorized: boolean = false): void {
+    const zh = I18n.getLanguage().startsWith('zh')
+    this.liveViewStatusText = zh ? '正在开启实况窗…' : 'Starting Live View...'
+    void this.liveViewCtl().start(req).then((res: LiveViewStartResult) => {
+      if (res.ok) {
+        this.liveViewStatusText = zh
+          ? `已开启「${req.title}」实况窗（状态栏与锁屏同步倒计时）`
+          : `Live View active for ${req.title}`
+        if (!silentIfUnauthorized && this.flashHint !== undefined) {
+          this.flashHint(zh ? `已开启实况窗 · ${req.title}` : `Live View started · ${req.title}`)
+        }
+      } else if (silentIfUnauthorized && (res.unauthorized || res.disabled)) {
+        this.liveViewStatusText = ''
+      } else {
+        const msg = res.error ?? (zh ? '开启实况窗失败' : 'Live View failed')
+        this.liveViewStatusText = res.code !== undefined ? `${msg} (${res.code})` : msg
+        if (!silentIfUnauthorized && this.flashHint !== undefined) {
+          this.flashHint(msg)
+        }
+      }
+    })
+  }
+
+  private startLiveViewForEvent(event: AstronomyCalendarEvent, silentIfUnauthorized: boolean = false): void {
+    const req = buildLiveViewRequestFromCalendarEvent(event, I18n.getLanguage())
+    this.startLiveViewForRequest(req, silentIfUnauthorized)
+  }
+
+  private startBestSatelliteLiveView(): void {
+    const lang = I18n.getLanguage()
+    const now = Date.now()
+    const bestSat = this.calendarStore.events.find((ev: AstronomyCalendarEvent) =>
+      ev.kind === 'satellite-pass' && isEventEligibleForLiveView(ev, now))
+    if (bestSat !== undefined) {
+      this.startLiveViewForEvent(bestSat, false)
+      return
+    }
+    const demoReq = buildDemoSatellitePassLiveViewRequest(lang)
+    this.startLiveViewForRequest(demoReq, false)
+  }
+
+  private startDarkAdaptLiveView(): void {
+    const req = buildDarkAdaptLiveViewRequest(20, I18n.getLanguage())
+    this.startLiveViewForRequest(req, false)
+  }
+
+  private stopActiveLiveView(): void {
+    const zh = I18n.getLanguage().startsWith('zh')
+    void this.liveViewCtl().stop().then(() => {
+      this.liveViewStatusText = zh ? '已停止实况窗倒计时' : 'Live View stopped'
+      if (this.flashHint !== undefined) {
+        this.flashHint(zh ? '实况窗已结束' : 'Live View stopped')
+      }
+    })
+  }
+
+  private refreshUpcomingSatellitePassPrompt(eventsOverride?: AstronomyCalendarEvent[]): void {
+    const planet = (this.sessionToolStore?.observerPlanet ?? 'Earth').trim().toLowerCase()
+    if (planet.length > 0 && planet !== 'earth') {
+      this.satPromptEvent = undefined
+      return
+    }
+    const list = eventsOverride ?? this.calendarStore.events
+    const now = Date.now()
+    const windowMs = 30 * 60 * 1000
+    let soonest: AstronomyCalendarEvent | undefined = undefined
+    for (const ev of list) {
+      if (ev.kind !== 'satellite-pass') continue
+      const startMs = ev.satStartAt ?? ev.at
+      const endMs = ev.satEndAt ?? (ev.at + 5 * 60 * 1000)
+      if (endMs <= now) continue
+      if (startMs - now > windowMs) continue
+      if (ev.id === this.satPromptDismissedId && this.liveViewActiveEventId !== ev.id) continue
+      if (soonest === undefined || startMs < (soonest.satStartAt ?? soonest.at)) {
+        soonest = ev
+      }
+    }
+    this.satPromptEvent = soonest
+    if (this.satPromptScanTimer === 0 && list.some((e: AstronomyCalendarEvent) => e.kind === 'satellite-pass')) {
+      this.satPromptScanTimer = setInterval(() => {
+        this.refreshUpcomingSatellitePassPrompt()
+      }, 60000)
+    }
+  }
+
+  private handleSatelliteLandingLiveView(eventId: string, satId: string, eventAtMs: number, landingSource: string): void {
+    const matchedPass = this.calendarStore.events.find((ev: AstronomyCalendarEvent) =>
+      ev.kind === 'satellite-pass' && (ev.id === eventId || (satId.length > 0 && ev.satCatalogId === satId && Math.abs(ev.at - (Number.isFinite(eventAtMs) ? eventAtMs : ev.at)) < 3600000)))
+    if (matchedPass !== undefined && isEventEligibleForLiveView(matchedPass)) {
+      this.satPromptDismissedId = ''
+      this.satPromptEvent = matchedPass
+      // 点卫星过境通知拉起前台后，若距离升起 ≤ 30 分钟且尚未开启实况窗，自动静默启动实况窗追踪。
+      const startMs = matchedPass.satStartAt ?? matchedPass.at
+      if (landingSource === 'reminder' && startMs - Date.now() <= 30 * 60 * 1000 && this.liveViewActiveEventId !== matchedPass.id) {
+        this.startLiveViewForEvent(matchedPass, true)
+      }
+    }
+  }
+
+  private satPromptBannerVisible(): boolean {
+    if (this.satPromptEvent === undefined) return false
+    if (this.panelVisible || this.locationMapFullscreen) return false
+    if (this.landingBannerVisible && (this.landingBannerHasTimeShift || this.landingTimeResetConfirmed)) return false
+    const endMs = this.satPromptEvent.satEndAt ?? (this.satPromptEvent.at + 5 * 60 * 1000)
+    return endMs > Date.now()
+  }
+
+  private satPromptSummaryText(): string {
+    const ev = this.satPromptEvent
+    if (ev === undefined) return ''
+    const zh = I18n.getLanguage().startsWith('zh')
+    const now = Date.now()
+    const startMs = ev.satStartAt ?? ev.at
+    const name = ev.title.replace(/\s*过境\s*·.*$/, '').replace(/\s*Pass\s*·.*$/, '').trim()
+    const altText = ev.satMaxAlt !== undefined ? (zh ? ` · 最高${Math.round(ev.satMaxAlt)}°` : ` · ${Math.round(ev.satMaxAlt)}°`) : ''
+    if (now >= startMs) {
+      return zh ? `${name} 正在过境${altText}` : `${name} passing now${altText}`
+    }
+    const mins = Math.max(1, Math.ceil((startMs - now) / 60000))
+    return zh ? `${name} ${mins}分钟后过境${altText}` : `${name} in ${mins}m${altText}`
+  }
+
   private landingTimePillY(): number {
     if (this.isExpandedLayout || this.isFoldHoverLayout) {
       return 52
@@ -4805,6 +5030,9 @@ export struct WindowNativeNode {
         } else {
           runSkyLanding()
         }
+        if (isSatelliteLanding && this.handleSatelliteLandingLiveView !== undefined) {
+          this.handleSatelliteLandingLiveView(eventId, satId, eventAtMs, landingSource)
+        }
         if (this.showLandingBanner !== undefined) {
           const fallbackTitle = landingTitle.length > 0
             ? landingTitle
@@ -4950,8 +5178,8 @@ export struct WindowNativeNode {
     if (panel === 'pluginManager') {
       this.configTab = 6
       panel = 'settings'
-    } else if (panel === 'settings' && this.configTab >= 4 && this.configTab <= 6) {
-      this.configTab = 0
+    } else if (panel === 'settings' && ((this.configTab >= 4 && this.configTab <= 6) || (this.activePanel === 'more' && routeDirection >= 0))) {
+      this.configTab = -1
     }
     if (panel === 'polarScope') {
       this.polarScopeCtl().enterPolarScope()
@@ -5184,6 +5412,7 @@ export struct WindowNativeNode {
         this.refreshState()
         this.catalogStore.loadCatalogHealth()
         this.settingsCtl().loadConfigurationSettings()
+        if (this.configTab === -1) void this.notificationCtl().refreshStatus()
         if (this.configTab === 6) this.pluginStore.loadPluginList()
       } else if (panel === 'place') {
         this.refreshState()
@@ -5494,7 +5723,7 @@ export struct WindowNativeNode {
   }
 
   private canGoBackPanel(): boolean {
-    return this.panelNavigationStack.length > 0 || panelRouteParent(this.activePanel).length > 0
+    return this.panelNavigationDepth > 0 || panelRouteParent(this.activePanel).length > 0
   }
 
   private handlePanelBackTap(): void {
@@ -5778,6 +6007,15 @@ export struct WindowNativeNode {
       const pillX = (this.skyWidth - pillW) / 2
       const pillY = this.landingTimePillY()
       if (x >= pillX - 10 && x <= pillX + pillW + 10 && y >= pillY - 6 && y <= pillY + pillH + 6) {
+        return true
+      }
+    }
+    if (this.satPromptBannerVisible()) {
+      const promptW = Math.min(360, Math.max(260, this.skyWidth - 32))
+      const promptH = 52
+      const promptX = (this.skyWidth - promptW) / 2
+      const promptY = this.landingTimePillY()
+      if (x >= promptX - 10 && x <= promptX + promptW + 10 && y >= promptY - 6 && y <= promptY + promptH + 6) {
         return true
       }
     }
@@ -10116,6 +10354,62 @@ export struct WindowNativeNode {
         }
       }
 
+      if (this.satPromptBannerVisible() && this.satPromptEvent !== undefined) {
+        Row({ space: 8 }) {
+          Text(this.satPromptSummaryText())
+            .fontSize(12)
+            .fontWeight(FontWeight.Medium)
+            .fontColor(this.hostSlots().textStrong)
+            .maxLines(1)
+            .textOverflow({ overflow: TextOverflow.Ellipsis })
+            .layoutWeight(1)
+          Button(this.liveViewActiveEventId === this.satPromptEvent.id
+            ? (I18n.getLanguage().startsWith('zh') ? '停止实况窗' : 'Stop')
+            : (I18n.getLanguage().startsWith('zh') ? '开启实况窗' : 'Live View'), { type: ButtonType.Capsule })
+            .height(30)
+            .padding({ left: 10, right: 10 })
+            .fontSize(11)
+            .fontColor(this.liveViewActiveEventId === this.satPromptEvent.id ? this.hostSlots().text : this.hostSlots().onAccent)
+            .backgroundColor(this.liveViewActiveEventId === this.satPromptEvent.id ? this.hostSlots().softStrong : this.hostSlots().accent)
+            .clickEffect({ level: ClickEffectLevel.LIGHT })
+            .onClick(() => {
+              const ev = this.satPromptEvent
+              if (ev === undefined) return
+              if (this.liveViewActiveEventId === ev.id) {
+                this.stopActiveLiveView()
+              } else {
+                this.startLiveViewForEvent(ev, false)
+              }
+            })
+          Button('×', { type: ButtonType.Circle })
+            .width(26)
+            .height(26)
+            .fontSize(14)
+            .fontColor(this.hostSlots().sub)
+            .backgroundColor(this.hostSlots().softStrong)
+            .onClick(() => {
+              if (this.satPromptEvent !== undefined) {
+                this.satPromptDismissedId = this.satPromptEvent.id
+              }
+              this.satPromptEvent = undefined
+            })
+        }
+          .alignItems(VerticalAlign.Center)
+          .constraintSize({ maxWidth: Math.min(360, Math.max(260, this.skyWidth - 32)) })
+          .padding({ left: 14, right: 10, top: 8, bottom: 8 })
+          .backgroundColor(this.hostSlots().panelGlassStrong)
+          .backdropBlur(24)
+          .border({ width: 0.7, color: this.hostSlots().border })
+          .borderRadius(UI_RADIUS_PILL)
+          .position({
+            x: '50%',
+            y: this.landingTimePillY()
+          })
+          .markAnchor({ x: '50%', y: 0 })
+          .zIndex(93)
+          .transition(TransitionEffect.OPACITY.animation({ duration: 200, curve: Curve.EaseOut }))
+      }
+
       if (this.tools.skyTextureStatusVisible) {
         Row({ space: 8 }) {
           if (!this.tools.skyTextureStatusError) {
@@ -10955,11 +11249,16 @@ export struct WindowNativeNode {
         scheduleCalendarReminder: (timestamp: number) => { this.notificationCtl().scheduleAtDateTime(timestamp) },
         scheduleDailyAlarmReminder: (hour: number, minute: number) => { this.notificationCtl().scheduleDailyAlarm(hour, minute) },
         pushTokenText: this.pushTokenText,
+        liveViewActiveTitle: this.liveViewActiveTitle,
+        liveViewStatusText: this.liveViewStatusText,
         fetchPushToken: () => {
           PushTokenFetcher.getToken().then((r: PushTokenResult) => {
             this.pushTokenText = r.ok ? (r.token ?? '') : ('失败 ' + (r.code ?? 0) + ' ' + (r.error ?? ''))
           })
         },
+        startSatLiveView: () => { this.startBestSatelliteLiveView() },
+        startDarkAdaptLiveView: () => { this.startDarkAdaptLiveView() },
+        stopLiveView: () => { this.stopActiveLiveView() },
         toggleAstronomyEvents: (v: boolean) => { void this.changeSubscriptionFromUi('astronomy', v) },
         toggleSatellitePass: (v: boolean) => { void this.changeSubscriptionFromUi('satellite', v) },
         toggleDigest: (v: boolean) => { this.notificationStore.digestEnabled = v },
@@ -11009,6 +11308,10 @@ export struct WindowNativeNode {
         observerLatitude: this.locationPickerStore.locationPickerLatitude,
         observerLongitude: this.locationPickerStore.locationPickerLongitude,
         earthMapUri: this.stellariumFilesDir().length > 0 ? ('file://' + this.stellariumFilesDir() + '/stellarium/textures/earth_cmap.png') : '',
+        activeLiveViewEventId: this.liveViewActiveEventId,
+        liveViewStatusText: this.liveViewStatusText,
+        remoteFeedStatus: this.remoteCalendarFeedStatus,
+        remoteFeedSyncing: this.remoteCalendarFeedSyncing,
         host: {
           previousMonth: () => this.calendarCtl().previousMonth(),
           nextMonth: () => this.calendarCtl().nextMonth(),
@@ -11038,7 +11341,10 @@ export struct WindowNativeNode {
             this.notificationCtl().subscribeFromCalendarFilter(mapping, this.calendarStore.regionId)
           },
           clearFilters: () => this.calendarCtl().clearFilters(),
-          goToCurrentMonth: () => this.calendarCtl().goToCurrentMonth()
+          goToCurrentMonth: () => this.calendarCtl().goToCurrentMonth(),
+          startLiveView: (event: AstronomyCalendarEvent) => { this.startLiveViewForEvent(event, false) },
+          stopLiveView: () => { this.stopActiveLiveView() },
+          syncRemoteFeed: () => { this.syncRemoteCalendarFeed(true) }
         }
       })
     } else if (this.activePanel === 'widgets') {
