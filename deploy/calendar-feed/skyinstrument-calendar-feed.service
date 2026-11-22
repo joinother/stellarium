@@ -1,0 +1,16 @@
+[Unit]
+Description=Build Skyinstrument read-only static astronomy calendar feed
+After=network-online.target tle-mirror.service
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+User=tlemirror
+Group=tlemirror
+ExecStart=/usr/bin/node /opt/tle-mirror/calendar-feed/build-calendar-feed.mjs --input /opt/tle-mirror/calendar-feed/curated-events.json --with-noaa --mpc-comets /srv/tle-mirror/v1/catalogs/mpc/comets.txt --out /srv/tle-mirror/v1/calendar
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ReadWritePaths=/srv/tle-mirror/v1/calendar
+ProtectHome=true
+TimeoutStartSec=45

@@ -1,0 +1,12 @@
+[Unit]
+Description=Refresh Skyinstrument astronomy calendar feed every 2 hours
+
+[Timer]
+OnBootSec=2min
+OnUnitActiveSec=2h
+RandomizedDelaySec=120
+Persistent=true
+Unit=skyinstrument-calendar-feed.service
+
+[Install]
+WantedBy=timers.target

@@ -104,6 +104,34 @@ class AuditCostTests(unittest.TestCase):
         self.assertFalse(self.audit.reserve_ai_call())
         self.assertEqual(pathlib.Path(self.audit.AI_USAGE).read_text(), '{invalid')
 
+    def test_cache_survives_past_24h_and_expires_after_7d(self):
+        source = self.root / 'page.html'
+        source.write_text('stable page')
+        self.audit.ABS_BY_REL['page'] = str(source)
+        calls = []
+
+        def invoke():
+            calls.append(True)
+            return {'verdict': 'ok'}
+
+        with patch.object(self.audit.time, 'time', return_value=1_700_000_000.0):
+            self.audit.cached_judgment('free', 'page', 'seg', invoke)
+        # 3 days later with identical content/rules: still hits cache (no daily fullscan re-billing).
+        with patch.object(self.audit.time, 'time', return_value=1_700_000_000.0 + 3 * 86400):
+            self.audit.cached_judgment('free', 'page', 'seg', invoke)
+        self.assertEqual(len(calls), 1)
+        # After 7 days TTL: expires and re-checks.
+        with patch.object(self.audit.time, 'time', return_value=1_700_000_000.0 + 7 * 86400 + 10):
+            self.audit.cached_judgment('free', 'page', 'seg', invoke)
+        self.assertEqual(len(calls), 2)
+
+    def test_mirror_machine_files_skip_free_ai_review(self):
+        self.assertTrue(self.audit.should_skip_free_ai_review('tle-mirror/v1/manifest.json'))
+        self.assertTrue(self.audit.should_skip_free_ai_review('tle-mirror/v1/calendar/manifest.json'))
+        self.assertTrue(self.audit.should_skip_free_ai_review('tle-mirror/v1/catalogs/mpc/comets.txt'))
+        self.assertFalse(self.audit.should_skip_free_ai_review('skyinstrument/website/current/index.html'))
+        self.assertFalse(self.audit.should_skip_free_ai_review('tle-mirror/v1/injected.html'))
+
 
 if __name__ == '__main__':
     unittest.main()

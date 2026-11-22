@@ -918,6 +918,8 @@ def main():
                 break
             if rel in hit_pages:
                 continue      # 该页已有规则命中，走上面的复核分支
+            if should_skip_free_ai_review(rel):
+                continue      # 镜像目录内的机器生成数据（如每 3h 刷新的 manifest.json）已有结构/规则校验，避免重复调 AI 计费
             added = changed_text.get(rel, '')
             if len(added.strip()) < 10:
                 continue
@@ -1383,6 +1385,16 @@ def reserve_ai_call():
 
 
 JUDGMENT_CACHE = '/var/lib/skyinstrument/judgment-cache.json'
+# 缓存键已包含源文件全文、词库、本脚本与模型配置的 SHA-256：只要内容或规则有任一改动就会立刻失效；
+# 将 TTL 设为 7 天（原 24h 刚好卡在每日 03:00 fullscan 随机延迟边界导致无改动也天天重复计费）。
+JUDGMENT_CACHE_TTL_SEC = 7 * 86400
+MIRROR_MACHINE_EXT = ('.json', '.csv', '.3le', '.tle', '.txt')
+
+
+def should_skip_free_ai_review(rel):
+    """镜像目录内周期性刷新的机器数据文件已有 validate_json/csv/3le 校验，不送 judge_free 避免每 3h 重复计费。"""
+    low = (rel or '').lower()
+    return MIRROR_DIR_HINT in low and low.endswith(MIRROR_MACHINE_EXT)
 
 
 def cached_judgment(kind, page, payload, invoke, source=None):
@@ -1403,7 +1415,7 @@ def cached_judgment(kind, page, payload, invoke, source=None):
         entries = json.load(open(JUDGMENT_CACHE, encoding='utf-8'))
         entries = {entry_key: entry for entry_key, entry in entries.items()
                    if isinstance(entry, dict) and isinstance(entry.get('result'), dict)
-                   and 0 <= now - entry.get('time', 0) < 86400}
+                   and 0 <= now - entry.get('time', 0) < JUDGMENT_CACHE_TTL_SEC}
     except (OSError, ValueError, TypeError, AttributeError):
         entries = {}
     if key in entries:

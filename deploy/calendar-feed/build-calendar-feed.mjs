@@ -4,7 +4,7 @@
 //
 // Usage:
 //   node deploy/calendar-feed/build-calendar-feed.mjs --input deploy/calendar-feed/curated-events.json --out /tmp/calendar-out
-//   node deploy/calendar-feed/build-calendar-feed.mjs --with-noaa --out /srv/tle-mirror/public/v1/calendar
+//   node deploy/calendar-feed/build-calendar-feed.mjs --with-noaa --mpc-comets /srv/tle-mirror/v1/catalogs/mpc/comets.txt --out /srv/tle-mirror/v1/calendar
 //   node deploy/calendar-feed/build-calendar-feed.mjs --validate-only --input deploy/calendar-feed/curated-events.json
 
 import { createHash } from 'node:crypto';
@@ -15,12 +15,14 @@ const NOAA_KP_FORECAST_URL = 'https://services.swpc.noaa.gov/products/noaa-plane
 const VALID_ID_RE = /^[a-zA-Z0-9][a-zA-Z0-9:._-]{1,127}$/;
 const VALID_ACTIONS = new Set(['upsert', 'enrich', 'retract']);
 const MAX_ENTRIES = 200;
+const DAY_MS = 86400000;
 
 function parseArgs(argv) {
   const opts = {
     input: resolve(dirname(new URL(import.meta.url).pathname), 'curated-events.json'),
     out: '',
     withNoaa: false,
+    mpcComets: '',
     validateOnly: false,
     dryRun: false,
     nowMs: Date.now()
@@ -30,6 +32,7 @@ function parseArgs(argv) {
     if (arg === '--input' && argv[i + 1]) opts.input = resolve(argv[++i]);
     else if (arg === '--out' && argv[i + 1]) opts.out = resolve(argv[++i]);
     else if (arg === '--with-noaa') opts.withNoaa = true;
+    else if (arg === '--mpc-comets' && argv[i + 1]) opts.mpcComets = argv[++i];
     else if (arg === '--validate-only') opts.validateOnly = true;
     else if (arg === '--dry-run') opts.dryRun = true;
     else if (arg === '--now' && argv[i + 1]) opts.nowMs = Number(argv[++i]);
@@ -104,6 +107,99 @@ export function buildNoaaAuroraEntries(rows, nowMs = Date.now()) {
   });
 }
 
+// Parse standard MPC 1-line comet orbital elements (Soft00Cmt / comets.txt).
+// Fixed columns: 14..18 year, 19..21 month, 22..29 day, 30..39 q(AU), 91..95 H, 96..100 G, 102..158 name.
+export function parseMpcCometsText(text) {
+  if (typeof text !== 'string' || !text.trim()) return [];
+  const comets = [];
+  for (const line of text.split(/\r?\n/)) {
+    if (line.length < 105) continue;
+    const year = Number(line.slice(14, 18).trim());
+    const month = Number(line.slice(19, 21).trim());
+    const dayFloat = Number(line.slice(22, 29).trim());
+    const q = Number(line.slice(30, 39).trim());
+    const absMag = Number(line.slice(91, 95).trim());
+    const slope = Number(line.slice(96, 100).trim());
+    const rawName = line.slice(102, 158).trim();
+    if (!Number.isFinite(year) || !Number.isFinite(month) || !Number.isFinite(dayFloat) ||
+        !Number.isFinite(q) || !Number.isFinite(absMag) || !rawName) {
+      continue;
+    }
+    if (month < 1 || month > 12 || dayFloat < 1 || dayFloat >= 32 || q <= 0.01) continue;
+    const wholeDay = Math.floor(dayFloat);
+    const fracDayMs = Math.round((dayFloat - wholeDay) * DAY_MS);
+    const perihelionMs = Date.UTC(year, month - 1, wholeDay) + fracDayMs;
+    if (!Number.isFinite(perihelionMs)) continue;
+    const safeSlope = Number.isFinite(slope) && slope > 0 ? slope : 4.0;
+    comets.push({
+      packedId: line.slice(0, 12).trim(),
+      name: rawName,
+      perihelionMs,
+      q,
+      absMag,
+      slope: safeSlope
+    });
+  }
+  return comets;
+}
+
+function cometSlug(name) {
+  return name
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '')
+    .slice(0, 64) || 'comet';
+}
+
+// Select genuinely notable bright comets passing perihelion within [-45d, +60d] of nowMs.
+// Emits `comet-alert` entries which also trigger the HarmonyOS app's automatic silent MPC comet sync.
+export function buildMpcBrightCometEntries(text, nowMs = Date.now(), maxCount = 3) {
+  const comets = parseMpcCometsText(text);
+  const candidates = [];
+  for (const c of comets) {
+    const deltaDays = (c.perihelionMs - nowMs) / DAY_MS;
+    if (deltaDays < -45 || deltaDays > 60) continue;
+    if (c.q > 2.4) continue;
+    // Conservative perihelion apparent magnitude estimate: m ≈ H + 5*log10(Delta_est) + 2.5*G*log10(q).
+    const deltaEstAu = Math.max(0.4, Math.abs(c.q - 1.0) + 0.35);
+    const peakMag = c.absMag + 5 * Math.log10(deltaEstAu) + 2.5 * c.slope * Math.log10(Math.max(0.05, c.q));
+    if (!Number.isFinite(peakMag) || peakMag > 10.5) continue;
+    candidates.push({ ...c, peakMag });
+  }
+  candidates.sort((a, b) => a.peakMag - b.peakMag);
+  return candidates.slice(0, Math.max(1, maxCount)).map(c => {
+    const dateStr = new Date(c.perihelionMs).toISOString().slice(0, 10);
+    const magStr = c.peakMag.toFixed(1);
+    const qStr = c.q.toFixed(2);
+    const gearZh = c.peakMag <= 5.5
+      ? '暗夜下有望肉眼可见，双筒望远镜观测更佳'
+      : (c.peakMag <= 8.5 ? '建议使用双筒望远镜在暗夜低光害处寻觅' : '建议使用小型天文望远镜或深空摄影观测');
+    const gearEn = c.peakMag <= 5.5
+      ? 'Potentially visible to the unaided eye under dark skies, and striking in binoculars'
+      : (c.peakMag <= 8.5 ? 'Best observed with binoculars under dark skies' : 'Best observed with a small telescope or astrophotography');
+    const slug = cometSlug(c.name);
+    return {
+      id: `remote:comet:${slug}-${dateStr.slice(0, 4)}`,
+      revision: Math.max(1, Math.round((15 - Math.max(-2, Math.min(14, c.peakMag))) * 10)),
+      action: 'upsert',
+      kind: 'comet-alert',
+      title: `亮彗星过近日点：${c.name}`,
+      titleEn: `Bright Comet Perihelion: ${c.name}`,
+      body: `根据 MPC 最新轨道数据，彗星 ${c.name} 于 ${dateStr}（UTC）过近日点（近日距 ${qStr} AU），峰值估算约 ${magStr} 等。${gearZh}。应用已自动校验并同步最新彗星轨道。`,
+      bodyEn: `Per latest MPC orbital elements, comet ${c.name} reaches perihelion on ${dateStr} UTC (q = ${qStr} AU) with estimated peak mag ~${magStr}. ${gearEn}.`,
+      at: c.perihelionMs,
+      endAt: c.perihelionMs + 14 * DAY_MS,
+      target: c.name,
+      panel: 'calendar',
+      observerPlanet: 'Earth',
+      badge: c.peakMag <= 6.0 ? '亮彗星' : '彗星观测',
+      badgeEn: c.peakMag <= 6.0 ? 'Bright Comet' : 'Comet Watch',
+      highlight: c.peakMag <= 6.5,
+      expiresAt: c.perihelionMs + 45 * DAY_MS
+    };
+  });
+}
+
 export function validateAndNormalizeEntries(entries, nowMs = Date.now()) {
   if (!Array.isArray(entries)) throw new Error('entries must be an array');
   if (entries.length > MAX_ENTRIES) throw new Error(`entries exceed max ${MAX_ENTRIES}`);
@@ -170,12 +266,37 @@ async function main() {
   const opts = parseArgs(process.argv.slice(2));
   const curated = JSON.parse(await readFile(opts.input, 'utf8'));
   const combined = Array.isArray(curated.entries) ? curated.entries.slice() : [];
+  const curatedIds = new Set(combined.map(e => String(e?.id ?? '').trim()));
 
   if (opts.withNoaa) {
-    const resp = await fetch(NOAA_KP_FORECAST_URL, { signal: AbortSignal.timeout(15000) });
-    if (!resp.ok) throw new Error(`NOAA fetch failed: HTTP ${resp.status}`);
-    const rows = await resp.json();
-    combined.push(...buildNoaaAuroraEntries(rows, opts.nowMs));
+    try {
+      const resp = await fetch(NOAA_KP_FORECAST_URL, { signal: AbortSignal.timeout(15000) });
+      if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+      const rows = await resp.json();
+      for (const entry of buildNoaaAuroraEntries(rows, opts.nowMs)) {
+        if (!curatedIds.has(entry.id)) combined.push(entry);
+      }
+    } catch (err) {
+      console.error(`[calendar-feed] NOAA fetch skipped: ${err instanceof Error ? err.message : String(err)}`);
+    }
+  }
+
+  if (opts.mpcComets) {
+    try {
+      let mpcText = '';
+      if (/^https?:\/\//i.test(opts.mpcComets)) {
+        const resp = await fetch(opts.mpcComets, { signal: AbortSignal.timeout(15000) });
+        if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+        mpcText = await resp.text();
+      } else {
+        mpcText = await readFile(resolve(opts.mpcComets), 'utf8');
+      }
+      for (const entry of buildMpcBrightCometEntries(mpcText, opts.nowMs)) {
+        if (!curatedIds.has(entry.id)) combined.push(entry);
+      }
+    } catch (err) {
+      console.error(`[calendar-feed] MPC comets skipped: ${err instanceof Error ? err.message : String(err)}`);
+    }
   }
 
   const artifacts = buildCalendarFeedArtifacts(combined, opts.nowMs);
