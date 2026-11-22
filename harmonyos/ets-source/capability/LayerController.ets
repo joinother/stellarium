@@ -366,22 +366,31 @@ export class LayerController {
   setViewLockState(enabled: boolean): void {
     if (enabled && !this.objectDetailStore.hasSelectedObject()) {
       this.viewSettingsStore.viewLock = false
+      this.viewSettingsStore.explicitViewLockObject = ''
       this.hooks.flashHint(I18n.t('view_lock_requires_selection'))
       return
     }
     const previous = this.viewSettingsStore.viewLock
+    const previousExplicit = this.viewSettingsStore.explicitViewLockObject
+    const selectedKey = this.objectDetailStore.selectedEnglishName.length > 0
+      ? this.objectDetailStore.selectedEnglishName
+      : this.objectDetailStore.selectedName
     this.viewSettingsStore.viewLock = enabled
+    this.viewSettingsStore.explicitViewLockObject = enabled ? selectedKey : ''
     this.port.requestInteractive('setViewLock', enabled ? '1' : '0', (r: StellariumBridgeResponse) => {
       if (r.ok !== true) {
         this.viewSettingsStore.viewLock = previous
+        this.viewSettingsStore.explicitViewLockObject = previousExplicit
         this.hooks.flashHint(r.selectionRequired === true ? I18n.t('view_lock_requires_selection') : I18n.t('msg_apply_failed'))
         return
       }
       if (r.viewLock !== undefined) this.viewSettingsStore.viewLock = r.viewLock === true
+      this.viewSettingsStore.explicitViewLockObject = this.viewSettingsStore.viewLock ? selectedKey : ''
       if (r.tracking !== undefined) this.hooks.setTrackingText(r.tracking === true ? 'On' : 'Off')
       this.hooks.flashHint(this.viewSettingsStore.viewLock ? I18n.t('view_lock_enabled') : I18n.t('view_lock_disabled'))
     }, () => {
       this.viewSettingsStore.viewLock = previous
+      this.viewSettingsStore.explicitViewLockObject = previousExplicit
       this.hooks.flashHint(I18n.t('msg_apply_failed'))
     })
   }
