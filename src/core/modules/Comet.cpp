@@ -108,12 +108,6 @@ inline float hashCometNameSeed(const QString& name)
 	return 1.0f + static_cast<float>(h % 10000u) * 0.01f;
 }
 
-inline float hashSynchrone01(float seed, int k)
-{
-	const float x = std::sin(seed * 12.9898f + static_cast<float>(k) * 78.233f) * 43758.5453f;
-	return x - std::floor(x);
-}
-
 // Symplectic Velocity Verlet integration of a cometary dust grain under reduced solar gravity mu_eff = mu_sun * (1 - beta).
 Vec3d integrateDustVerlet(const Vec3d& p0, const Vec3d& v0, double tauDays, double beta, int steps)
 {
@@ -1014,30 +1008,28 @@ void main(void)
 		}
 	}
 
-	// 2. Real 3D Finson-Probstein Synchrone Dust Sheet (22 Newtonian radiation-pressure synchrones)
-	//    Produces exact 110-130 deg sweeping rainbow arches + radiating aurora-like plumes on sunskirters
-	//    (McNaught, West, Ikeya-Seki) AND velvety seamless curved fans on smooth comets (Hale-Bopp).
+	// 2. Continuous 2D Finson-Probstein Synchrone Dust Sheet (22 Newtonian radiation-pressure synchrones)
+	//    The 22 widely overlapping 3D synchrones define a seamless continuous (uAge, vBeta) coordinate field
+	//    across the entire curved dust sheet, enabling infinite-resolution multi-scale aurora filaments
+	//    on sunskirters (McNaught, West) and silky asymptotic mist dissolve with ZERO blunt capsule tips.
 	if (u_dustIntensity > 0.0005)
 	{
-		mediump vec3 headTint  = mix(vec3(1.00, 0.98, 0.92), vec3(1.00, 0.94, 0.78), u_dustWarmth);
-		mediump vec3 midWarm   = mix(vec3(0.99, 0.87, 0.73), vec3(1.00, 0.86, 0.68), u_dustWarmth);
-		mediump vec3 midArch   = mix(midWarm, vec3(0.91, 0.93, 1.00), 0.74 * u_striaeStrength);
-		mediump vec3 outerWarm = mix(vec3(0.88, 0.74, 0.62), vec3(0.92, 0.76, 0.62), u_dustWarmth);
-		mediump vec3 outerCurt = mix(outerWarm, vec3(0.62, 0.77, 1.00), 0.90 * u_striaeStrength);
-
-		mediump vec3 dustRgb = vec3(0.0);
-		highp float dustSum = 0.0;
+		highp float gRawSum  = 0.0;
+		highp float gNormSum = 0.0;
+		highp float uSum     = 0.0;
+		highp float vSum     = 0.0;
+		highp float qSum     = 0.0;
 
 		for (int k = 0; k < 22; ++k)
 		{
-			highp vec4 meta = u_synMeta[k]; // x=weight, y=wInnerPx, z=wOuterPx, w=ageFrac (<0 invalid)
+			highp vec4 meta = u_synMeta[k]; // x=qNorm, y=wInnerPx, z=wOuterPx, w=ageFrac (<0 invalid)
 			if (meta.w < 0.0)
 				continue;
 
 			highp vec2 A = u_synA[k];
 			highp vec2 M = u_synM[k];
 			highp vec2 B = u_synB[k];
-			highp float wPad = max(meta.y, meta.z) * 3.4;
+			highp float wPad = max(meta.y, meta.z) * 3.2;
 			highp vec2 bMin = min(A, min(M, B)) - vec2(wPad);
 			highp vec2 bMax = max(A, max(M, B)) + vec2(wPad);
 			if (v_screenPos.x < bMin.x || v_screenPos.x > bMax.x ||
@@ -1064,75 +1056,105 @@ void main(void)
 			highp vec2 diff = v_screenPos - Ps;
 			highp float dist2 = dot(diff, diff);
 
-			// Smooth transition from overlapping continuous inner arch (wInner) to radiating outer plumes (wOuter)
-			highp float sOuter = smoothstep(0.12, 0.48, s);
-			highp float wLoc = mix(meta.y, meta.z, sOuter);
+			highp float wLoc = mix(meta.y, meta.z, s);
 			highp float v2 = dist2 / max(wLoc * wLoc, 1.0);
-			if (v2 < 11.0)
+			if (v2 < 9.5)
 			{
-				// On smooth comets: broad velvety Gaussian; on striated sunskirters: crisp-yet-feathery aurora pillar core + subtle ethereal veil
-				highp float striaeOuter = float(u_striaeStrength) * sOuter;
-				highp float coreWeight = mix(0.58, 0.88, striaeOuter);
-				highp float across = coreWeight * exp(-v2 * mix(1.25, 1.85, striaeOuter))
-				                   + (1.0 - coreWeight) * exp(-v2 * 0.36);
+				highp float g = exp(-v2 * 1.05);
 
-				highp float age = meta.w;
-				highp float headFill = 1.0 - smoothstep(0.03, 0.22, age);
-
-				// Carve a crisp, clean, hollow concave underside below the inner arch on striated sunskirters
-				// (no dust exists with beta < betaInner; prevents fog from bleeding into the dark hollow cavity!)
-				if (u_striaeStrength > 0.10 && s < 0.02 && headFill < 0.99)
+				// Smooth sunward/underside paraboloid edge behind A[k]:
+				// - On smooth comets (Hale-Bopp, Halley): clean rounded U-shaped fountain nose (no disk halo behind head!)
+				// - On striated sunskirters (McNaught, West): crisp clean hollow concave arch underside
+				highp float headFill = 1.0 - smoothstep(0.03, 0.22, meta.w);
+				if (s < 0.02)
 				{
 					highp vec2 tA = normalize(c1 + vec2(1e-4, 0.0));
 					highp float backDist = max(0.0, -dot(v_screenPos - A, tA));
-					highp float backNorm = backDist / max(0.28 * wLoc, 1.5);
-					across *= mix(1.0, exp(-backNorm * backNorm), float(u_striaeStrength) * (1.0 - headFill));
+					if (backDist > 0.0)
+					{
+						highp float backScale = mix(0.68, 0.30, float(u_striaeStrength) * (1.0 - headFill));
+						highp float backNorm = backDist / max(backScale * wLoc, 1.5);
+						g *= exp(-backNorm * backNorm);
+					}
 				}
 
-				// Delicate wispy aurora/silk sub-structure along the outer synchrone plumes
-				if (s > 0.08 && (u_striaeStrength > 0.05 || u_dustRibbonStrength > 0.20))
-				{
-					dP = c1 + 2.0 * s * c2;
-					highp float dPLen = max(length(dP), 1.0);
-					highp vec2 tDir = dP / dPLen;
-					highp float signedV = (diff.x * (-tDir.y) + diff.y * tDir.x) / max(wLoc, 1.0);
-					highp float wisp = vnoise(vec2(signedV * 2.4 + float(k) * 3.17 + u_seed * 0.41, s * 1.15));
-					highp float wispAmt = smoothstep(0.10, 0.44, s)
-					                    * clamp(float(u_striaeStrength) * 0.52 + float(u_dustRibbonStrength) * 0.14, 0.0, 0.58);
-					across *= mix(1.0, 0.62 + 0.76 * wisp, wispAmt);
-				}
-
-				highp float innerCut = mix(1.0, smoothstep(0.0, 0.11, s), float(u_striaeStrength) * (1.0 - headFill));
-				highp float archRidge = exp(-pow((s - 0.16) / 0.20, 2.0));
-				highp float outerPlume = pow(max(0.0, 1.0 - s), mix(1.02, 0.76, float(u_striaeStrength)))
-				                       * mix(1.0, smoothstep(0.02, 0.18, s), float(u_striaeStrength));
-				highp float alongS = (mix(0.40, 0.78, float(u_striaeStrength)) * archRidge
-				                    + mix(0.90, 0.74, float(u_striaeStrength)) * outerPlume) * innerCut;
-				alongS = mix(alongS, pow(max(0.0, 1.0 - s), 1.08), headFill * 0.56);
-
-				highp float extGrad = mix(1.0, float(u_tipExtRatio), max(age * 0.60, s * 0.50));
 				highp vec2 normPair = u_synNorm[k];
-				highp float localWeight = mix(normPair.x, normPair.y, sOuter);
-				highp float contrib = localWeight * alongS * across * extGrad;
-
-				highp float midBlend = smoothstep(0.06, 0.40, max(age * 0.85, s * 0.42));
-				highp float outBlend = smoothstep(0.20, 0.76, max(s * 0.98, age * 0.52));
-				mediump vec3 synColor = mix(headTint, midArch, float(midBlend));
-				synColor = mix(synColor, outerCurt, float(outBlend));
-
-				dustRgb += synColor * float(contrib);
-				dustSum += contrib;
+				gRawSum  += g;
+				gNormSum += g * mix(normPair.x, normPair.y, s);
+				uSum     += meta.w * g;
+				vSum     += s * g;
+				qSum     += meta.x * g;
 			}
 		}
 
-		if (dustSum > 1e-5)
+		if (gRawSum > 1e-4)
 		{
-			// Physical optical-depth saturation (1 - exp(-tau)): keeps aurora pillar peak-to-valley
-			// contrast crisp (~4:1) while preventing overexposed white blobs near the head.
-			highp float optDepth = dustSum * float(u_dustIntensity) * mix(2.90, 1.75, float(u_striaeStrength));
+			highp float uAge  = clamp(uSum / gRawSum, 0.0, 1.0);
+			highp float vBeta = clamp(vSum / gRawSum, 0.0, 1.0);
+			highp float qFlux = clamp(qSum / gRawSum, 0.0, 1.5);
+			// Pure C-infinity Gaussian-envelope coverage (eliminates any circular halo/rim around the head!)
+			highp float sheetMask = 1.0 - exp(-1.65 * gNormSum);
+
+			// Continuous multi-octave Finson-Probstein aurora filaments directly in (uAge, vBeta) sheet space:
+			// Constant uAge lines ARE exact 3D synchrones -> dozens of delicate silky gossamer threads,
+			// NEVER discrete stacked strips, NEVER blunt tips, NEVER abrupt right-end cutoffs!
+			highp float uWarp = uAge + (vnoise(vec2(uAge * 8.0 + u_seed * 0.31, vBeta * 0.90)) - 0.5) * 0.014 * vBeta;
+			highp float fMacro = vnoise(vec2(uWarp * 13.0 + u_seed * 0.53, vBeta * 0.34));
+			highp float fMid   = vnoise(vec2(uWarp * 30.0 + u_seed * 1.37, vBeta * 0.62));
+			highp float fFine  = vnoise(vec2(uWarp * 64.0 + u_seed * 2.71, vBeta * 1.05));
+			highp float fMicro = vnoise(vec2(uWarp * 112.0 + u_seed * 4.19, vBeta * 1.55));
+			highp float threadRaw = 0.28 * fMacro + 0.38 * fMid + 0.22 * fFine + 0.12 * fMicro;
+			highp float auroraFilaments = 0.20 + 1.65 * pow(clamp(threadRaw, 0.0, 1.0), 1.65);
+
+			// Organic per-filament height variation so upper gossamer wisps reach uneven heights and melt into space
+			highp float tipReach = mix(1.0, 0.68 + 0.54 * (0.55 * fMacro + 0.45 * fMid), float(u_striaeStrength));
+			highp float vTip = vBeta / max(tipReach, 0.45);
+			highp float omTip = max(0.0, 1.0 - vTip);
+
+			// Asymptotic zero-derivative mist dissolve at outer boundary (vBeta -> 1) and far-right arch (uAge -> 1):
+			// Keeps the full 120-deg arch and tall aurora plumes rich while dissolving invisibly into deep space!
+			highp float omV = max(0.0, 1.0 - vBeta);
+			highp float omU = max(0.0, 1.0 - uAge);
+			highp float headFill = 1.0 - smoothstep(0.02, 0.18, uAge);
+
+			// Smooth dust comets (Hale-Bopp, Halley, Hyakutake): lush velvety 10-12 deg curved fan with seamless mist dissolve
+			highp float smoothAlong = pow(omV, 0.95) * smoothstep(1.0, 0.72, vBeta) / (1.0 + 0.65 * vBeta);
+			highp float smoothAge   = pow(omU, 0.78) * smoothstep(1.0, 0.76, uAge);
+			highp float silkMod     = mix(1.0, 0.86 + 0.28 * fMid, float(u_dustRibbonStrength) * smoothstep(0.08, 0.38, vBeta));
+			highp float smoothDensity = smoothAlong * smoothAge * silkMod;
+
+			// Striated sunskirters (McNaught, West): bright sweeping 120-deg rainbow arch + dozens of gossamer aurora curtains
+			highp float innerCut      = mix(smoothstep(0.0, 0.10, vBeta), 1.0, headFill);
+			highp float archBand      = exp(-pow((vBeta - 0.16) / 0.18, 2.0)) * innerCut;
+			highp float outerEdgeSoft = smoothstep(1.0, 0.66, vBeta);
+			highp float curtainFade   = smoothstep(0.02, 0.14, vBeta) * pow(omTip, 1.15) * outerEdgeSoft;
+			highp float filamentMix   = smoothstep(0.05, 0.22, vBeta);
+			highp float striaeAlong   = (0.72 * archBand + 1.08 * curtainFade * mix(1.0, auroraFilaments, filamentMix))
+			                          * mix(1.0, 0.82 + 0.36 * fMacro, 0.52);
+			striaeAlong = mix(striaeAlong, pow(omV, 1.25) / (1.0 + 0.75 * vBeta), headFill * 0.52);
+			// Keep the entire sweeping 120-deg arch rich through uAge=0.72, then dissolve into ultra-faint gossamer wisps to 1.0
+			highp float striaeAge     = pow(omU, 0.52) * smoothstep(1.0, 0.82, uAge);
+			highp float striaeDensity = striaeAlong * striaeAge;
+
+			highp float extGrad = mix(1.0, float(u_tipExtRatio), max(uAge * 0.55, vBeta * 0.45));
+			highp float dustDensity = sheetMask * qFlux * extGrad
+			                        * mix(smoothDensity, striaeDensity, float(u_striaeStrength));
+
+			// Photographic dust palette: warm golden-ivory stem -> creamy-peach (Hale-Bopp) or pearl-ivory (McNaught) -> icy silver-blue outer curtains
+			mediump vec3 headTint  = mix(vec3(1.00, 0.98, 0.92), vec3(1.00, 0.94, 0.78), u_dustWarmth);
+			mediump vec3 midWarm   = mix(vec3(0.99, 0.87, 0.73), vec3(1.00, 0.86, 0.68), u_dustWarmth);
+			mediump vec3 midArch   = mix(midWarm, vec3(0.91, 0.93, 1.00), 0.76 * u_striaeStrength);
+			mediump vec3 outerWarm = mix(vec3(0.88, 0.74, 0.62), vec3(0.92, 0.76, 0.62), u_dustWarmth);
+			mediump vec3 outerCurt = mix(outerWarm, vec3(0.62, 0.77, 1.00), 0.92 * u_striaeStrength);
+
+			highp float midBlend = smoothstep(0.06, 0.40, max(uAge * 0.78, vBeta * 0.44));
+			highp float outBlend = smoothstep(0.18, 0.72, max(vBeta * 0.92, uAge * 0.54));
+			mediump vec3 dustColor = mix(headTint, midArch, float(midBlend));
+			dustColor = mix(dustColor, outerCurt, float(outBlend));
+
+			highp float optDepth = dustDensity * float(u_dustIntensity) * mix(3.15, 2.95, float(u_striaeStrength));
 			highp float dustRadiance = (1.0 - exp(-optDepth)) * 0.94;
-			mediump vec3 dustAvgColor = dustRgb / float(dustSum);
-			totalRgb += dustAvgColor * float(dustRadiance);
+			totalRgb += dustColor * float(dustRadiance);
 			totalSignal += dustRadiance;
 		}
 	}
@@ -1297,36 +1319,30 @@ void Comet::updateDustSynchrones(double dateJDE, float striaeStrength, float isL
 	if (periodDays > 10.0)
 		dtDays = std::remainder(dtDays, periodDays);
 
-	// Adaptive Finson-Probstein dust age window:
-	// - Post-perihelion sunskirters (McNaught, West, Ikeya-Seki): capture post-perihelion + perihelion surge
-	//   sweeping 110-130 deg cleanly without wrapping ancient pre-perihelion grains into crossing loops.
-	// - Moderate-q great comets (Hale-Bopp): ~44-50 days produces the classic lush ~12 deg curved dust fan.
-	double maxTau = qBound(22.0, 34.0 * std::sqrt(rNow * periQ) + 12.0, 54.0);
+	// Adaptive Finson-Probstein dust age window (includes extra outer mist buffer so tails dissolve asymptotically):
+	double maxTau = qBound(26.0, 42.0 * std::sqrt(rNow * periQ) + 14.0, 62.0);
 	if (periQ < 0.35 && dtDays > 0.5 && dtDays < 48.0)
 	{
-		maxTau = std::min(dtDays + 6.0, 16.5);
+		maxTau = std::min(dtDays + 7.2, 18.2);
 	}
 	maxTau *= (0.58 + 0.42 * static_cast<double>(isLongPeriod));
 
-	// Physical silicate dust radiation-pressure range beta in [0.04, 0.98] (< 1.0 => strictly bound/no loops!).
-	// On striated sunskirters, daughter striae fragment along the curving inner syndyne (betaInner ~ 0.22),
-	// carving McNaught's iconic hollow concave underside, and individual aurora plumes reach varying heights
-	// (betaOuter_k in 0.70..0.98) like real cathedral-spire aurora curtains; betaMid = 0.5*(betaInner+betaOuter_k)
-	// guarantees |M-A| ~ |B-M| so the quadratic Bezier never loops backward.
-	const double betaInner = 0.04 + 0.20 * static_cast<double>(striaeStrength);
+	// Uniform physical silicate dust radiation-pressure envelope beta in [betaInner, 0.985] (< 1.0 => strictly bound,
+	// distortion-free continuous (uAge, vBeta) coordinate atlas across the entire 3D sheet; all fine aurora-curtain
+	// height and brightness variations are evaluated continuously in the fragment shader).
+	const double betaInner = 0.04 + 0.16 * static_cast<double>(striaeStrength);
+	constexpr double betaOuter = 0.985;
+	const double betaMid = 0.5 * (betaInner + betaOuter);
 
 	double qRaw[COMET_SYNCHRONE_COUNT];
 	double qMax = 1e-6;
 
+	const double tauPow = 1.24 - 0.18 * static_cast<double>(striaeStrength);
 	for (int k = 0; k < COMET_SYNCHRONE_COUNT; ++k)
 	{
 		const double u = (static_cast<double>(k) + 0.35) / static_cast<double>(COMET_SYNCHRONE_COUNT);
 		const float ageFrac = static_cast<float>(k) / static_cast<float>(COMET_SYNCHRONE_COUNT - 1);
-		const double tau = std::max(0.08, maxTau * std::pow(u, 1.24));
-
-		const float hLen = hashSynchrone01(renderSeed + 17.3f, k);
-		const double betaOuter = 0.95 + static_cast<double>(striaeStrength) * (-0.24 + 0.27 * static_cast<double>(hLen));
-		const double betaMid   = 0.5 * (betaInner + betaOuter);
+		const double tau = std::max(0.08, maxTau * std::pow(u, tauPow));
 
 		Vec3d pEmit, vEmit;
 		kOrbit->stateAtTimeInVSOP87Coordinates(dateJDE - tau, pEmit, vEmit);
@@ -1339,7 +1355,7 @@ void Comet::updateDustSynchrones(double dateJDE, float striaeStrength, float isL
 		syn.relM = integrateDustVerlet(pEmit, vEmit, tau, betaMid, steps) - cometNowPos;
 		syn.relB = integrateDustVerlet(pEmit, vEmit, tau, betaOuter, steps) - cometNowPos;
 
-		qRaw[k] = std::pow(1.0 / rEmit, 1.85);
+		qRaw[k] = std::pow(1.0 / rEmit, 1.80);
 		if (qRaw[k] > qMax)
 			qMax = qRaw[k];
 		syn.ageFrac = ageFrac;
@@ -1348,18 +1364,9 @@ void Comet::updateDustSynchrones(double dateJDE, float striaeStrength, float isL
 	for (int k = 0; k < COMET_SYNCHRONE_COUNT; ++k)
 	{
 		DustSynchroneSample& syn = dustSynchrones[k];
-		const float ageFrac = syn.ageFrac;
-		// Normalize outgassing rate Q(t_e) across the synchrones so peak flux is always 1.0
-		const float qNorm = qBound(0.28f, static_cast<float>(qRaw[k] / qMax), 1.0f);
-		const float ageFadeSmooth = std::pow(std::max(0.12f, 1.0f - 0.72f * ageFrac), 0.90f);
-		const float ageFadeStriae = std::pow(std::max(0.22f, 1.0f - 0.58f * ageFrac), 0.65f);
-		const float ageFade = ageFadeSmooth + (ageFadeStriae - ageFadeSmooth) * striaeStrength;
-
-		// Deterministic intermittent active-vent bursts along the arch (authentic irregular aurora pillars on sunskirters)
-		const float h = hashSynchrone01(renderSeed, k);
-		const float burst = 1.0f + (h * 1.15f - 0.50f) * striaeStrength * smoothStepF(0.08f, 0.26f, ageFrac);
-
-		syn.weight = qNorm * ageFade * burst;
+		// Smooth gently-compressed physical outgassing flux Q(t_e) so perihelion arch shines brightest
+		// while the older sweeping right wing retains luminous presence as it fades out.
+		syn.weight = qBound(0.52f, static_cast<float>(std::pow(qRaw[k] / qMax, 0.55)), 1.0f);
 	}
 
 	lastSynchroneJDE = dateJDE;
@@ -1596,14 +1603,14 @@ void Comet::drawAnalyticalComet(StelCore* core, const StelProjectorP& prj,
 
 	if (validSynCount > 0 && finalDustInt > 0.002f)
 	{
-		const double overlapInner = 1.24 - 0.32 * static_cast<double>(striaeStrength);
-		// Smooth comets: 1.24 (velvety seamless fan); striated sunskirters: ~0.20 (crisp radiating aurora curtains!)
-		const double overlapOuter = std::max(0.18, 1.24 - 1.22 * static_cast<double>(striaeStrength));
-		const double minWInner = std::max(2.0 * dpr, 0.92 * comaPx);
-		const double minWOuter = std::max((2.4 - 0.7 * static_cast<double>(striaeStrength)) * dpr,
-		                                  (1.05 - 0.42 * static_cast<double>(striaeStrength)) * comaPx);
-		const double maxWInner = 0.28 * maxVp;
-		const double maxWOuter = 0.32 * maxVp;
+		// Wide seamless Gaussian overlap (~1.55x neighbor spacing) guarantees a mathematically flat,
+		// 100% continuous 2D (uAge, vBeta) sheet atlas for ALL comets (zero visible discrete capsules or fork prongs!).
+		constexpr double overlapInner = 1.55;
+		constexpr double overlapOuter = 1.62;
+		const double minWInner = std::max(2.2 * dpr, 0.98 * comaPx);
+		const double minWOuter = std::max(2.6 * dpr, 1.15 * comaPx);
+		const double maxWInner = 0.34 * maxVp;
+		const double maxWOuter = 0.42 * maxVp;
 
 		for (int k = 0; k < COMET_SYNCHRONE_COUNT; ++k)
 		{
@@ -1640,19 +1647,18 @@ void Comet::drawAnalyticalComet(StelCore* core, const StelProjectorP& prj,
 				dTip   = static_cast<double>((synB[nextIdx] - synB[k]).length());
 			}
 
-			const double wInnerPx = qBound(minWInner, overlapInner * std::max(dInner, 0.58 * dMid), maxWInner);
+			const double wInnerPx = qBound(minWInner, overlapInner * std::max(dInner, 0.65 * dMid), maxWInner);
 			const double wOuterPx = qBound(minWOuter, overlapOuter * dTip, maxWOuter);
 
-			// Exact local surface-brightness conservation at both inner arch (A/M) and outer plume tips (B):
-			const double overlapA = std::max(1.0, 2.05 * (wInnerPx / std::max(0.5 * (dInner + dMid), 0.5)));
-			const double overlapB = std::max(1.0, 1.85 * (wOuterPx / std::max(dTip, 0.5)));
-			const float wBase = dustSynchrones[k].weight;
+			// Exact partition-of-unity normalization for exp(-1.05 * u^2) (integral = sqrt(pi/1.05) = 1.73):
+			const double overlapA = std::max(1.0, 1.73 * (wInnerPx / std::max(0.5 * (dInner + dMid), 0.5)));
+			const double overlapB = std::max(1.0, 1.73 * (wOuterPx / std::max(dTip, 0.5)));
 
-			synMeta[k] = QVector4D(wBase, static_cast<float>(wInnerPx), static_cast<float>(wOuterPx), dustSynchrones[k].ageFrac);
-			synNorm[k] = QVector2D(static_cast<float>(static_cast<double>(wBase) / overlapA),
-			                       static_cast<float>(static_cast<double>(wBase) / overlapB));
+			synMeta[k] = QVector4D(dustSynchrones[k].weight, static_cast<float>(wInnerPx), static_cast<float>(wOuterPx), dustSynchrones[k].ageFrac);
+			synNorm[k] = QVector2D(static_cast<float>(1.0 / overlapA),
+			                       static_cast<float>(1.0 / overlapB));
 
-			const double synPad = std::max(wInnerPx, wOuterPx) * 3.4;
+			const double synPad = std::max(wInnerPx, wOuterPx) * 3.2;
 			expandPt(static_cast<double>(synA[k].x()), static_cast<double>(synA[k].y()), synPad);
 			expandPt(static_cast<double>(synM[k].x()), static_cast<double>(synM[k].y()), synPad);
 			expandPt(static_cast<double>(synB[k].x()), static_cast<double>(synB[k].y()), synPad);
