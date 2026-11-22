@@ -227,4 +227,8 @@ test('HarmonyOS host wires static SHA-256 feed sync into startup, foreground, ca
   const panelSrc = readEts('panels/panels/AstronomyCalendarPanel.ets');
   assert.match(panelSrc, /remoteDynamicCard\(/);
   assert.match(panelSrc, /this\.host\.syncRemoteFeed\?\.\(\)/);
+  assert.doesNotMatch(panelSrc, /RegionScopePicker/);
+
+  const notifSectionSrc = readEts('panels/settings/NotificationSection.ets');
+  assert.doesNotMatch(notifSectionSrc, /RegionScopePicker/);
 });

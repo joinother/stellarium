@@ -47,7 +47,7 @@ test('filter rows precede variable results and retain their own bounded scroll c
   assert.match(panel, /Scroll\(this\.panelScroller\)/);
   const selector = readFileSync(new URL('../harmonyos/ets-source/panels/satellite/SatelliteGroupSelector.ets', import.meta.url), 'utf8');
   assert.match(selector, /Scroll\(this\.scroller\)/);
-  assert.match(selector, /height\(180\)/);
+  assert.match(selector, /scrollable\(ScrollDirection\.Horizontal\)/);
   assert.match(selector, /\(group: string\) => group/);
   assert.match(selector, /opacity\(this\.activeGroup === group \? 1 : 0\)/);
 });

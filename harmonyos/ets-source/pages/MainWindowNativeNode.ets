@@ -169,6 +169,7 @@ import { LocationStore } from '../state/LocationStore'
 import { CityChipsRow } from '../panels/location/CityChipsRow'
 import { LocationPickerPanel } from '../panels/location/LocationPickerPanel'
 import { LocationFullScreenMap } from '../panels/location/LocationFullScreenMap'
+import { SatellitePassAlertCard } from '../panels/satellite/SatellitePassAlertCard'
 import { LocationPickerStore } from '../state/LocationPickerStore'
 import { LayerStore } from '../state/LayerStore'
 import { LayerPresetStore } from '../state/LayerPresetStore'
@@ -1564,6 +1565,8 @@ export struct WindowNativeNode {
   private hintTimer: number = 0
   private starBrightnessHudTimer: number = 0
   private observerLatitude: number = 39.9
+  @State private observerLatLive: number = 39.9
+  @State private observerLonLive: number = 116.4
   // 离线搜索分块扫描草稿（locSearchRequestId / locationSearchScan* / locationSearchLastPublishMs）
   private panelIdleTimer: number = -1
   private lastOverlayActivityMs: number = 0
@@ -4449,7 +4452,8 @@ export struct WindowNativeNode {
       : []
     this.calendarStore.highlightOnly = settings.calendarHighlightOnly
     this.calendarStore.satelliteSubFilter = settings.calendarSatSubFilter
-    this.calendarStore.regionId = settings.calendarRegionId
+    // 日历暂时专注当前地球观测位置，重置任何历史自定义区域为跟随当前位置
+    this.calendarStore.regionId = 'follow'
     this.syncUiTypographyScale()
     if (this.engineReady) {
       this.callInteractive('setTouchPickRadius', settings.touchPickRadiusVp.toString(), () => {})
@@ -4780,8 +4784,12 @@ export struct WindowNativeNode {
       this.satPromptEvent = undefined
       return
     }
-    const list = eventsOverride ?? this.calendarStore.events
     const now = Date.now()
+    if (this.satPromptEvent !== undefined && this.satPromptEvent.id.endsWith('-preview')) {
+      const endMs = this.satPromptEvent.satEndAt ?? (this.satPromptEvent.at + 5 * 60 * 1000)
+      if (endMs > now) return
+    }
+    const list = eventsOverride ?? this.calendarStore.events
     const windowMs = 30 * 60 * 1000
     let soonest: AstronomyCalendarEvent | undefined = undefined
     for (const ev of list) {
@@ -4801,6 +4809,99 @@ export struct WindowNativeNode {
         this.refreshUpcomingSatellitePassPrompt()
       }, 60000)
     }
+  }
+
+  private satAlertCardCompactHeight(): boolean {
+    return this.skyHeight > 0 && this.skyHeight < 580
+  }
+
+  private satAlertCardWidth(): number {
+    return Math.min(352, Math.max(296, this.skyWidth - 28))
+  }
+
+  private satAlertCardHeight(): number {
+    return this.satAlertCardCompactHeight() ? 404 : 454
+  }
+
+  private satAlertCardTopY(): number {
+    const minTop = Math.max(52, this.landingTimePillY())
+    const cardH = this.satAlertCardHeight()
+    const maxTop = Math.max(minTop, this.skyHeight - cardH - 108)
+    const centered = Math.round((this.skyHeight - cardH) * 0.38)
+    return Math.min(maxTop, Math.max(minTop, centered))
+  }
+
+  private previewSatellitePassAlertCard(): void {
+    const zh = I18n.getLanguage().startsWith('zh')
+    const now = Date.now()
+    const realSoon = this.calendarStore.events.find((ev: AstronomyCalendarEvent) => {
+      if (ev.kind !== 'satellite-pass') return false
+      const startMs = ev.satStartAt ?? ev.at
+      const endMs = ev.satEndAt ?? (startMs + 360000)
+      return endMs > now && startMs - now <= 60 * 60 * 1000
+    })
+    let cardEvent: AstronomyCalendarEvent
+    if (realSoon !== undefined) {
+      cardEvent = realSoon
+    } else {
+      const riseMs = now + (4 * 60 + 35) * 1000
+      const durSec = 360
+      const endMs = riseMs + durSec * 1000
+      const peakMs = riseMs + Math.round(durSec * 500)
+      cardEvent = {
+        id: 'satellite-pass-48274-preview',
+        kind: 'satellite-pass',
+        title: zh ? '中国空间站 天宫' : 'Tiangong CSS',
+        at: peakMs,
+        jd: peakMs / 86400000 + 2440587.5,
+        body: zh ? '西北升起 · 过顶仰角 72° · 东南落下' : 'Rises NW · Peak 72° · Sets SE',
+        target: 'CSS (TIANHE)',
+        panel: 'satellites',
+        tab: 0,
+        satCatalogId: '48274',
+        satArchetype: 'station',
+        satMaxAlt: 72,
+        satVisible: true,
+        satDurationSec: durSec,
+        satAzimuthSummary: zh ? '西北 308° → 东南 132°' : 'NW 308° → SE 132°',
+        satStartAt: riseMs,
+        satEndAt: endMs,
+        satStartAz: 308,
+        satEndAz: 132,
+        satMag: -3.2
+      }
+    }
+    this.setPanel('', true, true)
+    this.satPromptDismissedId = ''
+    this.satPromptEvent = cardEvent
+  }
+
+  private trackSatellitePassEvent(ev: AstronomyCalendarEvent): void {
+    this.satPromptDismissedId = ev.id
+    this.satPromptEvent = undefined
+    const satId = (ev.satCatalogId ?? '').trim()
+    const target = (ev.target ?? '').trim()
+    const searchArg = satId.length > 0 ? `object|Satellite|${satId}` : target
+    this.satelliteCtl().setSatelliteFlag('hints', true)
+    if (this.satelliteStore !== undefined && !this.satelliteStore.satOrbitLines) {
+      this.satelliteCtl().setSatelliteFlag('orbitLines', true)
+    }
+    if (searchArg.length === 0) return
+    this.callInteractive('searchObject', searchArg, (response: StellariumBridgeResponse) => {
+      this.applySelectedObject(response, false, '', true)
+      if (response.found !== false) {
+        this.callInteractive('moveToSelected', '', () => {
+          if (response.aboveHorizon === false && this.flashHint !== undefined) {
+            this.flashHint(I18n.getLanguage().startsWith('zh')
+              ? '该卫星即将升起，已开启轨道线并锁定目标'
+              : 'Satellite rising soon; orbit line enabled and target locked')
+          }
+          this.refreshState()
+        })
+      } else {
+        this.refreshState()
+      }
+    })
   }
 
   private handleSatelliteLandingLiveView(eventId: string, satId: string, eventAtMs: number, landingSource: string): void {
@@ -4823,21 +4924,6 @@ export struct WindowNativeNode {
     if (this.landingBannerVisible && (this.landingBannerHasTimeShift || this.landingTimeResetConfirmed)) return false
     const endMs = this.satPromptEvent.satEndAt ?? (this.satPromptEvent.at + 5 * 60 * 1000)
     return endMs > Date.now()
-  }
-
-  private satPromptSummaryText(): string {
-    const ev = this.satPromptEvent
-    if (ev === undefined) return ''
-    const zh = I18n.getLanguage().startsWith('zh')
-    const now = Date.now()
-    const startMs = ev.satStartAt ?? ev.at
-    const name = ev.title.replace(/\s*过境\s*·.*$/, '').replace(/\s*Pass\s*·.*$/, '').trim()
-    const altText = ev.satMaxAlt !== undefined ? (zh ? ` · 最高${Math.round(ev.satMaxAlt)}°` : ` · ${Math.round(ev.satMaxAlt)}°`) : ''
-    if (now >= startMs) {
-      return zh ? `${name} 正在过境${altText}` : `${name} passing now${altText}`
-    }
-    const mins = Math.max(1, Math.ceil((startMs - now) / 60000))
-    return zh ? `${name} ${mins}分钟后过境${altText}` : `${name} in ${mins}m${altText}`
   }
 
   private landingTimePillY(): number {
@@ -6011,11 +6097,11 @@ export struct WindowNativeNode {
       }
     }
     if (this.satPromptBannerVisible()) {
-      const promptW = Math.min(360, Math.max(260, this.skyWidth - 32))
-      const promptH = 52
+      const promptW = this.satAlertCardWidth()
+      const promptH = this.satAlertCardHeight()
       const promptX = (this.skyWidth - promptW) / 2
-      const promptY = this.landingTimePillY()
-      if (x >= promptX - 10 && x <= promptX + promptW + 10 && y >= promptY - 6 && y <= promptY + promptH + 6) {
+      const promptY = this.satAlertCardTopY()
+      if (x >= promptX - 10 && x <= promptX + promptW + 10 && y >= promptY - 10 && y <= promptY + promptH + 10) {
         return true
       }
     }
@@ -9301,6 +9387,8 @@ export struct WindowNativeNode {
     // 否则保留 setLocation 已应用到头部的值（避免被 planetName 等字段清成“未命名”或空值）。
     if (result.latitude !== undefined && result.longitude !== undefined) {
       this.observerLatitude = result.latitude
+      this.observerLatLive = result.latitude
+      this.observerLonLive = result.longitude
       this.coordinateText = this.locationStore.formatDegrees(result.latitude, 'N', 'S') + ' / ' + this.locationStore.formatDegrees(result.longitude, 'E', 'W')
       if (result.locationName !== undefined && result.locationName.length > 0) {
         const planetName = result.planetName && result.planetName.length > 0 ? result.planetName : 'Earth'
@@ -10355,59 +10443,43 @@ export struct WindowNativeNode {
       }
 
       if (this.satPromptBannerVisible() && this.satPromptEvent !== undefined) {
-        Row({ space: 8 }) {
-          Text(this.satPromptSummaryText())
-            .fontSize(12)
-            .fontWeight(FontWeight.Medium)
-            .fontColor(this.hostSlots().textStrong)
-            .maxLines(1)
-            .textOverflow({ overflow: TextOverflow.Ellipsis })
-            .layoutWeight(1)
-          Button(this.liveViewActiveEventId === this.satPromptEvent.id
-            ? (I18n.getLanguage().startsWith('zh') ? '停止实况窗' : 'Stop')
-            : (I18n.getLanguage().startsWith('zh') ? '开启实况窗' : 'Live View'), { type: ButtonType.Capsule })
-            .height(30)
-            .padding({ left: 10, right: 10 })
-            .fontSize(11)
-            .fontColor(this.liveViewActiveEventId === this.satPromptEvent.id ? this.hostSlots().text : this.hostSlots().onAccent)
-            .backgroundColor(this.liveViewActiveEventId === this.satPromptEvent.id ? this.hostSlots().softStrong : this.hostSlots().accent)
-            .clickEffect({ level: ClickEffectLevel.LIGHT })
-            .onClick(() => {
-              const ev = this.satPromptEvent
-              if (ev === undefined) return
-              if (this.liveViewActiveEventId === ev.id) {
-                this.stopActiveLiveView()
-              } else {
-                this.startLiveViewForEvent(ev, false)
-              }
-            })
-          Button('×', { type: ButtonType.Circle })
-            .width(26)
-            .height(26)
-            .fontSize(14)
-            .fontColor(this.hostSlots().sub)
-            .backgroundColor(this.hostSlots().softStrong)
-            .onClick(() => {
-              if (this.satPromptEvent !== undefined) {
-                this.satPromptDismissedId = this.satPromptEvent.id
-              }
-              this.satPromptEvent = undefined
-            })
-        }
-          .alignItems(VerticalAlign.Center)
-          .constraintSize({ maxWidth: Math.min(360, Math.max(260, this.skyWidth - 32)) })
-          .padding({ left: 14, right: 10, top: 8, bottom: 8 })
-          .backgroundColor(this.hostSlots().panelGlassStrong)
-          .backdropBlur(24)
-          .border({ width: 0.7, color: this.hostSlots().border })
-          .borderRadius(UI_RADIUS_PILL)
+        SatellitePassAlertCard({
+          event: this.satPromptEvent,
+          language: this.i18nLang,
+          observerLat: this.observerLatLive,
+          observerLon: this.observerLonLive,
+          earthMapUri: this.stellariumFilesDir().length > 0 ? ('file://' + this.stellariumFilesDir() + '/stellarium/textures/earth_cmap.png') : '',
+          liveViewActive: this.liveViewActiveEventId === this.satPromptEvent.id,
+          cardWidth: this.satAlertCardWidth(),
+          compactHeight: this.satAlertCardCompactHeight(),
+          onTrackInSky: () => {
+            const ev = this.satPromptEvent
+            if (ev !== undefined) {
+              this.trackSatellitePassEvent(ev)
+            }
+          },
+          onToggleLiveView: () => {
+            const ev = this.satPromptEvent
+            if (ev === undefined) return
+            if (this.liveViewActiveEventId === ev.id) {
+              this.stopActiveLiveView()
+            } else {
+              this.startLiveViewForEvent(ev, false)
+            }
+          },
+          onDismiss: () => {
+            if (this.satPromptEvent !== undefined) {
+              this.satPromptDismissedId = this.satPromptEvent.id
+            }
+            this.satPromptEvent = undefined
+          }
+        })
           .position({
             x: '50%',
-            y: this.landingTimePillY()
+            y: this.satAlertCardTopY()
           })
           .markAnchor({ x: '50%', y: 0 })
           .zIndex(93)
-          .transition(TransitionEffect.OPACITY.animation({ duration: 200, curve: Curve.EaseOut }))
       }
 
       if (this.tools.skyTextureStatusVisible) {
@@ -10965,8 +11037,8 @@ export struct WindowNativeNode {
         overlayStore: this.overlayStore,
         surveyStore: this.surveyStore,
         nightModeOn: this.nightModeStore.nightMode,
-        observerLatitude: this.locationPickerStore.locationPickerLatitude,
-        observerLongitude: this.locationPickerStore.locationPickerLongitude,
+        observerLatitude: this.observerLatLive,
+        observerLongitude: this.observerLonLive,
         observerAltitude: this.locationPickerStore.locationPickerAltitude,
         earthObserver: this.sessionToolStore.observerPlanet === 'Earth',
         viewTab: this.viewTab,
@@ -11259,6 +11331,7 @@ export struct WindowNativeNode {
         startSatLiveView: () => { this.startBestSatelliteLiveView() },
         startDarkAdaptLiveView: () => { this.startDarkAdaptLiveView() },
         stopLiveView: () => { this.stopActiveLiveView() },
+        previewSatPassCard: () => { this.previewSatellitePassAlertCard() },
         toggleAstronomyEvents: (v: boolean) => { void this.changeSubscriptionFromUi('astronomy', v) },
         toggleSatellitePass: (v: boolean) => { void this.changeSubscriptionFromUi('satellite', v) },
         toggleDigest: (v: boolean) => { this.notificationStore.digestEnabled = v },
@@ -11305,8 +11378,8 @@ export struct WindowNativeNode {
         remindedEventIds: this.notificationStore.remindedEventIds,
         notificationTimingMode: this.notificationStore.timingMode,
         notificationPassLeadMinutes: this.notificationStore.passLeadMinutes,
-        observerLatitude: this.locationPickerStore.locationPickerLatitude,
-        observerLongitude: this.locationPickerStore.locationPickerLongitude,
+        observerLatitude: this.observerLatLive,
+        observerLongitude: this.observerLonLive,
         earthMapUri: this.stellariumFilesDir().length > 0 ? ('file://' + this.stellariumFilesDir() + '/stellarium/textures/earth_cmap.png') : '',
         activeLiveViewEventId: this.liveViewActiveEventId,
         liveViewStatusText: this.liveViewStatusText,

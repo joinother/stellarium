@@ -29,7 +29,6 @@ import {
 import { UI_MOTION_STANDARD_MS, UI_OPTION_ANIMATION_MS, UI_RADIUS_CARD, UI_RADIUS_CONTROL, UI_RADIUS_PILL } from '../../common/ui/UiTokens'
 import { uiFadeUpTransition, uiSlideTransition } from '../../common/ui/UiMotion'
 import { InfoTipButton } from '../../common/ui/InfoTipButton'
-import { RegionScopePicker } from '../../common/ui/RegionScopePicker'
 
 export interface AstronomyCalendarPanelHost {
   previousMonth(): void
@@ -790,16 +789,8 @@ export struct AstronomyCalendarPanel {
               })
           }.width('100%')
 
-          // 地理区域选择器（地球视角下支持跟随星图位置或独立选区）
+          // 地球视角下展示云端动态天象同步条（日历固定跟随当前地球观测位置，不再单独选自定义区域）
           if (isEarthCalendarPlanet(this.calendarStore.observerPlanet)) {
-            RegionScopePicker({
-              title: this.t('日历地理区域', 'Calendar Region'),
-              regionId: this.calendarStore.regionId,
-              followLocationName: this.followLocationName,
-              language: this.language,
-              onSelectRegion: (rid: string) => { this.host.setRegionId?.(rid) }
-            })
-            // 云端动态天象同步条（静态只读拉取 + SHA-256 校验，端侧按纬度过滤，不上传位置）
             Row({ space: 6 }) {
               Circle({ width: 6, height: 6 })
                 .fill(this.c.isNight ? this.c.accent : '#CE93D8')
@@ -906,8 +897,8 @@ export struct AstronomyCalendarPanel {
                 Text(this.eventDisplayTime(event)).fontSize(this.panelFontSize - 1).fontColor(this.c.sub)
                 InfoTipButton({
                   title: this.t('观测说明', 'Observation Note'),
-                  tip: this.t('时间按所选地理区域时区显示。点击「查看」，星图将前往事件时刻；是否可见取决于观测地点和天气。图案为示意。',
-                    'Times follow the selected region timezone. View sky goes to the event instant; visibility depends on location and weather.')
+                  tip: this.t('时间按当前地球观测位置与设备时区显示。点击「查看」，星图将前往事件时刻；是否可见取决于观测地点和天气。图案为示意。',
+                    'Times follow your current Earth observer location and device timezone. View sky goes to the event instant; visibility depends on location and weather.')
                 })
               }.layoutWeight(1).alignItems(VerticalAlign.Center)
               Button(this.isEventReminded(event.id) ? this.t('✓ 已预约', '✓ Booked') : this.t('预约提醒', 'Remind'),

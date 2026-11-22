@@ -1,11 +1,10 @@
 import { I18n } from '../../capability/I18n'
 import { notificationText } from '../../capability/NotificationText'
-import { Theme } from '@kit.ArkUI'
+import { LengthMetrics, Theme } from '@kit.ArkUI'
 import { panelFontSize } from '../../common/ui/UiTypography'
 import { UI_OPTION_ANIMATION_MS, UI_RADIUS_CARD, UI_RADIUS_CONTROL, UI_RADIUS_PILL } from '../../common/ui/UiTokens'
 import { uiFadeUpTransition } from '../../common/ui/UiMotion'
 import { InfoTipButton } from '../../common/ui/InfoTipButton'
-import { RegionScopePicker } from '../../common/ui/RegionScopePicker'
 import { DEFAULT_SLOTS, ThemeSlots, slotsFromTheme } from '../../state/StellariumTheme'
 import { AstronomyReminderItem } from '../../qability/AstronomyReminderService'
 import {
@@ -135,6 +134,7 @@ export struct NotificationSection {
   onStartSatLiveView: () => void = () => {}
   onStartDarkAdaptLiveView: () => void = () => {}
   onStopLiveView: () => void = () => {}
+  onPreviewSatPassCard: () => void = () => {}
 
   aboutToAppear(): void { this.syncToggles() }
 
@@ -387,17 +387,7 @@ export struct NotificationSection {
         .border({ width: 1, color: this.c.dividerSoft })
         .borderRadius(UI_RADIUS_CARD)
 
-      // 3. 通知地理区域选择器（跟随位置 / 独立区域）
-      RegionScopePicker({
-        title: this.tr('通知地理区域', 'Notification Region'),
-        regionId: this.regionId,
-        followLocationName: this.followLocationName,
-        language: this.language,
-        disabled: this.busy(),
-        onSelectRegion: (rid: string) => this.onRegionChange(rid)
-      })
-
-      // 4. 折叠式「时机与静默高级设置」抽屉（默认收起，保持极简）
+      // 3. 折叠式「时机与静默高级设置」抽屉（通知固定跟随当前地球观测位置，不再单独选自定义区域）
       Column({ space: 8 }) {
         Row({ space: 6 }) {
           Column({ space: 2 }) {
@@ -618,15 +608,16 @@ export struct NotificationSection {
             .fontColor(this.c.accent)
             .width('100%')
         } else {
-          Text(this.tr('当卫星过境临近 30 分钟内，星图顶部也会主动提示一键开启实况窗。',
-            'An in-app prompt also appears within 30 min of an upcoming satellite pass.'))
+          Text(this.tr('当卫星过境临近 30 分钟内，应用内会自动弹出 3D 地球轨道过境卡片并支持一键开启实况窗。',
+            'A 3D Earth orbit pass card pops up automatically within 30 min of an upcoming pass.'))
             .fontSize(panelFontSize(10, this.readableUi))
             .fontColor(this.c.sub)
             .width('100%')
         }
-        Row({ space: 8 }) {
+        Flex({ wrap: FlexWrap.Wrap, space: { main: LengthMetrics.vp(8), cross: LengthMetrics.vp(8) } }) {
           this.action(this.tr('空间站过境实况窗', 'Station Pass Live View'), true, () => { this.onStartSatLiveView() })
           this.action(this.tr('暗适应 20 分钟', 'Dark Adapt 20m'), true, () => { this.onStartDarkAdaptLiveView() })
+          this.action(this.tr('预览过境卡片', 'Preview Pass Card'), true, () => { this.onPreviewSatPassCard() })
         }.width('100%')
         if (this.liveViewStatusText.length > 0) {
           Text(this.liveViewStatusText)

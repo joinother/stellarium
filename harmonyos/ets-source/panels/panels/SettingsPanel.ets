@@ -184,6 +184,7 @@ export struct SettingsPanel {
   startSatLiveView: () => void = () => {}
   startDarkAdaptLiveView: () => void = () => {}
   stopLiveView: () => void = () => {}
+  previewSatPassCard: () => void = () => {}
   clearAstronomyReminders: () => void = () => {}
   keyboardShortcutQueryChange: (value: string) => void = () => {}
   keyboardShortcutSelectChange: (item: KeyboardShortcutItem) => void = () => {}
@@ -352,6 +353,7 @@ export struct SettingsPanel {
               onStartSatLiveView: () => { this.startSatLiveView() },
               onStartDarkAdaptLiveView: () => { this.startDarkAdaptLiveView() },
               onStopLiveView: () => { this.stopLiveView() },
+              onPreviewSatPassCard: () => { this.previewSatPassCard() },
               onClearReminders: () => { this.clearAstronomyReminders() }
             })
             Row().width('100%').height(0.5).backgroundColor(this.c.border).margin({ top: 5, bottom: 8 })

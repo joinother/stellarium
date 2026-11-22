@@ -439,3 +439,26 @@ test('settings panel defaults to Device & Privacy (-1) and resolves more as rout
   const settingsLoad = main.slice(main.indexOf("} else if (panel === 'settings') {"), main.indexOf("} else if (panel === 'place') {"));
   assert.match(settingsLoad, /if \(this\.configTab === -1\) void this\.notificationCtl\(\)\.refreshStatus\(\)/);
 });
+
+test('in-app satellite pass alert renders rounded 3D orthographic Earth orbit card with offline fallback and preview trigger', () => {
+  const cardSrc = read('panels/satellite/SatellitePassAlertCard.ets');
+  assert.ok(cardSrc.includes('export struct SatellitePassAlertCard'), 'SatellitePassAlertCard component must exist');
+  assert.ok(cardSrc.includes('stellarium/textures/earth_cmap.png'), 'card must read bundled physical earth_cmap.png');
+  assert.ok(!cardSrc.includes('worldmap.jpg'), 'card must never reference uncertified political worldmap.jpg');
+  assert.ok(cardSrc.includes('NIGHT_CITY_LIGHTS'), 'card must render night-side city lights');
+  assert.ok(cardSrc.includes('ORBIT_RADIUS_EARTH'), 'card must render elevated 3D orbital ring');
+  assert.ok(cardSrc.includes('computeSolarSubpoint'), 'card must compute day/night solar terminator');
+  assert.ok(cardSrc.includes('onTrackInSky') && cardSrc.includes('onToggleLiveView') && cardSrc.includes('onDismiss'),
+    'card must expose sky tracking, Live View toggle, and dismiss callbacks');
+  assert.ok(cardSrc.includes('borderRadius(28)'), 'card must use rounded floating card framing');
+
+  assert.ok(main.includes('SatellitePassAlertCard({'), 'MainWindowNativeNode must mount SatellitePassAlertCard');
+  assert.ok(main.includes('this.satAlertCardWidth()') && main.includes('this.satAlertCardHeight()'),
+    'isUiPoint must protect full SatellitePassAlertCard touch bounds');
+  assert.ok(main.includes('previewSatPassCard: () => { this.previewSatellitePassAlertCard() }'),
+    'Settings Live View section must expose pass card preview hook');
+
+  const notifSrc = read('panels/settings/NotificationSection.ets');
+  assert.ok(notifSrc.includes('onPreviewSatPassCard'), 'NotificationSection must expose preview pass card button');
+  assert.ok(!notifSrc.includes('RegionScopePicker'), 'NotificationSection must not expose custom region picker');
+});

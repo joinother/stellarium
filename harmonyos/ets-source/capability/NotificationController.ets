@@ -99,7 +99,8 @@ export class NotificationController {
     this.store.topicSolarTerm = value.topicSolarTerm !== undefined ? value.topicSolarTerm : value.astronomyEventsEnabled
     this.store.subscriptionHighlightOnly = value.highlightOnly === true
     this.store.timingMode = normalizeTimingMode(value.timingMode)
-    this.store.regionId = normalizeObserverRegionId(value.regionId)
+    // 通知暂时专注当前地球观测位置，统一跟随当前位置（避免旧自定义区域残留）
+    this.store.regionId = 'follow'
     this.store.dndEnabled = value.dndEnabled
     this.store.dndSatelliteOnly = value.dndSatelliteOnly !== false
     this.store.dndStartMinutes = value.dndStartMinutes
@@ -267,7 +268,7 @@ export class NotificationController {
     this.store.subscriptionHighlightOnly = mapping.highlightOnly
     this.store.astronomyEventsEnabled = mapping.meteor || mapping.planet || mapping.moon || mapping.solarTerm
     if (regionId !== undefined) {
-      this.store.regionId = normalizeObserverRegionId(regionId)
+      this.store.regionId = 'follow'
     }
     this.persistPreferences()
     this.report(notificationText('已按当前日历筛选同步通知订阅。'))
