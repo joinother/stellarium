@@ -260,7 +260,7 @@ Preferences 写失败多数只 `hilog.warn`；`QSettings::sync()` 的返回值/�
 | store | 键 | 策略 | 说明 |
 |---|---|---|---|
 | `night_mode_store` | `nightMode` | 缓存 | **仅首帧缓存**；权威为 `config.ini: viewing/flag_night`，缓存不得反写引擎 |
-| `stellarium_ui`（新增） | `musicEnabled`、`useMetricUnits`、`viewCoordinates*`、`objectDetailConnectorVisible`、`astroTab/Group/...`、`ephemeris*`、`schemaVersion` | S0/S1 | 承接现 `stellariumSettings` 中**纯 UI 偏好**内容；不含夜间模式与赤道仪 |
+| `stellarium_ui`（新增） | `musicEnabled`、`useMetricUnits`、`viewCoordinates*`、`astroTab/Group/...`、`ephemeris*`、`schemaVersion` | S0/S1 | 承接现 `stellariumSettings` 中**纯 UI 偏好**内容；不含夜间模式与赤道仪（`objectDetailConnectorVisible` 已随连接线移除） |
 | `stellarium_observer_location` | 观测点记录 | S0 | |
 | `stellarium_bookmarks` | 收藏列表 | S0 | |
 | `stellarium_observing_list` | 观测记录 | S0 | |

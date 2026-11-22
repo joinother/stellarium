@@ -17,7 +17,6 @@ export interface UiSettings {
   viewCoordinatesVisible: boolean
   viewCoordinateFamily: string
   viewEquatorialEpoch: string
-  objectDetailConnectorVisible: boolean
   astroTab: number
   astroGroup: number
   positionMode: number
@@ -47,7 +46,6 @@ export function defaultUiSettings(): UiSettings {
     viewCoordinatesVisible: false,
     viewCoordinateFamily: 'equatorial',
     viewEquatorialEpoch: 'j2000',
-    objectDetailConnectorVisible: true,
     astroTab: 5,
     astroGroup: 0,
     positionMode: 0,
@@ -133,7 +131,6 @@ export function migrateUiSettings(raw: string): UiSettings {
   out.viewCoordinatesVisible = boolOf(obj['viewCoordinatesVisible'], defaults.viewCoordinatesVisible)
   out.viewCoordinateFamily = strOf(obj['viewCoordinateFamily'], defaults.viewCoordinateFamily)
   out.viewEquatorialEpoch = strOf(obj['viewEquatorialEpoch'], defaults.viewEquatorialEpoch)
-  out.objectDetailConnectorVisible = boolOf(obj['objectDetailConnectorVisible'], defaults.objectDetailConnectorVisible)
   out.astroTab = clampInt(numOf(obj['astroTab'], defaults.astroTab), 0, 9, defaults.astroTab)
   out.astroGroup = clampInt(numOf(obj['astroGroup'], defaults.astroGroup), 0, 9, defaults.astroGroup)
   out.positionMode = clampInt(numOf(obj['positionMode'], defaults.positionMode), 0, 2, defaults.positionMode)

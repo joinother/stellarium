@@ -25,6 +25,8 @@ export struct CityChipsRow {
   onSaveCurrent: () => void = () => {}
   onApplyLocation: (name: string, lat: number, lon: number, alt: number, planet: string) => void = () => {}
   onDeleteLocation: (key: string) => void = () => {}
+  // 已保存地点交给仿系统大弹窗（仅地球地点；外星地点没有外部地图）。
+  onShareLocation: (name: string, lat: number, lon: number) => void = () => {}
 
   onWillApplyTheme(theme: Theme): void {
     this.c = slotsFromTheme(theme)
@@ -45,6 +47,23 @@ export struct CityChipsRow {
     this.actionKey = key
     this.renamingKey = ''
     this.renameError = ''
+  }
+
+  private actionTarget(): SavedLocation | undefined {
+    return this.store.savedLocations.find((s: SavedLocation) =>
+      this.store.savedLocationKey(s) === this.actionKey)
+  }
+
+  private actionTargetIsEarth(): boolean {
+    const target = this.actionTarget()
+    return target !== undefined && target.planet === 'Earth'
+  }
+
+  // 已保存地点直接打开仿系统大弹窗；地点目标在点按时读取，随后关闭管理行。
+  private shareForAction(): void {
+    const target = this.actionTarget()
+    this.actionKey = ''
+    if (target !== undefined) this.onShareLocation(target.name, target.lat, target.lon)
   }
 
   private startRename(item: SavedLocation, key: string): void {
@@ -213,7 +232,15 @@ export struct CityChipsRow {
             }
           } else {
             Row({ space: 6 }) {
-              Text(I18n.t('loc_more_actions')).fontSize(10).fontColor(this.c.tertiary).layoutWeight(1)
+              // 四个按钮在地球地点行会占满宽度，说明文字让位给操作本身。
+              Blank()
+              if (this.actionTargetIsEarth()) {
+                Button(I18n.t('loc_map_actions'))
+                  .fontSize(10).height(28).fontColor(this.c.text).backgroundColor(this.c.softStrong)
+                  .borderRadius(UI_RADIUS_CONTROL)
+                  .id('loc-open-map-saved')
+                  .onClick(() => { this.shareForAction() })
+              }
               Button(I18n.t('loc_rename'))
                 .fontSize(10).height(28).fontColor(this.c.text).backgroundColor(this.c.softStrong)
                 .borderRadius(UI_RADIUS_CONTROL)

@@ -94,6 +94,8 @@ export interface DocumentImportPort {
   // 用户取消时 cancelled=true。后缀过滤（'Stellarium 地景 ZIP|.zip'）/ 单文件 / 名称清洗
   //（landscapeImportFileName 语义）/ 同名碰撞改名（picker + fileIo）。
   importLandscapeDocument(): Promise<MediaImportResult>
+  // 读取不超过 maxBytes 的 UTF-8 文本文件（器材配置等用户导入的 JSON）；失败或超限抛 Error。
+  readTextFile(path: string, maxBytes: number, label: string): string
 }
 
 // 屏幕录制：录屏工作目录与文件、录屏对象生命周期、相册保存。

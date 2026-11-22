@@ -194,6 +194,9 @@ export struct LocationFullScreenMap {
   }
   onPick: (latitude: number, longitude: number, altitude: number, name: string, source: string) => void =
     () => {}
+  // 星象仪 → 地图：把选中的地球坐标交给仿系统大弹窗（规划路线 / 查看地点）。
+  onShare: (latitude: number, longitude: number, name: string) => void =
+    (latitude: number, longitude: number, name: string) => {}
   onClose: () => void = () => {}
   planetLabel: (en: string) => string = (en: string) => en
   contextOf: (item: LocSearchItem) => string = () => ''
@@ -1676,6 +1679,12 @@ export struct LocationFullScreenMap {
     }
   }
 
+  // 当前选点直接打开仿系统大弹窗；坐标与名称在点按时取自草稿点。
+  private shareSelected(): void {
+    const name = this.selectedName.length > 0 ? this.selectedName : this.locationName
+    this.onShare(this.draftLat, this.draftLon, name)
+  }
+
   @Builder
   actionCard() {
     Column({ space: 8 }) {
@@ -1699,6 +1708,14 @@ export struct LocationFullScreenMap {
           .onClick(() => { this.onClose() })
       }
         .width('100%')
+      // 外星球没有对应的外部地图，入口只在未选点（地球）时出现。
+      if (this.observerPlanet === 'Earth') {
+        Button(I18n.t('loc_map_actions')).fontSize(12).width('100%')
+          .backgroundColor(this.c.soft).fontColor(this.c.text)
+          .borderRadius(UI_RADIUS_CONTROL)
+          .id('loc-open-map-selected')
+          .onClick(() => { this.shareSelected() })
+      }
     }
       .width('100%').padding(12)
       .backgroundColor(this.c.panelGlassStrong)

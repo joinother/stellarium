@@ -259,7 +259,6 @@ export interface LayerPresetSnapshot {
   milkyWayBright: number
   realisticStarVisibility: boolean
   nightMode: boolean
-  observeMode: boolean
   equatorialMount: boolean
   telrad: boolean
   ccd: boolean
@@ -504,6 +503,12 @@ export interface OcularInstrumentItem {
   binningX?: number
   binningY?: number
   rotation?: number
+  reticlePath?: string
+  hasOAG?: boolean
+  prismHeight?: number
+  prismWidth?: number
+  prismDistance?: number
+  prismPosAngle?: number
 }
 export interface OcularsData {
   ocularMode: boolean
@@ -554,6 +559,8 @@ export interface OcularsData {
   ccdCropVSize: number
   ccdPrismRotation: number
   guiPanelEnabled: boolean
+  ccdCenter: boolean
+  telradFov: number[]
   magnification?: number
   actualFov?: number
   exitPupil?: number
@@ -570,6 +577,11 @@ export interface OcularsResponse extends StellariumBridgeResponse {
 export interface OcularModeResponse extends StellariumBridgeResponse {
   applied?: boolean
   selectionRequired?: boolean
+}
+export interface OcularEquipmentResponse extends StellariumBridgeResponse {
+  index?: number
+  kind?: string
+  json?: string
 }
 export interface PointerCoordinatesData {
   enabled: boolean

@@ -1,5 +1,107 @@
 > **身份图例**：本文件真机记录中出现的 `com.cnchensh.stellarium` 是**本机调试签名身份**（本机 DevEco 自动生成，非发布身份）；发布身份为 `com.joinother.skyinstrument`。构建脚本 `build-ohos-hap-windows.ps1 -Install` 从产物 `pack.info` 读取实际包名，仓库不写死任何签名身份（见 `docs/harmonyos/release/BUNDLE-IDENTITY-CLEANUP.md`）。
 
+## [2026-11-22] 目镜插件页签化与器材配置管理
+
+- **修改文件：** `harmonyos/ets-source/panels/panels/OcularsPanel.ets`、`harmonyos/ets-source/panels/telescope/OcularsTabs.ets`（新）、`OcularSummaryCard.ets`（新）、`OcularGeneralTab.ets`（新）、`OcularEquipmentTab.ets`（新）、`OcularEquipmentForm.ets`（新）、`harmonyos/ets-source/common/derive/ocularEquipment.ets`（新）、`harmonyos/ets-source/state/TelescopeStore.ets`、`harmonyos/ets-source/capability/OcularController.ets`、`harmonyos/ets-source/common/types/MainWindowModels.ets`、`harmonyos/ets-source/bridge/MediaPort.ets`、`harmonyos/ets-source/pages/MainWindowNativeNode.ets`、`harmonyos/ets-source/qability/QAbility.ets`、`harmonyos/ets-source/capability/I18n.ets`、`plugins/Oculars/src/Oculars.cpp`、`plugins/Oculars/src/Oculars.hpp`、`src/StelMainView.cpp`、`src/StelOhosCommandCatalog.hpp`、`scripts/test-ohos-oculars-equipment.mjs`（新）、`scripts/test-ohos-readable-typography.mjs`、`docs/harmonyos/CLI.md`、`docs/harmonyos/AGENTS.md`、`docs/harmonyos/specs/OCULARS-EQUIPMENT.md`（新）、`docs/harmonyos/json/ui-contract-baseline.json`、`docs/harmonyos/CHANGELOG.md`。
+- **用户要求：** 按 PC 版划分页签；每个器材页提供自定义器材弹窗；整体优化面板布局；支持器材配置导入导出；补充 Telrad 四圈 FOV 与 CCD 中心标记设置。
+- **核心改动：**
+  1. 面板改为「当前组合摘要 + 通用 / 目镜 / 增倍镜 / 传感器 / 望远镜 / 关于」六页签；通用页按模式、结果、视图、传感器、Telrad、行为、配置分组，器材页以列表即选择器。
+  2. 器材页支持新增/编辑/删除/上移/下移；表单为居中 `bindContentCover` 浮层，按类别裁剪字段并做与原生一致的范围校验；删除最后一件目镜/望远镜/传感器被拒绝。
+  3. C++ 新增 `applyOhosEquipmentAction`、`exportOhosEquipmentJson`、`importOhosEquipmentJson`、`persistEquipmentSettings`；导入先完整校验再原子替换/追加，导出为版本化 JSON；每次变更立即同步 `ocular.ini`。
+  4. 新增 `setTelradFov`（四圈直径 0–30°）与 `setOcularSetting ccdCenter`；`getOculars` 回读 `telradFov`、`ccdCenter` 及完整器材字段。
+  5. 新增语义 UI 命令 `setOcularsTab`、`setOcularsScroll`、`openOcularEquipmentEditor`、`closeOcularEquipmentEditor`，供读屏验证页签、长页底部控件与弹窗。
+- **构建结果：** 引擎交叉编译成功（`build/src/libstellarium.so`，含 `QJsonObject::fromVariantMap` 计数回包修正）；`-Release -SkipEngine -SkipResources -SkipDeploy -Install -Device 192.168.3.95:36717` BUILD SUCCESSFUL，signed HAP 803.3 MB（842,352,871 字节），安装并启动成功。
+- **验证结果：**
+  - 主机：`test-ohos-oculars-equipment.mjs` 10/10；受影响回归 46/46（设计系统、紧凑几何、图层预设、快捷红光、详情卡、插件面板、搜索浏览器）；`check-ohos-command-catalog.mjs` 443 命令一致；`check-ohos-i18n.mjs` 0 error；`check-ohos-ui-contract.mjs` intact（41 面板 / 73 静态 id / 35 动态前缀 / 111 anchor）。`test-ohos-readable-typography.mjs` 通过（58 个映射标签；同时修正了通知区早已失效的旧高度断言）。
+  - 真机读屏（`192.168.3.95:36717`）：通用页摘要 `oculars-summary`、六个页签、Telrad 四圈输入与“应用/恢复默认”、配置导入导出按钮均可见；目镜/增倍镜/传感器/望远镜列表行与新增/删除/上移/下移可见；`openOcularEquipmentEditor ocular|-1` 与 `ccd|0` 弹出表单，名称/保存/取消及传感器字段可见，关闭后消失；关于页可见。
+  - 真机语义 CLI：新增目镜 → `getOculars` 18→19 且末项命中；修改名称/永久十字丝成功；上移后顺序正确；强制停止并重启后第 17 项仍为测试器材；删除后恢复 18 项。导入导出：导出 9,783 字节 v1 文档（19/3/22/17）；追加导入后翻倍为 38/6/44/34；替换导入后恢复 19/3/22/17，选中项 `ocular=0,telescope=2,lens=-1,ccd=0` 保持。`setTelradFov [0.6,2.2,4.4,0]` 回读并按 0.001° 归一化显示，`ccdCenter|0` 回读 false；均已恢复默认 `[0.5,2,4,0]` 与 true。非法数值返回 `value_invalid`、错误格式返回 `bad_format`。
+  - 全量 `node --test scripts/test-ohos-*.mjs`：682 项，598 pass / 81 fail / 3 skipped；失败集中在 AstroPanel、天文日历/通知、位置面板与 `-pad`/性能等既有断言（例：AstroPanel `.onClick` 107≠103），未涉及目镜新增测试或受影响回归。
+  - 未覆盖：系统文件选择器的真实点选（导出/导入按钮仅做可见性读屏，文件链路经原生命令验证）；Telrad/CCD 中心标记的渲染像素未截图逐帧确认。
+
+## [2026-11-22] 观测辅助预设关闭视场中心标记
+
+- **修改文件：** `harmonyos/ets-source/state/LayerPresetStore.ets`、`scripts/test-ohos-layer-presets.mjs`、`docs/harmonyos/CHANGELOG.md`。
+- **修改内容：** 从 `OBSERVE_ACTIONS` 移除 `actionShow_FOV_Center_Marker`，观测辅助预设不再开启视场中心标记；预设测试断言该项为 `false`。
+- **验证：** `test-ohos-layer-presets.mjs` 8/8 通过。
+- **备注：** 内置预设快照会持久化；已保存过旧“观测辅助”快照的设备，可在预设详情点“还原”应用新出厂值，或在「图层 → 标记 → 辅助标记」手动关闭 FOV标记。
+
+## [2026-11-22] 详情卡固定极简大卡 + 时间面板轻量卡形变；移除连接线与天文馆入口
+
+- **修改文件：** `harmonyos/ets-source/pages/MainWindowNativeNode.ets`、`harmonyos/ets-source/state/InfoWindowStore.ets`、`harmonyos/ets-source/state/OverlayStore.ets`、`harmonyos/ets-source/state/SettingsRepository.ets`、`harmonyos/ets-source/state/LayerPresetStore.ets`、`harmonyos/ets-source/common/types/MainWindowModels.ets`、`harmonyos/ets-source/common/derive/quickActions.ets`、`harmonyos/ets-source/common/ui/ShellIcons.ets`、`harmonyos/ets-source/capability/DetailRefreshController.ets`（由 `DetailConnectorController.ets` 更名）、`harmonyos/ets-source/capability/ControllerHooks.ets`、`harmonyos/ets-source/capability/StartupBridge.ets`、`harmonyos/ets-source/panels/object/UnifiedObjectDetailCard.ets`、`harmonyos/ets-source/panels/object/ObjectSelectionPill.ets`、`harmonyos/ets-source/panels/object/ObjectDetailCardChrome.ets`、`harmonyos/ets-source/panels/shell/CompactShell.ets`、`harmonyos/ets-source/panels/shell/ExpandedShell.ets`、`harmonyos/ets-source/panels/shell/HoverObservatoryShell.ets`、`harmonyos/ets-source/panels/panels/SettingsPanel.ets`、`harmonyos/ets-source/qability/QAbility.ets`、`harmonyos/ets-source/panels/overlay/ObjectDetailConnectorLayer.ets`（删除）、`src/StelMainView.cpp`、`src/StelOhosCommandCatalog.hpp`、`scripts/test-ohos-selection-reticle-and-pill.mjs`、`scripts/test-ohos-detail-live-values.mjs`、`scripts/test-ohos-layer-presets.mjs`、`scripts/test-ohos-quick-red-light.mjs`、`docs/harmonyos/CLI.md`、`docs/harmonyos/json/ui-contract-baseline.json`、`docs/harmonyos/specs/OBJECT-DETAIL-OBSERVE-MODE.md`、`docs/harmonyos/specs/SETTINGS-PERSISTENCE.md`、`docs/harmonyos/CHANGELOG.md`。
+- **用户要求：** 普通界面详情卡固定为观测模式的极简大卡，不再提供直接启动天文馆全量大卡的入口；轻量卡仅在时间面板打开时启用且不再有“详情”按钮；开/关时间面板时用方案 A（真实几何/位置形变）在大卡与轻量卡之间过渡；快捷面板原“观测模式”格子由卫星提示默认替代；连接线直接移除。
+- **核心改动：**
+  1. **单容器形变：** 三个壳层只保留一个 `UnifiedObjectDetailCard` 容器（条件 `infoWinVisible && selectedName.length > 0`），不再分别渲染浮标与大卡。宿主 `detailCardX/Y/Width/Height` 按 `isTimePanelActive()`（`panelVisible && activePanel === 'time'`）在两套几何间切换：大卡用 `bottomCard*`（折叠壳用 `hoverBottomCardY`），轻量卡沿用原浮标几何 `selectionPill*`。壳层容器与卡片根节点各挂 280ms `springMotion(0.52, 0.9)` 属性动画，位置、宽高与圆角同步过渡。
+  2. **形态与内容：** `UnifiedObjectDetailCard` 新增 `timeLight` 分支，复用去掉“详情”按钮与展开动作的 `ObjectSelectionPill` 内容；轻量卡隐藏下沿展开箭头、点击卡身不展开，仅保留 ✕；大卡保留展开箭头（→ 全量观测卡）。新增 `.id('object-detail-time-light')` 供读屏断言。
+  3. **状态收敛：** `panelVisible` / `activePanel` 加 `@Watch`，统一经 `syncDetailCardForPanel()`：时间面板打开时 `infoWinExpanded=false` 且 `observeExpanded=false`；关闭或切到其他面板时 `infoWinExpanded=true`。新选中 / 重开详情按 `!isTimePanelActive()` 决定形态；时间面板下再次点选不把大卡顶出来。
+  4. **固定观测模式：** 删除 `setDetailDisplayMode` / `restoreDetailDisplayMode` / 详情模式 Preferences 读写与 `observeModeEnabled()`；`detailDisplayMode` 恒为 `observe`。图层预设快照移除 `observeMode` 字段（旧数据忽略该键），快捷面板候选池回到 17 项、默认 12 项，卫星提示占回第 10 格；删除 `observe_mode` 图标映射。
+  5. **连接线移除：** 删除 `ObjectDetailConnectorLayer.ets`、三壳层 11 个 connector/marker props、`OverlayStore.objectDetailConnectorVisible`、`UiSettings.objectDetailConnectorVisible`、信息页开关、宿主 9 个逐帧几何 `@State`、`objectDetailConnectorObstacles()`、`setObjectDetailConnector()` 与 CLI 分发；原生删除 `s_ohosObjectDetailConnector` 及 `get/setObjectDetailConnector` 命令与命令目录项。`DetailConnectorController` 收敛为 `DetailRefreshController`（仅保留 180ms 详情轮询与刷新门控），`objectDetailCardY()` 逻辑内联回宿主。
+- **测试更新：** `test-ohos-selection-reticle-and-pill.mjs` 改为断言单容器/`timeLight`/无连接线/无“详情”按钮；`test-ohos-detail-live-values.mjs` 改读 `DetailRefreshController.ets`，并把两条过时的 `resolve` 断言改为“详情页直读 `@ObjectLink store`、禁止 `this.resolve(` 间接取值”；`test-ohos-layer-presets.mjs` 移除 `observeMode` 断言；`test-ohos-quick-red-light.mjs` 候选池 18→17、候选 6→5，并断言卫星回到默认网格。
+- **构建结果：** 引擎交叉编译成功（`build/src/libstellarium.so`，已确认库内不再含 `get/setObjectDetailConnector` 字符串）；`-Release -SkipEngine -SkipDeploy -SkipResources -Install` BUILD SUCCESSFUL，signed HAP 803.2 MB（842,174,671 字节），安装并启动成功（`192.168.3.95:36717`，最终包无重复 id 警告）。
+- **验证结果：**
+  - 主机：`test-ohos-selection-reticle-and-pill.mjs` 5 项、`test-ohos-detail-live-values.mjs` 9 项、`test-ohos-layer-presets.mjs` 8 项、`test-ohos-quick-red-light.mjs` 6 项、design system / compact geometry / detail image / information policy 20 项通过；`check-ohos-command-catalog.mjs` 436 命令一致；`check-ohos-i18n.mjs` 0 error；`check-ohos-ui-contract.mjs` intact（41 面板 / 58 静态 id / 92 anchor）。
+  - 真机（读屏 `ohos-ui-dump.mjs`，语义 CLI 选星）：`searchObject Vega` 后 `object-detail-observe-expand` visible、`object-detail-time-light` absent；`openUiPanel time` 后 `object-detail-time-light` visible（bounds 970×264 px ≈ 277×75.5 vp，窄宽双行）、`object-detail-observe-expand` absent；`closeUiPanel` 后展开箭头重新出现。`getObjectDetailConnector` 返回 `{"ok":false,"error":"unknown command"}`。开合过程为容器/卡片 280ms `springMotion(0.52, 0.9)` 属性动画；本次验证了起止几何与显隐。设备无 `screenrecord` 命令，未逐帧录屏。
+
+## [2026-11-22] 修复 Dock 入口恢复跨域子页（更多→图层、快捷→位置）
+
+- **修改文件：** `harmonyos/ets-source/pages/MainWindowNativeNode.ets`、`scripts/test-ohos-dock-hit-regression.mjs`、`docs/harmonyos/CHANGELOG.md`。
+- **现象：** 点击“更多功能”弹出图层面板而不是更多目录；点击“快捷开关”打开位置面板。
+- **根因：** Dock 面板记忆把 `panelNavigationStack[0]` 当作入口归属。跨入口子页会把原入口留在栈根：
+  - “更多 → 设置 → 打开天空图层”后，`activePanel='layers'` 但栈根仍是 `more`；保存时把 `layers` 记在 `more` 名下，之后点“更多”恢复成图层面板。
+  - “快捷 → 点击标题 → 位置”后，`activePanel='place'` 但栈根是 `quick`；切到图层再点“快捷”，恢复成位置面板。
+- **修复：**
+  1. `currentDockRootOwner()` 以当前可见面板的 `panelRouteRoot(activePanel)` 为准；栈根只在没有活动面板时兜底，Dock 高亮也随之落在真实面板所属入口。
+  2. `saveCurrentDockPanelMemory()` 在栈根与当前面板域名不一致时丢弃返回栈，避免跨域返回链。
+  3. 恢复记忆前校验 `panelRouteRoot(saved.activePanel) === item.panel`；不兼容的旧记忆删除并按入口本页打开。
+- **验证：** 新增 `test-ohos-dock-hit-regression.mjs` 用例（面板域名归属与源码守卫），4 项通过。真机（`192.168.3.95:36717`，HAP 803.2 MB / 842,245,420 字节）复测：
+  - 更多 → 设置 → 前往（图层）→ 关闭 → 更多：打开更多目录，不再恢复图层；
+  - 快捷 → 点击标题（位置）→ 图层 → 快捷：打开快捷面板，不再恢复位置；
+  - 同一入口内的记忆仍保留：更多 → 设置 → 更多（收起）→ 更多，恢复设置面板。
+
+## [2026-11-22] 新增真机控件树读屏/断言封装 `ohos-ui-dump.mjs`
+
+- **修改文件：** `scripts/ohos-ui-dump.mjs`（新增）、`scripts/test-ohos-ui-dump.mjs`（新增）、`docs/harmonyos/DEVELOPMENT-MCP-WORKFLOW.md`、`docs/harmonyos/CHANGELOG.md`。
+- **核心改动：**
+  1. **读屏封装：** 新增 `scripts/ohos-ui-dump.mjs`，底层调用 `uitest dumpLayout -b com.joinother.skyinstrument` 读取富属性控件树，支持 `--id` / `--text` / `--text-contains` / `--type` 查询，以及 `--expect-present/-absent/-visible/-hidden/-enabled/-disabled/-opacity/-background/-bg-alpha/-bounds` 断言（opacity/alpha 支持 `--tolerance`）。原始树默认保存到 `build/ui-layout.json`。
+  2. **前台与设备处理：** 默认按发布包名读取；应用不在前台或窗口不可读时以退出码 2 提示先 `aa start`；支持 `--device` / `--hdc` / `--window` / `--display` / `--no-merge` / `--no-save` / `--json` / `--first` / `--dump-only`。`--hdc` 支持 `HDC` / `HDC_BIN` / `DEVECO_HOME` 与 Windows/macOS DevEco 默认路径。
+  3. **测试：** 新增 `scripts/test-ohos-ui-dump.mjs`，覆盖属性解析、树展开、选择器、断言、歧义与参数组合校验。
+- **验证：** 主机 8 项测试通过；真机 `192.168.3.95:36717` 验证 `loc-open-map-current` 的 present/visible/enabled、文本查询、`--json`、`--dump-only`、`--no-save`，以及应用退到后台时的空树退出码 2。
+- **能力边界：** 控件树不暴露字体大小/字重/字体颜色、`backdropBlur`、XComponent/GL 渲染内容与实际像素；这些仍需截图或录屏。`devecocli ui layout` 是简化投影；DevEco MCP 只有 10 个代码智能工具，没有设备/UI 工具。
+
+## [2026-11-22] 本地星文化推荐移至顶部 + 现实星等固定星点亮度
+
+- **修改文件：** `harmonyos/ets-source/pages/MainWindowNativeNode.ets`、`harmonyos/ets-source/capability/SkyInputController.ets`、`harmonyos/ets-source/capability/LayerController.ets`、`harmonyos/ets-source/panels/layers/LayerViewTabs.ets`、`harmonyos/ets-source/panels/shell/HarmonyShell.ets`、`scripts/test-ohos-sky-input.mjs`、`scripts/test-ohos-sky-tone-grs-meteors.mjs`、`scripts/test-ohos-media-cultures-landscapes.mjs`、`docs/harmonyos/CHANGELOG.md`。
+- **核心改动：**
+  1. **文化推荐移到顶部：** 切换地点/年代触发的本地传统星文化推荐胶囊从底部 `skyHeight - 166` 移到顶部，固定挂在普通提示（`actionHint`）下方 44 vp，不随提示出现/消失移动；新增 `topHintY()` 统一平板/手机基准（16/58 vp）。手机端胶囊宽度改为 `skyWidth - 92` 并左对齐，避开右上角陀螺仪/音频按钮；标题精简为“推荐「文化名」”，在避让后的宽度内完整显示。
+  2. **现实星等固定星点亮度 1.0×：** `SkyInputController` 新增 `starBrightnessGestureEnabled` 钩子与 `TWO_FINGER_SUPPRESSED` 模式：现实星等开启时双指竖向平行滑动被识别后整体忽略，不会退化为捏合缩放；AR 天空抠像手势不受影响。`LayerController` 将 `absoluteStarScale` 偏移写入改写为 `starBrightnessReset`，开启现实星等时无条件归位；`MainWindowNativeNode` 在状态回读时修正旧配置遗留偏移并收起 HUD。图层面板星点亮度滑杆在现实星等开启时禁用（45% 透明度），说明文字改为“固定 1.0×，双指上下滑不再调节”；移除 `HarmonyShell` 中已不可达的现实星等 HUD 提示行。
+  3. **测试修复：** `test-ohos-media-cultures-landscapes.mjs` 改用 `fileURLToPath` 与 data-URL 加载 `.ts`，兼容 Windows 路径、CRLF 与 Node 的 TS 加载限制，使文化推荐断言可在本机执行。
+- **验证：** 主机 53 项相关测试通过（含新增的“现实星等开启时双指亮度手势被忽略”用例）；UI contract（41 面板 / 57 静态 id / 91 anchor / 352 文件）、i18n、命令目录（438）通过。真机：深链切换地点后推荐胶囊显示在顶部；现实星等开启时图层面板显示“50% · 1.00×”，滑杆禁用且点击不改变数值，`getAbsoluteStarScale` 返回 1。
+- **构建/安装：** BUILD SUCCESSFUL，signed HAP 803.2 MB（842,245,667 字节），安装并启动成功（`192.168.3.95:36717`，2026-11-22 20:01）。
+- **真机复核：** 最终构建中推荐胶囊位于顶部左侧，标题“推荐「chinese」”完整显示，右边缘不再覆盖陀螺仪/音频按钮；图层面板现实星等开启时星点亮度锁定 1.00×，滑杆置灰且点击无效。
+
+## [2026-11-22] 地点出站：分享标 + 仿系统大弹窗（规划路线 / 查看地点）
+
+- **修改文件：** `harmonyos/ets-source/pages/MainWindowNativeNode.ets`、`harmonyos/ets-source/panels/panels/PlacePanel.ets`、`harmonyos/ets-source/panels/location/CityChipsRow.ets`、`harmonyos/ets-source/panels/location/LocationFullScreenMap.ets`、`harmonyos/ets-source/common/location/MapAppCatalog.ets`（新增）、`harmonyos/ets-source/capability/I18n.ets`、`harmonyos/module.json5`、`scripts/test-ohos-location-map-outbound.mjs`、`scripts/test-ohos-location-share.mjs`、`scripts/build-ohos-minor-body-meshes.mjs`、`docs/harmonyos/json/ui-contract-baseline.json`、`docs/harmonyos/NETWORK-INVENTORY.md`、`docs/harmonyos/CHANGELOG.md`。
+- **基线：** 完成 P1/P2 后在 `31ba1ab2a9` 上实现，随后 rebase 到 `864d3a8c5b`（`joinother/ohos-master`）；唯一代码冲突是 `StartupBridge.refreshRuntimeState`，已合并上游日历预览/触控拾取半径与本地地点分享消费。
+- **核心改动：**
+  1. **分享标直开大弹窗：** 位置面板当前观测点的三角导航标替换为系统 `sys.symbol.share` 分享标；三处入口（当前观测点、已保存地点管理行、全屏选点卡片）删除一级 `bindPopup` 小下拉，点击后直接打开宿主级仿系统“选择导航方式”大弹窗。
+  2. **大弹窗布局：** 全屏遮罩 + 底部大面板，标题“分享位置”、当前地点名；顶部两个能力卡片：规划路线是**直接动作**，点击即调用系统导航面板；查看地点为选中态，下方列出可用应用。新增 `.id('map-app-mode-route' / 'map-app-mode-view' / 'map-app-<vendor>' / 'map-app-close' / 'map-app-cancel')`。系统线形符号（`sys.symbol.share`、`sys.symbol.map`）统一加 `.fontWeight(600)`，与 Dock/面板里的实心 SVG 图标保持同一粗细。
+  3. **唯一保留的地图应用列表（查看地点）：** 新增 `MapAppCatalog.ets`，只包含花瓣、百度、以及“其他支持的应用”（`geo:` 系统出口）。HarmonyOS 普通第三方应用无法读取其他应用的 BundleInfo/图标（`GET_BUNDLE_INFO` 即使已授予，`getBundleInfoSync` 仍返回 201），因此用 `bundleManager.canOpenLink` + `module.json5` 的 `querySchemes`（`petalmaps` / `baidumap` / `geo`）判断安装状态；图标为应用内品牌色圆角块 + 系统符号，非官方图标。未安装的应用不显示对应行。
+  4. **规划路线（系统统一接口）：** `startAbilityByType('navigation', { sceneType: 1, destinationName, destinationLatitude, destinationLongitude, vehicleType: 0 })`，坐标 WGS84→GCJ-02；由系统“选择导航方式”面板列出已安装的导航应用。删除花瓣/高德/百度的路线专用分支与路线应用行。
+  5. **查看地点（应用适配 + geo 系统出口）：** 花瓣 `petalMaps.openMapPoiDetail`（WGS84）；百度 `baidumap://map/marker?...&coord_type=gcj02`（GCJ-02）；“其他支持的应用”使用标准 `geo:` URI（RFC 5870，WGS84）调用 `startAbility`，由系统“选择打开方式”面板继续选择具体应用。高德不提供专用查看地点入口。花瓣地图不会解码 `q` 标签中的百分号编码（真机标题栏显示 `%E5%BD%93...`），因此标签改用未编码文本，仅折叠换行/制表符；真机确认中文标题正常显示。
+  6. **大弹窗磨砂玻璃：** 背景改为 `panelGlassStrong`（夜间 `rgba(25,6,4,0.85)` / 日间 `rgba(15,20,30,0.82)`）+ `backdropBlur(36)`，全屏遮罩降为夜间 0.46 / 日间 0.30；提高面板不透明度，背景模糊只做磨砂质感，不大量透出底层内容。
+  7. **返回手势：** `onRequestBack` 最前面检查 `mapActionPickerOpen`，返回手势 / 返回键先关闭分享大弹窗，再处理它下面的位置面板，避免弹窗悬空或误关底层面板。
+  8. **坐标约定：** 花瓣 MapKit WGS84；百度深链 WGS84→GCJ-02；`geo:` WGS84。
+  9. **当前观测点坐标来源修正：** 当前观测点动作改用上游实时观测者字段 `observerLatLive` / `observerLonLive` 和“当前位置”名称，避免未应用的 `locationPickerStore` 草稿把目的地带错。
+  10. **Windows 资源同步修复：** `scripts/build-ohos-minor-body-meshes.mjs` 的直接调用判断由 `file://${process.argv[1]}` 改为 `pathToFileURL`，修复 Windows 下脚本空跑；重新生成 15 个 SBM1 网格与 `models/ohos/manifest.json`。
+- **验证：**
+  - 主机：`node --test scripts/test-ohos-location-map-outbound.mjs scripts/test-ohos-location-share.mjs scripts/test-ohos-location-share-resolver.mjs` 17 项通过；UI contract（41 面板 / 57 静态 id / 31 动态前缀 / 91 anchor / 352 文件）、i18n、命令目录（438）通过。
+  - 构建/安装：BUILD SUCCESSFUL，signed HAP 803.2 MB（842,246,082 字节），安装并启动成功（`192.168.3.95:36717`，2026-11-22 19:33）。
+  - 真机（面板经 `openUiPanel place`，按钮经 `devecocli ui click --id`）：路线卡片直接打开系统“选择导航方式”，列出高德地图/百度地图/地图（花瓣）；花瓣查看地点显示“当前位置”定位标记与详情卡；百度查看地点显示“当前位置”与清溪镇标记；“其他支持的应用”经系统“选择打开方式”列出地图（花瓣）/奥维互动地图，选择花瓣后标题栏正确显示“当前位置”（修复前显示 `%E5%BD%93...`）。
+  - 图标与返回：截图确认位置面板分享标、弹窗规划路线/其他应用的地图符号均为 600 字重，与 Dock 实心图标粗细一致；返回键与屏幕左边缘返回手势都只关闭分享大弹窗，位置面板保持打开（`getUiPanelState` 仍为 `place`）。
+  - 磨砂玻璃：截图确认大弹窗为深色高不透明度玻璃（`panelGlassStrong` + `backdropBlur(36)`），底层位置面板仅隐约可见。
+  - 背景：`sceneType: 4` 地点详情导航面板在本机为空（“暂无可用导航方式”），因此查看地点仍保留花瓣/百度适配 + `geo:` 系统出口；路线规划使用系统 `sceneType: 1`。
+  - 命令缺口：命令目录暂无“打开位置分享大弹窗 / 点按 `map-app-*` 行”的语义命令，本次用 `openUiPanel place` + `devecocli ui click --id` 命中既有 id 锚点验证；建议后续补一条 ArkUI 命令，避免回归只能靠 UI 注入。
+
 ## [2026-11-21] 新增「天文月历」桌面小组件（4×4 全月历 + 2×4 周历、每日真实月相盘、翻月交互与天象直达）
 
 - **修改文件：** `harmonyos/ets-source/form/AstronomyCalendarCard.ets`（新增）、`harmonyos/ets-source/form/AstronomyCardData.ts`、`harmonyos/ets-source/form/FormStoreHelper.ets`、`harmonyos/ets-source/form/SkyInstrumentFormAbility.ets`、`harmonyos/ets-source/form/SkyFormEditPage.ets`、`harmonyos/ets-source/form/SkyLiveFormPage.ets`、`harmonyos/resources/base/profile/form_config.json`、`harmonyos/resources/base/element/string.json`、`harmonyos/resources/zh_CN/element/string.json`、`harmonyos/resources/zh_TW/element/string.json`、`harmonyos/resources/zh_HK/element/string.json`、`harmonyos/resources/en_US/element/string.json`、`scripts/test-ohos-form-cards.mjs`、`docs/harmonyos/CHANGELOG.md`。
@@ -28,6 +130,81 @@
 - **验证与真机实测（MatePad Mini `192.168.31.234:42713`，`com.joinother.skyinstrument`）：**
   - 主机验证：新增 `scripts/test-ohos-nomenclature-and-3d-models.mjs`，连同 `check-ohos-resource-dirs.mjs`（10/10 目录）、`check-ohos-command-catalog.mjs`（438 命令）、`check-ohos-ui-contract.mjs`（40 面板）、`check-ohos-network-sources.mjs`、`fetch-mirror.test.mjs`、`test-ohos-plugin-panels-phase23.mjs`、`test-ohos-media-cultures-landscapes.mjs` 全部通过。
   - 真机实拍验收：实测「行星地貌图集」完整加载 16,079 处 IAU 地貌（月球 9,081 / 火星 2,052），点击第谷与奥林波斯山均精准望远镜缩放飞抵并清晰绘制中文标注与绿色环形山轮廓；实测灶神星（黎明号实测 3D 地形模型 + OpenGL 实景戴瓦利亚槽沟群）、火卫一（火星快车 3D 形态模型）、哈雷彗星（乔托号 3D 花生形彗核）、67P/Churyumov-Gerasimenko（罗塞塔号 3D 双瓣彗核）均秒级加载、流畅手势旋转、文案与排版零截断。
+
+## [2026-11-21] 高德地点出站：系统导航应用选择面板 + 路线规划
+
+- **修改文件：** `harmonyos/ets-source/pages/MainWindowNativeNode.ets`、`harmonyos/ets-source/capability/I18n.ets`、`harmonyos/ets-source/common/location/LocationShareLink.ets`、`scripts/test-ohos-location-share.mjs`、`scripts/test-ohos-location-map-outbound.mjs`、`docs/harmonyos/NETWORK-INVENTORY.md`、`docs/harmonyos/json/ui-contract-baseline.json`、`docs/harmonyos/CHANGELOG.md`。
+- **核心改动：**
+  1. **系统级地图选择：** “在地图中打开”改为调用 `startAbilityByType('navigation', ...)`，由系统展示带应用图标的导航应用选择面板（本机实测显示“地图”“百度地图”“高德地图”及各自图标），用户选择具体地图应用；不再使用自绘选择面板或内置 WebView。
+  2. **路线规划意图：** `sceneType: 1`（路线规划），只传终点名称、WGS84 转换后的 GCJ-02 经纬度和 `vehicleType: 0`；不传起点，由地图应用使用设备当前位置。系统面板把请求交给用户选择的地图应用。
+  3. **坐标纠偏：** `startAbilityByType` 要求 GCJ-02；`LocationShareLink.ets` 导出 `wgs84ToGcj02Point`，宿主在调用前完成 WGS84→GCJ-02 转换，避免偏移。
+  4. **不自动导航：** 星象仪只打开路线规划；地图应用停留在路线方案页，用户需自行点“开始导航”。宿主不调用 `openMapNavi`/`openMapRoutePlan`，也不直接启动高德/百度/花瓣。
+  5. **移除旧方案：** 删除自绘地图选择面板、高德系统 WebView 页面、`MapOutboundLink.ets` 及 ArkWeb 相关接线；不打包浏览器内核，signed HAP 仍为 799.4 MB。
+- **验证结果：**
+  - `node --test scripts/test-ohos-location-share.mjs scripts/test-ohos-location-share-resolver.mjs scripts/test-ohos-location-map-outbound.mjs` 14 项通过（含 WGS84→GCJ02 参考、系统面板接线、无导航调用、无自绘面板/WebView 断言）；
+  - UI contract 39 面板 / 50 静态 id / 23 动态前缀 / 76 anchor / 337 文件；i18n、命令目录（435）通过；
+  - `build-ohos-hap-windows.ps1 -Release -SkipEngine -SkipResources -Install -Device 192.168.3.95:36717` BUILD SUCCESSFUL，安装并启动成功；
+  - 真机（MatePad Mini）：位置面板 → 地图图标，系统“选择导航方式”面板显示“地图”“百度地图”“高德地图”及图标；选择“高德地图”打开高德原生路线规划，从“我的位置”到目标“桃源街道”，地图居中显示路线方案并停留在“开始导航”前；选择“地图”/百度同样进入各自路线规划；星象仪不自动开始导航。
+  - 说明：该方案统一使用“路线规划”，因此选择花瓣时也进入路线规划，而不是此前的地点点详情；如需要“仅看地点详情”，需另设入口。
+
+## [2026-11-21] 高德地点分享入站（GCJ02 纠偏 + 短链解析）
+
+- **修改文件：** `harmonyos/ets-source/common/location/LocationShareLink.ets`、`harmonyos/ets-source/common/location/LocationShareResolver.ets`（新增）、`harmonyos/ets-source/qability/QAbility.ets`、`scripts/test-ohos-location-share.mjs`、`scripts/test-ohos-location-share-resolver.mjs`（新增）、`docs/harmonyos/NETWORK-INVENTORY.md`、`docs/harmonyos/json/ui-contract-baseline.json`、`docs/harmonyos/CHANGELOG.md`。
+- **核心改动：**
+  1. **高德 GCJ02→WGS84 纠偏：** `uri.amap.com/marker` 默认 `coordinate=gaode`（GCJ02），仅 `coordinate=wgs84` 不纠偏；`m.amap.com`、`wb.amap.com` 与 `amapuri://viewMap` 以 `dev=1` 表示 WGS84，其余按 GCJ02。解析器在写观测点前统一转换为 WGS84，避免此前约 300–600 m 的系统性偏移。
+  2. **补齐 `wb.amap.com` 短链目标格式：** 支持 `?p=poiid,lat,lon,name,address,city` 与 `?q=lat,lon,name,city`（纬度在前），并从中提取地点名称；修复多段 `q` 被误当成名称的问题。
+  3. **`surl.amap.com` 短链解析：** 新增 `LocationShareResolver.ets`。仅当分享文本中没有可离线解析的坐标且包含 `surl.amap.com` 时，发起一次用户主动触发的 HTTPS GET；`maxRedirects: 0`，连接/读取超时各 5 秒，响应体上限 64 KiB；只读取 3xx 的 `Location`，目标 host 必须属于高德白名单（`wb.amap.com`、`uri.amap.com`、`m.amap.com`、`wap.amap.com`、`www.amap.com`、`amap.com`），不下载 `wb` 页面、不携带 Cookie/账号/SN/UDID/观测位置。
+  4. **`QAbility` 接入：** 系统分享记录、`want.uri` 和深链统一走“本地解析 → 高德短链受限解析”流程；增加解析序列号，新的分享或直接坐标会丢弃过期的异步短链结果；失败沿用“未找到可用坐标”提示。
+  5. **出站边界不变：** 本轮只做高德→星象仪入站，不接入高德出站、不声明 `querySchemes`、不引入高德 SDK/AppKey，不触发路线规划或导航。
+- **验证结果：**
+  - `node --test scripts/test-ohos-location-share.mjs scripts/test-ohos-location-share-resolver.mjs` 11 项通过（含高德 GCJ02 基准、`wb` p/q、短链提取/重定向白名单、`Location` 头大小写）；
+  - `check-ohos-ui-contract.mjs`（39 面板 / 50 静态 id / 23 动态前缀 / 76 anchor / 337 文件）、`check-ohos-i18n.mjs`、`check-ohos-command-catalog.mjs`（435 命令）通过；
+  - `build-ohos-hap-windows.ps1 -Release -SkipEngine -SkipResources -Install -Device 192.168.3.95:36717` BUILD SUCCESSFUL（signed HAP 799.4 MB，bundle `com.joinother.skyinstrument`），安装并启动成功；
+  - 主机侧用真实短链 `https://surl.amap.com/1rXM9G4cgrQ` 验证 302 → `wb.amap.com/?q=...`，解析结果为 `31.957156, 120.939653`（与独立 GCJ02 参考实现一致）；
+  - 真机注入验证（`aa start ... -A ohos.want.action.sendData -U ...` + `getObserverInfo`）：
+    - `surl.amap.com/1rXM9G4cgrQ` 冷启动/热启动均解析为 `31.957155, 120.939651`，名称“南通市崇川区源兴路”；
+    - `uri.amap.com/marker?position=121.47822305927693,31.22845773757727&coordinate=gaode` → `31.2304, 121.4737`；`coordinate=wgs84` 保持 `31.2304, 121.4737` 不纠偏；
+    - `wb.amap.com/?q=31.22845773757727,121.47822305927693,AmapWB,310000` 与 `m.amap.com/?q=...&dev=0` → `31.2304, 121.4737`；
+    - 无效短链 `surl.amap.com/zzzzzzzzzzzz` 返回 404，提示“未找到可用坐标”，观测点保持不变。
+  - 实现备注：`maxRedirects: 0` 时 HarmonyOS HTTP 客户端在收到 3xx 后抛出 2300047（“redirections reaches the maximum”），不会返回响应；改用 `headersReceive` 一次性回调读取 302 的 `Location`，在异常分支使用该地址，从而既不跟随重定向，也能完成解析。
+  - 高德分享面板 → 星象仪的**系统分享记录**路径尚未做真机实测；本轮真机验证覆盖 `want.uri`、本地解析和短链网络解析。
+
+
+## [2026-11-21] 双向地点分享（花瓣地图精确打开 + 地图分享注入观测点）
+
+- **修改文件：** `harmonyos/ets-source/common/location/LocationShareLink.ets`（新增）、`harmonyos/ets-source/qability/QAbility.ets`、`harmonyos/module.json5`、`harmonyos/ets-source/pages/MainWindowNativeNode.ets`、`harmonyos/ets-source/panels/panels/PlacePanel.ets`、`harmonyos/ets-source/panels/location/LocationFullScreenMap.ets`、`harmonyos/ets-source/panels/location/CityChipsRow.ets`、`harmonyos/ets-source/common/ui/ShellIcons.ets`、`harmonyos/ets-source/capability/I18n.ets`、`harmonyos/ets-source/resources/base/media/ic_map_navigate.svg`（新增）、`scripts/test-ohos-location-share.mjs`（新增）、`docs/harmonyos/json/ui-contract-baseline.json`、`docs/harmonyos/NETWORK-INVENTORY.md`、`docs/harmonyos/CHANGELOG.md`。
+- **核心改动：**
+  1. **地图 → 星象仪（地点注入）：**
+     - `LocationShareLink.ets` 新增纯函数解析器，支持 `skyinstrument://location`、标准 `geo:LAT,LON?q=LAT,LON(NAME)`、地图网页链接（`ll` / `q` / `location` / `@lat,lon` / `!3d..!4d..`）以及纯文本坐标；重点补齐**花瓣地图真实分享协议**：`https://www.petalmaps.com/place/?...&marker=lat,lng...`、`petalmaps://poidetail?marker=lat,lng...` 与 `maps://locationInfo?...`。花瓣 `marker`/`center` 为纬度在前，未写 `coordinateType` 时按 GCJ02，仅 `coordinateType=0` 为 WGS84；
+     - 新增标准 GCJ02→WGS84 迭代纠偏（含中国境外恒等判断），保证花瓣分享进入星象仪后仍以 WGS84 写入观测点；坐标范围、海拔 -500–9000 m、名称 80 字上限保持不变；
+     - `QAbility` 在 `onCreate` / `onNewWant` 处理系统分享文本/链接（`systemShare.getSharedData`）与 `skyinstrument` 深链；`module.json5` 显式注册 `skyinstrument` viewData 深链，并保留 `general.text` / `general.hyperlink` 分享目标；
+     - 宿主在引擎就绪且隐私已同意后消费 payload：关闭面板与全屏地图，调用 `LocationController.setLocation(..., 'Earth', false, 'share')` 完成“切回地球 + 应用坐标”，刷新今晚天象与推荐；无坐标时提示“未找到可用坐标”。
+  2. **星象仪 → 花瓣地图（精确打开地点，不自动导航）：**
+     - 使用 Map Kit `petalMaps.openMapPoiDetail`，显式 `CoordinateType.WGS84`，只打开精确坐标的地点详情/标靶，不传路线、不规划路线、不进入导航；真机已验证“外滩”精确标靶；
+     - **高德、百度暂不接入**。系统 `startAbilityByType` 不作为本功能的实现：`sceneType: 3` 只接收地点名称（会落到街道/搜索结果层级），`sceneType: 4` 本机三家地图均未声明 `DetailLocation`，`sceneType: 1/2` 会进入路线规划/导航；
+     - 位置面板坐标行新增地图图标入口（仅地球观测点）；已保存地点长按操作行新增「在地图中打开」（仅地球地点）；全屏选点卡片新增「在地图中打开」。
+- **验证结果：**
+  - `node --test scripts/test-ohos-location-share.mjs` 8 项通过（含花瓣真实分享格式、默认 GCJ02→WGS84、`coordinateType=0`、`petalmaps://` 深链、坐标范围/无效内容拒绝）；
+  - `check-ohos-ui-contract.mjs`、`check-ohos-i18n.mjs`、`check-ohos-command-catalog.mjs`（435 命令）通过；
+  - `build-ohos-hap-windows.ps1 -Release -SkipEngine -SkipResources -Install` BUILD SUCCESSFUL（release signed HAP 799.4 MB）；
+  - 真机实测（MatePad Mini `192.168.3.95:36717`）：
+    - 花瓣分享链接 `https://www.petalmaps.com/place/?z=17&marker=31.22845773757727,121.47822305927693&placeId=...&utm_campaign=poi_share#/` 注入后，`getObserverInfo` 返回 `31.2304 / 121.4737`（GCJ02→WGS84 纠偏正确），名称为“分享位置”；
+    - `skyinstrument://location?...` 与 `geo:0,0?q=31.2304,121.4737(外滩)` 均正确注入；
+    - 点击位置面板地图图标后直接拉起花瓣地图并显示精确标靶（无三选一菜单、未进入导航）。
+  - 花瓣真实分享若使用短链或不含 `marker` 的链接，仍需拿到原始分享内容再补充分支；高德、百度本轮未接入。
+
+
+## [2026-11-21] 快速面板红光手电（扩展列候选 + 全屏红光 + 亮度调节）
+
+- **修改文件：** `harmonyos/ets-source/common/derive/quickActions.ets`、`harmonyos/ets-source/common/ui/ShellIcons.ets`、`harmonyos/ets-source/pages/MainWindowNativeNode.ets`、`harmonyos/ets-source/capability/I18n.ets`、`harmonyos/ets-source/resources/base/media/ic_red_light.svg`（新增）、`scripts/test-ohos-quick-red-light.mjs`（新增）、`docs/harmonyos/json/ui-contract-baseline.json`、`docs/harmonyos/research/QUICK-ACTIONS-PANEL-PLAN.md`、`docs/harmonyos/specs/OBJECT-DETAIL-OBSERVE-MODE.md`、`docs/harmonyos/CHANGELOG.md`。
+- **核心改动：**
+  1. `quickActions.ets` 候选池新增第 18 项 `red_light`（默认不进 12 格，仅出现在扩展列候选带；默认候选 6 项仍为 1 行，宿主高度公式不变）；新增 `ic_red_light.svg` 与 `ShellIcons` 映射。
+  2. 宿主 `setRedLight` 渲染 `#FF0000` 全屏叠层（`zIndex(400)`，覆盖面板与 Dock），设置应用窗口亮度并 `setWindowKeepScreenOn(true)`；叠层底部提供亮度滑块（5%–100%，默认 100%），拖动时以约 30 ms 合并窗口亮度写入，松手/点击时持久化到快捷面板 preferences（`redLightBrightness`），下次开启自动恢复；轻触滑块以外空白、系统返回、切后台或页面销毁时关闭并恢复 `-1.0` 系统亮度与非常亮。窗口写入经 Promise 链串行化，避免快速开关/拖动时旧请求后落地。
+  3. 红光手电是纯 UI 照明，不参与图层预设的“已修改”标记。
+- **验证结果：**
+  - 包含本功能的 release HAP 构建成功（799.4 MB）；`node --test scripts/test-ohos-quick-red-light.mjs` 5 项通过；`check-ohos-ui-contract.mjs` 73 anchors、`check-ohos-i18n.mjs`、`check-ohos-command-catalog.mjs`（435 命令）通过。
+  - 真机实测（MatePad Mini `192.168.3.95:36717`）：快捷面板扩展列显示手电图标；点击后全屏纯红并显示亮度滑块，拖动 100% → 57% 时叠层保持打开，关闭后再次开启仍为 57%；轻触空白处可关闭并恢复面板。
+
 
 ## [2026-11-21] 太阳系小天体阿里云国内 MPC 镜像部署、离线精密历表与千颗彗星库全链路盘活及 SolarSystemEditor 鸿蒙沙盒写盘修复
 

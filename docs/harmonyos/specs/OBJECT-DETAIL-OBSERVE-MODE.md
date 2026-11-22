@@ -1,7 +1,7 @@
 # 天体详情卡：天文馆模式 / 观测模式设计
 
-> **状态：** 已实现（2026-10-07，见 §12 实施记录）
-> **日期：** 2026-10-07
+> **状态：** 已实现（2026-10-07，见 §12 实施记录）；**2026-11-22 定稿改为固定观测模式 + 时间面板轻量卡，连接线移除，见 §13（以此为准）**
+> **日期：** 2026-10-07（§13：2026-11-22）
 > **基线：** HEAD `cbc8c5bfae`（宿主 `MainWindowNativeNode.ets` 7,974 行；文中宿主/C++ 行号已对照该基线核验）
 > **涉及：** `UnifiedObjectDetailCard` 详情卡体系、`InfoWindowStore` 信息级别域、`QuickPanel` 快捷面板、`SettingsPanel` 设置-信息页
 
@@ -338,7 +338,8 @@ ObjectCompactMetric（现有组件，零改动）
    I18n 键换成 `detail_mode_observe` 一族，`OverlayStore.minimalHud` 删除。
 2. **卫星项是「移出默认 12 格」而非删除。** §5/§8.1 要求替换第 10 格并保留卫星开关；三期已有自定义面板，
    因此卫星项**留在池尾**（`quickActionPool` 第 17 项）：默认网格不含它，但用户可在编辑态把它拖回。
-   池仍 17 项，候选带仍 1 行（`quickCandidateSlotsFor` 的 2 行上限未触及）。
+   池共 18 项（2026-11-21 在卫星项之后追加 `red_light` 红光手电），候选带仍 1 行
+   （`quickCandidateSlotsFor` 的 2 行上限未触及）。
    副作用：已持久化过自定义顺序的旧安装会保留自己的顺序（含卫星格），需自行把「观测模式」拖入 ——
    这是既有「自定义顺序优先」语义的必然结果，仅对**手动提交过**顺序的用户可见。
 3. **§9 边界 4 的前提有误。** `vmage` 是否存在只取决于「目标有星等 + 有气团质量」，与天体类型无关：
@@ -424,3 +425,37 @@ ObjectCompactMetric（现有组件，零改动）
 `test-ohos-information-policy` / `test-ohos-detail-live-values` / `test-ohos-distance-ui` /
 `verify-ohos-object-details` / `test-ohos-satellite-panel` 全部通过。
 本轮改动文件按仓库约定统一 CRLF（`docs/harmonyos/**`、`harmonyos/ets-source/**`）。
+
+---
+
+## 13. 定稿（2026-11-22）：固定观测模式 + 时间面板轻量卡；连接线移除
+
+> 本节取代 §4.2 的“按钮行 / 天文馆切换按钮”、§5 的快捷面板“观测模式”开关、§6 的设置入口，以及 §12.7 关于连接线的全部描述。
+
+### 13.1 形态
+
+- **普通界面：固定极简大卡。** 选中天体后直接显示观测模式的极简大卡（页头 + 名称 / 类型 / 三指标 + ✕ + 下沿展开箭头），不再先出现轻量浮标，也不再有“一键直开天文馆全量卡”的入口。
+- **展开箭头保留。** 点下沿箭头 → 展开全量观测卡；再点 → 收回极简大卡。展开态只对当前目标有效（`observeExpanded` 瞬态，换目标 / 关卡片复位）。
+- **时间面板打开：轻量卡。** 卡片形变为原一阶段浮标形态：图标 + 名称 + 类型/星等/星座摘要 + ✕；**没有“详情”按钮，没有展开箭头**，点按卡身不展开。关闭时间面板后自动恢复极简大卡。
+- **连接线已移除。** 删除 `ObjectDetailConnectorLayer`、`objectDetailConnectorVisible` 设置、信息页开关、CLI `get/setObjectDetailConnector` 命令与宿主 9 个逐帧几何 `@State`；`DetailConnectorController` 更名为 `DetailRefreshController`，仅保留详情自动刷新。
+
+### 13.2 几何与动画（方案 A：真实几何/位置形变）
+
+- 三壳层只渲染**一个卡片容器** `UnifiedObjectDetailCard`，条件为 `infoWinVisible && selectedName.length > 0`。
+- 宿主 `detailCardX/Y/Width/Height` 按 `isTimePanelActive()`（`panelVisible && activePanel === 'time'`）切换两套几何：
+  - 大卡：`bottomCardX/Y/Width/Height`（折叠 hover 壳用 `hoverBottomCardY`）；
+  - 轻量卡：`selectionPillX/Y/Width/Height`（沿用浮标位置：手机顶部安全区、平板底部 Dock 上方居中、折叠壳 hover 控制台上方）。
+- 壳层容器与卡片根节点各挂 280ms `curves.springMotion(0.52, 0.9)` 属性动画，位置、宽高与圆角（轻量卡 20/29vp，大卡面板圆角）同步过渡。
+- 面板状态用 `@Watch` 收敛：`panelVisible` / `activePanel` 变化 → `syncDetailCardForPanel()`：时间面板打开时 `infoWinExpanded=false` 且 `observeExpanded=false`；其余状态 `infoWinExpanded=true`。
+
+### 13.3 快捷面板与设置
+
+- 快捷面板候选池恢复 17 项、默认 12 项；原“观测模式”格子由**卫星提示**回到默认第 10 格。
+- 设置 → 信息页删除“详情卡指向线”开关；`UiSettings` 不再包含 `objectDetailConnectorVisible`（旧持久化字段忽略并自然淘汰）。
+- 旧 `detailDisplayMode` 持久化值仍被读取但统一归为 `observe`；不再写回天文馆模式。
+
+### 13.4 测试与护栏
+
+- `test-ohos-selection-reticle-and-pill.mjs` 改为断言：单容器、`timeLight` 分支、无连接线壳层属性、`isTimePanelActive` / `syncDetailCardForPanel`、无“详情”按钮。
+- `test-ohos-detail-live-values.mjs` 的轮询断言改读 `capability/DetailRefreshController.ets`。
+- `check-ohos-ui-contract.mjs` 基线需重新生成（删除连接线组件、更名控制器）。

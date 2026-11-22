@@ -51,14 +51,27 @@ for (const relative of mappedPanels) {
     restoredLabels++;
   }
 }
-assert.ok(restoredLabels >= 60);
+// 目镜面板按器材页拆分后，旧标签改由 OcularGeneralTab / OcularEquipmentTab /
+// OcularEquipmentForm / OcularSummaryCard 的共享 builder 渲染；统一按
+// panelFontSize() 缩放，仍计入旧键盘可读性基线的覆盖统计。
+for (const relative of ['telescope/OcularGeneralTab.ets', 'telescope/OcularEquipmentTab.ets',
+  'telescope/OcularEquipmentForm.ets', 'telescope/OcularSummaryCard.ets']) {
+  const source = panel(relative);
+  for (const [, key] of legacyLabels) {
+    if (!source.includes(`I18n.t('${key}')`)) continue;
+    assert.ok(source.includes('panelFontSize('), `${relative}: ${key} must use panelFontSize()`);
+    restoredLabels++;
+  }
+}
+assert.ok(restoredLabels >= 55);
 
 const observing = panel('panels/ObservingPanel.ets');
 assert.match(observing, /targetTitleOf\(target\)\)\.fontSize\(panelFontSize\(14, this.readableUi\)\)/);
 assert.match(observing, /displayNameOf\(name\)\)\.fontSize\(panelFontSize\(15, this.readableUi\)\)/);
 assert.match(observing, /I18n\.t\('observing_list_saved'\)\)\.fontSize\(10\)/);
 assert.match(observing, /I18n\.t\('observing_refresh'\)\)\.fontSize\(10\)/);
-assert.match(panel('panels/OcularsPanel.ets'), /I18n\.t\('ocular_mask_opacity'\)\)\.fontSize\(12\)/);
+assert.match(panel('telescope/OcularGeneralTab.ets'), /sliderCard\(I18n\.t\('ocular_mask_opacity'\)/);
+assert.match(panel('telescope/OcularGeneralTab.ets'), /Text\(label\)\.fontSize\(panelFontSize\(12, this\.readableUi\)\)/);
 assert.match(panel('telescope/OcularSelector.ets'), /I18n\.t\('ocular_no_devices'\)\)\.fontSize\(11\)/);
 assert.match(panel('telescope/OcularMetric.ets'), /panelFontSize\(15, this.readableUi\)/);
 
@@ -67,7 +80,10 @@ assert.match(tabs, /minWidth: this.readableUi \? 76 : 60, minHeight: this.readab
 assert.match(tabs, /\.height\(this.readableUi \? 46 : 42\)/);
 assert.match(panel('layers/LayerSwitchRow.ets'), /\.height\(this\.hasHint\(\) \? \(this\.readableUi \? 64 : 56\) : \(this\.readableUi \? 50 : 42\)\)/);
 assert.match(panel('shell/PanelHeader.ets'), /fontSize\(panelFontSize\(18, this.readableUi\)\)/);
-assert.match(panel('settings/NotificationSection.ets'), /height\(this\.readableUi \? 50 : 42\)/);
+const notifications = panel('settings/NotificationSection.ets');
+assert.match(notifications, /topicSwitchRow\(/);
+assert.match(notifications, /Toggle\(\{ type: ToggleType\.Switch, isOn: isOn \}\)\s*\.width\(44\)\.height\(24\)/);
+assert.match(notifications, /\.padding\(\{ left: 12, right: 10, top: 8, bottom: 8 \}\)/);
 assert.match(panel('layers/LayerSpectralSection.ets'), /height\(this.readableUi \? 34 : 28\)/);
 for (const name of ['InfoRow', 'NavStarsToggleRow', 'SettingsChoiceButton', 'SettingsSwitchRow']) {
   const source = read(`harmonyos/ets-source/common/ui/${name}.ets`);

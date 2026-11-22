@@ -66,6 +66,22 @@
 - 设备上同时装有发布身份与开发身份时，`scripts/stellarium-cli.mjs` 的默认包名是**发布身份**（`DEFAULT_BUNDLE = 'com.joinother.skyinstrument'`，可用 `--bundle` 或 `STELLARIUM_BUNDLE` 覆盖），而本机调试构建可能装成**另一个已注册包名**（由 DevEco 自动签名决定；`build-ohos-hap-windows.ps1 -Install` 会从 `pack.info` 打印它）。不带 `--bundle` 的 CLI 调用（含 `openUiPanel`）会启动并操作**另一个 app**，其后的 `devecocli ui screenshot` / `layout` 全在拍错对象。走查一律显式加 `--bundle <构建脚本打印的包名>`，或用 `devecocli run` 按构建产物安装与启动。
 - `devecocli ui layout` 只返回**视口内**节点，Scroll 折叠区不出现；要看面板末行须先滚动，或改由 CLI 命令面与结构化状态覆盖。
 
+### 读屏断言（`ohos-ui-dump.mjs`）
+
+真机 UI 验收优先读控件树，而不是先截图：
+
+```bash
+node scripts/ohos-ui-dump.mjs --device <IP:port> --id loc-open-map-current \
+  --expect-present --expect-visible --expect-enabled
+node scripts/ohos-ui-dump.mjs --device <IP:port> --text-contains 星点亮度 --expect-present
+```
+
+- 底层是 `uitest dumpLayout` 的富属性树（`enabled`、`visible`、`opacity`、`backgroundColor`、bounds、选择器等）；`devecocli ui layout` 只是简化投影，缺少这些字段。
+- 退出码 0/1/2 分别表示通过、断言失败或无匹配、参数/设备/解析错误；原始树默认保存到 `build/ui-layout.json`。
+- 只读**前台可见窗口**：应用退到后台时返回空树，脚本以退出码 2 提示。`openUiPanel` 的 `accepted` 不能代替 `getUiPanelState` 的最终面板状态。
+- 字体大小/字重/字体颜色、`backdropBlur`、XComponent/GL 内容不在控件树中；磨砂质感、图标粗细、渲染颜色和动画仍需截图或录屏。
+- 状态断言要求唯一匹配；文本可能命中多个节点时加 `--first` 或收窄选择器。
+
 推荐验证顺序：
 
 ```bash

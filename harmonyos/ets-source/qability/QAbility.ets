@@ -8,6 +8,7 @@ import hilog from '@ohos.hilog';
 import deviceInfo from '@ohos.deviceInfo';
 import preferences from '@ohos.data.preferences';
 import { fileIo } from '@kit.CoreFileKit';
+import { systemShare } from '@kit.ShareKit';
 import BuildProfile from 'BuildProfile';
 import qpa from 'libqohos.so';
 import { command } from 'libentry.so';
@@ -26,6 +27,8 @@ import { readAstronomyCard, publishAstronomyCard } from './AstronomyCardService'
 import { CardTonightData } from '../form/AstronomyCardData';
 import { CollaborationSessionOptions, collaborationNativeState, collaborationPreview, createCollaborationSession } from './CollaborationSessionService';
 import { NIGHT_MODE_STORE } from '../common/types/MainWindowModels';
+import { findAmapShortLink, parseSharedLocationText, SharedLocationPoint } from '../common/location/LocationShareLink';
+import { resolveSharedLocationText } from '../common/location/LocationShareResolver';
 
 interface AstronomyReminderResponse {
   ok: boolean;
@@ -261,6 +264,8 @@ export default class QAbility extends UIAbility {
     if (commandName === 'setSatellitePanelGroup' || commandName === 'setSatellitePanelScroll' || commandName === 'setSatellitePanelSection') return true;
     if (commandName === 'setObjectDetailTab') return true;
     if (commandName === 'setObjectModelView') return true;
+    if (commandName === 'setOcularsTab' || commandName === 'setOcularsScroll' ||
+      commandName === 'openOcularEquipmentEditor' || commandName === 'closeOcularEquipmentEditor') return true;
     return commandName === 'openUiPanel' || commandName === 'openPluginFeature' || commandName === 'closeUiPanel' || commandName === 'backUiPanel' ||
       commandName === 'setLayerTab' || commandName === 'setSkyCultureMakerTab' || commandName === 'setGyroscopeEnabled' || commandName === 'setTelescopeLivePosition' || commandName === 'setLocationMapProvider' || commandName === 'setUiLayoutMode';
   }
@@ -600,6 +605,20 @@ export default class QAbility extends UIAbility {
         this.finishCliRequest(request, JSON.stringify({ ok: false, error: 'expected tab 0..9 or group 0..2' }));
         return;
       }
+      if (request.commandName === 'setOcularsTab' && !/^[0-5]$/.test(value)) {
+        this.finishCliRequest(request, JSON.stringify({ ok: false, error: 'expected oculars tab 0..5' }));
+        return;
+      }
+      if (request.commandName === 'setOcularsScroll' &&
+        (value.length === 0 || !Number.isFinite(Number(value)) || Number(value) < 0)) {
+        this.finishCliRequest(request, JSON.stringify({ ok: false, error: 'expected non-negative scroll offset' }));
+        return;
+      }
+      if (request.commandName === 'openOcularEquipmentEditor' &&
+        !/^(ocular|lens|ccd|telescope)(\|-?\d{1,4})?$/.test(value)) {
+        this.finishCliRequest(request, JSON.stringify({ ok: false, error: 'expected kind or kind|index' }));
+        return;
+      }
       if (request.commandName === 'setSatellitePanelSection' &&
         !['main', 'settings', 'sources', 'imports', 'display', 'countdown', 'diagnostics'].includes(value)) {
         this.finishCliRequest(request, JSON.stringify({ ok: false, error: 'unknown satellite section' }));
@@ -755,10 +774,12 @@ export default class QAbility extends UIAbility {
       request.commandName !== 'setNebulaTextureConflictAvoidance' &&
       request.commandName !== 'setDateFormat' && request.commandName !== 'setTimeFormat' && request.commandName !== 'playScript' &&
       request.commandName !== 'continueScript' && request.commandName !== 'stopScript' &&
-      request.commandName !== 'setScriptRate') {
-      if (request.commandName !== 'setObjectDetailConnector' && request.commandName !== 'getObjectDetailConnector') {
-        return;
-      }
+      request.commandName !== 'setScriptRate' &&
+      request.commandName !== 'addOcularEquipment' && request.commandName !== 'updateOcularEquipment' &&
+      request.commandName !== 'deleteOcularEquipment' && request.commandName !== 'moveOcularEquipment' &&
+      request.commandName !== 'importOcularEquipment' && request.commandName !== 'setTelradFov' &&
+      request.commandName !== 'setOcularSetting' && request.commandName !== 'selectOcularInstrument') {
+      return;
     }
     try {
       const parsed = JSON.parse(response) as Record<string, Object>;
@@ -1049,6 +1070,101 @@ export default class QAbility extends UIAbility {
     hilog.info(LOG_DOMAIN, LOG_TAG, '[catalog-open] received .cat open-with want');
   }
 
+  // 地点分享：地图应用通过系统分享面板或 `skyinstrument:` 深链发来观测点
+  //（同时兼容分享文本中的 `geo:` 链接）。解析成功后写入 AppStorage；
+  // ArkUI 在引擎就绪且已同意隐私后消费并注入观测点。
+  private publishSharedLocation(point: SharedLocationPoint | null): void {
+    const route: Record<string, Object> = {};
+    route['routeId'] = Date.now().toString();
+    if (point !== null) {
+      route['name'] = point.name;
+      route['latitude'] = point.latitude;
+      route['longitude'] = point.longitude;
+      route['altitude'] = point.altitude;
+      route['planet'] = point.planet;
+      route['source'] = point.source;
+      AppStorage.setOrCreate('stellariumLocationShare', JSON.stringify(route));
+      hilog.info(LOG_DOMAIN, LOG_TAG, '[location-share] accepted shared point');
+      return;
+    }
+    route['ok'] = false;
+    route['error'] = 'unrecognized';
+    AppStorage.setOrCreate('stellariumLocationShare', JSON.stringify(route));
+    hilog.info(LOG_DOMAIN, LOG_TAG, '[location-share] shared content has no usable coordinates');
+  }
+
+  private locationShareResolveSeq: number = 0;
+
+  private resolveLocationShare(raw: string): void {
+    const seq = ++this.locationShareResolveSeq;
+    resolveSharedLocationText(raw).then((point: SharedLocationPoint | null) => {
+      if (seq !== this.locationShareResolveSeq) return;
+      this.publishSharedLocation(point);
+    }).catch((error: Error) => {
+      if (seq !== this.locationShareResolveSeq) return;
+      hilog.warn(LOG_DOMAIN, LOG_TAG, `[location-share] resolve failed: ${error.message}`);
+      this.publishSharedLocation(null);
+    });
+  }
+
+  private queueLocationShareWant(want: Want): void {
+    const uri = want.uri ?? '';
+    const direct = parseSharedLocationText(uri);
+    if (direct !== null) {
+      this.locationShareResolveSeq += 1;
+      this.publishSharedLocation(direct);
+      return;
+    }
+    // 高德短链本身不含坐标；先做受限解析，不进入系统分享记录分支。
+    if (findAmapShortLink(uri) !== null) {
+      this.resolveLocationShare(uri);
+      return;
+    }
+    const action = want.action ?? '';
+    if (action !== 'ohos.want.action.sendData') {
+      const lower = uri.toLowerCase();
+      if (lower.startsWith('skyinstrument://') || lower.startsWith('geo:')) this.publishSharedLocation(null);
+      return;
+    }
+    const seq = ++this.locationShareResolveSeq;
+    systemShare.getSharedData(want).then((data: systemShare.SharedData) => {
+      if (seq !== this.locationShareResolveSeq) return;
+      const records = data.getRecords();
+      let sawText = false;
+      let shortLinkCandidate = '';
+      for (let i = 0; i < records.length; i++) {
+        const record = records[i];
+        const utd = record.utd.toLowerCase();
+        if (utd.indexOf('text') >= 0 || utd.indexOf('url') >= 0 || utd.indexOf('link') >= 0) sawText = true;
+        const content = record.content ?? '';
+        const parsedContent = parseSharedLocationText(content);
+        if (parsedContent !== null) {
+          this.publishSharedLocation(parsedContent);
+          return;
+        }
+        const recordUri = record.uri ?? '';
+        const parsedUri = parseSharedLocationText(recordUri);
+        if (parsedUri !== null) {
+          this.publishSharedLocation(parsedUri);
+          return;
+        }
+        if (shortLinkCandidate.length === 0) {
+          if (findAmapShortLink(content) !== null) shortLinkCandidate = content;
+          else if (findAmapShortLink(recordUri) !== null) shortLinkCandidate = recordUri;
+        }
+      }
+      if (shortLinkCandidate.length > 0) {
+        this.resolveLocationShare(shortLinkCandidate);
+        return;
+      }
+      // Image/file shares are registered for other flows; only text/links get
+      // the "no coordinates" feedback, so unrelated shares stay silent.
+      if (sawText) this.publishSharedLocation(null);
+    }).catch((error: Error) => {
+      hilog.warn(LOG_DOMAIN, LOG_TAG, `[location-share] getSharedData failed: ${error.message}`);
+    });
+  }
+
   private publishSystemFontScale(rawScale: number | undefined): void {
     const valid = typeof rawScale === 'number' && Number.isFinite(rawScale) && rawScale > 0 ? rawScale : 1.0;
     const clamped = Math.max(0.85, Math.min(1.45, valid));
@@ -1080,6 +1196,7 @@ export default class QAbility extends UIAbility {
     this.queueCliRequest(want);
     this.routeCardWant(want);
     this.queueOpenCatalogWant(want);
+    this.queueLocationShareWant(want);
   }
 
   private async readEarlyNightMode(): Promise<void> {
@@ -1177,6 +1294,7 @@ export default class QAbility extends UIAbility {
     this.queueCliRequest(want);
     this.routeCardWant(want);
     this.queueOpenCatalogWant(want);
+    this.queueLocationShareWant(want);
     if (this.qtAbilityCreated) {
       qpa.handleAbilityOnNewWant(this, want, launchParam);
       this.drainCliRequests();

@@ -10,11 +10,11 @@ import { DEFAULT_SLOTS, ThemeSlots, slotsFromTheme } from '../../state/Stellariu
 
 // 详情卡外壳的页头与页签栏。
 //
-// 页头 = 拖拽柄 + 标题行 + 紧凑指标（+ 天文馆模式下的实时高度方位行 / 实时信息块）；页签栏 = 四个 `ObjectDetailTab`。
+// 页头 = 拖拽柄 + 标题行 + 紧凑指标（天文馆分支保留但入口已移除）；页签栏 = 四个 `ObjectDetailTab`。
 // 动态查值与名称本地化由宿主以回调注入。
 //
-// 观测模式（`detailDisplayMode === 'observe'`）下页头有两处不同：天体类型图标套一个可点的聚焦圈（= 居中），
-// 星等 tag 用「两值一行」格式；展开 / 收起不在这里，改到卡片下沿中央的箭头（`UnifiedObjectDetailCard`）。
+// 详情卡固定观测模式：天体类型图标套一个可点的聚焦圈（= 居中），星等 tag 用「两值一行」格式；
+// 展开 / 收起不在这里，改到卡片下沿中央的箭头（`UnifiedObjectDetailCard`）。
 //
 // 页头三枚摘要（星等 / 星座 / 距离）必须**直接读 `@ObjectLink store`**：ArkUI 的局部刷新按元素
 // 记录依赖，若取值只经普通成员回调（`resolve` / `distanceSummary`）而不触碰被观察对象，

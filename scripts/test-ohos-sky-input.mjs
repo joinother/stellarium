@@ -29,7 +29,7 @@ function fixture() {
   const commands = [];
   const taps = [];
   const wheels = [];
-  const state = { fov: 60, startFov: 60, pinch: false, navigation: true, zoom: true, pauses: 0, resumes: 0, checkpoints: 0, brightness: 0.5, brightnessEvents: [], touchX2: 0, touchY2: 0, touchFeedback: false };
+  const state = { fov: 60, startFov: 60, pinch: false, navigation: true, zoom: true, pauses: 0, resumes: 0, checkpoints: 0, brightness: 0.5, brightnessEvents: [], brightnessGestureEnabled: true, touchX2: 0, touchY2: 0, touchFeedback: false };
   const port = { fire(name, payload = '') {
     commands.push({ name, payload });
     const parts = payload.split('|').map(Number);
@@ -89,6 +89,7 @@ function fixture() {
     setSkyTouchFeedbackMulti() {},
     skyZoomButtonAt: () => '',
     starBrightnessValue: () => state.brightness,
+    starBrightnessGestureEnabled: () => state.brightnessGestureEnabled,
     onStarBrightnessChange: (value, dragging) => {
       state.brightness = value;
       state.brightnessEvents.push({ value, dragging });
@@ -281,6 +282,26 @@ function mouse(action, overrides = {}) {
   test.controller.handleSkyTouch(touch(TouchType.Up, [[400, 750]]));
   assert.equal(test.state.brightness, 0);
   assert.equal(test.calls('setAbsoluteStarScale').at(-1).payload, '0.120');
+}
+
+// Realistic star visibility pins brightness at 1.0x: the vertical two-finger
+// drag is recognized but ignored instead of falling through to pinch zoom.
+{
+  const test = fixture();
+  test.state.brightnessGestureEnabled = false;
+  const touch = (type, pts) => ({
+    type, source: SourceType.TouchScreen,
+    touches: pts.map(([x, y]) => ({ windowX: x, windowY: y })),
+    changedTouches: pts.map(([x, y]) => ({ windowX: x, windowY: y })),
+  });
+  test.controller.handleSkyTouch(touch(TouchType.Down, [[400, 400], [560, 400]]));
+  test.controller.handleSkyTouch(touch(TouchType.Move, [[400, 360], [560, 360]]));
+  test.controller.handleSkyTouch(touch(TouchType.Move, [[400, 240], [560, 240]]));
+  test.controller.handleSkyTouch(touch(TouchType.Up, [[400, 240]]));
+  assert.equal(test.calls('setAbsoluteStarScale').length, 0, 'brightness must stay fixed');
+  assert.equal(test.calls('zoomBy').length, 0, 'suppressed gesture must not become a pinch');
+  assert.equal(test.state.brightness, 0.5);
+  assert.equal(test.state.brightnessEvents.length, 0);
 }
 
 // Two-finger spread triggers pinch zoom and leaves star brightness untouched.

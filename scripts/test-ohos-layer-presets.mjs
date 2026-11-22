@@ -44,7 +44,6 @@ function makeSnapshot(overrides = {}) {
     milkyWayBright: 3,
     realisticStarVisibility: true,
     nightMode: false,
-    observeMode: false,
     equatorialMount: false,
     telrad: false,
     ccd: false,
@@ -96,10 +95,10 @@ test('five built-in presets keep vivid last and carry the requested scene settin
   assert.equal(observe.actions.actionShow_Equatorial_Grid, true)
   assert.equal(observe.realisticStarVisibility, true)
   assert.equal(observe.nightMode, true)
-  assert.equal(observe.observeMode, true)
   assert.equal(observe.equatorialMount, true)
   assert.equal(observe.telrad, true)
   assert.equal(observe.starMagLimit, 21)
+  assert.equal(observe.actions.actionShow_FOV_Center_Marker, false, 'observation-aid preset must not enable the FOV centre marker')
 
   const photo = byId('photo').snapshot
   assert.equal(photo.actions.actionShow_Atmosphere, true)
@@ -274,7 +273,7 @@ test('preset tab and host bridge expose the management and full-scene snapshot',
   assert.match(host, /presetCaptureSerial/)
   assert.match(host, /requestInteractive\('getState', captureSerial/)
   assert.match(host, /applyNightMode\(snapshot\.nightMode, true\)/)
-  assert.match(host, /setDetailDisplayMode\(snapshot\.observeMode/)
+  assert.doesNotMatch(host, /setDetailDisplayMode\(snapshot\.observeMode/)
   assert.match(host, /actionSwitch_Equatorial_Mount/)
   assert.match(host, /ensurePluginLoaded\('Oculars'/)
   assert.match(host, /LAYER_PRESET_STORE/)

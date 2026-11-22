@@ -53,6 +53,9 @@ export struct PlacePanel {
   onSaveCurrent: () => void = () => {}
   onApplyLocation: (name: string, lat: number, lon: number, alt: number, planet: string) => void = () => {}
   onDeleteLocation: (key: string) => void = () => {}
+  // 星象仪 → 地图：分享标直接打开仿系统大弹窗（规划路线 / 查看地点）。
+  onShareCurrent: () => void = () => {}
+  onShareLocation: (name: string, lat: number, lon: number) => void = () => {}
   onSelectPlanet: (name: string) => void = () => {}
   onApplyEnvironment: (pressure: number, temperature: number) => void = () => {}
   // 进入位置面板时从引擎回读已持久化的大气参数，避免显示 store 默认值。
@@ -127,7 +130,21 @@ export struct PlacePanel {
         Text(this.coordinateText + (this.altitudeText.length > 0 ? ' · ' + this.altitudeText : ''))
           .fontSize(14).fontColor(this.c.text).layoutWeight(1)
           .maxLines(1).textOverflow({ overflow: TextOverflow.Ellipsis })
-      }.height(28).width('100%').padding({ left: 10, right: 10 })
+        // 外星球坐标无法用外部地图打开，只有地球观测点显示入口。
+        if (this.sessionToolStore.observerPlanet === 'Earth') {
+          Button() {
+            // 600 字重让系统线形图标与 Dock/面板里的实心 SVG 图标粗细一致。
+            SymbolGlyph($r('sys.symbol.share')).fontSize(17).fontWeight(600).fontColor([this.c.sub])
+          }
+            .width(28).height(28).padding(0)
+            .backgroundColor(Color.Transparent)
+            .borderRadius(UI_RADIUS_CONTROL)
+            .clickEffect({ level: ClickEffectLevel.LIGHT })
+            .id('loc-open-map-current')
+            .accessibilityText(I18n.t('loc_map_actions'))
+            .onClick(() => { this.onShareCurrent() })
+        }
+      }.height(28).width('100%').padding({ left: 10, right: 4 })
       ObserverPlanetSection({ store: this.sessionToolStore, planetLabel: (en: string) => this.planetLabel(en), onSelectPlanet: (name: string) => { this.onSelectPlanet(name) } })
       if (this.fixedObserverPoint) {
         this.fixedObserverPreview()
@@ -175,7 +192,8 @@ export struct PlacePanel {
         observerPlanet: this.sessionToolStore.observerPlanet,
         onSaveCurrent: () => { this.onSaveCurrent() },
         onApplyLocation: (name: string, lat: number, lon: number, alt: number, planet: string) => { this.onApplyLocation(name, lat, lon, alt, planet) },
-        onDeleteLocation: (key: string) => { this.onDeleteLocation(key) }
+        onDeleteLocation: (key: string) => { this.onDeleteLocation(key) },
+        onShareLocation: (name: string, lat: number, lon: number) => { this.onShareLocation(name, lat, lon) }
       })
       }
       // Tonight's events stay here; the virtual pointer test and watch gyro

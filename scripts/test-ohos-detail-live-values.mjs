@@ -70,9 +70,9 @@ test('structured row resolves replaced fields and handles fields that disappear'
 });
 
 test('live detail polling does not wait for optional satellite pass predictions', () => {
-  // D1：startDetailAutoRefresh 已下沉 capability/DetailConnectorController.ets（宿主状态经 hooks 回读）。
-  const connectorCtl = readFileSync(new URL('../harmonyos/ets-source/capability/DetailConnectorController.ets', import.meta.url), 'utf8');
-  const poll = connectorCtl.match(/startDetailAutoRefresh\(\): void \{([\s\S]*?)\n  \}/)[1];
+  // D1：startDetailAutoRefresh 已下沉 capability/DetailRefreshController.ets（宿主状态经 hooks 回读）。
+  const detailCtl = readFileSync(new URL('../harmonyos/ets-source/capability/DetailRefreshController.ets', import.meta.url), 'utf8');
+  const poll = detailCtl.match(/startDetailAutoRefresh\(\): void \{([\s\S]*?)\n  \}/)[1];
   assert.doesNotMatch(poll, /selectedSatellitePassesLoaded|getSatellitePasses/);
   assert.match(poll, /this\.hooks\.skyDragging\(\)/);
   assert.match(poll, /this\.hooks\.refreshSelectedObject\(\)/);
@@ -116,15 +116,17 @@ test('detail rows and tiles come from components while the host keeps the lookup
   ]) {
     assert.ok((source + tabs + chrome).includes(wired), wired);
   }
-  assert.ok(tabs.includes("value: this.resolve('selectedRise')"), 'the tab components resolve tile values through the injected resolver');
+  assert.ok(tabs.includes('value: this.store.selectedRise'), 'the tab components read tile values from the observed store directly');
+  assert.ok(!tabs.includes('this.resolve('), 'no opaque resolver lookup may shadow live store reads');
   assert.ok((source + hoverShell + expandedShell).includes('activeIndex: this.bottomCardIndex'), 'the active tab derives from live state');
 });
 
-test('tile components receive resolved values while the host keeps the lookups', () => {
+test('tile components receive live values from the observed store', () => {
   for (const tile of ['ObjectDataTile', 'ObjectMetric', 'ObjectScheduleTile']) {
     assert.ok((source + tabs + chrome).includes(`${tile}({ label: `), tile);
   }
-  assert.ok(tabs.includes("value: this.resolve('selectedRise')"));
+  assert.ok(tabs.includes('value: this.store.selectedRise'), 'tile values read the observed store directly and refresh live');
+  assert.ok(!tabs.includes('this.resolve('), 'no resolver indirection inside the tab components');
   assert.ok(chrome.includes('ObjectDetailTab({ label:'), 'the tab bar comes from the component');
   assert.ok((source + hoverShell + expandedShell).includes('activeIndex: this.bottomCardIndex'), 'the active tab is derived from live state');
   assert.ok(source.includes('resolve: (key: string) => this.selectedDisplayValue(key)'), 'the host injects the resolver');

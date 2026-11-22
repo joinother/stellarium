@@ -1,19 +1,16 @@
-import { Theme } from '@kit.ArkUI'
+import { curves, Theme } from '@kit.ArkUI'
 import { ShellAction, SatellitePass, StationComplexMember } from '../../pages/StellariumTypes'
 import { BottomDock } from './BottomDock'
-import { ObjectDetailConnectorLayer } from '../overlay/ObjectDetailConnectorLayer'
-import { ObjectSelectionPill } from '../object/ObjectSelectionPill'
 import { UnifiedObjectDetailCard } from '../object/UnifiedObjectDetailCard'
 import { ObjectDetailStore } from '../../state/ObjectDetailStore'
 import { ObjectMediaStore } from '../../state/ObjectMediaStore'
-import { OverlayStore } from '../../state/OverlayStore'
 import { UI_RADIUS_PILL, UI_RADIUS_SHEET } from '../../common/ui/UiTokens'
 import { DEFAULT_SLOTS, ThemeSlots, slotsFromTheme } from '../../state/StellariumTheme'
 
 // 折叠展开（hover）观测壳。
 //
 // 结构：全屏星空触摸承接层 + 顶部观测时间/FOV 胶囊 + 分隔线 + 观测台玻璃底板
-// （Column 纯装饰）+ 底部 Dock + 天体详情指向线与详情卡。
+// （Column 纯装饰）+ 底部 Dock + 天体详情卡（时间面板打开时形变为轻量卡）。
 //
 // 面板由宿主调用点在过渡包裹内渲染，本组件不含面板：`compactPanel()` 是宿主薄 @Builder
 // （体内即 `panelContent()` 的 `activePanel` 分发链），组件无法跨边界调用宿主 @Builder
@@ -25,7 +22,6 @@ export struct HoverObservatoryShell {
   @Prop dockTop: number
   @ObjectLink objectDetailStore: ObjectDetailStore
   @ObjectLink objectMediaStore: ObjectMediaStore
-  @ObjectLink overlayStore: OverlayStore
 
   @Prop observationTimeText: string
   @Prop currentFovText: string
@@ -46,11 +42,8 @@ export struct HoverObservatoryShell {
   @Prop dockItemHeight: number
   @Prop infoWinVisible: boolean
   @Prop infoWinExpanded: boolean
-  @Prop pillVisible: boolean
-  @Prop pillWidth: number
-  @Prop pillHeight: number
-  @Prop pillX: number
-  @Prop pillY: number
+  // 时间面板打开：详情卡切换为轻量卡，几何随宿主 detailX/Y/Width/Height 形变。
+  @Prop detailTimeLight: boolean
   @Prop bottomCardIndex: number
   @Prop liveInfoVisible: boolean
   @Prop contentOpacity: number
@@ -76,18 +69,6 @@ export struct HoverObservatoryShell {
   @Prop satelliteVisible: boolean
   @Prop tleEpoch: string
   @Prop cultureVisible: boolean
-  @Prop connectorVisible: boolean
-  @Prop connectorLength: number
-  @Prop connectorX: number
-  @Prop connectorY: number
-  @Prop connectorAngle: number
-  @Prop connectorAnimateGeometry: boolean
-  @Prop connectorTargetOnScreen: boolean
-  @Prop connectorTargetX: number
-  @Prop connectorTargetY: number
-  @Prop connectorEndX: number
-  @Prop connectorEndY: number
-  @Prop markerSize: number
   @Prop detailX: number
   @Prop detailY: number
   @Prop detailWidth: number
@@ -105,7 +86,6 @@ export struct HoverObservatoryShell {
   nameOf: (name: string) => string = () => ''
   typeOf: (type: string) => string = () => ''
   onDragTouch: (event: TouchEvent) => void = () => {}
-  onExpandDetailPill: () => void = () => {}
   onDismiss: () => void = () => {}
   onSelectTab: (index: number) => void = () => {}
   onLoadPasses: () => void = () => {}
@@ -207,41 +187,8 @@ export struct HoverObservatoryShell {
         .hitTestBehavior(HitTestMode.Block)
         .zIndex(40)
 
-      if (this.pillVisible) {
-        Stack() {
-          ObjectSelectionPill({
-            store: this.objectDetailStore,
-            iconName: this.iconName,
-            pillWidth: this.pillWidth,
-            pillHeight: this.pillHeight,
-            distanceSummaryText: this.distanceSummaryText,
-            nameOf: (name: string) => this.nameOf(name),
-            typeOf: (type: string) => this.typeOf(type),
-            onExpand: () => { this.onExpandDetailPill() },
-            onDismiss: () => { this.onDismiss() }
-          })
-        }
-          .position({ x: this.pillX, y: this.pillY })
-          .width(this.pillWidth)
-          .height(this.pillHeight)
-          .zIndex(35)
-          .hitTestBehavior(HitTestMode.BLOCK_HIERARCHY)
-      }
-      if (this.infoWinVisible && this.objectDetailStore.selectedName.length > 0 && this.infoWinExpanded) {
-         ObjectDetailConnectorLayer({
-           visible: this.connectorVisible,
-           beamLength: this.connectorLength,
-           beamX: this.connectorX,
-           beamY: this.connectorY,
-           beamAngle: this.connectorAngle,
-           animateGeometry: this.connectorAnimateGeometry,
-           targetOnScreen: this.connectorTargetOnScreen,
-           targetX: this.connectorTargetX,
-           targetY: this.connectorTargetY,
-           endX: this.connectorEndX,
-           endY: this.connectorEndY,
-            markerSize: this.markerSize
-          })
+      // 详情卡唯一容器：普通界面为极简大卡，时间面板打开时形变为轻量卡。
+      if (this.infoWinVisible && this.objectDetailStore.selectedName.length > 0) {
         Stack() {
           UnifiedObjectDetailCard({
             store: this.objectDetailStore, mediaStore: this.objectMediaStore, scroller: this.scroller,
@@ -252,6 +199,7 @@ export struct HoverObservatoryShell {
             inObservingList: this.inObservingList,
             iconName: this.iconName, distanceText: this.distanceText,
             detailDisplayMode: this.detailDisplayMode, observeExpanded: this.observeExpanded,
+            timeLight: this.detailTimeLight,
             distanceSummaryText: this.distanceSummaryText,
             imageHeight: this.imageHeight, inlineModelSize: this.inlineModelSize,
             modelReady: this.modelReady, modelRendering: this.modelRendering,
@@ -288,6 +236,7 @@ export struct HoverObservatoryShell {
           .height(this.detailHeight)
           .zIndex(35)
           .hitTestBehavior(HitTestMode.BLOCK_HIERARCHY)
+          .animation({ duration: 280, curve: curves.springMotion(0.52, 0.9) })
       }
     }
       .width('100%')

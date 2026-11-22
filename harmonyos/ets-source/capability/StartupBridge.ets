@@ -229,7 +229,6 @@ export class StartupBridge {
         if (saved.viewCoordinatesVisible !== undefined) { this.overlayStore.viewCoordinatesVisible = saved.viewCoordinatesVisible as boolean }
         if (saved.viewCoordinateFamily !== undefined) { this.overlayStore.viewCoordinateFamily = saved.viewCoordinateFamily as string }
         if (saved.viewEquatorialEpoch !== undefined) { this.overlayStore.viewEquatorialEpoch = saved.viewEquatorialEpoch as string }
-        if (saved.objectDetailConnectorVisible !== undefined) { this.overlayStore.objectDetailConnectorVisible = saved.objectDetailConnectorVisible as boolean }
         const savedAstroTab = Number(saved.astroTab)
         if (Number.isInteger(savedAstroTab) && savedAstroTab >= 0 && savedAstroTab <= 9) {
           this.astroStore.astroTab = savedAstroTab

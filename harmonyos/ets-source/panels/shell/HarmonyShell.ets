@@ -32,7 +32,6 @@ export struct HarmonyShell {
   @Prop actionHint: ResourceStr
   @Prop starBrightnessHudVisible: boolean = false
   @Prop starBrightnessValue: number = 0.5
-  @Prop realisticStarVisibility: boolean = true
   @State c: ThemeSlots = DEFAULT_SLOTS
 
   onHandleViewCoordinateTouch: (event: TouchEvent) => void = () => {}
@@ -131,14 +130,6 @@ export struct HarmonyShell {
                 .fontColor(this.c.text)
                 .width(38)
                 .textAlign(TextAlign.End)
-            }
-            if (this.realisticStarVisibility) {
-              Text(Math.abs(this.starBrightnessValue - 0.5) <= 0.03
-                ? '现实星等基准 · 1.0×'
-                : '星点临时偏移 · 现实星等仍限制暗星（重开现实星等自动归位）')
-                .fontSize(10)
-                .fontColor(Math.abs(this.starBrightnessValue - 0.5) <= 0.03 ? this.c.sub : this.c.accent)
-                .maxLines(1)
             }
           }
             .alignItems(HorizontalAlign.Center)

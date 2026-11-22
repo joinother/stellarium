@@ -4,15 +4,19 @@
 // 不 import NAPI/UI：桥经 CommandPort；状态整体写回
 // TelescopeStore / MosaicStore / EquationOfTimeStore / ArchaeoStore（面板经 @ObjectLink 消费）。
 // 逐帧/草稿字段 equationOfTimeMutationId / archaeoMutationId 由控制器自持。
-// 本控制器无 UI 提示（各方法均不调 flashHint），故无 hooks 注入。
+// 器材 CRUD / 导入导出 / Telrad 视场的错误提示经 OcularHostHooks.flashHint 回注。
 import { I18n } from '../pages/I18n'
 import { StellariumBridgeResponse } from '../pages/StellariumTypes'
-import { OcularModeResponse } from '../pages/MainWindowModels'
+import { OcularEquipmentResponse, OcularModeResponse } from '../pages/MainWindowModels'
 import { CommandPort } from '../bridge/CommandPort'
 import { TelescopeStore } from '../state/TelescopeStore'
 import { MosaicStore } from '../state/MosaicStore'
 import { EquationOfTimeStore } from '../state/EquationOfTimeStore'
 import { ArchaeoStore } from '../state/ArchaeoStore'
+
+export interface OcularHostHooks {
+  flashHint(text: ResourceStr): void
+}
 
 export class OcularController {
   private port: CommandPort
@@ -20,17 +24,19 @@ export class OcularController {
   private mosaicStore: MosaicStore
   private equationOfTimeStore: EquationOfTimeStore
   private archaeoStore: ArchaeoStore
+  private hooks: OcularHostHooks
   // 乐观回滚代际（草稿字段由控制器自持）。
   private equationOfTimeMutationId: number = 0
   private archaeoMutationId: number = 0
 
   constructor(port: CommandPort, telescopeStore: TelescopeStore, mosaicStore: MosaicStore,
-    equationOfTimeStore: EquationOfTimeStore, archaeoStore: ArchaeoStore) {
+    equationOfTimeStore: EquationOfTimeStore, archaeoStore: ArchaeoStore, hooks: OcularHostHooks) {
     this.port = port
     this.telescopeStore = telescopeStore
     this.mosaicStore = mosaicStore
     this.equationOfTimeStore = equationOfTimeStore
     this.archaeoStore = archaeoStore
+    this.hooks = hooks
   }
 
   // 目镜总开关写回（乐观写 store → 桥 → 以回包 applied 修正 → loadOculars）。
@@ -189,5 +195,128 @@ export class OcularController {
   }
   resetOcularInstrument(kind: string): void {
     this.port.requestWhenReady('resetOcularInstrument', kind, () => { this.telescopeStore.loadOculars(false) })
+  }
+
+  // ==== 器材配置 CRUD / 导入导出 ====
+
+  addOcularEquipment(kind: string, payload: string): void {
+    this.mutateEquipment('addOcularEquipment', kind, payload)
+  }
+
+  updateOcularEquipment(kind: string, payload: string): void {
+    this.mutateEquipment('updateOcularEquipment', kind, payload)
+  }
+
+  deleteOcularEquipment(kind: string, payload: string): void {
+    this.mutateEquipment('deleteOcularEquipment', kind, payload)
+  }
+
+  moveOcularEquipment(kind: string, payload: string): void {
+    this.mutateEquipment('moveOcularEquipment', kind, payload)
+  }
+
+  setTelradFov(values: number[]): void {
+    this.telescopeStore.ocularTelradFov = values.slice(0, 4)
+    this.port.requestWhenReady('setTelradFov', JSON.stringify(values), (r: StellariumBridgeResponse) => {
+      if (r.ok !== true) {
+        this.hooks.flashHint(this.equipmentErrorText(r.error ?? ''))
+      }
+      this.telescopeStore.loadOculars(false)
+    })
+  }
+
+  exportEquipment(done: (json: string, ok: boolean) => void): void {
+    this.port.requestInteractive('exportOcularEquipment', '', (r: StellariumBridgeResponse) => {
+      const response = r as OcularEquipmentResponse
+      if (r.ok === true && typeof response.json === 'string') {
+        done(response.json, true)
+        return
+      }
+      const text = this.equipmentErrorText(r.error ?? '')
+      this.hooks.flashHint(text)
+      done('', false)
+    }, () => {
+      const text = I18n.t('ocular_equipment_export_failed')
+      this.hooks.flashHint(text)
+      done('', false)
+    })
+  }
+
+  importEquipment(json: string, append: boolean, done: (ok: boolean) => void): void {
+    try {
+      JSON.parse(json)
+    } catch (error) {
+      const text = I18n.t('ocular_equipment_error_document')
+      this.telescopeStore.ocularEquipmentError = text
+      this.hooks.flashHint(text)
+      done(false)
+      return
+    }
+    const payload = '{"append":' + (append ? 'true' : 'false') + ',"document":' + json.trim() + '}'
+    this.telescopeStore.ocularEquipmentBusy = true
+    this.telescopeStore.ocularEquipmentError = ''
+    this.port.requestInteractive('importOcularEquipment', payload, (r: StellariumBridgeResponse) => {
+      this.telescopeStore.ocularEquipmentBusy = false
+      if (r.ok !== true) {
+        const text = this.equipmentErrorText(r.error ?? '')
+        this.telescopeStore.ocularEquipmentError = text
+        this.hooks.flashHint(text)
+        done(false)
+        return
+      }
+      this.telescopeStore.ocularEquipmentError = ''
+      this.hooks.flashHint(I18n.t('ocular_equipment_import_done'))
+      this.telescopeStore.loadOculars(false)
+      done(true)
+    }, () => {
+      this.telescopeStore.ocularEquipmentBusy = false
+      const text = I18n.t('ocular_equipment_import_failed')
+      this.telescopeStore.ocularEquipmentError = text
+      this.hooks.flashHint(text)
+      done(false)
+    })
+  }
+
+  private mutateEquipment(command: string, kind: string, payload: string): void {
+    if (this.telescopeStore.ocularEquipmentBusy) return
+    this.telescopeStore.ocularEquipmentBusy = true
+    this.telescopeStore.ocularEquipmentError = ''
+    this.port.requestInteractive(command, payload, (r: StellariumBridgeResponse) => {
+      this.telescopeStore.ocularEquipmentBusy = false
+      const response = r as OcularEquipmentResponse
+      if (r.ok !== true) {
+        const text = this.equipmentErrorText(r.error ?? '')
+        this.telescopeStore.ocularEquipmentError = text
+        this.hooks.flashHint(text)
+        return
+      }
+      this.telescopeStore.ocularEquipmentError = ''
+      this.telescopeStore.loadOculars(false)
+      if (command === 'addOcularEquipment' && typeof response.index === 'number' && response.index >= 0) {
+        this.selectOcularInstrument(kind, response.index)
+      }
+    }, () => {
+      this.telescopeStore.ocularEquipmentBusy = false
+      const text = I18n.t('msg_apply_failed')
+      this.telescopeStore.ocularEquipmentError = text
+      this.hooks.flashHint(text)
+    })
+  }
+
+  private equipmentErrorText(code: string): string {
+    switch (code) {
+      case 'name_empty': return I18n.t('ocular_equipment_error_name')
+      case 'value_invalid': return I18n.t('ocular_equipment_error_value')
+      case 'last_item': return I18n.t('ocular_equipment_error_last')
+      case 'bad_index': return I18n.t('ocular_equipment_error_index')
+      case 'bad_document':
+      case 'bad_format':
+      case 'item_invalid': return I18n.t('ocular_equipment_error_document')
+      case 'bad_version': return I18n.t('ocular_equipment_error_version')
+      case 'file_too_large':
+      case 'too_many_items': return I18n.t('ocular_equipment_error_size')
+      case 'plugin_unavailable': return I18n.t('ocular_status_unavailable')
+      default: return I18n.t('msg_apply_failed')
+    }
   }
 }

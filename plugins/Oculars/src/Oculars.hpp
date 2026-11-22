@@ -213,6 +213,14 @@ public slots:
 	int getLensCount() const { return lenses.size(); }
 	int getCCDCount() const { return ccds.size(); }
 	QVariantMap getOhosInstrumentState() const;
+	// OHOS equipment configuration CRUD. kind: ocular|telescope|lens|ccd.
+	// action: add|update|delete|move. Returns {ok,error,index}.
+	QVariantMap applyOhosEquipmentAction(const QString& kind, const QString& action,
+					    int index, const QVariantMap& item);
+	// Full equipment document in the versioned JSON schema used by export/import.
+	QByteArray exportOhosEquipmentJson() const;
+	// Replace or append the equipment lists from a JSON document. Returns {ok,error,index,kind}.
+	QVariantMap importOhosEquipmentJson(const QByteArray& json, bool append);
 
 	//! Toggles the sensor frame overlay.
 	void toggleCCD(bool show);
@@ -410,6 +418,8 @@ private slots:
 	void updateLatestSelectedSSO();
 
 private:
+	//! Persist the current equipment lists and selected indices to ocular.ini.
+	void persistEquipmentSettings();
 	//! Compute the limiting magnitude for a telescope
 	static double computeLimitMagnitude(Ocular *ocular, Telescope *telescope);
 

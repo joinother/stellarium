@@ -264,15 +264,21 @@ export class LayerController {
   // 星空显示设置写回（布尔项写 LayerStore，数值项写 LayerViewStore）。
   setSkyDisplaySetting(setting: string, value: boolean | number): void {
     this.hooks.noteLayerPresetManualChange()
+    // 现实星等开启时星点亮度固定 1.0×：滑杆或旧入口的偏移写入统一改写成归位命令。
+    const pinStarBrightness = setting === 'absoluteStarScale' && this.layerStore.realisticStarVisibility
+    if (pinStarBrightness) {
+      this.layerViewStore.starBrightnessScale = 1.0
+    }
     let resetStarScaleForRealistic = false
     if (setting === 'luminanceAdaptation') this.layerStore.luminanceAdaptation = value as boolean
     else if (setting === 'realisticStarVisibility') {
       const nextRealistic = value as boolean
       this.layerStore.realisticStarVisibility = nextRealistic
-      // 调和「现实星等」与「双指上下滑星点亮度」：重新开启现实星等时，若此前手动偏移了星点倍率，
-      // 自动归位至物理基准 1.0×（50%），避免高倍率暗星与现实星等语义互相打架。
-      if (nextRealistic && Math.abs(this.layerViewStore.starBrightnessScale - 1.0) > 0.06) {
-        resetStarScaleForRealistic = true
+      // 现实星等开启时星点亮度固定 1.0×：开启瞬间无条件归位；此前手动偏移过则回写引擎。
+      if (nextRealistic) {
+        if (Math.abs(this.layerViewStore.starBrightnessScale - 1.0) > 0.001) {
+          resetStarScaleForRealistic = true
+        }
         this.layerViewStore.starBrightnessScale = 1.0
       }
     }
@@ -299,7 +305,9 @@ export class LayerController {
       this.layerViewStore.toneDisplayGamma = 2.22
       this.layerViewStore.toneUseTmGamma = true
     }
-    else if (setting === 'absoluteStarScale') this.layerViewStore.starBrightnessScale = value as number
+    else if (setting === 'absoluteStarScale') {
+      if (!pinStarBrightness) this.layerViewStore.starBrightnessScale = value as number
+    }
     else if (setting === 'starBrightnessReset') this.layerViewStore.starBrightnessScale = 1.0
     else if (setting === 'grsLongitude') this.layerViewStore.grsLongitude = ((Math.round(value as number) % 360) + 360) % 360
     else if (setting === 'grsDrift') this.layerViewStore.grsDrift = Math.round((value as number) * 10) / 10
@@ -309,12 +317,15 @@ export class LayerController {
       this.layerViewStore.grsDrift = 15.0
       this.layerViewStore.grsJd = 2460218.5
     }
-    const payload = setting + '|' + (typeof value === 'boolean' ? (value ? '1' : '0') : value.toString())
+    const effectiveSetting = pinStarBrightness ? 'starBrightnessReset' : setting
+    const effectiveValue = pinStarBrightness ? 1 : value
+    const payload = effectiveSetting + '|' +
+      (typeof effectiveValue === 'boolean' ? (effectiveValue ? '1' : '0') : effectiveValue.toString())
     this.port.requestInteractive('setSkyDisplaySetting', payload, (r: StellariumBridgeResponse) => {
       if (r.ok === true) {
         if (resetStarScaleForRealistic) {
           this.port.requestInteractive('setSkyDisplaySetting', 'starBrightnessReset|1', () => {
-            this.hooks.flashHint('已开启现实星等，并恢复星点亮度基准 1.0×')
+            this.hooks.flashHint('已开启现实星等：星点亮度固定 1.0×')
             this.hooks.refreshState()
           })
           return

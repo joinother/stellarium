@@ -397,6 +397,17 @@ $HDC -t 127.0.0.1:5555 shell uitest dumpLayout
 | `setTelrad` | Telrad 叠加 | checked |
 | `setCrosshairs` | 十字丝 | checked |
 | `setCCD` | CCD 叠加 | checked |
+| `setOcularSetting` | 目镜布尔/滑杆设置 | setting\|value |
+| `selectOcularInstrument` | 选择当前器材 | kind\|index |
+| `addOcularEquipment` | 新增器材 | JSON |
+| `updateOcularEquipment` | 修改器材 | JSON |
+| `deleteOcularEquipment` | 删除器材 | JSON |
+| `moveOcularEquipment` | 调整器材顺序 | JSON |
+| `setTelradFov` | Telrad 四圈视场直径 | JSON 数组 |
+| `exportOcularEquipment` | 导出器材配置 JSON | - |
+| `importOcularEquipment` | 导入器材配置 | JSON |
+
+UI 语义命令（QAbility，非原生桥）：`setOcularsTab 0..5`、`openOcularEquipmentEditor kind|index`、`closeOcularEquipmentEditor`。
 
 ### 脚本
 
