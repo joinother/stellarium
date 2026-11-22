@@ -55,7 +55,8 @@ export class ArCameraService {
   private previewHeight: number = 1080
   private cameraAspect: number = 16 / 9
   private running: boolean = false
-  private currentBlend: number = 0.72
+  private currentBlend: number = 0.55
+  private baseFovDeg: number = 45.0
 
   static getInstance(): ArCameraService {
     if (ArCameraService.instance === null) {
@@ -224,8 +225,11 @@ export class ArCameraService {
     }
   }
 
-  async start(context: common.UIAbilityContext, blend: number): Promise<ArCameraStartResult> {
+  async start(context: common.UIAbilityContext, blend: number, baseFovDeg: number = 45.0): Promise<ArCameraStartResult> {
     this.currentBlend = Math.max(0, Math.min(1, blend))
+    if (Number.isFinite(baseFovDeg) && baseFovDeg >= 15 && baseFovDeg <= 100) {
+      this.baseFovDeg = baseFovDeg
+    }
     if (!canIUse('SystemCapability.Multimedia.Camera.Core')) {
       return { ok: false, reason: '当前设备不支持相机能力', profileWidth: 0, profileHeight: 0, cameraAspect: 1 }
     }
@@ -313,9 +317,25 @@ export class ArCameraService {
         // Optional focus mode / focal length probe
       }
 
+      // 锁定主摄 1.0x 固定光学焦段，避免缩放时触发摄像头硬件变焦 ISP 管道延迟（150-300ms）与物理镜头切换卡顿；
+      // 变焦同步由 hello.cpp GPU 着色器依据 Stellarium 每帧渲染的实时 FOV（StellariumEntry_setRenderedFov）零延迟精确锁帧完成。
+      try {
+        const zRange = session.getZoomRatioRange()
+        if (zRange !== undefined && zRange.length >= 2 &&
+          Number.isFinite(zRange[0]) && Number.isFinite(zRange[1]) &&
+          zRange[0] > 0 && zRange[1] >= zRange[0]) {
+          const fixedZoom = (1.0 >= zRange[0] && 1.0 <= zRange[1]) ? 1.0 : zRange[0]
+          session.setZoomRatio(fixedZoom)
+          hilog.info(LOG_DOMAIN, LOG_TAG, '[ar-camera] zoomRange=%{public}s..%{public}s locked=%{public}s',
+            zRange[0].toFixed(2), zRange[1].toFixed(2), fixedZoom.toFixed(2))
+        }
+      } catch (_zoomErr) {
+        // Optional hardware zoom query
+      }
+
       await session.start()
       this.running = true
-      entry.setArCameraComposite(true, this.currentBlend, this.cameraAspect)
+      entry.setArCameraComposite(true, this.currentBlend, this.cameraAspect, this.baseFovDeg)
 
       hilog.info(LOG_DOMAIN, LOG_TAG, '[ar-camera] started %{public}dx%{public}d aspect=%{public}s blend=%{public}s',
         this.previewWidth, this.previewHeight, this.cameraAspect.toFixed(3), this.currentBlend.toFixed(2))
@@ -345,20 +365,28 @@ export class ArCameraService {
   updateBlend(blend: number): void {
     this.currentBlend = Math.max(0, Math.min(1, blend))
     if (this.running) {
-      entry.setArCameraComposite(true, this.currentBlend, this.cameraAspect)
+      entry.setArCameraComposite(true, this.currentBlend, this.cameraAspect, this.baseFovDeg)
+    }
+  }
+
+  updateBaseFov(baseFovDeg: number): void {
+    if (!Number.isFinite(baseFovDeg)) return
+    this.baseFovDeg = Math.max(15.0, Math.min(100.0, baseFovDeg))
+    if (this.running) {
+      entry.setArCameraComposite(true, this.currentBlend, this.cameraAspect, this.baseFovDeg)
     }
   }
 
   refreshRotation(): void {
     if (!this.running || this.previewOutput === undefined) return
     this.applyPreviewRotation(this.previewOutput)
-    entry.setArCameraComposite(true, this.currentBlend, this.cameraAspect)
+    entry.setArCameraComposite(true, this.currentBlend, this.cameraAspect, this.baseFovDeg)
   }
 
   async stop(): Promise<void> {
     this.running = false
     try {
-      entry.setArCameraComposite(false, this.currentBlend, this.cameraAspect)
+      entry.setArCameraComposite(false, this.currentBlend, this.cameraAspect, this.baseFovDeg)
     } catch (_err) {
     }
     const session = this.photoSession

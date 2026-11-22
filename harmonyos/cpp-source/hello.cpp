@@ -48,6 +48,7 @@ struct EglState
     GLuint lastSkyTexture = 0;
     int lastSkyWidth = 0;
     int lastSkyHeight = 0;
+    float lastSkyFovDeg = 0.0f;
     int frameTextureWidth = 0;
     int frameTextureHeight = 0;
     bool submittedFrame = false;
@@ -65,6 +66,7 @@ struct ArCameraState
     bool compositeEnabled = false;
     float skyBlend = 0.55f;
     float cameraAspect = 16.0f / 9.0f;
+    float baseFovDeg = 45.0f;
     float transform[16] = {
         1.0f, 0.0f, 0.0f, 0.0f,
         0.0f, 1.0f, 0.0f, 0.0f,
@@ -75,6 +77,7 @@ struct ArCameraState
 
 EglState g_egl;
 ArCameraState g_ar;
+std::atomic<float> g_renderedFovDeg {0.0f};
 std::atomic<bool> g_arFrameAvailable {false};
 std::mutex g_arWakeMutex;
 std::condition_variable g_arWakeCv;
@@ -296,6 +299,7 @@ uniform mat4 u_camTransform;
 uniform float u_blend;
 uniform float u_screenAspect;
 uniform float u_cameraAspect;
+uniform float u_cameraZoom;
 in vec2 v_texCoord;
 out vec4 fragColor;
 void main()
@@ -310,7 +314,11 @@ void main()
             cropUv.x = (cropUv.x - 0.5) * scaleX + 0.5;
         }
     }
-    vec2 camUv = clamp((u_camTransform * vec4(cropUv, 0.0, 1.0)).xy, vec2(0.0), vec2(1.0));
+    float zoom = max(0.25, u_cameraZoom);
+    cropUv = (cropUv - 0.5) / zoom + 0.5;
+    float edgeMargin = min(min(cropUv.x, 1.0 - cropUv.x), min(cropUv.y, 1.0 - cropUv.y));
+    float camBounds = smoothstep(-0.015, 0.015, edgeMargin);
+    vec2 camUv = clamp((u_camTransform * vec4(clamp(cropUv, vec2(0.0), vec2(1.0)), 0.0, 1.0)).xy, vec2(0.0), vec2(1.0));
     vec3 cam = texture(u_camera, camUv).rgb;
     vec3 sky = texture(u_frame, v_texCoord).rgb;
 
@@ -340,7 +348,8 @@ void main()
     float nightOverlayMix = smoothstep(0.90, 1.0, b);
     vec3 nightOverlay = 1.0 - (1.0 - cam * 0.35) * (1.0 - clamp(sky * 1.18, 0.0, 1.0));
     nightOverlay = mix(nightOverlay, max(nightOverlay, sky), smoothstep(0.05, 0.30, skyPeak) * 0.65);
-    vec3 finalRgb = mix(keyedResult, nightOverlay, nightOverlayMix);
+    vec3 fusedRgb = mix(keyedResult, nightOverlay, nightOverlayMix);
+    vec3 finalRgb = mix(sky, fusedRgb, camBounds);
     fragColor = vec4(finalRgb, 1.0);
 })";
 
@@ -451,6 +460,23 @@ void drawSkyWithOptionalArCameraLocked(GLuint skyTexture, int viewportWidth, int
                 : 1.0f;
             glUniform1f(glGetUniformLocation(g_egl.arCompositeProgram, "u_screenAspect"), screenAspect);
             glUniform1f(glGetUniformLocation(g_egl.arCompositeProgram, "u_cameraAspect"), g_ar.cameraAspect);
+            float effectiveZoom = 1.0f;
+            const float skyFov = g_egl.lastSkyFovDeg > 0.1f
+                ? g_egl.lastSkyFovDeg
+                : g_renderedFovDeg.load(std::memory_order_acquire);
+            if (g_ar.baseFovDeg >= 15.0f && g_ar.baseFovDeg <= 100.0f &&
+                skyFov >= 1.0f && skyFov <= 160.0f) {
+                const double baseHalfRad = static_cast<double>(g_ar.baseFovDeg) * 0.5 * (3.14159265358979323846 / 180.0);
+                const double curHalfRad = static_cast<double>(skyFov) * 0.5 * (3.14159265358979323846 / 180.0);
+                const double tanCur = std::tan(curHalfRad);
+                if (tanCur > 1e-5) {
+                    const double pinholeZoom = std::tan(baseHalfRad) / tanCur;
+                    if (std::isfinite(pinholeZoom) && pinholeZoom > 0.0) {
+                        effectiveZoom = static_cast<float>(std::max(0.25, std::min(12.0, pinholeZoom)));
+                    }
+                }
+            }
+            glUniform1f(glGetUniformLocation(g_egl.arCompositeProgram, "u_cameraZoom"), effectiveZoom);
             glDrawArrays(GL_TRIANGLES, 0, 3);
             glActiveTexture(GL_TEXTURE0);
             return;
@@ -708,6 +734,7 @@ bool renderSubmittedTexture(GLuint texture, int frameWidth, int frameHeight,
     g_egl.lastSkyTexture = texture;
     g_egl.lastSkyWidth = frameWidth;
     g_egl.lastSkyHeight = frameHeight;
+    g_egl.lastSkyFovDeg = g_renderedFovDeg.load(std::memory_order_acquire);
     drawSkyWithOptionalArCameraLocked(texture, viewport.width, viewport.height);
     if (glGetError() != GL_NO_ERROR || eglSwapBuffers(g_egl.display, g_egl.surface) != EGL_TRUE) {
         OH_LOG_Print(LOG_APP, LOG_ERROR, STEL_ENTRY_LOG_DOMAIN, STEL_ENTRY_LOG_TAG,
@@ -800,6 +827,7 @@ void renderSubmittedFrame(const unsigned char* rgba, int frameWidth, int frameHe
     g_egl.lastSkyTexture = g_egl.frameTexture;
     g_egl.lastSkyWidth = frameWidth;
     g_egl.lastSkyHeight = frameHeight;
+    g_egl.lastSkyFovDeg = g_renderedFovDeg.load(std::memory_order_acquire);
     drawSkyWithOptionalArCameraLocked(g_egl.frameTexture, viewport.width, viewport.height);
     const GLenum drawError = glGetError();
     if (drawError != GL_NO_ERROR) {
@@ -924,6 +952,13 @@ extern "C" __attribute__((visibility("default"))) void StellariumEntry_submitFra
         loggedSubmit = true;
     }
     renderSubmittedFrame(rgba, width, height);
+}
+
+extern "C" __attribute__((visibility("default"))) void StellariumEntry_setRenderedFov(double fovDeg)
+{
+    if (std::isfinite(fovDeg) && fovDeg >= 0.5 && fovDeg <= 179.0) {
+        g_renderedFovDeg.store(static_cast<float>(fovDeg), std::memory_order_release);
+    }
 }
 
 extern "C" __attribute__((visibility("default"))) bool StellariumEntry_submitTexture(
@@ -1193,16 +1228,25 @@ static napi_value DestroyArCameraSurface(napi_env env, napi_callback_info info)
 
 static napi_value SetArCameraComposite(napi_env env, napi_callback_info info)
 {
-    size_t argc = 3;
-    napi_value args[3] = { nullptr, nullptr, nullptr };
+    size_t argc = 4;
+    napi_value args[4] = { nullptr, nullptr, nullptr, nullptr };
     napi_get_cb_info(env, info, &argc, args, nullptr, nullptr);
 
     bool enabled = false;
-    double blend = 0.72;
+    double blend = 0.55;
     double cameraAspect = 16.0 / 9.0;
+    double baseFovDeg = 45.0;
+    bool hasBaseFov = false;
     if (argc >= 1) napi_get_value_bool(env, args[0], &enabled);
     if (argc >= 2) napi_get_value_double(env, args[1], &blend);
     if (argc >= 3) napi_get_value_double(env, args[2], &cameraAspect);
+    if (argc >= 4) {
+        napi_valuetype t = napi_undefined;
+        if (napi_typeof(env, args[3], &t) == napi_ok && t == napi_number) {
+            napi_get_value_double(env, args[3], &baseFovDeg);
+            hasBaseFov = true;
+        }
+    }
 
     {
         std::lock_guard<std::mutex> lock(g_renderMutex);
@@ -1212,6 +1256,9 @@ static napi_value SetArCameraComposite(napi_env env, napi_callback_info info)
         }
         if (std::isfinite(cameraAspect) && cameraAspect > 0.1 && cameraAspect < 10.0) {
             g_ar.cameraAspect = static_cast<float>(cameraAspect);
+        }
+        if (hasBaseFov && std::isfinite(baseFovDeg) && baseFovDeg >= 15.0 && baseFovDeg <= 100.0) {
+            g_ar.baseFovDeg = static_cast<float>(baseFovDeg);
         }
     }
     napi_value undef;

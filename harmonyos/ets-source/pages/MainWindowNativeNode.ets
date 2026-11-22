@@ -3429,6 +3429,7 @@ export struct WindowNativeNode {
             this.currentProjection = snap.projection
           }
           this.fovSliderValue = snap.fovDeg
+          this.currentFovText = snap.fovDeg.toFixed(1) + '°'
           this.refreshState()
         },
         onArCameraActiveChanged: (active: boolean): void => {
@@ -3440,6 +3441,7 @@ export struct WindowNativeNode {
             this.layerStore.auroraEnabled = false
             this.currentProjection = 'ProjectionPerspective'
             this.fovSliderValue = this.arStore.arCameraFovDeg
+            this.currentFovText = this.arStore.arCameraFovDeg.toFixed(1) + '°'
           }
         }
       }

@@ -99,7 +99,7 @@ export class ARController {
 
     this.store.arCameraStarting = true
     this.store.arPreviewStatus = '正在启动后置相机与 GPU 实景融合…'
-    const res = await ArCameraService.getInstance().start(ctx, this.store.arSkyBlend)
+    const res = await ArCameraService.getInstance().start(ctx, this.store.arSkyBlend, this.store.arCameraFovDeg)
     this.store.arCameraStarting = false
 
     if (!res.ok) {
@@ -178,6 +178,7 @@ export class ARController {
     if (!Number.isFinite(fovDeg)) return
     const clamped = Math.max(35, Math.min(85, fovDeg))
     this.store.arCameraFovDeg = clamped
+    ArCameraService.getInstance().updateBaseFov(clamped)
     if (this.store.arCameraActive) {
       this.port.fire('setFOV', clamped.toFixed(1))
     }

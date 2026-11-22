@@ -196,6 +196,7 @@ namespace
 {
 using OhosSubmitFrameFunc = void (*)(const unsigned char*, int, int);
 using OhosSubmitTextureFunc = bool (*)(unsigned int, int, int, void*, void*);
+using OhosSetRenderedFovFunc = void (*)(double);
 // The CPU fallback still copies every frame GPU -> CPU -> GPU. Keep it below
 // the display refresh rate, but do not cap it at 30 FPS when recent timings
 // show a frame has enough headroom for fluid touch manipulation.
@@ -1981,6 +1982,7 @@ void submitOhosFramebuffer(QOpenGLFunctions* gl)
 	static bool resolved = false;
 	static OhosSubmitFrameFunc submitFrame = nullptr;
 	static OhosSubmitTextureFunc submitTexture = nullptr;
+	static OhosSetRenderedFovFunc setRenderedFov = nullptr;
 	if (!resolved)
 	{
 		resolved = true;
@@ -1991,6 +1993,8 @@ void submitOhosFramebuffer(QOpenGLFunctions* gl)
 													: dlsym(RTLD_DEFAULT, "StellariumEntry_submitFrame"));
 		submitTexture = reinterpret_cast<OhosSubmitTextureFunc>(entryHandle ? dlsym(entryHandle, "StellariumEntry_submitTexture")
 													: dlsym(RTLD_DEFAULT, "StellariumEntry_submitTexture"));
+		setRenderedFov = reinterpret_cast<OhosSetRenderedFovFunc>(entryHandle ? dlsym(entryHandle, "StellariumEntry_setRenderedFov")
+													: dlsym(RTLD_DEFAULT, "StellariumEntry_setRenderedFov"));
 		qInfo() << "OpenHarmony native frame bridge" << (submitFrame ? "resolved." : "not found.");
 		ohosMark(submitTexture ? "zero-copy frame bridge resolved" : (submitFrame ? "frame bridge resolved" : "frame bridge not found"));
 	}
@@ -2171,6 +2175,15 @@ void submitOhosFramebuffer(QOpenGLFunctions* gl)
 		gl->glViewport(0, 0, width, height);
 		if (depthWasEnabled) gl->glEnable(GL_DEPTH_TEST); else gl->glDisable(GL_DEPTH_TEST);
 		if (blendWasEnabled) gl->glEnable(GL_BLEND); else gl->glDisable(GL_BLEND);
+	}
+
+	if (setRenderedFov)
+	{
+		if (StelCore* core = StelApp::getInstance().getCore())
+		{
+			if (StelMovementMgr* mvMgr = core->getMovementMgr())
+				setRenderedFov(mvMgr->getCurrentFov());
+		}
 	}
 
 	// When both EGL contexts can join the same share group, the XComponent can

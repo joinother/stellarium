@@ -6,7 +6,7 @@ export const isEngineReady: () => boolean;
 export const probeArHardware: () => string;
 export const createArCameraSurface: () => string;
 export const destroyArCameraSurface: () => void;
-export const setArCameraComposite: (enabled: boolean, blend: number, cameraAspect: number) => void;
+export const setArCameraComposite: (enabled: boolean, blend: number, cameraAspect: number, baseFovDeg?: number) => void;
 export const renderDetailModelSphere: (
   texture: ArrayBuffer,
   textureWidth: number,
