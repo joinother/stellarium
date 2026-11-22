@@ -86,7 +86,7 @@ function emptyActions(): Record<string, boolean> {
 const MAX_STAR_MAG_LIMIT: number = 21
 
 function buildSnapshot(onActions: string[], vividAtmosphere: boolean, milkyWayBright: number,
-  realisticStarVisibility: boolean, nightMode: boolean, observeMode: boolean,
+  realisticStarVisibility: boolean, nightMode: boolean,
   equatorialMount: boolean, telrad: boolean, ccd: boolean, dsoLabels: boolean,
   constellationArt3d: boolean, starMagLimit?: number): LayerPresetSnapshot {
   const actions = emptyActions()
@@ -97,7 +97,6 @@ function buildSnapshot(onActions: string[], vividAtmosphere: boolean, milkyWayBr
     milkyWayBright: milkyWayBright,
     realisticStarVisibility: realisticStarVisibility,
     nightMode: nightMode,
-    observeMode: observeMode,
     equatorialMount: equatorialMount,
     telrad: telrad,
     ccd: ccd,
@@ -116,7 +115,6 @@ function cloneSnapshot(source: LayerPresetSnapshot): LayerPresetSnapshot {
     milkyWayBright: source.milkyWayBright,
     realisticStarVisibility: source.realisticStarVisibility,
     nightMode: source.nightMode,
-    observeMode: source.observeMode,
     equatorialMount: source.equatorialMount,
     telrad: source.telrad,
     ccd: source.ccd,
@@ -127,15 +125,15 @@ function cloneSnapshot(source: LayerPresetSnapshot): LayerPresetSnapshot {
 }
 
 function neutralSnapshot(): LayerPresetSnapshot {
-  return buildSnapshot([], false, 3, true, false, false, false, false, false, true, false)
+  return buildSnapshot([], false, 3, true, false, false, false, false, true, false)
 }
 
 function factoryDefinitions(): Array<LayerPresetDefinition> {
-  const clean = buildSnapshot(CLEAN_ACTIONS, false, 6, true, false, false, false, false, false, true, false)
-  const observe = buildSnapshot(OBSERVE_ACTIONS, false, 3, true, true, true, true, true, false, true, false, MAX_STAR_MAG_LIMIT)
-  const photo = buildSnapshot(PHOTO_ACTIONS, false, 3, true, false, false, false, false, true, false, false, MAX_STAR_MAG_LIMIT)
-  const study = buildSnapshot(STUDY_ACTIONS, false, 4, true, false, false, false, false, false, true, false)
-  const vivid = buildSnapshot(VIVID_ACTIONS, true, 6, false, false, false, false, false, false, true, true)
+  const clean = buildSnapshot(CLEAN_ACTIONS, false, 6, true, false, false, false, false, true, false)
+  const observe = buildSnapshot(OBSERVE_ACTIONS, false, 3, true, true, true, true, false, true, false, MAX_STAR_MAG_LIMIT)
+  const photo = buildSnapshot(PHOTO_ACTIONS, false, 3, true, false, false, false, true, false, false, MAX_STAR_MAG_LIMIT)
+  const study = buildSnapshot(STUDY_ACTIONS, false, 4, true, false, false, false, false, true, false)
+  const vivid = buildSnapshot(VIVID_ACTIONS, true, 6, false, false, false, false, false, true, true)
   return [
     { id: 'clean', kind: 'builtin', nameKey: 'preset_clean', customName: '', enabled: true, snapshot: clean, factory: cloneSnapshot(clean) },
     { id: 'observe', kind: 'builtin', nameKey: 'preset_observe', customName: '', enabled: true, snapshot: observe, factory: cloneSnapshot(observe) },
@@ -189,7 +187,6 @@ function normalizeSnapshot(raw: Object | undefined): LayerPresetSnapshot | undef
     milkyWayBright: Math.max(0, Math.min(6, Math.round(readNumber(source, 'milkyWayBright', 3)))),
     realisticStarVisibility: readBool(source, 'realisticStarVisibility', true),
     nightMode: readBool(source, 'nightMode', false),
-    observeMode: readBool(source, 'observeMode', false),
     equatorialMount: readBool(source, 'equatorialMount', false),
     telrad: readBool(source, 'telrad', false),
     ccd: readBool(source, 'ccd', false),
@@ -393,7 +390,6 @@ function crossLabel(key: string): string {
     labels.set('milkyWayBright', '银河亮度')
     labels.set('realisticStarVisibility', '现实星等')
     labels.set('nightMode', '夜间模式')
-    labels.set('observeMode', '详情观测模式')
     labels.set('equatorialMount', '赤道仪模式')
     labels.set('telrad', '寻星镜')
     labels.set('ccd', 'CCD 取景框')
@@ -405,7 +401,6 @@ function crossLabel(key: string): string {
     labels.set('milkyWayBright', 'Milky Way brightness')
     labels.set('realisticStarVisibility', 'Realistic star visibility')
     labels.set('nightMode', 'Night mode')
-    labels.set('observeMode', 'Object-detail observe mode')
     labels.set('equatorialMount', 'Equatorial mount')
     labels.set('telrad', 'Finder scope')
     labels.set('ccd', 'CCD frame')
@@ -436,9 +431,6 @@ function diffSnapshots(before: LayerPresetSnapshot, after: LayerPresetSnapshot):
   }
   if (before.nightMode !== after.nightMode) {
     items.push({ label: crossLabel('nightMode'), before: boolText(before.nightMode), after: boolText(after.nightMode) })
-  }
-  if (before.observeMode !== after.observeMode) {
-    items.push({ label: crossLabel('observeMode'), before: boolText(before.observeMode), after: boolText(after.observeMode) })
   }
   if (before.equatorialMount !== after.equatorialMount) {
     items.push({ label: crossLabel('equatorialMount'), before: boolText(before.equatorialMount), after: boolText(after.equatorialMount) })

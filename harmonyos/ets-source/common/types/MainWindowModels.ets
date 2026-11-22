@@ -259,7 +259,6 @@ export interface LayerPresetSnapshot {
   milkyWayBright: number
   realisticStarVisibility: boolean
   nightMode: boolean
-  observeMode: boolean
   equatorialMount: boolean
   telrad: boolean
   ccd: boolean

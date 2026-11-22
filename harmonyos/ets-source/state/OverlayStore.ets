@@ -3,12 +3,12 @@ import { StellariumBridgeResponse } from '../pages/StellariumTypes'
 import { PointerCoordinatesResponse } from '../pages/MainWindowModels'
 import { CommandPort } from '../bridge/CommandPort'
 
-// 「视图中心坐标」叠层、「指针坐标」插件面板与「天体详情指向线」开关的状态簇：持有开关与
-// 档位（字符串枚举选项）等设置类字段。宿主持有实例，相关面板 / 叠层以 @ObjectLink 观察。
+// 「视图中心坐标」叠层与「指针坐标」插件面板的状态簇：持有开关与档位（字符串枚举选项）
+// 等设置类字段。宿主持有实例，相关面板 / 叠层以 @ObjectLink 观察。
 //
-// 刻意不入本 store：视图中心坐标的实时读数与拖拽瞬时量、天体详情指向线的几何量等逐帧/
-// 触摸级字段（放进被观察 store 会造成重渲染风暴），一律留在宿主由组件以 @Prop 接收；
-// 天体检查器的模型叠层字段属渲染管线，同样留在宿主。
+// 刻意不入本 store：视图中心坐标的实时读数与拖拽瞬时量等逐帧/触摸级字段（放进被观察
+// store 会造成重渲染风暴），一律留在宿主由组件以 @Prop 接收；天体检查器的模型叠层字段
+// 属渲染管线，同样留在宿主。
 // store 只放数据与纯查表/纯计算，不 import UI / NAPI。
 @Observed
 export class OverlayStore {
@@ -28,9 +28,6 @@ export class OverlayStore {
   pointerCoordinatesElongation: boolean = false
   pointerCoordinatesSystem: string = 'RaDecJ2000'
   pointerCoordinatesPlace: string = 'TopCenter'
-
-  // —— 天体详情指向线（设置） ——
-  objectDetailConnectorVisible: boolean = true
 
   // —— 桥注入 ——
   private port: CommandPort | null = null

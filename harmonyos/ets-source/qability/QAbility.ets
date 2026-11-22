@@ -759,9 +759,7 @@ export default class QAbility extends UIAbility {
       request.commandName !== 'setDateFormat' && request.commandName !== 'setTimeFormat' && request.commandName !== 'playScript' &&
       request.commandName !== 'continueScript' && request.commandName !== 'stopScript' &&
       request.commandName !== 'setScriptRate') {
-      if (request.commandName !== 'setObjectDetailConnector' && request.commandName !== 'getObjectDetailConnector') {
-        return;
-      }
+      return;
     }
     try {
       const parsed = JSON.parse(response) as Record<string, Object>;

@@ -282,7 +282,6 @@ static std::atomic<float> s_ohosSelectedScreenXRatio{0.0f};
 static std::atomic<float> s_ohosSelectedScreenYRatio{0.0f};
 static std::atomic<bool> s_ohosSelectedScreenValid{false};
 static std::atomic<bool> s_ohosSelectedScreenVisible{false};
-static std::atomic<bool> s_ohosObjectDetailConnector{true};
 
 // The polar-scope reticle is rendered after StelApp::draw() on the Qt render
 // thread. This keeps it in the same frame and projection as the native sky;
@@ -7869,18 +7868,6 @@ extern "C" __attribute__((visibility("default"))) const char* StellariumOhos_com
 		guideResult["xRatio"] = s_ohosSelectedScreenXRatio.load();
 		guideResult["yRatio"] = s_ohosSelectedScreenYRatio.load();
 		response = QString::fromUtf8(QJsonDocument(guideResult).toJson(QJsonDocument::Compact)).toUtf8();
-		return response.constData();
-	}
-	if (commandName == "getObjectDetailConnector" || commandName == "setObjectDetailConnector")
-	{
-		bool enabled = s_ohosObjectDetailConnector.load();
-		if (commandName == "setObjectDetailConnector")
-			enabled = arg == "1" || arg.compare("true", Qt::CaseInsensitive) == 0;
-		s_ohosObjectDetailConnector.store(enabled);
-		QJsonObject connectorResult;
-		connectorResult["ok"] = true;
-		connectorResult["enabled"] = enabled;
-		response = QString::fromUtf8(QJsonDocument(connectorResult).toJson(QJsonDocument::Compact)).toUtf8();
 		return response.constData();
 	}
 	if (commandName == "setApplicationForeground")

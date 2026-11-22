@@ -67,8 +67,6 @@ export function getIcon(icon: string, isActive: boolean): Resource {
     'bt_equatorial_mount': $r('app.media.bt_equatorial_mount'),
     'bt_flip_horizontal': $r('app.media.bt_flip_horizontal'),
     'bt_obs_list': $r('app.media.bt_obs_list'),
-    // 三期：该图标即「观测模式」开关（原 minimal_hud 占位改名，见 specs/OBJECT-DETAIL-OBSERVE-MODE.md §5）。
-    'observe_mode': $r('app.media.bt_observe_mode'),
     'edit': $r('app.media.ic_edit'),
   }
   return map[icon] || $r('app.media.ic_search')

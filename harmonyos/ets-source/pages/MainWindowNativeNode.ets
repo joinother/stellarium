@@ -107,7 +107,7 @@ import { CardTonightData } from '../form/AstronomyCardData'
 import { RecordingController, RecordingHostHooks } from '../capability/RecordingController'
 import { ObjectModelRenderer, ObjectModelRendererHostHooks } from '../capability/ObjectModelRenderer'
 import { SkyInputController, SkyInputHostHooks, absoluteScaleToStarBrightness, starBrightnessToAbsoluteScale } from '../capability/SkyInputController'
-import { DetailConnectorController, DetailConnectorHostHooks } from '../capability/DetailConnectorController'
+import { DetailRefreshController, DetailRefreshHostHooks } from '../capability/DetailRefreshController'
 import { LayerController, LayerHostHooks } from '../capability/LayerController'
 import { SkyTextureStatusController, SkyTextureStatusHostHooks } from '../capability/SkyTextureStatusController'
 import { NebulaTextureController, NebulaTextureHostHooks } from '../capability/NebulaTextureController'
@@ -1217,9 +1217,11 @@ export struct WindowNativeNode {
   @State private hasUsableFoldAngle: boolean = false
   @State private responsiveLayoutMode: string = 'compact'
   @State private uiLayoutOverride: string = 'auto'
-  @State private activePanel: string = 'object'
-  // 面板可见性变化时同步"返回可消费"镜像（系统返回手势据此决定接管还是退出），见 publishBackConsumable。
-  @Watch('publishBackConsumable') @State private panelVisible: boolean = false
+  // 面板/页面切换时同步详情卡形态：时间面板打开 → 轻量卡；其余 → 极简大卡。
+  @Watch('onActivePanelChangedForDetail') @State private activePanel: string = 'object'
+  // 面板可见性变化时同步"返回可消费"镜像（系统返回手势据此决定接管还是退出），
+  // 并同步详情卡形态（时间面板关闭 → 恢复极简大卡）。
+  @Watch('onPanelVisibilityChanged') @State private panelVisible: boolean = false
   @State private panelNavigationDepth: number = 0
   private panelNavigationStack: string[] = []
   // 记录每个底部 Dock 入口关闭前的页面路径（子面板 + 返回栈 + 页签）与滚动偏移，
@@ -1288,8 +1290,8 @@ export struct WindowNativeNode {
   private objectModelRendererImpl: ObjectModelRenderer | null = null
   // 天空输入控制器骨架（惰性构造；鼠标/键盘/滚轮轴/点按序列/惯性方法 + 16 个草稿字段）。
   private skyInputControllerImpl: SkyInputController | null = null
-  // 详情连接线 / 详情刷新定时器控制器（惰性构造；指向线几何 @State 由宿主持有经 hooks 逐帧写入）。
-  private detailConnectorControllerImpl: DetailConnectorController | null = null
+  // 详情刷新定时器控制器（惰性构造；轮询句柄与刷新门控由控制器自持）。
+  private detailRefreshControllerImpl: DetailRefreshController | null = null
   // 图层 / 视图标签控制器（惰性构造；标签 @State 与过渡量由宿主持有经 hooks 读写）。
   private layerControllerImpl: LayerController | null = null
   // SkyTexture 状态观察控制器（惰性构造；定时器自持 start/stop，状态条字段在 ToolsStore）。
@@ -1381,15 +1383,6 @@ export struct WindowNativeNode {
   private languageSwitchTimer: number = -1
   @State private cardOffsetX: number = 0
   @State private cardOffsetY: number = 0
-  @State private objectDetailConnectorX: number = 0
-  @State private objectDetailConnectorY: number = 0
-  @State private objectDetailConnectorLength: number = 0
-  @State private objectDetailConnectorAngle: number = 0
-  @State private objectDetailConnectorEndX: number = 0
-  @State private objectDetailConnectorEndY: number = 0
-  @State private objectDetailConnectorTargetX: number = 0
-  @State private objectDetailConnectorTargetY: number = 0
-  @State private objectDetailConnectorTargetOnScreen: boolean = false
   @State private objectDetailContentOpacity: number = 1
   @State private objectDetailContentTranslateX: number = 0
   private objectCardDragging: boolean = false
@@ -1591,8 +1584,6 @@ export struct WindowNativeNode {
   private panelIdleTimer: number = -1
   private lastOverlayActivityMs: number = 0
   // 目标详情自动刷新：选中天体后每 180ms 重新拉一次坐标，让“地平坐标”随地球自转实时变化。
-  // objectDetailConnectorAnimateGeometry 是宿主 @State（指向线过渡开关），控制器经 hooks 写入。
-  @State private objectDetailConnectorAnimateGeometry: boolean = false
   private foregroundRefreshPaused: boolean = false
   @State private remoteCalendarFeedStatus: string = ''
   @State private remoteCalendarFeedSyncing: boolean = false
@@ -1660,7 +1651,7 @@ export struct WindowNativeNode {
           this.timeCtl().startPanelTimers()
         }
         if (this.objectDetailStore.selectedStatus === 'Selected' && ((this.activePanel === 'object' && this.panelVisible) || this.infoWindowStore.infoWinVisible)) {
-          this.detailConnectorCtl().startDetailAutoRefresh()
+          this.detailRefreshCtl().startDetailAutoRefresh()
         }
       }
       if (this.audioStore.musicEnabled) {
@@ -1681,7 +1672,7 @@ export struct WindowNativeNode {
 
     // This app declares no background task. Stop ArkUI polling and audio
     // rendering as soon as the Ability leaves the foreground.
-    this.foregroundRefreshPaused = this.timeCtl().hasPanelTimer() || this.detailConnectorCtl().hasDetailTimer()
+    this.foregroundRefreshPaused = this.timeCtl().hasPanelTimer() || this.detailRefreshCtl().hasDetailTimer()
     this.timeCtl().stopPanelTimers()
     this.viewCoordinateCtl().stopViewCoordinateTimer()
     this.stopDockClockTimer()
@@ -1690,7 +1681,7 @@ export struct WindowNativeNode {
     this.polarScopeCtl().stopPolarScopeTimer()
     this.astroCalcCtl().stopAstroCalcContextTimer()
     this.telescopeCtl().stopTelescopeLivePosition(false)
-    this.detailConnectorCtl().stopDetailAutoRefresh()
+    this.detailRefreshCtl().stopDetailAutoRefresh()
     this.skyInputCtl().stop()
     this.clearStarBrightnessHudTimer()
     this.keyboardShortcutCtl().setSkyFocused(false)
@@ -1926,8 +1917,7 @@ export struct WindowNativeNode {
       flashHint: (text: ResourceStr): void => { this.flashHint(text) },
       applySelectedInfoMode: (mode: string): void => { this.applySelectedInfoMode(mode) },
       refreshSelectedObject: (): void => { this.refreshSelectedObject() },
-      clearSelectedDetailLoaded: (): void => { this.objectDetailStore.selectedDetailLoaded = false },
-      persistDetailDisplayMode: (mode: string): void => { this.writeDetailModeStorage(mode) }
+      clearSelectedDetailLoaded: (): void => { this.objectDetailStore.selectedDetailLoaded = false }
     })
     this.navigationStore.attachPort(hostPort)
     this.navigationStore.attachHooks({
@@ -2500,13 +2490,6 @@ export struct WindowNativeNode {
         hilog.info(0x0000, 'StellariumArkUI', '[cli-ui] navigated back')
         return
       }
-      if ((commandName === 'setObjectDetailConnector' || commandName === 'getObjectDetailConnector') &&
-        (response as Record<string, Object>)['enabled'] !== undefined) {
-        const enabled = (response as Record<string, Object>)['enabled'] as boolean
-        this.setObjectDetailConnector(enabled, false)
-        hilog.info(0x0000, 'StellariumArkUI', '[cli-ui] detail connector=%{public}s', enabled.toString())
-        return
-      }
       if (commandName === 'clearSelection' || response.found !== true) {
         this.applySelectedObject(response)
         return
@@ -2546,44 +2529,6 @@ export struct WindowNativeNode {
       hint: (text: string) => { this.flashHint(text) }
     })
     this.loadQuickActionOrderFromStorage()
-    this.loadDetailModeFromStorage()
-  }
-
-  // ── 详情卡「呈现轴」持久化（观测模式）──
-  // store `stellarium_info_window` / key `detailDisplayMode`。切换**不触碰桥**：
-  // 信息级别（数据轴）与详情卡形态（呈现轴）正交，见 specs/OBJECT-DETAIL-OBSERVE-MODE.md §3/§4.6。
-  private async writeDetailModeStorage(mode: string): Promise<void> {
-    try {
-      const ctx = this.getUIContext().getHostContext() as common.UIAbilityContext
-      const store = await preferences.getPreferences(ctx, INFO_WINDOW_STORE)
-      await store.put('detailDisplayMode', mode)
-      await store.flush()
-    } catch (e) {
-      hilog.warn(0xD002, 'Stellarium', 'save detail display mode failed: %{public}s', String(e))
-    }
-  }
-
-  // 读失败 / 缺省一律回落天文馆模式（等价于升级前的观感）。
-  private async loadDetailModeFromStorage(): Promise<void> {
-    try {
-      const ctx = this.getUIContext().getHostContext() as common.UIAbilityContext
-      const store = await preferences.getPreferences(ctx, INFO_WINDOW_STORE)
-      const raw = await store.get('detailDisplayMode', 'planetarium')
-      this.infoWindowStore.restoreDetailDisplayMode(typeof raw === 'string' ? raw : 'planetarium')
-    } catch (e) {
-      hilog.warn(0xD002, 'Stellarium', 'load detail display mode failed: %{public}s', String(e))
-    }
-  }
-
-  // 观测模式开关（快捷面板格子与设置页 Toggle 的同一入口）：只切呈现轴，并给一次提示。
-  private applyObserveMode(enabled: boolean): void {
-    this.layerPresetStore.noteManualChange()
-    const target = enabled ? 'observe' : 'planetarium'
-    const changed = this.infoWindowStore.detailDisplayMode !== target
-    this.infoWindowStore.setDetailDisplayMode(target)
-    if (changed) {
-      this.flashHint(I18n.t(enabled ? 'detail_switched_observe' : 'detail_switched_planetarium'))
-    }
   }
 
   // 快捷面板 12 格顺序的持久化（store `stellarium_quick_panel` / key `order`，与书签 / 观测列表同套）。
@@ -2675,7 +2620,7 @@ export struct WindowNativeNode {
     if (this.arControllerImpl !== null) {
       void this.arControllerImpl.disableArCamera(false)
     }
-    this.detailConnectorCtl().stop()
+    this.detailRefreshCtl().stop()
     this.objectInspectorMediaCtl().stopObjectInspectorMediaWarmup()
     this.objectInspectorMediaCtl().stopBodyDetailWarmup()
     this.objectInspectorMediaCtl().clearObjectInspectorDecodedImage()
@@ -3675,8 +3620,8 @@ export struct WindowNativeNode {
         setCurrentFovText: (text: string): void => { this.currentFovText = text },
         setPanelOffset: (offsetX: number, offsetY: number): void => { this.panelOffsetX = offsetX; this.panelOffsetY = offsetY },
         cancelSelectedObjectUiChange: (): void => this.cancelSelectedObjectUiChange(),
-        pauseDetailRefreshForSkyDrag: (): void => this.detailConnectorCtl().pauseDetailRefreshForSkyDrag(),
-        resumeDetailRefreshAfterSkyDrag: (): void => this.detailConnectorCtl().resumeDetailRefreshAfterSkyDrag(),
+        pauseDetailRefreshForSkyDrag: (): void => this.detailRefreshCtl().pauseDetailRefreshForSkyDrag(),
+        resumeDetailRefreshAfterSkyDrag: (): void => this.detailRefreshCtl().resumeDetailRefreshAfterSkyDrag(),
         scheduleSelectedObjectForUiChange: (delay: number): void => this.scheduleSelectedObjectForUiChange(delay),
         scheduleSkyTextureStatusCheck: (): void => this.skyTextureStatusCtl().start(),
         scheduleRecordingViewCheckpoint: (delay: number): void => this.recordingCtl().scheduleRecordingViewCheckpoint(delay),
@@ -3776,12 +3721,11 @@ export struct WindowNativeNode {
     }
   }
 
-  // 详情连接线 / 详情刷新定时器控制器惰性构造。指向线几何 9 个 @State 与过渡开关由宿主持有、
-  // 经 hooks 逐帧 get/set；面板/星图状态、几何派生、宿主保留控制器
-  // （objectDetailConnectorObstacles / refreshSelectedObject / scheduleSkyTextureStatusCheck）经 hooks 注入。
-  private detailConnectorCtl(): DetailConnectorController {
-    if (this.detailConnectorControllerImpl === null) {
-      const hooks: DetailConnectorHostHooks = {
+  // 详情刷新定时器控制器惰性构造。面板/星图状态与宿主保留收口点
+  // （refreshSelectedObject / scheduleSkyTextureStatusCheck）经 hooks 注入。
+  private detailRefreshCtl(): DetailRefreshController {
+    if (this.detailRefreshControllerImpl === null) {
+      const hooks: DetailRefreshHostHooks = {
         refreshState: (): void => { this.refreshState() },
         flashHint: (text: ResourceStr): void => { this.flashHint(text) },
         panelChange: (panel: string, visible: boolean): void => {
@@ -3794,43 +3738,12 @@ export struct WindowNativeNode {
         skyDragging: (): boolean => this.skyDragging
           || this.timeWheelStore.timeWheelDragging
           || (this.timeWheelController !== undefined && this.timeWheelController.isInteracting()),
-        skyWidth: (): number => this.skyWidth,
-        skyHeight: (): number => this.skyHeight,
-        isFoldHoverLayout: (): boolean => this.isFoldHoverLayout,
-        bottomCardY: (): number => this.bottomCardY(),
-        hoverBottomCardY: (): number => this.hoverBottomCardY(),
-        detailCardX: (): number => this.detailCardX(),
-        detailCardY: (): number => this.detailCardY(),
-        detailCardWidth: (): number => this.detailCardWidth(),
-        detailCardHeight: (): number => this.detailCardHeight(),
-        objectDetailConnectorObstacles: (): SkyUiObstacle[] => this.objectDetailConnectorObstacles(),
         refreshSelectedObject: (): void => { this.refreshSelectedObject() },
-        scheduleSkyTextureStatusCheck: (): void => { this.skyTextureStatusCtl().start() },
-        gyroGuideProjection: (): GyroGuideProjection => this.callNative('getGyroGuidePosition') as GyroGuideProjection,
-        connectorVisible: (): boolean => this.overlayStore.objectDetailConnectorVisible,
-        connectorX: (): number => this.objectDetailConnectorX,
-        setConnectorX: (value: number): void => { this.objectDetailConnectorX = value },
-        connectorY: (): number => this.objectDetailConnectorY,
-        setConnectorY: (value: number): void => { this.objectDetailConnectorY = value },
-        connectorLength: (): number => this.objectDetailConnectorLength,
-        setConnectorLength: (value: number): void => { this.objectDetailConnectorLength = value },
-        connectorAngle: (): number => this.objectDetailConnectorAngle,
-        setConnectorAngle: (value: number): void => { this.objectDetailConnectorAngle = value },
-        connectorEndX: (): number => this.objectDetailConnectorEndX,
-        setConnectorEndX: (value: number): void => { this.objectDetailConnectorEndX = value },
-        connectorEndY: (): number => this.objectDetailConnectorEndY,
-        setConnectorEndY: (value: number): void => { this.objectDetailConnectorEndY = value },
-        connectorTargetX: (): number => this.objectDetailConnectorTargetX,
-        setConnectorTargetX: (value: number): void => { this.objectDetailConnectorTargetX = value },
-        connectorTargetY: (): number => this.objectDetailConnectorTargetY,
-        setConnectorTargetY: (value: number): void => { this.objectDetailConnectorTargetY = value },
-        connectorTargetOnScreen: (): boolean => this.objectDetailConnectorTargetOnScreen,
-        setConnectorTargetOnScreen: (value: boolean): void => { this.objectDetailConnectorTargetOnScreen = value },
-        setConnectorAnimateGeometry: (value: boolean): void => { this.objectDetailConnectorAnimateGeometry = value }
+        scheduleSkyTextureStatusCheck: (): void => { this.skyTextureStatusCtl().start() }
       }
-      this.detailConnectorControllerImpl = new DetailConnectorController(this.objectDetailStore, this.infoWindowStore, hooks)
+      this.detailRefreshControllerImpl = new DetailRefreshController(this.objectDetailStore, this.infoWindowStore, hooks)
     }
-    return this.detailConnectorControllerImpl
+    return this.detailRefreshControllerImpl
   }
 
   // 图层 / 视图标签控制器惰性构造。桥经 HostCommandPort；标签 @State 与两组过渡量由宿主持有、
@@ -4170,7 +4083,7 @@ export struct WindowNativeNode {
         },
         stopSkyInertia: (): void => this.skyInputCtl().stopSkyInertia(),
         stopCompetingTasks: (): void => {
-          this.detailConnectorCtl().stopDetailAutoRefresh()
+          this.detailRefreshCtl().stopDetailAutoRefresh()
           this.timeCtl().stopPanelTimers()
           this.skyCultureCtl().stopSkyCultureTimeFollowTimer()
           this.astroCalcCtl().stopAstroCalcContextTimer()
@@ -4430,7 +4343,6 @@ export struct WindowNativeNode {
       viewCoordinatesVisible: this.overlayStore.viewCoordinatesVisible,
       viewCoordinateFamily: this.overlayStore.viewCoordinateFamily,
       viewEquatorialEpoch: this.overlayStore.viewEquatorialEpoch,
-      objectDetailConnectorVisible: this.overlayStore.objectDetailConnectorVisible,
       astroTab: this.astroStore.astroTab.toString(),
       astroGroup: this.astroStore.astroGroup.toString(),
       positionMode: this.astroStore.positionMode.toString(),
@@ -4460,7 +4372,6 @@ export struct WindowNativeNode {
       viewCoordinatesVisible: this.overlayStore.viewCoordinatesVisible,
       viewCoordinateFamily: this.overlayStore.viewCoordinateFamily,
       viewEquatorialEpoch: this.overlayStore.viewEquatorialEpoch,
-      objectDetailConnectorVisible: this.overlayStore.objectDetailConnectorVisible,
       astroTab: this.astroStore.astroTab,
       astroGroup: this.astroStore.astroGroup,
       positionMode: this.astroStore.positionMode,
@@ -4590,7 +4501,6 @@ export struct WindowNativeNode {
       viewCoordinatesVisible: settings.viewCoordinatesVisible,
       viewCoordinateFamily: settings.viewCoordinateFamily,
       viewEquatorialEpoch: settings.viewEquatorialEpoch,
-      objectDetailConnectorVisible: settings.objectDetailConnectorVisible,
       astroTab: settings.astroTab.toString(),
       astroGroup: settings.astroGroup.toString(),
       positionMode: settings.positionMode.toString(),
@@ -4628,6 +4538,26 @@ export struct WindowNativeNode {
   private publishBackConsumable(): void {
     if (AppStorage.get<boolean>('stellariumBackConsumable') !== true) {
       AppStorage.setOrCreate<boolean>('stellariumBackConsumable', true)
+    }
+  }
+
+  private onPanelVisibilityChanged(): void {
+    this.publishBackConsumable()
+    this.syncDetailCardForPanel()
+  }
+
+  private onActivePanelChangedForDetail(): void {
+    this.syncDetailCardForPanel()
+  }
+
+  // 时间面板是唯一启用轻量详情卡的状态；进入时顺带收起「临时展开」，退出后恢复极简大卡。
+  // 几何形变由壳层容器的 .animation 完成，这里只切状态。
+  private syncDetailCardForPanel(): void {
+    if (this.isTimePanelActive()) {
+      this.infoWindowStore.infoWinExpanded = false
+      this.infoWindowStore.observeExpanded = false
+    } else {
+      this.infoWindowStore.infoWinExpanded = true
     }
   }
 
@@ -5732,7 +5662,6 @@ export struct WindowNativeNode {
         this.panelPresentationOffsetY = 0
         if (panel === 'object') {
           this.fullInspectorRequested = false
-          this.infoWindowStore.infoWinExpanded = false
         }
         this.publishUiPanelState()
       } }, () => {
@@ -6334,7 +6263,6 @@ export struct WindowNativeNode {
       this.panelPresentationOffsetY = 0
       if (closingObjectPanel) {
         this.fullInspectorRequested = false
-        this.infoWindowStore.infoWinExpanded = false
       }
       this.publishUiPanelState()
     } }, () => {
@@ -6536,14 +6464,9 @@ export struct WindowNativeNode {
       }
     }
     if (this.objectDetailStore.isObjectDetailCardRendered(this.infoWindowStore.infoWinVisible)) {
-      if (this.infoWindowStore.infoWinExpanded) {
-        if (isObjectDetailCardPoint(x, y, true, this.detailCardX(), this.detailCardY(), this.detailCardWidth(), this.detailCardHeight())) {
-          return true
-        }
-      } else if (this.selectionPillVisible()) {
-        if (isObjectDetailCardPoint(x, y, true, this.selectionPillX(), this.selectionPillY(), this.selectionPillWidth(), this.selectionPillHeight())) {
-          return true
-        }
+      // 大卡与时间面板轻量卡共用同一容器，几何随 isTimePanelActive() 切换。
+      if (isObjectDetailCardPoint(x, y, true, this.detailCardX(), this.detailCardY(), this.detailCardWidth(), this.detailCardHeight())) {
+        return true
       }
     }
     if (this.isExpandedLayout) {
@@ -6768,7 +6691,7 @@ export struct WindowNativeNode {
     void this.haptics().selection('')
     const requestSerial = ++this.skySelectionRequestSerial
     this.skyInputCtl().resetSkyTapSequence()
-    this.detailConnectorCtl().stop()
+    this.detailRefreshCtl().stop()
     this.applySelectedObject({ ok: true, found: false } as StellariumBridgeResponse)
     hilog.info(0x0000, 'StellariumArkUI', 'double tap cleared sky selection at ' +
       Math.round(x).toString() + ',' + Math.round(y).toString())
@@ -7142,50 +7065,29 @@ export struct WindowNativeNode {
     return base + this.clampedObjectCardOffsetY(base, this.bottomCardHeight())
   }
 
+  // 时间面板打开时，详情卡切换为轻量卡（原一阶段浮标形态）：位置/尺寸沿用浮标几何，
+  // 关闭时间面板后回到极简大卡几何；两套几何共用同一个卡片容器，由壳层动画做真实形变。
+  private isTimePanelActive(): boolean {
+    return this.panelVisible && this.activePanel === 'time'
+  }
+
   private detailCardX(): number {
-    return this.bottomCardX()
+    return this.isTimePanelActive() ? this.selectionPillX() : this.bottomCardX()
   }
 
   private detailCardY(): number {
-    return this.detailConnectorCtl().objectDetailCardY()
+    if (this.isTimePanelActive()) {
+      return this.selectionPillY()
+    }
+    return this.isFoldHoverLayout ? this.hoverBottomCardY() : this.bottomCardY()
   }
 
   private detailCardWidth(): number {
-    return this.bottomCardWidth()
+    return this.isTimePanelActive() ? this.selectionPillWidth() : this.bottomCardWidth()
   }
 
   private detailCardHeight(): number {
-    return this.bottomCardHeight()
-  }
-
-  private selectionPillVisible(): boolean {
-    if (!this.infoWindowStore.infoWinVisible
-      || this.objectDetailStore.selectedName.length === 0
-      || this.infoWindowStore.infoWinExpanded) {
-      return false
-    }
-    if (this.isExpandedLayout) {
-      if (this.panelVisible) {
-        const freeLeft = expandedDockOccupiedLeft(true, this.panelWidth, this.panelOffsetX, this.EDGE_MARGIN)
-        const freeW = this.skyWidth - this.EDGE_MARGIN - freeLeft
-        if (freeW < 220) {
-          return false
-        }
-      }
-      return true
-    }
-    if (this.isFoldHoverLayout) {
-      return !this.panelVisible
-    }
-    // 手机紧凑模式：浮标位于顶部安全区左侧（避开底部 Dock / FOV / 时钟 / 竖排缩放按钮及右上快捷区）；
-    // 当陀螺仪校准浮层开启，或底部菜单抽屉上拉至 90% 接近浮标时自动隐藏避让。
-    if (this.gyroStore.gyroscopeEnabled && this.gyroStore.gyroCalibPanelOpen) {
-      return false
-    }
-    if (this.panelVisible && this.compactPanelTop() < this.selectionPillY() + this.selectionPillHeight() + 12) {
-      return false
-    }
-    return true
+    return this.isTimePanelActive() ? this.selectionPillHeight() : this.bottomCardHeight()
   }
 
   private selectionPillWidth(): number {
@@ -7244,24 +7146,6 @@ export struct WindowNativeNode {
     return Math.max(compactTopQuickY(), this.scriptControlSafeTop())
   }
 
-  private expandDetailPill(): void {
-    if (!this.infoWindowStore.infoWinVisible || this.objectDetailStore.selectedName.length === 0) {
-      return
-    }
-    // 大星体详情卡与菜单面板不互斥：展开详情卡时保留已打开的菜单面板，两者可同时查看与拖动。
-    this.infoWindowStore.infoWinExpanded = true
-    this.fullInspectorRequested = true
-    this.detailConnectorCtl().markObjectCardPlacementPending()
-    if (!this.objectDetailStore.selectedDetailLoaded) {
-      this.requestSelectedDetails(this.objectDetailStore.selectedName)
-    }
-    if (this.objectDetailStore.selectedObjectIsArtificialSatellite()) {
-      this.objectDetailStore.loadSelectedSatellitePasses()
-    }
-    this.detailConnectorCtl().startObjectDetailConnectorRefresh()
-    this.detailConnectorCtl().refreshObjectDetailConnector()
-  }
-
   private clampedObjectCardOffsetX(base: number, width: number): number {
     return clamp(this.cardOffsetX, 8 - base, this.skyWidth - width - 8 - base)
   }
@@ -7282,7 +7166,7 @@ export struct WindowNativeNode {
 
   private bottomCardHeight(): number {
     // 观测极简卡：内容只有页头 + 三 tag + 按钮行（见 ObjectDetailCardHeader 的取值），
-    // 高度必须与内容一致，否则卡内会留大片空底（展开 / 天文馆模式仍走下面的全量高度）。
+    // 高度必须与内容一致，否则卡内会留大片空底（展开态仍走下面的全量高度）。
     if (this.infoWindowStore.observeCompact()) {
       return this.observeCompactCardHeight()
     }
@@ -7649,7 +7533,6 @@ export struct WindowNativeNode {
           milkyWayBright: Math.max(0, Math.min(6, Math.round(intensity * 3))),
           realisticStarVisibility: response.realisticStarVisibility === true,
           nightMode: this.nightModeStore.nightMode,
-          observeMode: this.infoWindowStore.observeModeEnabled(),
           equatorialMount: this.telescopeStore.equatorialMount,
           telrad: this.telescopeStore.telradOn,
           ccd: this.telescopeStore.ccdOn,
@@ -7684,7 +7567,6 @@ export struct WindowNativeNode {
       this.layerStore.dsoLabels = snapshot.dsoLabels
       this.skyCultureCtl().setSkyCultureVisualSetting('constellationArt3d', snapshot.constellationArt3d ? 1 : 0)
       this.nightModeStore.applyNightMode(snapshot.nightMode, true)
-      this.infoWindowStore.setDetailDisplayMode(snapshot.observeMode ? 'observe' : 'planetarium')
       this.telescopeStore.equatorialMount = snapshot.equatorialMount
       this.commandPort().requestInteractive('setActionChecked',
         'actionSwitch_Equatorial_Mount|' + (snapshot.equatorialMount ? '1' : '0'), (): void => {
@@ -7733,7 +7615,6 @@ export struct WindowNativeNode {
       'night_mode': this.nightModeStore.nightMode,
       'equatorial_mount': this.telescopeStore.equatorialMount,
       'flip_horizontal': this.polarScopeStore.polarScopeHorizontalFlip,
-      'observe_mode': this.infoWindowStore.observeModeEnabled(),
       'red_light': this.redLightOn
     }
   }
@@ -7795,11 +7676,6 @@ export struct WindowNativeNode {
       // 引擎那一位是**全局**镜像，应用内唯一真值就是极轴镜那一份（由会话 flags.flipHorz 回读），
       // 故复用其写入入口：含乐观写与失败回滚，快捷面板与极轴镜叠层天然同步（见计划 §13.6）。
       this.polarScopeCtl().setPolarScopeHorizontalFlip(value)
-      return
-    }
-    if (id === 'observe_mode') {
-      // 只切详情卡的**呈现轴**：不调 setInformationSetting、不刷新选中详情（数据本来就在 store 里）。
-      this.applyObserveMode(value)
       return
     }
     // 其余图层类：走公开入口 applyLayerSwitch（与图层面板同一路径，附带「已显示/已隐藏」提示）。
@@ -7967,29 +7843,29 @@ export struct WindowNativeNode {
   // 拉取当前选中天体的信息并刷新详情面板。
   // 加防重入：避免自动刷新(1Hz)与手动“刷新”按钮重叠，导致 consume-on-read 结果被互相冲掉。
   // callNativeWhenReady 放弃轮询时不会回调，所以配 detailRefreshGuard 兜底复位，防止永久卡死。
-  // detailRefreshing / detailRefreshGuard 的所有权随 移交 capability/DetailConnectorController.ets。
+  // detailRefreshing / detailRefreshGuard 的所有权在 capability/DetailRefreshController.ets。
   private refreshSelectedObject(): void {
-    if (this.detailConnectorCtl().isDetailRefreshing()) { return }
+    if (this.detailRefreshCtl().isDetailRefreshing()) { return }
     const expectedName = this.objectDetailStore.selectedName
     const selectionSerial = this.skySelectionRequestSerial
-    this.detailConnectorCtl().beginDetailRefresh()
+    this.detailRefreshCtl().beginDetailRefresh()
     const detailsNeeded = !this.objectDetailStore.selectedDetailLoaded && (this.fullInspectorRequested || useTabletObjectInspector())
     if (detailsNeeded && this.objectDetailStore.selectedDetailRequestPending) {
-      this.detailConnectorCtl().endDetailRefresh()
+      this.detailRefreshCtl().endDetailRefresh()
       return
     }
     const details = detailsNeeded ? 'details' : ''
     if (details === 'details') { this.objectDetailStore.selectedDetailRequestPending = true }
     this.callInteractive('getSelectedObjectInfo', details, (r) => {
       if (details === 'details') { this.objectDetailStore.selectedDetailRequestPending = false }
-      this.detailConnectorCtl().endDetailRefresh()
+      this.detailRefreshCtl().endDetailRefresh()
       if (selectionSerial !== this.skySelectionRequestSerial || expectedName !== this.objectDetailStore.selectedName) {
         return
       }
       this.applySelectedObject(r, true)
     }, () => {
       if (details === 'details') { this.objectDetailStore.selectedDetailRequestPending = false }
-      this.detailConnectorCtl().endDetailRefresh()
+      this.detailRefreshCtl().endDetailRefresh()
     })
   }
 
@@ -8014,15 +7890,15 @@ export struct WindowNativeNode {
     // 180ms 周期的 100ms）时这次补拉会被挡掉，星等又退回 550ms 之后。直接发起并重置守卫即可。
     const expectedName = this.objectDetailStore.selectedName
     const selectionSerial = this.skySelectionRequestSerial
-    this.detailConnectorCtl().beginDetailRefresh()
+    this.detailRefreshCtl().beginDetailRefresh()
     this.callInteractive('getSelectedObjectInfo', '', (r) => {
-      this.detailConnectorCtl().endDetailRefresh()
+      this.detailRefreshCtl().endDetailRefresh()
       if (selectionSerial !== this.skySelectionRequestSerial || expectedName !== this.objectDetailStore.selectedName) {
         return
       }
       this.applySelectedObject(r, true)
     }, () => {
-      this.detailConnectorCtl().endDetailRefresh()
+      this.detailRefreshCtl().endDetailRefresh()
     })
   }
 
@@ -8240,8 +8116,9 @@ export struct WindowNativeNode {
     return best
   }
 
-  // UI layout changes only refresh the connector. The selected object owns its
-  // current sky position; opening a panel must never move the sky behind it.
+  // UI layout changes only resync the detail-card form (big card vs time-panel
+  // light card). The selected object owns its current sky position; opening a
+  // panel must never move the sky behind it.
   private scheduleSelectedObjectForUiChange(delay: number = 360): void {
     if (this.objectDetailStore.selectedUiLayoutTimer !== 0) {
       clearTimeout(this.objectDetailStore.selectedUiLayoutTimer)
@@ -8253,7 +8130,7 @@ export struct WindowNativeNode {
     this.objectDetailStore.selectedUiLayoutTimer = setTimeout(() => {
       this.objectDetailStore.selectedUiLayoutTimer = 0
       if (this.objectDetailStore.selectedStatus === 'Selected') {
-        this.detailConnectorCtl().refreshObjectDetailConnector()
+        this.syncDetailCardForPanel()
       }
     }, delay) as number
   }
@@ -8467,22 +8344,23 @@ export struct WindowNativeNode {
       this.objectDetailStore.selectedPhase = showObservedInfo && typeof result.phase === 'number' ? (result.phase as number).toFixed(0) + '%' : ''
       this.objectDetailStore.selectedElongation = showObservedInfo && typeof result.elongation === 'number' ? (result.elongation as number).toFixed(1) + '°' : ''
       this.objectDetailStore.applyCustomInformationMask(this.infoWindowStore.informationMode, (key: string): boolean => this.infoWindowStore.informationMaskHas(key))
-      // 选中成功后弹出独立浮动详情窗口（新目标默认收起，不打扰当前菜单；同一目标刷新时保留展开态）
+      // 选中成功后弹出独立浮动详情卡（新目标默认极简大卡 / 时间面板下为轻量卡；同一目标刷新时保留展开态）
       if (targetChanged) {
         this.dismissedObjectName = ''
-        this.objectDetailConnectorLength = 0
         this.objectDetailStore.selectedConstellationCultureDescriptionExpanded = false
         // 换了目标就回到极简形态：观测模式下的「展开」只对当前这颗天体有效。
         this.infoWindowStore.resetObserveExpand()
       }
+      // 时间面板打开时卡片只能是轻量卡，不允许再次点选把大卡顶出来。
+      const timeLight = this.isTimePanelActive()
       // 再次点选同一目标：
-      // - 若已关闭：恢复为一阶段轻浮标；
-      // - 若正处于一阶段轻浮标：平滑展开为二阶段完整详情卡。
+      // - 若已关闭：恢复为极简大卡（时间面板打开时为轻量卡）；
+      // - 若正处于轻量卡：不展开，避免与时间面板叠层。
       const expandFromPillOnRetap = userReselect && !targetChanged && this.infoWindowStore.infoWinVisible
-        && !this.infoWindowStore.infoWinExpanded
+        && !this.infoWindowStore.infoWinExpanded && !timeLight
       if (reopenDismissedDetail) {
         this.dismissedObjectName = ''
-        this.infoWindowStore.infoWinExpanded = false
+        this.infoWindowStore.infoWinExpanded = !timeLight
         this.fullInspectorRequested = true
       } else if (expandFromPillOnRetap) {
         this.infoWindowStore.infoWinExpanded = true
@@ -8495,13 +8373,11 @@ export struct WindowNativeNode {
         this.infoWindowStore.infoWinVisible = true
       }
       if (isNewSelection) {
-        // 一阶段默认以轻量悬浮胶囊出现，保留 95% 纯净星空；轻点胶囊或再点同一星体即展开完整大卡。
-        this.infoWindowStore.infoWinExpanded = false
+        // 普通界面固定显示观测模式的极简大卡；只有时间面板打开时才退化为轻量卡。
+        this.infoWindowStore.infoWinExpanded = !timeLight
         this.fullInspectorRequested = true
         this.objectMediaStore.objectInspectorMoreOpen = false
         this.objectDetailStore.bottomCardIndex = 2
-        this.detailConnectorCtl().markObjectCardPlacementPending()
-        this.detailConnectorCtl().clearObjectDetailConnector()
         // The lightweight tap/search response deliberately has no detailFields.
         // Never leave the previous target's structured data visible while loading.
         this.objectDetailStore.selectedDetailFields = []
@@ -8510,8 +8386,8 @@ export struct WindowNativeNode {
         this.objectDetailStore.selectedSatellitePasses = []
         this.objectDetailStore.selectedSatellitePassesLoaded = false
         this.objectDetailStore.selectedSatellitePassesRequested = false
-        // 不在一阶段胶囊点选时立即触发 48 小时 SGP4 过境预测（会阻塞渲染线程 100ms+ 拖慢卫星轨道展开）；
-        // 仅在展开二阶段大详情卡或主动刷新过境列表时按需加载。
+        // 点选时不立即触发 48 小时 SGP4 过境预测（会阻塞渲染线程 100ms+ 拖慢卫星轨道展开）；
+        // 仅在用户打开资料页或主动刷新过境列表时按需加载。
         // Sensor tracking owns the camera. A gyro-mode search selects the
         // target and opens its card, but never starts a safe-area fly-to.
         if (!this.gyroStore.gyroscopeEnabled && !this.sessionToolStore.isObserverPlanetSelection(incomingName)) {
@@ -8527,7 +8403,7 @@ export struct WindowNativeNode {
       if (isNewSelection) {
         AudioEngine.getInstance().chimeForSelection(result)
       }
-      this.detailConnectorCtl().startDetailAutoRefresh()
+      this.detailRefreshCtl().startDetailAutoRefresh()
       if (isNewSelection && !this.objectDetailStore.selectedDetailLoaded) {
         this.requestSelectedDetails(this.objectDetailStore.selectedName)
       }
@@ -8637,7 +8513,6 @@ export struct WindowNativeNode {
       this.objectDetailStore.selectedUiLayoutTimer = 0
     }
     this.infoWindowStore.infoWinVisible = false
-    this.detailConnectorCtl().stopObjectDetailConnectorRefresh()
     this.infoWindowStore.infoWinExpanded = false
     this.objectMediaStore.objectInspectorMoreOpen = false
     this.dismissedObjectName = this.objectDetailStore.selectedName
@@ -8648,9 +8523,9 @@ export struct WindowNativeNode {
     this.skyTouchFeedback = false
     this.skyDragging = false
     if (dismissFromPill) {
-      // 从轻浮标点 ✕ 时一并清除当前选中与准星，避免残留空准星。
+      // 从时间面板轻量卡点 ✕ 时一并清除当前选中与准星，避免残留空准星。
       const requestSerial = ++this.skySelectionRequestSerial
-      this.detailConnectorCtl().stop()
+      this.detailRefreshCtl().stop()
       this.applySelectedObject({ ok: true, found: false } as StellariumBridgeResponse)
       this.callInteractive('clearSelection', '', (result) => {
         if (requestSerial !== this.skySelectionRequestSerial) { return }
@@ -8663,15 +8538,14 @@ export struct WindowNativeNode {
 
   private showFullObjectInspector(): void {
     this.infoWindowStore.infoWinVisible = true
-    this.infoWindowStore.infoWinExpanded = true
+    // 时间面板打开时详情卡保持轻量形态；关闭时间面板后自动恢复极简大卡。
+    this.infoWindowStore.infoWinExpanded = !this.isTimePanelActive()
     this.fullInspectorRequested = true
     this.objectMediaStore.objectInspectorMoreOpen = false
     this.objectDetailStore.bottomCardIndex = 2
-    this.detailConnectorCtl().markObjectCardPlacementPending()
     this.dismissedObjectName = ''
     this.resetPanelIdle()
     this.refreshSelectedObject()
-    this.detailConnectorCtl().startObjectDetailConnectorRefresh()
     this.scheduleSelectedObjectForUiChange(320)
   }
 
@@ -8749,63 +8623,6 @@ export struct WindowNativeNode {
       this.flashHint(I18n.t('i0080'))
     }
     this.obsListStore.persistObservingList()
-  }
-
-// ----- 详情连接线 -----
-
-  private objectDetailConnectorObstacles(): SkyUiObstacle[] {
-    const obstacles: SkyUiObstacle[] = []
-    const layoutObstacles = this.selectedObjectUiObstacles()
-    for (let index = 0; index < layoutObstacles.length; index++) {
-      const obstacle = layoutObstacles[index]
-      // The detail card is the start of the connector, not an obstacle to
-      // route around. The panel and Dock remain real visual boundaries.
-      if (obstacle.label !== 'object-card' && obstacle.label !== 'object-inspector' &&
-        obstacle.label !== 'summary' && obstacle.label !== 'object-peek') {
-        obstacles.push(obstacle)
-      }
-    }
-    if (this.overlayStore.viewCoordinatesVisible) {
-      obstacles.push({
-        label: 'view-coordinates', left: this.viewCoordinateOverlayLeft() - 8,
-        top: this.viewCoordinateOverlayTop() - 8,
-        right: this.viewCoordinateOverlayLeft() + this.viewCoordinateOverlayWidth() + 8,
-        bottom: this.viewCoordinateOverlayTop() + 100
-      })
-    }
-    if (this.polarScopeStore.polarScopeVisible) {
-      const headerTop = this.polarScopeTopInset()
-      const left = (this.skyWidth - this.polarScopeControlWidth()) / 2
-      const right = left + this.polarScopeControlWidth()
-      obstacles.push({ label: 'polar-scope-header', left: left, top: headerTop,
-        right: right, bottom: headerTop + 60 })
-      obstacles.push({ label: 'polar-scope-footer', left: left,
-        top: this.skyHeight - this.polarScopeFooterHeight() - 12, right: right,
-        bottom: this.skyHeight - 12 })
-    }
-    if (this.gyroStore.gyroscopeEnabled && this.gyroStore.gyroCalibPanelOpen) {
-      const calibrationLeft = this.isExpandedLayout ? this.EDGE_MARGIN + 64 : 16
-      const calibrationTop = this.isExpandedLayout ? railTop(this.EDGE_MARGIN) + 120 : 80
-      obstacles.push({ label: 'gyro-calibration', left: calibrationLeft - 8, top: calibrationTop - 8,
-        right: calibrationLeft + (this.isExpandedLayout ? 320 : Math.min(360, this.skyWidth - 32)) + 8,
-        bottom: calibrationTop + 270 })
-    }
-    if (!this.isExpandedLayout && this.isCompactTopQuickPoint(this.compactTopQuickX(), compactTopQuickY())) {
-      const quickX = this.compactTopQuickX()
-      const quickY = compactTopQuickY()
-      obstacles.push({ label: 'compact-quick', left: quickX - 8, top: quickY - 8,
-        right: quickX + 52, bottom: quickY + 106 })
-    }
-    return obstacles
-  }
-
-  private setObjectDetailConnector(enabled: boolean, syncNative: boolean = true): void {
-    this.overlayStore.objectDetailConnectorVisible = enabled
-    this.detailConnectorCtl().refreshObjectDetailConnector()
-    this.saveAppSettings()
-    if (syncNative) {
-      this.callInteractive('setObjectDetailConnector', enabled ? '1' : '0', () => {})
-    }
   }
 
 // ----- 搜索 -----
@@ -10363,7 +10180,6 @@ export struct WindowNativeNode {
               HoverObservatoryShell({
                 objectDetailStore: this.objectDetailStore,
                 objectMediaStore: this.objectMediaStore,
-                overlayStore: this.overlayStore,
                 observationTimeText: this.timeStore.observationTimeText,
                 currentFovText: this.currentFovText,
                 skyWidth: this.skyWidth,
@@ -10384,17 +10200,13 @@ export struct WindowNativeNode {
                 dockItemHeight: this.compactDockItemHeight(),
                 infoWinVisible: this.infoWindowStore.infoWinVisible,
                 infoWinExpanded: this.infoWindowStore.infoWinExpanded,
-                pillVisible: this.selectionPillVisible(),
-                pillWidth: this.selectionPillWidth(),
-                pillHeight: this.selectionPillHeight(),
-                pillX: this.selectionPillX(),
-                pillY: this.selectionPillY(),
+                detailTimeLight: this.isTimePanelActive(),
                 bottomCardIndex: this.objectDetailStore.bottomCardIndex,
                 liveInfoVisible: this.infoWindowStore.selectedLiveInfoVisible(),
                 contentOpacity: this.objectDetailContentOpacity,
                 contentTranslateX: this.objectDetailContentTranslateX,
-                cardWidth: this.bottomCardWidth(),
-                cardHeight: this.bottomCardHeight(),
+                cardWidth: this.detailCardWidth(),
+                cardHeight: this.detailCardHeight(),
                 viewLock: this.viewSettingsStore.viewLock,
                 speechStatus: this.guideStore.speechStatus,
                 inObservingList: this.obsListStore.observingList.includes(this.objectDetailStore.selectedName),
@@ -10414,18 +10226,6 @@ export struct WindowNativeNode {
                 satelliteVisible: this.objectDetailStore.selectedObjectIsArtificialSatellite(),
                 tleEpoch: this.objectDetailStore.selectedSatelliteTleEpoch(),
                 cultureVisible: this.objectDetailStore.selectedObjectIsConstellation(),
-                connectorVisible: this.overlayStore.objectDetailConnectorVisible && !this.infoWindowStore.observeModeEnabled(),
-                connectorLength: this.objectDetailConnectorLength,
-                connectorX: this.objectDetailConnectorX,
-                connectorY: this.objectDetailConnectorY,
-                connectorAngle: this.objectDetailConnectorAngle,
-                connectorAnimateGeometry: this.objectDetailConnectorAnimateGeometry,
-                connectorTargetOnScreen: this.objectDetailConnectorTargetOnScreen,
-                connectorTargetX: this.objectDetailConnectorTargetX,
-                connectorTargetY: this.objectDetailConnectorTargetY,
-                connectorEndX: this.objectDetailConnectorEndX,
-                connectorEndY: this.objectDetailConnectorEndY,
-                markerSize: this.objectDetailMarkerSize(),
                 detailX: this.detailCardX(),
                 detailY: this.detailCardY(),
                 detailWidth: this.detailCardWidth(),
@@ -10441,7 +10241,6 @@ export struct WindowNativeNode {
                 nameOf: (name: string) => zhNameOf(name),
                 typeOf: (type: string) => zhType(type),
                 onDragTouch: (event: TouchEvent) => { this.handleObjectInspectorDragTouch(event) },
-                onExpandDetailPill: () => { this.expandDetailPill() },
                 onDismiss: () => { this.dismissObjectInspector() },
                 onSelectTab: (index: number) => { this.selectObjectDetailTab(index) },
                 onLoadPasses: () => { this.objectDetailStore.loadSelectedSatellitePasses() },
@@ -10476,7 +10275,6 @@ export struct WindowNativeNode {
               ExpandedShell({
                 objectDetailStore: this.objectDetailStore,
                 objectMediaStore: this.objectMediaStore,
-                overlayStore: this.overlayStore,
                 gyroStore: this.gyroStore,
                 expandedUiAllowed: this.expandedUiAllowed(),
                 panelVisible: this.panelVisible,
@@ -10503,17 +10301,13 @@ export struct WindowNativeNode {
                 gyroPanelTop: railTop(this.EDGE_MARGIN) + 120,
                 infoWinVisible: this.infoWindowStore.infoWinVisible,
                 infoWinExpanded: this.infoWindowStore.infoWinExpanded,
-                pillVisible: this.selectionPillVisible(),
-                pillWidth: this.selectionPillWidth(),
-                pillHeight: this.selectionPillHeight(),
-                pillX: this.selectionPillX(),
-                pillY: this.selectionPillY(),
+                detailTimeLight: this.isTimePanelActive(),
                 bottomCardIndex: this.objectDetailStore.bottomCardIndex,
                 liveInfoVisible: this.infoWindowStore.selectedLiveInfoVisible(),
                 contentOpacity: this.objectDetailContentOpacity,
                 contentTranslateX: this.objectDetailContentTranslateX,
-                cardWidth: this.bottomCardWidth(),
-                cardHeight: this.bottomCardHeight(),
+                cardWidth: this.detailCardWidth(),
+                cardHeight: this.detailCardHeight(),
                 viewLock: this.viewSettingsStore.viewLock,
                 speechStatus: this.guideStore.speechStatus,
                 inObservingList: this.obsListStore.observingList.includes(this.objectDetailStore.selectedName),
@@ -10533,18 +10327,6 @@ export struct WindowNativeNode {
                 satelliteVisible: this.objectDetailStore.selectedObjectIsArtificialSatellite(),
                 tleEpoch: this.objectDetailStore.selectedSatelliteTleEpoch(),
                 cultureVisible: this.objectDetailStore.selectedObjectIsConstellation(),
-                connectorVisible: this.overlayStore.objectDetailConnectorVisible && !this.infoWindowStore.observeModeEnabled(),
-                connectorLength: this.objectDetailConnectorLength,
-                connectorX: this.objectDetailConnectorX,
-                connectorY: this.objectDetailConnectorY,
-                connectorAngle: this.objectDetailConnectorAngle,
-                connectorAnimateGeometry: this.objectDetailConnectorAnimateGeometry,
-                connectorTargetOnScreen: this.objectDetailConnectorTargetOnScreen,
-                connectorTargetX: this.objectDetailConnectorTargetX,
-                connectorTargetY: this.objectDetailConnectorTargetY,
-                connectorEndX: this.objectDetailConnectorEndX,
-                connectorEndY: this.objectDetailConnectorEndY,
-                markerSize: this.objectDetailMarkerSize(),
                 detailX: this.detailCardX(),
                 detailY: this.detailCardY(),
                 detailWidth: this.detailCardWidth(),
@@ -10572,7 +10354,6 @@ export struct WindowNativeNode {
                 nameOf: (name: string) => zhNameOf(name),
                 typeOf: (type: string) => zhType(type),
                 onDragTouch: (event: TouchEvent) => { this.handleObjectInspectorDragTouch(event) },
-                onExpandDetailPill: () => { this.expandDetailPill() },
                 onDismiss: () => { this.dismissObjectInspector() },
                 onSelectTab: (index: number) => { this.selectObjectDetailTab(index) },
                 onLoadPasses: () => { this.objectDetailStore.loadSelectedSatellitePasses() },
@@ -10614,7 +10395,6 @@ export struct WindowNativeNode {
               CompactShell({
                 objectDetailStore: this.objectDetailStore,
                 objectMediaStore: this.objectMediaStore,
-                overlayStore: this.overlayStore,
                 gyroStore: this.gyroStore,
                 skyHeight: this.skyHeight,
                 panelVisible: this.panelVisible,
@@ -10639,17 +10419,13 @@ export struct WindowNativeNode {
                 quickY: compactTopQuickY(),
                 infoWinVisible: this.infoWindowStore.infoWinVisible,
                 infoWinExpanded: this.infoWindowStore.infoWinExpanded,
-                pillVisible: this.selectionPillVisible(),
-                pillWidth: this.selectionPillWidth(),
-                pillHeight: this.selectionPillHeight(),
-                pillX: this.selectionPillX(),
-                pillY: this.selectionPillY(),
+                detailTimeLight: this.isTimePanelActive(),
                 bottomCardIndex: this.objectDetailStore.bottomCardIndex,
                 liveInfoVisible: this.infoWindowStore.selectedLiveInfoVisible(),
                 contentOpacity: this.objectDetailContentOpacity,
                 contentTranslateX: this.objectDetailContentTranslateX,
-                cardWidth: this.bottomCardWidth(),
-                cardHeight: this.bottomCardHeight(),
+                cardWidth: this.detailCardWidth(),
+                cardHeight: this.detailCardHeight(),
                 viewLock: this.viewSettingsStore.viewLock,
                 speechStatus: this.guideStore.speechStatus,
                 inObservingList: this.obsListStore.observingList.includes(this.objectDetailStore.selectedName),
@@ -10669,18 +10445,6 @@ export struct WindowNativeNode {
                 satelliteVisible: this.objectDetailStore.selectedObjectIsArtificialSatellite(),
                 tleEpoch: this.objectDetailStore.selectedSatelliteTleEpoch(),
                 cultureVisible: this.objectDetailStore.selectedObjectIsConstellation(),
-                connectorVisible: this.overlayStore.objectDetailConnectorVisible && !this.infoWindowStore.observeModeEnabled(),
-                connectorLength: this.objectDetailConnectorLength,
-                connectorX: this.objectDetailConnectorX,
-                connectorY: this.objectDetailConnectorY,
-                connectorAngle: this.objectDetailConnectorAngle,
-                connectorAnimateGeometry: this.objectDetailConnectorAnimateGeometry,
-                connectorTargetOnScreen: this.objectDetailConnectorTargetOnScreen,
-                connectorTargetX: this.objectDetailConnectorTargetX,
-                connectorTargetY: this.objectDetailConnectorTargetY,
-                connectorEndX: this.objectDetailConnectorEndX,
-                connectorEndY: this.objectDetailConnectorEndY,
-                markerSize: this.objectDetailMarkerSize(),
                 detailX: this.detailCardX(),
                 detailY: this.detailCardY(),
                 detailWidth: this.detailCardWidth(),
@@ -10721,7 +10485,6 @@ export struct WindowNativeNode {
                 nameOf: (name: string) => zhNameOf(name),
                 typeOf: (type: string) => zhType(type),
                 onDragTouch: (event: TouchEvent) => { this.handleObjectInspectorDragTouch(event) },
-                onExpandDetailPill: () => { this.expandDetailPill() },
                 onDismiss: () => { this.dismissObjectInspector() },
                 onSelectTab: (index: number) => { this.selectObjectDetailTab(index) },
                 onLoadPasses: () => { this.objectDetailStore.loadSelectedSatellitePasses() },
@@ -11989,8 +11752,6 @@ export struct WindowNativeNode {
         isExpandedLayout: this.isExpandedLayout,
         informationMode: this.infoWindowStore.informationMode,
         informationSettingPending: this.infoWindowStore.informationSettingPending,
-        observeMode: this.infoWindowStore.observeModeEnabled(),
-        onToggleObserveMode: (enabled: boolean) => { this.applyObserveMode(enabled) },
         currentProjection: this.currentProjection,
         configDitheringMode: this.viewSettingsStore.configDitheringMode,
         timeSettingsPending: this.timeSettingsPending,
@@ -12022,7 +11783,6 @@ export struct WindowNativeNode {
         selectSettingsChoice: (group: string, value: string) => { this.selectSettingsChoice(group, value) },
         setStartupTimeSetting: (key: string, value: string) => { this.timeCtl().setStartupTimeSetting(key, value) },
         setInformationField: (key: string, enabled: boolean) => { this.infoWindowStore.setInformationField(key, enabled) },
-        setObjectDetailConnector: (enabled: boolean) => { this.setObjectDetailConnector(enabled) },
         toggleGyroscope: (enabled: boolean) => { this.gyroCtl().toggleGyroscope(enabled) },
         confirmPrivacyRevocation: () => { this.confirmPrivacyRevocation() },
         requestNotificationAccess: () => { this.notificationCtl().requestAccess() },

@@ -98,8 +98,6 @@ export struct SettingsPanel {
   @Prop isExpandedLayout: boolean
   @Prop informationMode: string
   @Prop informationSettingPending: boolean
-  // 呈现轴（与上面的信息级别正交）：详情卡默认形态开关，见 OBJECT-DETAIL-OBSERVE-MODE.md §6。
-  @Prop observeMode: boolean
   @Prop currentProjection: string
   @Prop configDitheringMode: string
   @Prop timeSettingsPending: boolean
@@ -135,8 +133,6 @@ export struct SettingsPanel {
   selectSettingsChoice: (group: string, value: string) => void = () => {}
   setStartupTimeSetting: (key: string, value: string) => void = () => {}
   setInformationField: (key: string, enabled: boolean) => void = () => {}
-  onToggleObserveMode: (enabled: boolean) => void = () => {}
-  setObjectDetailConnector: (enabled: boolean) => void = () => {}
   toggleGyroscope: (enabled: boolean) => void = () => {}
   confirmPrivacyRevocation: () => void = () => {}
   requestNotificationAccess: () => void = () => {}
@@ -606,40 +602,6 @@ export struct SettingsPanel {
               InformationModeButton({ labelKey: 'i0250', active: this.informationMode === 'none', canPick: !this.informationSettingPending, onPick: () => { this.selectSettingsChoice('information', 'none') } })
               InformationModeButton({ labelKey: 'information_custom_mode', active: this.informationMode === 'custom', canPick: !this.informationSettingPending, onPick: () => { this.selectSettingsChoice('information', 'custom') } })
             }.width('100%').padding({ left: 4, right: 4 }).margin({ bottom: 6 })
-            Row({ space: 6 }) {
-              Row({ space: 2 }) {
-                Text(I18n.t('detail_observe_toggle')).fontSize(13).fontColor(this.c.text)
-                InfoTipButton({
-                  title: I18n.t('detail_observe_toggle'),
-                  tip: I18n.t('detail_observe_hint')
-                })
-              }.layoutWeight(1).alignItems(VerticalAlign.Center)
-              Toggle({ type: ToggleType.Switch, isOn: this.observeMode })
-                .width(44).height(26).selectedColor(this.c.accent)
-                .clickEffect({ level: ClickEffectLevel.LIGHT })
-                .onChange((value: boolean) => { this.onToggleObserveMode(value) })
-            }.width('100%').constraintSize({ minHeight: 42 }).padding({ left: 12, right: 10 })
-              .backgroundColor(this.observeMode ? this.c.soft : this.c.bg)
-              .border({ width: 1, color: this.observeMode ? this.c.soft : this.c.dividerSoft })
-              .borderRadius(UI_RADIUS_CONTROL).margin({ bottom: 6 })
-              .animation({ duration: UI_OPTION_ANIMATION_MS, curve: Curve.EaseOut })
-            Row({ space: 6 }) {
-              Row({ space: 2 }) {
-                Text('详情卡指向线').fontSize(13).fontColor(this.c.text)
-                InfoTipButton({
-                  title: '详情卡指向线',
-                  tip: '在可见天体与详情卡之间显示细连接线，方便在密集星区一眼确认选中目标。'
-                })
-              }.layoutWeight(1).alignItems(VerticalAlign.Center)
-              Toggle({ type: ToggleType.Switch, isOn: this.overlayStore.objectDetailConnectorVisible })
-                .width(44).height(26).selectedColor(this.c.accent)
-                .clickEffect({ level: ClickEffectLevel.LIGHT })
-                .onChange((value: boolean) => { this.setObjectDetailConnector(value) })
-            }.width('100%').constraintSize({ minHeight: 42 }).padding({ left: 12, right: 10 })
-              .backgroundColor(this.overlayStore.objectDetailConnectorVisible ? this.c.soft : this.c.bg)
-              .border({ width: 1, color: this.overlayStore.objectDetailConnectorVisible ? this.c.soft : this.c.dividerSoft })
-              .borderRadius(UI_RADIUS_CONTROL).margin({ bottom: 6 })
-              .animation({ duration: UI_OPTION_ANIMATION_MS, curve: Curve.EaseOut })
             Row({ space: 2 }) {
               Text('自定义信息字段').fontSize(12).fontColor(this.c.sub)
               InfoTipButton({

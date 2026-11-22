@@ -1,8 +1,8 @@
 // 行为控制器共享的宿主 hook 契约。
 //
 // 控制器经此回调宿主，**不 import 宿主**；本文件是纯接口，不 import NAPI / UI / 宿主。
-// 后续控制器接口可 `extends BehaviorHostHooks`，例如 capability/DetailConnectorController.ets
-// 的 `DetailConnectorHostHooks`。
+// 后续控制器接口可 `extends BehaviorHostHooks`，例如 capability/DetailRefreshController.ets
+// 的 `DetailRefreshHostHooks`。
 export interface BehaviorHostHooks {
   // 宿主 refreshState()：生命周期收口。
   refreshState(): void

@@ -4,13 +4,10 @@ import { BottomDock } from './BottomDock'
 import { CompactTopQuickControls } from './CompactTopQuickControls'
 import { DockClockLayer, DockFovLayer, SkyZoomLayer } from './PanelChromeExtras'
 import { GyroCalibPanel } from '../sensors/GyroCalibPanel'
-import { ObjectDetailConnectorLayer } from '../overlay/ObjectDetailConnectorLayer'
-import { ObjectSelectionPill } from '../object/ObjectSelectionPill'
 import { UnifiedObjectDetailCard } from '../object/UnifiedObjectDetailCard'
 import { GyroStore } from '../../state/GyroStore'
 import { ObjectDetailStore } from '../../state/ObjectDetailStore'
 import { ObjectMediaStore } from '../../state/ObjectMediaStore'
-import { OverlayStore } from '../../state/OverlayStore'
 import { DEFAULT_SLOTS, ThemeSlots, slotsFromTheme } from '../../state/StellariumTheme'
 
 // 手机 / 折叠半折的紧凑壳。
@@ -28,7 +25,6 @@ import { DEFAULT_SLOTS, ThemeSlots, slotsFromTheme } from '../../state/Stellariu
 export struct CompactShell {
   @ObjectLink objectDetailStore: ObjectDetailStore
   @ObjectLink objectMediaStore: ObjectMediaStore
-  @ObjectLink overlayStore: OverlayStore
   @ObjectLink gyroStore: GyroStore
 
   @Prop skyHeight: number
@@ -60,11 +56,8 @@ export struct CompactShell {
   @Prop quickY: number
   @Prop infoWinVisible: boolean
   @Prop infoWinExpanded: boolean
-  @Prop pillVisible: boolean
-  @Prop pillWidth: number
-  @Prop pillHeight: number
-  @Prop pillX: number
-  @Prop pillY: number
+  // 时间面板打开：详情卡切换为轻量卡（无详情按钮），几何随宿主 detailX/Y/Width/Height 形变。
+  @Prop detailTimeLight: boolean
   @Prop bottomCardIndex: number
   @Prop liveInfoVisible: boolean
   @Prop contentOpacity: number
@@ -90,18 +83,6 @@ export struct CompactShell {
   @Prop satelliteVisible: boolean
   @Prop tleEpoch: string
   @Prop cultureVisible: boolean
-  @Prop connectorVisible: boolean
-  @Prop connectorLength: number
-  @Prop connectorX: number
-  @Prop connectorY: number
-  @Prop connectorAngle: number
-  @Prop connectorAnimateGeometry: boolean
-  @Prop connectorTargetOnScreen: boolean
-  @Prop connectorTargetX: number
-  @Prop connectorTargetY: number
-  @Prop connectorEndX: number
-  @Prop connectorEndY: number
-  @Prop markerSize: number
   @Prop detailX: number
   @Prop detailY: number
   @Prop detailWidth: number
@@ -128,7 +109,6 @@ export struct CompactShell {
   nameOf: (name: string) => string = () => ''
   typeOf: (type: string) => string = () => ''
   onDragTouch: (event: TouchEvent) => void = () => {}
-  onExpandDetailPill: () => void = () => {}
   onDismiss: () => void = () => {}
   onSelectTab: (index: number) => void = () => {}
   onLoadPasses: () => void = () => {}
@@ -260,47 +240,10 @@ export struct CompactShell {
             TransitionEffect.OPACITY.animation({ duration: 160, curve: Curve.EaseIn })
           ))
       }
-      if (this.pillVisible) {
-        Stack() {
-          ObjectSelectionPill({
-            store: this.objectDetailStore,
-            iconName: this.iconName,
-            pillWidth: this.pillWidth,
-            pillHeight: this.pillHeight,
-            distanceSummaryText: this.distanceSummaryText,
-            nameOf: (name: string) => this.nameOf(name),
-            typeOf: (type: string) => this.typeOf(type),
-            onExpand: () => { this.onExpandDetailPill() },
-            onDismiss: () => { this.onDismiss() }
-          })
-        }
-          .position({ x: this.pillX, y: this.pillY })
-          .width(this.pillWidth)
-          .height(this.pillHeight)
-          .zIndex(48)
-          .hitTestBehavior(HitTestMode.BLOCK_HIERARCHY)
-          .transition(TransitionEffect.asymmetric(
-            TransitionEffect.OPACITY.animation({ duration: 200, curve: Curve.EaseOut })
-              .combine(TransitionEffect.translate({ x: 0, y: -14 }).animation({ duration: 280, curve: curves.springMotion(0.5, 0.86) })),
-            TransitionEffect.OPACITY.animation({ duration: 150, curve: Curve.EaseIn })
-              .combine(TransitionEffect.translate({ x: 0, y: -10 }).animation({ duration: 160, curve: Curve.EaseIn }))
-          ))
-      }
-      if (this.infoWinVisible && this.objectDetailStore.selectedName.length > 0 && this.infoWinExpanded) {
-         ObjectDetailConnectorLayer({
-           visible: this.connectorVisible,
-           beamLength: this.connectorLength,
-           beamX: this.connectorX,
-           beamY: this.connectorY,
-           beamAngle: this.connectorAngle,
-           animateGeometry: this.connectorAnimateGeometry,
-           targetOnScreen: this.connectorTargetOnScreen,
-           targetX: this.connectorTargetX,
-           targetY: this.connectorTargetY,
-           endX: this.connectorEndX,
-           endY: this.connectorEndY,
-            markerSize: this.markerSize
-          })
+      // 详情卡唯一容器：普通界面为极简大卡，时间面板打开时形变为轻量卡。
+      // 位置/尺寸由宿主 detailCardX/Y/Width/Height 按 isTimePanelActive() 切换，这里用
+      // 属性动画做真实几何形变（方案 A），不再分别渲染浮标与大卡。
+      if (this.infoWinVisible && this.objectDetailStore.selectedName.length > 0) {
         Stack() {
           UnifiedObjectDetailCard({
             store: this.objectDetailStore, mediaStore: this.objectMediaStore, scroller: this.scroller,
@@ -311,6 +254,7 @@ export struct CompactShell {
             inObservingList: this.inObservingList,
             iconName: this.iconName, distanceText: this.distanceText,
             detailDisplayMode: this.detailDisplayMode, observeExpanded: this.observeExpanded,
+            timeLight: this.detailTimeLight,
             distanceSummaryText: this.distanceSummaryText,
             imageHeight: this.imageHeight, inlineModelSize: this.inlineModelSize,
             modelReady: this.modelReady, modelRendering: this.modelRendering,
@@ -347,6 +291,7 @@ export struct CompactShell {
           .height(this.detailHeight)
           .zIndex(50)
           .hitTestBehavior(HitTestMode.BLOCK_HIERARCHY)
+          .animation({ duration: 280, curve: curves.springMotion(0.52, 0.9) })
           .transition(TransitionEffect.asymmetric(
             TransitionEffect.OPACITY.animation({ duration: 260, curve: Curve.EaseOut })
               .combine(TransitionEffect.translate({ x: 0, y: 40 }).animation({ duration: 420, curve: curves.springMotion(0.55, 0.85) })),

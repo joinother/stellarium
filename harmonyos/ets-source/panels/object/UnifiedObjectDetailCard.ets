@@ -8,7 +8,8 @@ import { SatellitePass, StationComplexMember } from '../../pages/StellariumTypes
 import { ObjectDetailCardHeader, ObjectDetailCardTabs } from './ObjectDetailCardChrome'
 import { ObjectDetailObserveTab, ObjectDetailCoordinateTab, ObjectDetailDataTab } from './ObjectDetailTabs'
 import { ObjectDetailActionsTab } from './ObjectDetailActionsTab'
-import { Theme } from '@kit.ArkUI'
+import { ObjectSelectionPill } from './ObjectSelectionPill'
+import { curves, Theme } from '@kit.ArkUI'
 import { DEFAULT_SLOTS, ThemeSlots, slotsFromTheme } from '../../state/StellariumTheme'
 
 // 天体详情主卡片的整体外壳：页头 + 页签栏 + 分隔线 + `Scroll` 内四个页组件。
@@ -34,6 +35,8 @@ export struct UnifiedObjectDetailCard {
   @Prop iconName: string
   @Prop detailDisplayMode: string
   @Prop observeExpanded: boolean
+  // 时间面板打开：整张卡形变为轻量卡（仅名称/摘要 + ✕，无展开箭头与详情按钮）。
+  @Prop timeLight: boolean
   @Prop distanceText: string
   @Prop distanceSummaryText: string
   @Prop imageHeight: number
@@ -106,8 +109,7 @@ export struct UnifiedObjectDetailCard {
     }, 0)
   }
 
-  // 观测极简形态：只有页头会渲染（页签栏 + 分隔线 + 滚动区整体不渲染）。
-  // 观测极简形态：页头之后只剩卡片下沿的展开箭头（页签栏 / 实时行 / 滚动区都不渲染）。
+  // 观测极简形态：页头 + 卡片下沿展开箭头，页签栏 / 实时行 / 滚动区整体不渲染。
   private observeCompact(): boolean {
     return this.detailDisplayMode === 'observe' && !this.observeExpanded
   }
@@ -119,7 +121,17 @@ export struct UnifiedObjectDetailCard {
 
   build() {
     Column() {
-      if (this.observeCompact()) {
+      if (this.timeLight) {
+        ObjectSelectionPill({
+          store: this.store,
+          iconName: this.iconName,
+          pillWidth: this.cardWidth,
+          distanceSummaryText: this.distanceSummaryText,
+          nameOf: this.nameOf,
+          typeOf: this.typeOf,
+          onDismiss: () => { this.onDismiss() }
+        })
+      } else if (this.observeCompact()) {
         ObjectDetailCardHeader({
           store: this.store, iconName: this.iconName, liveInfoVisible: this.liveInfoVisible,
           detailDisplayMode: this.detailDisplayMode,
@@ -267,8 +279,9 @@ export struct UnifiedObjectDetailCard {
           .clip(true)
       }
 
-      if (this.observeMode()) {
+      if (!this.timeLight && this.observeMode()) {
         // 展开 / 收起的唯一入口：卡片下沿正中一个箭头 —— 收起态向下（展开全量），展开态向上（收回极简）。
+        // 时间面板打开时的轻量卡不提供该入口（此时应保持小卡让位给面板）。
         // 样式与面板返回按钮完全一致（无底 Button + `ic_back` 17vp 描边箭头 + 按压 opacity 0.62），
         // 只是把同一个左向箭头旋转 90°：−90° = 向下，+90° = 向上。动作作用于「这张卡的整体形态」，
         // 位置固定在下沿最容易被摸到。
@@ -311,8 +324,10 @@ export struct UnifiedObjectDetailCard {
       .backgroundColor(this.c.overlayPanel)
       .backdropBlur(28)
       .border({ width: 0.5, color: this.c.softStrong })
-      .borderRadius(UI_RADIUS_PANEL)
+      .borderRadius(this.timeLight ? (this.cardWidth < 310 ? 20 : 29) : UI_RADIUS_PANEL)
       .clip(true)
       .shadow({ radius: 20, color: this.c.shadowSoft, offsetX: 0, offsetY: 8 })
+      // 真实几何/位置形变（方案 A）：尺寸与圆角随时间面板开合平滑过渡。
+      .animation({ duration: 280, curve: curves.springMotion(0.52, 0.9) })
   }
 }

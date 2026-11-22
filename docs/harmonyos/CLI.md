@@ -135,14 +135,7 @@ CLI 通过 DevEco 自带的 `hdc` 和鸿蒙官方 `aa start --ps` 启动参数�
 
 `searchObject`、`selectAt` 和 `clearSelection` 的 CLI 结果同时同步到 ArkUI 详情卡；因此通过 CLI 选中行星时，会自动打开与应用内点选相同的详情媒体区域，不需要额外注入触摸事件。
 
-对象详情统一使用一张可拖动的完整资料卡。卡片位置由 ArkUI 保存，连接到选中天体的细线可通过信息设置或本地 CLI 控制：
-
-```bash
-node scripts/stellarium-cli.mjs --device <设备ID> --command setObjectDetailConnector --payload 1 --json
-node scripts/stellarium-cli.mjs --device <设备ID> --command getObjectDetailConnector --json
-```
-
-`enabled` 为 `true` 时显示连接线，`false` 时隐藏；该设置不改变星图投影、选中状态或天体位置，也不产生联网行为。
+对象详情统一使用一张可拖动的资料卡：普通界面固定显示观测模式的极简大卡，时间面板打开时形变为轻量卡；连接线功能已移除。
 
 星座被选中后，可读取详情媒体未来切换为本地 3D 模型所需的能力契约：
 
