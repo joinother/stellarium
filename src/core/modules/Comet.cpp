@@ -1085,21 +1085,22 @@ void main(void)
 			// Pure C-infinity Gaussian-envelope coverage (eliminates any circular halo/rim around the head!)
 			highp float sheetMask = 1.0 - exp(-1.65 * gNormSum);
 
-			// Continuous multi-octave Sekanina-Farrell calligraphy-brush bristles in (uAge, vBeta) sheet space:
-			// Forward shear uShear = uAge - 0.20 * vBeta aligns all fragmentation striae in ONE wind-swept direction.
-			// Soft low/mid-frequency aurora bands (no harsh high-frequency scratchy needles) give an authentic
-			// dry-brush mist / aurora-curtain texture where bristles stretch seamlessly out of the main stroke.
-			highp float uShear = uAge - 0.20 * vBeta * float(u_striaeStrength);
-			highp float uWarp  = uShear + (vnoise(vec2(uShear * 6.5 + u_seed * 0.31, vBeta * 0.75)) - 0.5) * 0.018 * vBeta;
-			highp float fMacro = vnoise(vec2(uWarp * 10.5 + u_seed * 0.53, vBeta * 0.26));
-			highp float fMid   = vnoise(vec2(uWarp * 22.0 + u_seed * 1.37, vBeta * 0.44));
-			highp float fFine  = vnoise(vec2(uWarp * 46.0 + u_seed * 2.71, vBeta * 0.72));
-			highp float bristleTuft = 0.42 * fMacro + 0.38 * fMid + 0.20 * fFine;
+			// Organic non-periodic Sekanina-Farrell aurora paintbrush bristles in (uAge, vBeta) sheet space:
+			// Tiny positive shear (+0.025 * vBeta) keeps striae straight-ish & graceful (zero spiral pinwheel bend!),
+			// while mid-to-fine non-periodic vnoise octaves (22 / 44 / 82) generate ~18-22 natural irregular aurora
+			// ribbons spanning the entire arch with ZERO periodic seashell ribs and ZERO giant empty V-notches!
+			highp float uStria = uAge + 0.025 * vBeta * float(u_striaeStrength);
+			highp float uWarp  = uStria + (vnoise(vec2(uStria * 8.0 + u_seed * 0.37, vBeta * 0.55)) - 0.5) * 0.010 * vBeta;
+			highp float bBand1 = vnoise(vec2(uWarp * 22.0 + u_seed * 0.53, vBeta * 0.26));
+			highp float bBand2 = vnoise(vec2(uWarp * 44.0 + u_seed * 1.37, vBeta * 0.44));
+			highp float bBand3 = vnoise(vec2(uWarp * 82.0 + u_seed * 2.71, vBeta * 0.72));
+			highp float bristleBand = clamp(0.46 * bBand1 + 0.36 * bBand2 + 0.18 * bBand3, 0.0, 1.0);
+			highp float fMid = bBand1;
 
-			// Organic low-frequency cloud turbulence warping vBeta so NO dust edge ever reads like a rigid mathematical curve
-			highp float cloudWarp = ((vnoise(vec2(uAge * 4.4 + u_seed * 0.61, vBeta * 2.0)) - 0.5) * 0.064
-			                       + (vnoise(vec2(uAge * 9.5 + u_seed * 1.73, vBeta * 3.6)) - 0.5) * 0.026)
-			                       * smoothstep(0.10, 0.40, uAge);
+			// Subtle organic cloud turbulence warping vBeta so no edge ever reads like a rigid mathematical curve
+			highp float cloudWarp = ((vnoise(vec2(uAge * 4.4 + u_seed * 0.61, vBeta * 2.0)) - 0.5) * 0.048
+			                       + (vnoise(vec2(uAge * 9.5 + u_seed * 1.73, vBeta * 3.6)) - 0.5) * 0.020)
+			                       * smoothstep(0.12, 0.42, uAge);
 			highp float vOrg = clamp(vBeta + cloudWarp, 0.0, 1.0);
 
 			highp float omU = max(0.0, 1.0 - uAge);
@@ -1122,64 +1123,65 @@ void main(void)
 			mediump vec3 smoothColor = mix(headTint, midWarm, float(midBlend));
 			smoothColor = mix(smoothColor, outerWarm, float(outBlend));
 
-			// Striated great sunskirters (McNaught, West) — CALLIGRAPHY DRY-BRUSH / FINSON-PROBSTEIN MODEL:
-			//  1) Starts as ONE cohesive blazing curved brush stroke from the head (uAge < 0.34), then naturally forks
-			//     (uAge 0.28..0.68) as silicate (high-beta) and heavier (low-beta) dust separate into two sweeping
-			//     sub-tails of comparable grand arc radius, bridged by soft translucent intermediate-beta mist.
-			//  2) ZERO separate pasted-on stripe layer and ZERO harsh zebra cuts inside the luminous core:
-			//     On the outer side of the brush spine (vOrg > vUpper), each bristle tuft has its own variable reach
-			//     wFeather(uShear) so long misty aurora plumes stretch continuously out of the stroke itself and
-			//     dissolve softly across BOTH the main arch and the outer right wing!
-			highp float archFadeU    = pow(omU, 0.38) * smoothstep(1.0, 0.78, uAge);
-			highp float forkGrow     = smoothstep(0.28, 0.66, uAge);
-			highp float featherOn    = smoothstep(0.10, 0.34, uAge);
+			// Striated great sunskirters (McNaught, West) — ORGANIC AURORA PAINTBRUSH + TWIN-SUBTAIL FORK:
+			//  1) Rises cleanly from the head as ONE smooth, blazing, silky curved main tail (zero caterpillar ribs!),
+			//     forking naturally on the outer sweep (uAge 0.34..0.72) into upper (0.48) & lower (0.24) sub-tails
+			//     bridged by soft translucent intermediate-beta mist.
+			//  2) Directly upward from the entire crest of the luminous arch, ~18-22 organic irregular aurora bristle
+			//     curtains stretch high into the night sky (vOrg 0.36 -> 0.98) and dissolve softly like dry-brush mist!
+			highp float archFadeU    = pow(omU, 0.36) * smoothstep(1.0, 0.78, uAge);
+			highp float forkGrow     = smoothstep(0.32, 0.70, uAge);
+			highp float striaOn      = smoothstep(0.16, 0.40, uAge);
 
-			// Physical bifurcation: ONE main stroke centered at 0.44 forks smoothly into upper (0.57) & lower (0.27) sub-tails
-			highp float vUpper       = mix(0.44, 0.57, forkGrow);
-			highp float vLower       = mix(0.44, 0.27, forkGrow);
+			// Physical bifurcation from ONE sweeping main arch (v=0.36) into upper (0.48) & lower (0.24) sub-tails
+			highp float vUpper       = mix(0.36, 0.48, forkGrow);
+			highp float vLower       = mix(0.36, 0.24, forkGrow);
 
-			// Variable-reach dry-brush bristle plume (long soft misty aurora wisps grow directly out of the upper crest!)
-			highp float tuftShape    = smoothstep(0.18, 0.88, bristleTuft);
-			highp float wInnerUpper  = mix(0.24, 0.115, forkGrow);
-			highp float wOuterFeather = mix(0.14, mix(0.11, 0.46, pow(tuftShape, 1.30)), featherOn);
+			// Smooth silky glowing arch spine + variable-reach organic aurora bristles soaring upward out of the crest
 			highp float dvUpper      = vOrg - vUpper;
-			highp float wUpperSide   = (dvUpper >= 0.0) ? wOuterFeather : wInnerUpper;
-			highp float outerFade    = smoothstep(1.0, 0.72, vOrg);
-			// Silky subtle brush-hair sheen in the luminous spine; richer misty contrast as bristles splay outward
-			highp float bristleSheen = mix(0.84 + 0.32 * bristleTuft, 0.42 + 1.15 * tuftShape, smoothstep(0.02, 0.26, dvUpper) * featherOn);
-			highp float upperBranch  = mix(1.18, 0.96, forkGrow)
+			highp float wInnerUpper  = mix(0.22, 0.10, forkGrow);
+			highp float tuftShape    = smoothstep(0.16, 0.86, bristleBand);
+			highp float wOuterBristle = mix(0.18, mix(0.18, 0.54, tuftShape), striaOn);
+			highp float wUpperSide   = (dvUpper >= 0.0) ? wOuterBristle : wInnerUpper;
+			highp float outerFade    = smoothstep(1.0, 0.70, vOrg);
+
+			// Keep the bright stem & arch spine silky smooth (0.88..1.14), sharpening smoothly into luminous aurora ribbons ONLY upward!
+			highp float rootMod      = 0.88 + 0.26 * bristleBand;
+			highp float curtainMod   = 0.22 + 1.44 * pow(tuftShape, 1.35);
+			highp float bristleMod   = mix(rootMod, curtainMod, smoothstep(0.04, 0.30, dvUpper) * striaOn);
+			highp float upperBranch  = mix(1.22, 0.94, forkGrow)
 			                         * exp(-pow(dvUpper / max(wUpperSide, 0.06), 2.0))
-			                         * bristleSheen * outerFade * archFadeU;
+			                         * mix(1.0, bristleMod, striaOn) * outerFade * archFadeU;
 
-			// Soft misty aurora veil extending delicately above the entire arch & right wing (soft dry-brush mist halo)
-			highp float mistyPlume   = 0.36 * featherOn * smoothstep(vUpper - 0.05, vUpper + 0.12, vOrg)
-			                         * pow(max(0.0, 1.0 - vOrg), 1.15) * outerFade
-			                         * (0.35 + 1.25 * pow(tuftShape, 1.45)) * archFadeU;
+			// Soft dreamy aurora mist glow bathing the soaring curtains (keeps striations silky & atmospheric)
+			highp float auroraMist   = 0.28 * striaOn * smoothstep(vUpper - 0.05, vUpper + 0.10, vOrg)
+			                         * pow(max(0.0, 1.0 - vOrg), 1.05) * outerFade
+			                         * (0.42 + 1.16 * pow(tuftShape, 1.25)) * archFadeU;
 
-			// Soft patchy mist bridging the fork between the upper and lower sub-tails (never an empty black hole)
+			// Soft patchy mist bridging the fork between upper & lower sub-tails
 			highp float vMidFork     = 0.5 * (vUpper + vLower);
-			highp float valleyPatch  = vnoise(vec2(uWarp * 7.5 + u_seed * 2.13, vOrg * 2.8));
-			highp float valleyMist   = 0.24 * forkGrow
-			                         * exp(-pow((vOrg - vMidFork) / 0.12, 2.0))
-			                         * (0.50 + 0.95 * valleyPatch) * (0.78 + 0.44 * bristleTuft)
+			highp float valleyPatch  = vnoise(vec2(uWarp * 8.5 + u_seed * 2.13, vOrg * 2.8));
+			highp float valleyMist   = 0.26 * forkGrow
+			                         * exp(-pow((vOrg - vMidFork) / 0.105, 2.0))
+			                         * (0.55 + 0.85 * valleyPatch) * (0.86 + 0.28 * bristleBand)
 			                         * archFadeU;
 
-			// Companion lower sub-tail peeling smoothly off the main stroke, with soft misty trailing brush wisps along its outer edge
+			// Companion lower sub-tail peeling smoothly off the main arch, with subtle misty striated wisps on its outer edge
 			highp float dvLower      = vOrg - vLower;
-			highp float wLowerOut    = mix(0.095, 0.17, tuftShape * featherOn);
-			highp float wLowerSide   = (dvLower < 0.0) ? wLowerOut : 0.095;
+			highp float wLowerOut    = mix(0.09, 0.155, tuftShape * striaOn);
+			highp float wLowerSide   = (dvLower < 0.0) ? wLowerOut : 0.088;
 			highp float lowerBranch  = 0.58 * forkGrow
 			                         * exp(-pow(dvLower / max(wLowerSide, 0.06), 2.0))
-			                         * (0.78 + 0.44 * bristleTuft)
-			                         * pow(omU, 0.44) * smoothstep(1.0, 0.78, uAge);
+			                         * (0.86 + 0.28 * bristleBand)
+			                         * pow(omU, 0.42) * smoothstep(1.0, 0.78, uAge);
 
-			highp float striaeDensity = upperBranch + mistyPlume + valleyMist + lowerBranch;
-			mediump vec3 hornColor   = mix(vec3(1.00, 0.99, 0.94), vec3(1.00, 0.94, 0.80), u_dustWarmth * 0.45);
+			highp float striaeDensity = upperBranch + auroraMist + valleyMist + lowerBranch;
+			mediump vec3 hornColor   = mix(vec3(1.00, 0.99, 0.93), vec3(1.00, 0.93, 0.78), u_dustWarmth * 0.45);
 			mediump vec3 archColor   = mix(hornColor, vec3(0.95, 0.97, 1.00), float(forkGrow));
-			mediump vec3 curtainCol  = vec3(0.70, 0.82, 1.00);
-			mediump vec3 upperColor  = mix(archColor, curtainCol, float(smoothstep(vUpper + 0.04, 0.90, vOrg)));
-			mediump vec3 lowerColor  = vec3(0.87, 0.91, 0.96);
-			mediump vec3 striaeColor = (upperColor * float(upperBranch + mistyPlume)
+			mediump vec3 curtainCol  = vec3(0.68, 0.80, 1.00);
+			mediump vec3 upperColor  = mix(archColor, curtainCol, float(smoothstep(vUpper + 0.06, 0.88, vOrg)));
+			mediump vec3 lowerColor  = vec3(0.88, 0.91, 0.96);
+			mediump vec3 striaeColor = (upperColor * float(upperBranch + auroraMist)
 			                          + lowerColor * float(valleyMist + lowerBranch)) / max(float(striaeDensity), 1e-4);
 
 			highp float extGrad = mix(1.0, float(u_tipExtRatio), max(uAge * 0.55, vBeta * 0.45));
