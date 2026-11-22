@@ -244,6 +244,11 @@ private:
 	float renderSeed; // deterministic per-comet seed
 	float fragmentationStrength; // 0 = intact comet, >0..1 = cascading disintegrating comet (73P-B, C/2019 Y4, C/1999 S4, C/2012 S1)
 	double fragmentationEpochJD; // peak cascade-breakup / close-approach epoch (0 = auto near perihelion)
+	mutable double cachedBestLat;
+	mutable double cachedBestLon;
+	mutable double cachedBestJD;
+	mutable double cachedBestFov;
+	mutable bool cachedBestValid;
 	std::array<DustSynchroneSample, COMET_SYNCHRONE_COUNT> dustSynchrones;
 	double lastSynchroneJDE;
 	float lastSynchroneStriae;
