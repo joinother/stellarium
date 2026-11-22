@@ -77,6 +77,8 @@ struct CometShaderVars
 	int dustWarmth = -1;
 	int dustRibbonStrength = -1;
 	int striaeStrength = -1;
+	int striaDir = -1;
+	int striaSpanPx = -1;
 	int synA = -1;
 	int synM = -1;
 	int synB = -1;
@@ -946,6 +948,8 @@ uniform mediump float u_dustIntensity;
 uniform mediump float u_dustWarmth;
 uniform mediump float u_dustRibbonStrength;
 uniform mediump float u_striaeStrength;
+uniform highp vec2 u_striaDir;
+uniform highp float u_striaSpanPx;
 uniform highp vec2 u_synA[22];
 uniform highp vec2 u_synM[22];
 uniform highp vec2 u_synB[22];
@@ -1085,17 +1089,25 @@ void main(void)
 			// Pure C-infinity Gaussian-envelope coverage (eliminates any circular halo/rim around the head!)
 			highp float sheetMask = 1.0 - exp(-1.65 * gNormSum);
 
-			// Organic non-periodic Sekanina-Farrell aurora paintbrush bristles in (uAge, vBeta) sheet space:
-			// Tiny positive shear (+0.025 * vBeta) keeps striae straight-ish & graceful (zero spiral pinwheel bend!),
-			// while mid-to-fine non-periodic vnoise octaves (22 / 44 / 82) generate ~18-22 natural irregular aurora
-			// ribbons spanning the entire arch with ZERO periodic seashell ribs and ZERO giant empty V-notches!
-			highp float uStria = uAge + 0.025 * vBeta * float(u_striaeStrength);
-			highp float uWarp  = uStria + (vnoise(vec2(uStria * 8.0 + u_seed * 0.37, vBeta * 0.55)) - 0.5) * 0.010 * vBeta;
-			highp float bBand1 = vnoise(vec2(uWarp * 22.0 + u_seed * 0.53, vBeta * 0.26));
-			highp float bBand2 = vnoise(vec2(uWarp * 44.0 + u_seed * 1.37, vBeta * 0.44));
-			highp float bBand3 = vnoise(vec2(uWarp * 82.0 + u_seed * 2.71, vBeta * 0.72));
-			highp float bristleBand = clamp(0.46 * bBand1 + 0.36 * bBand2 + 0.18 * bBand3, 0.0, 1.0);
-			highp float fMid = bBand1;
+			// Coherent parallel-ish Sekanina-Farrell aurora paintbrush striations in screen-space ray coordinates:
+			// Real post-perihelion boulder fragmentation striae are all pushed by the SAME post-perihelion solar
+			// radiation-pressure vector (u_striaDir) rather than radiating 110 deg from the comet head!
+			// Radiating gently (~20-25 deg total spread) from a virtual solar push origin 2.4*span behind the head
+			// guarantees EVERY stria across the ENTIRE tail leans coherently in ONE unified wind-swept direction!
+			highp vec2 striaPerp   = vec2(-u_striaDir.y, u_striaDir.x);
+			highp float spanPx     = max(u_striaSpanPx, 40.0);
+			highp vec2 striaOrigin = u_headPos - u_striaDir * (2.4 * spanPx);
+			highp vec2 fromOrigin  = v_screenPos - striaOrigin;
+			highp float rayAlong   = max(dot(fromOrigin, u_striaDir) / spanPx, 0.25);
+			highp float rayAcross  = dot(fromOrigin, striaPerp) / spanPx;
+			highp float rayCoord   = atan(rayAcross, rayAlong) * 3.2;
+
+			highp float rWarp  = rayCoord + (vnoise(vec2(rayCoord * 4.5 + u_seed * 0.37, rayAlong * 0.60)) - 0.5) * 0.024;
+			highp float bBand1 = vnoise(vec2(rWarp * 15.0 + u_seed * 0.53, rayAlong * 0.18));
+			highp float bBand2 = vnoise(vec2(rWarp * 31.0 + u_seed * 1.37, rayAlong * 0.32));
+			highp float bBand3 = vnoise(vec2(rWarp * 60.0 + u_seed * 2.71, rayAlong * 0.54));
+			highp float bristleBand = clamp(0.52 * bBand1 + 0.38 * bBand2 + 0.10 * bBand3, 0.0, 1.0);
+			highp float fMid = vnoise(vec2(uAge * 22.0 + u_seed * 1.37, vBeta * 0.44));
 
 			// Subtle organic cloud turbulence warping vBeta so no edge ever reads like a rigid mathematical curve
 			highp float cloudWarp = ((vnoise(vec2(uAge * 4.4 + u_seed * 0.61, vBeta * 2.0)) - 0.5) * 0.048
@@ -1123,63 +1135,62 @@ void main(void)
 			mediump vec3 smoothColor = mix(headTint, midWarm, float(midBlend));
 			smoothColor = mix(smoothColor, outerWarm, float(outBlend));
 
-			// Striated great sunskirters (McNaught, West) — ORGANIC AURORA PAINTBRUSH + TWIN-SUBTAIL FORK:
-			//  1) Rises cleanly from the head as ONE smooth, blazing, silky curved main tail (zero caterpillar ribs!),
-			//     forking naturally on the outer sweep (uAge 0.34..0.72) into upper (0.48) & lower (0.24) sub-tails
-			//     bridged by soft translucent intermediate-beta mist.
-			//  2) Directly upward from the entire crest of the luminous arch, ~18-22 organic irregular aurora bristle
-			//     curtains stretch high into the night sky (vOrg 0.36 -> 0.98) and dissolve softly like dry-brush mist!
+			// Striated great sunskirters (McNaught, West) — COHERENT PARALLEL AURORA PAINTBRUSH + TWIN-SUBTAIL FORK:
+			//  1) Rises cleanly from the head as ONE smooth, blazing, silky curved main tail, forking naturally on the
+			//     outer sweep (uAge 0.32..0.70) into upper (0.48) & lower (0.24) sub-tails bridged by soft white mist.
+			//  2) Directly upward from the entire crest of the luminous arch, ~12-20 coherent parallel-ish aurora bristle
+			//     curtains (all aligned along u_striaDir!) soar high into the night sky and dissolve like glowing mist!
 			highp float archFadeU    = pow(omU, 0.36) * smoothstep(1.0, 0.78, uAge);
 			highp float forkGrow     = smoothstep(0.32, 0.70, uAge);
-			highp float striaOn      = smoothstep(0.16, 0.40, uAge);
+			highp float striaOn      = smoothstep(0.14, 0.36, uAge);
 
 			// Physical bifurcation from ONE sweeping main arch (v=0.36) into upper (0.48) & lower (0.24) sub-tails
 			highp float vUpper       = mix(0.36, 0.48, forkGrow);
 			highp float vLower       = mix(0.36, 0.24, forkGrow);
 
-			// Smooth silky glowing arch spine + variable-reach organic aurora bristles soaring upward out of the crest
+			// Smooth silky glowing arch spine + variable-reach coherent aurora bristles soaring upward out of the crest
 			highp float dvUpper      = vOrg - vUpper;
 			highp float wInnerUpper  = mix(0.22, 0.10, forkGrow);
 			highp float tuftShape    = smoothstep(0.16, 0.86, bristleBand);
-			highp float wOuterBristle = mix(0.18, mix(0.18, 0.54, tuftShape), striaOn);
+			highp float wOuterBristle = mix(0.18, mix(0.18, 0.56, tuftShape), striaOn);
 			highp float wUpperSide   = (dvUpper >= 0.0) ? wOuterBristle : wInnerUpper;
-			highp float outerFade    = smoothstep(1.0, 0.70, vOrg);
+			highp float outerFade    = smoothstep(1.0, 0.68, vOrg);
 
-			// Keep the bright stem & arch spine silky smooth (0.88..1.14), sharpening smoothly into luminous aurora ribbons ONLY upward!
+			// Keep bright stem & arch spine silky smooth (0.88..1.14), sharpening smoothly into soft glowing smoke plumes downwind!
 			highp float rootMod      = 0.88 + 0.26 * bristleBand;
-			highp float curtainMod   = 0.22 + 1.44 * pow(tuftShape, 1.35);
-			highp float bristleMod   = mix(rootMod, curtainMod, smoothstep(0.04, 0.30, dvUpper) * striaOn);
+			highp float curtainMod   = 0.26 + 1.32 * pow(tuftShape, 1.25);
+			highp float bristleMod   = mix(rootMod, curtainMod, smoothstep(0.03, 0.28, dvUpper) * striaOn);
 			highp float upperBranch  = mix(1.22, 0.94, forkGrow)
 			                         * exp(-pow(dvUpper / max(wUpperSide, 0.06), 2.0))
 			                         * mix(1.0, bristleMod, striaOn) * outerFade * archFadeU;
 
-			// Soft dreamy aurora mist glow bathing the soaring curtains (keeps striations silky & atmospheric)
-			highp float auroraMist   = 0.28 * striaOn * smoothstep(vUpper - 0.05, vUpper + 0.10, vOrg)
-			                         * pow(max(0.0, 1.0 - vOrg), 1.05) * outerFade
-			                         * (0.42 + 1.16 * pow(tuftShape, 1.25)) * archFadeU;
+			// Soft dreamy aurora mist glow bathing the soaring parallel curtains across both arch and right wing
+			highp float auroraMist   = 0.30 * striaOn * smoothstep(vUpper - 0.05, vUpper + 0.10, vOrg)
+			                         * pow(max(0.0, 1.0 - vOrg), 1.00) * outerFade
+			                         * (0.42 + 1.16 * pow(tuftShape, 1.20)) * archFadeU;
 
 			// Soft patchy mist bridging the fork between upper & lower sub-tails
 			highp float vMidFork     = 0.5 * (vUpper + vLower);
-			highp float valleyPatch  = vnoise(vec2(uWarp * 8.5 + u_seed * 2.13, vOrg * 2.8));
+			highp float valleyPatch  = vnoise(vec2(rWarp * 8.0 + u_seed * 2.13, vOrg * 2.8));
 			highp float valleyMist   = 0.26 * forkGrow
 			                         * exp(-pow((vOrg - vMidFork) / 0.105, 2.0))
-			                         * (0.55 + 0.85 * valleyPatch) * (0.86 + 0.28 * bristleBand)
+			                         * (0.55 + 0.85 * valleyPatch) * (0.88 + 0.24 * bristleBand)
 			                         * archFadeU;
 
-			// Companion lower sub-tail peeling smoothly off the main arch, with subtle misty striated wisps on its outer edge
+			// Companion lower sub-tail peeling smoothly off the main arch: smoke blows ONLY downwind (upward),
+			// keeping the sunward underside (dvLower < 0) clean & smooth with zero upwind streaks below the arch!
 			highp float dvLower      = vOrg - vLower;
-			highp float wLowerOut    = mix(0.09, 0.155, tuftShape * striaOn);
-			highp float wLowerSide   = (dvLower < 0.0) ? wLowerOut : 0.088;
-			highp float lowerBranch  = 0.58 * forkGrow
+			highp float wLowerSide   = (dvLower < 0.0) ? 0.085 : 0.092;
+			highp float lowerBranch  = 0.56 * forkGrow
 			                         * exp(-pow(dvLower / max(wLowerSide, 0.06), 2.0))
-			                         * (0.86 + 0.28 * bristleBand)
+			                         * mix(0.92 + 0.16 * bristleBand, 0.82 + 0.36 * bristleBand, smoothstep(-0.02, 0.08, dvLower))
 			                         * pow(omU, 0.42) * smoothstep(1.0, 0.78, uAge);
 
 			highp float striaeDensity = upperBranch + auroraMist + valleyMist + lowerBranch;
-			mediump vec3 hornColor   = mix(vec3(1.00, 0.99, 0.93), vec3(1.00, 0.93, 0.78), u_dustWarmth * 0.45);
-			mediump vec3 archColor   = mix(hornColor, vec3(0.95, 0.97, 1.00), float(forkGrow));
-			mediump vec3 curtainCol  = vec3(0.68, 0.80, 1.00);
-			mediump vec3 upperColor  = mix(archColor, curtainCol, float(smoothstep(vUpper + 0.06, 0.88, vOrg)));
+			mediump vec3 hornColor   = mix(vec3(1.00, 0.99, 0.92), vec3(1.00, 0.92, 0.76), u_dustWarmth * 0.45);
+			mediump vec3 archColor   = mix(hornColor, vec3(0.94, 0.97, 1.00), float(forkGrow));
+			mediump vec3 curtainCol  = vec3(0.65, 0.78, 1.00);
+			mediump vec3 upperColor  = mix(archColor, curtainCol, float(smoothstep(vUpper + 0.05, 0.86, vOrg)));
 			mediump vec3 lowerColor  = vec3(0.88, 0.91, 0.96);
 			mediump vec3 striaeColor = (upperColor * float(upperBranch + auroraMist)
 			                          + lowerColor * float(valleyMist + lowerBranch)) / max(float(striaeDensity), 1e-4);
@@ -1313,6 +1324,8 @@ void main(void)
 	s_cometShaderVars.dustWarmth        = cometShaderProgram->uniformLocation("u_dustWarmth");
 	s_cometShaderVars.dustRibbonStrength = cometShaderProgram->uniformLocation("u_dustRibbonStrength");
 	s_cometShaderVars.striaeStrength    = cometShaderProgram->uniformLocation("u_striaeStrength");
+	s_cometShaderVars.striaDir          = cometShaderProgram->uniformLocation("u_striaDir");
+	s_cometShaderVars.striaSpanPx       = cometShaderProgram->uniformLocation("u_striaSpanPx");
 	auto findArrayUniform = [&](const char* name, const char* elem0) -> int {
 		int loc = cometShaderProgram->uniformLocation(name);
 		return (loc >= 0) ? loc : cometShaderProgram->uniformLocation(elem0);
@@ -1785,10 +1798,44 @@ void Comet::drawAnalyticalComet(StelCore* core, const StelProjectorP& prj,
 	cometShaderProgram->setUniformValue(s_cometShaderVars.gasIntensity, finalGasInt);
 	cometShaderProgram->setUniformValue(s_cometShaderVars.ionRayStrength, ionRayStrength);
 	const float solarWindPhase = static_cast<float>(std::fmod(core->getJDE() * 0.16, 100.0));
+	QVector2D striaDir = gasDir;
+	float striaSpanPx = static_cast<float>(std::max(comaPx * 6.0, 80.0));
+	if (validSynCount > 0 && finalDustInt > 0.002f)
+	{
+		QVector2D dirAccum(0.0f, 0.0f);
+		double maxSpan = 0.0;
+		const QVector2D head2D(static_cast<float>(winHead[0]), static_cast<float>(winHead[1]));
+		for (int k = 0; k < COMET_SYNCHRONE_COUNT; ++k)
+		{
+			if (!synValid[k])
+				continue;
+			const QVector2D ab = synB[k] - synA[k];
+			const float abLen = ab.length();
+			const float tipDist = (synB[k] - head2D).length();
+			if (tipDist > maxSpan)
+				maxSpan = tipDist;
+			if (abLen > 8.0f)
+			{
+				const float w = dustSynchrones[k].weight;
+				const float age = dustSynchrones[k].ageFrac;
+				// Perihelion-burst synchrones define the coherent post-perihelion striation push direction
+				const float wPeak = w * w * w * w * (0.25f + 0.75f * smoothStepF(0.25f, 0.65f, age)
+				                                     * (1.0f - 0.65f * smoothStepF(0.75f, 1.0f, age)));
+				dirAccum += (ab / abLen) * wPeak;
+			}
+		}
+		if (dirAccum.lengthSquared() > 1e-6f)
+			striaDir = dirAccum.normalized();
+		if (maxSpan > 16.0)
+			striaSpanPx = static_cast<float>(maxSpan);
+	}
+
 	cometShaderProgram->setUniformValue(s_cometShaderVars.dustIntensity, finalDustInt);
 	cometShaderProgram->setUniformValue(s_cometShaderVars.dustWarmth, warmth);
 	cometShaderProgram->setUniformValue(s_cometShaderVars.dustRibbonStrength, dustRibbonStrength);
 	cometShaderProgram->setUniformValue(s_cometShaderVars.striaeStrength, striaeStrength);
+	cometShaderProgram->setUniformValue(s_cometShaderVars.striaDir, striaDir);
+	cometShaderProgram->setUniformValue(s_cometShaderVars.striaSpanPx, striaSpanPx);
 	if (finalDustInt > 0.0005f)
 	{
 		cometShaderProgram->setUniformValueArray(s_cometShaderVars.synA, synA, COMET_SYNCHRONE_COUNT);
