@@ -3112,6 +3112,7 @@ export struct WindowNativeNode {
     const svc = RemoteCalendarFeedService.getInstance()
     if (dir.length > 0) {
       svc.initDir(dir)
+      this.minorBodiesStore.initDir(dir)
     }
     if (this.remoteCalendarFeedStatus.length === 0) {
       this.remoteCalendarFeedStatus = svc.summaryText(this.i18nLang)
@@ -3142,6 +3143,10 @@ export struct WindowNativeNode {
         if (this.engineReady && this.notificationControllerImpl !== null) {
           void this.notificationControllerImpl.refreshSubscriptions()
         }
+      }
+      if (this.engineReady && onlineAllowed) {
+        const hasCometAlert = res.changed && svc.getEntries().some((e: RemoteCalendarEntry) => e.kind === 'comet-alert')
+        void this.minorBodiesStore.syncCometsIfDue(onlineAllowed, hasCometAlert)
       }
     }).catch(() => {
       this.remoteCalendarFeedSyncing = false
@@ -5533,6 +5538,10 @@ export struct WindowNativeNode {
       } else if (panel === 'calendars') {
         this.pluginFeatureCtl().ensurePluginLoaded('Calendars', () => { this.calendarsStore.load() })
       } else if (panel === 'minorBodies') {
+        const minorDir = this.stellariumFilesDir()
+        if (minorDir.length > 0) {
+          this.minorBodiesStore.initDir(minorDir)
+        }
         this.pluginFeatureCtl().ensurePluginLoaded('SolarSystemEditor', () => { this.minorBodiesStore.load() })
       } else if (panel === 'nomenclature') {
         this.nomenclatureStore.load()

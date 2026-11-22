@@ -2,13 +2,16 @@
 // 仅从自有境内镜像 https://skyinstrument.cn 执行只读静态 GET + SHA-256 校验，
 // 不上传经纬度、设备标识、Push Token 或搜索词；所有地理纬度/区域过滤均在端侧完成。
 
-import { http } from '@kit.NetworkKit'
-import { cryptoFramework } from '@kit.CryptoArchitectureKit'
 import { fileIo } from '@kit.CoreFileKit'
 import { util } from '@kit.ArkTS'
 import hilog from '@ohos.hilog'
 import { hasCurrentPrivacyConsent } from '../qability/PrivacyConsent'
 import { OFFLINE_APPGALLERY_BUILD } from '../common/types/MainWindowModels'
+import {
+  MIRROR_ORIGIN,
+  MirrorManifestClient,
+  findManifestSource
+} from './MirrorManifestClient'
 import {
   RemoteCalendarEntry,
   RemoteCalendarFeedDocument,
@@ -17,9 +20,7 @@ import {
   validateRemoteCalendarManifest
 } from '../state/RemoteCalendarFeed'
 
-const FEED_ORIGIN: string = 'https://skyinstrument.cn'
-const CALENDAR_MANIFEST_URL: string = FEED_ORIGIN + '/v1/calendar/manifest.json'
-const ROOT_MANIFEST_URL: string = FEED_ORIGIN + '/v1/manifest.json'
+const CALENDAR_MANIFEST_URL: string = MIRROR_ORIGIN + '/v1/calendar/manifest.json'
 const ROOT_MANIFEST_SOURCE_ID: string = 'calendar.dynamic-feed'
 const OVERLAY_FILE_NAME: string = 'astronomy_remote_calendar_v1.json'
 const AUTO_SYNC_INTERVAL_MS: number = 30 * 60 * 1000
@@ -36,25 +37,6 @@ interface PersistedRemoteOverlay {
   entries: RemoteCalendarEntry[]
 }
 
-interface RootMirrorSourceEntry {
-  id?: string
-  path?: string
-  bytes?: number
-  sha256?: string
-  available?: boolean
-  lastSuccessAt?: string | null
-}
-
-interface RootMirrorManifest {
-  generatedAt?: string
-  sources?: Array<RootMirrorSourceEntry>
-}
-
-interface HttpBufferResult {
-  code: number
-  bytes: Uint8Array
-}
-
 export interface RemoteCalendarSyncResult {
   ok: boolean
   changed: boolean
@@ -64,23 +46,6 @@ export interface RemoteCalendarSyncResult {
   statusZh: string
   statusEn: string
   reason?: string
-}
-
-function bytesToHex(bytes: Uint8Array): string {
-  const hexChars = '0123456789abcdef'
-  let out = ''
-  for (let i = 0; i < bytes.length; i++) {
-    const b = bytes[i]
-    out += hexChars[(b >> 4) & 0x0f] + hexChars[b & 0x0f]
-  }
-  return out
-}
-
-async function computeSha256Hex(data: Uint8Array): Promise<string> {
-  const md = cryptoFramework.createMd('SHA256')
-  await md.update({ data: data })
-  const digest = await md.digest()
-  return bytesToHex(digest.data)
 }
 
 export class RemoteCalendarFeedService {
@@ -212,32 +177,11 @@ export class RemoteCalendarFeedService {
     }
   }
 
-  private async httpGet(url: string, maxLimitBytes: number): Promise<HttpBufferResult> {
-    const req = http.createHttp()
-    try {
-      const resp = await req.request(url, {
-        method: http.RequestMethod.GET,
-        connectTimeout: 10000,
-        readTimeout: 15000,
-        expectDataType: http.HttpDataType.ARRAY_BUFFER,
-        maxLimit: maxLimitBytes,
-        usingCache: false
-      })
-      const code = Number(resp.responseCode)
-      const buf = resp.result as ArrayBuffer
-      const bytes = (buf !== undefined && buf !== null && buf.byteLength > 0)
-        ? new Uint8Array(buf)
-        : new Uint8Array(0)
-      return { code: code, bytes: bytes }
-    } finally {
-      req.destroy()
-    }
-  }
-
-  private async resolveRemoteManifest(): Promise<RemoteCalendarManifest | undefined> {
+  private async resolveRemoteManifest(force: boolean): Promise<RemoteCalendarManifest | undefined> {
+    const client = MirrorManifestClient.getInstance()
     const decoder = util.TextDecoder.create('utf-8')
     // 1. 优先读取独立动态日历清单 /v1/calendar/manifest.json
-    const direct = await this.httpGet(CALENDAR_MANIFEST_URL, MAX_MANIFEST_BYTES)
+    const direct = await client.httpGetBuffer(CALENDAR_MANIFEST_URL, MAX_MANIFEST_BYTES)
     if (direct.code === 200 && direct.bytes.byteLength > 0) {
       try {
         const parsed = JSON.parse(decoder.decodeToString(direct.bytes)) as Object
@@ -245,32 +189,26 @@ export class RemoteCalendarFeedService {
         if (valid !== undefined) return valid
       } catch (_) {}
     }
-    // 2. 兼容在全站 /v1/manifest.json 中登记的 calendar.dynamic-feed 静态源
-    const root = await this.httpGet(ROOT_MANIFEST_URL, MAX_MANIFEST_BYTES)
-    if (root.code !== 200 || root.bytes.byteLength === 0) return undefined
-    try {
-      const parsed = JSON.parse(decoder.decodeToString(root.bytes)) as RootMirrorManifest
-      const sources = Array.isArray(parsed.sources) ? parsed.sources : []
-      for (const s of sources) {
-        if (s.id === ROOT_MANIFEST_SOURCE_ID && s.available === true &&
-          typeof s.path === 'string' && typeof s.sha256 === 'string' && typeof s.bytes === 'number') {
-          const updatedAt = typeof s.lastSuccessAt === 'string' && Number.isFinite(Date.parse(s.lastSuccessAt))
-            ? Date.parse(s.lastSuccessAt)
-            : (typeof parsed.generatedAt === 'string' && Number.isFinite(Date.parse(parsed.generatedAt))
-              ? Date.parse(parsed.generatedAt) : Date.now())
-          const gen = Math.max(1, Math.floor(updatedAt / 1000))
-          return validateRemoteCalendarManifest({
-            schemaVersion: 1,
-            generation: gen,
-            updatedAt: updatedAt,
-            feedPath: s.path,
-            bytes: s.bytes,
-            sha256: s.sha256
-          })
-        }
-      }
-    } catch (_) {}
-    return undefined
+    // 2. 兼容在全站 /v1/manifest.json 中登记的 calendar.dynamic-feed 静态源（共享短期缓存，避免重复拉取）
+    const rootManifest = await client.fetchRootManifest(force)
+    const entry = findManifestSource(rootManifest, ROOT_MANIFEST_SOURCE_ID)
+    if (entry === undefined || entry.available !== true ||
+      typeof entry.path !== 'string' || typeof entry.sha256 !== 'string' || typeof entry.bytes !== 'number') {
+      return undefined
+    }
+    const updatedAt = typeof entry.lastSuccessAt === 'string' && Number.isFinite(Date.parse(entry.lastSuccessAt))
+      ? Date.parse(entry.lastSuccessAt)
+      : (typeof rootManifest?.generatedAt === 'string' && Number.isFinite(Date.parse(rootManifest.generatedAt))
+        ? Date.parse(rootManifest.generatedAt) : Date.now())
+    const gen = Math.max(1, Math.floor(updatedAt / 1000))
+    return validateRemoteCalendarManifest({
+      schemaVersion: 1,
+      generation: gen,
+      updatedAt: updatedAt,
+      feedPath: entry.path,
+      bytes: entry.bytes,
+      sha256: entry.sha256
+    })
   }
 
   applyValidatedFeed(doc: RemoteCalendarFeedDocument, sha256: string = ''): boolean {
@@ -311,7 +249,7 @@ export class RemoteCalendarFeedService {
 
     this.syncing = true
     try {
-      const manifest = await this.resolveRemoteManifest()
+      const manifest = await this.resolveRemoteManifest(force)
       this.lastCheckedAt = Date.now()
       if (manifest === undefined) {
         this.persistToDiskSync()
@@ -331,35 +269,39 @@ export class RemoteCalendarFeedService {
         }
       }
 
-      const feedResp = await this.httpGet(FEED_ORIGIN + manifest.feedPath, MAX_FEED_BYTES)
-      if (feedResp.code !== 200 || feedResp.bytes.byteLength <= 0) {
+      const artifact = await MirrorManifestClient.getInstance().fetchVerifiedArtifact(
+        manifest.feedPath,
+        manifest.sha256,
+        manifest.bytes,
+        MAX_FEED_BYTES,
+        '/v1/'
+      )
+      if (!artifact.ok) {
+        if (artifact.errorKind === 'size-mismatch') {
+          hilog.warn(0x0000, 'StellariumArkUI', '[remote-calendar] size mismatch expected=%{public}d', manifest.bytes)
+          return {
+            ok: false, changed: false, skipped: false, entryCount: this.entries.length, generation: this.generation,
+            statusZh: '大小校验未通过 · 已拒收', statusEn: 'Size check failed',
+            reason: 'size-mismatch'
+          }
+        }
+        if (artifact.errorKind === 'sha256-mismatch') {
+          hilog.warn(0x0000, 'StellariumArkUI', '[remote-calendar] sha256 mismatch')
+          return {
+            ok: false, changed: false, skipped: false, entryCount: this.entries.length, generation: this.generation,
+            statusZh: 'SHA-256 校验失败 · 已拒收', statusEn: 'SHA-256 check failed',
+            reason: 'sha256-mismatch'
+          }
+        }
         return {
           ok: false, changed: false, skipped: false, entryCount: this.entries.length, generation: this.generation,
           statusZh: '拉取失败 · 保留本地缓存', statusEn: 'Fetch failed · kept cache',
-          reason: 'http-' + String(feedResp.code)
-        }
-      }
-      if (feedResp.bytes.byteLength !== manifest.bytes) {
-        hilog.warn(0x0000, 'StellariumArkUI', '[remote-calendar] size mismatch got=%{public}d expected=%{public}d',
-          feedResp.bytes.byteLength, manifest.bytes)
-        return {
-          ok: false, changed: false, skipped: false, entryCount: this.entries.length, generation: this.generation,
-          statusZh: '大小校验未通过 · 已拒收', statusEn: 'Size check failed',
-          reason: 'size-mismatch'
-        }
-      }
-      const actualHash = await computeSha256Hex(feedResp.bytes)
-      if (actualHash !== manifest.sha256) {
-        hilog.warn(0x0000, 'StellariumArkUI', '[remote-calendar] sha256 mismatch')
-        return {
-          ok: false, changed: false, skipped: false, entryCount: this.entries.length, generation: this.generation,
-          statusZh: 'SHA-256 校验失败 · 已拒收', statusEn: 'SHA-256 check failed',
-          reason: 'sha256-mismatch'
+          reason: artifact.code > 0 ? ('http-' + String(artifact.code)) : artifact.errorKind
         }
       }
 
       const decoder = util.TextDecoder.create('utf-8')
-      const parsed = JSON.parse(decoder.decodeToString(feedResp.bytes)) as Object
+      const parsed = JSON.parse(decoder.decodeToString(artifact.bytes)) as Object
       const validated = validateRemoteCalendarFeed(parsed, Date.now())
       if (validated === undefined) {
         return {
@@ -369,7 +311,7 @@ export class RemoteCalendarFeedService {
         }
       }
 
-      const changed = this.applyValidatedFeed(validated, actualHash)
+      const changed = this.applyValidatedFeed(validated, artifact.actualSha256)
       hilog.info(0x0000, 'StellariumArkUI', '[remote-calendar] synced gen=%{public}d entries=%{public}d changed=%{public}s',
         this.generation, this.entries.length, changed ? '1' : '0')
       return {

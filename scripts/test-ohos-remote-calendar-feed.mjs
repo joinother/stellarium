@@ -209,17 +209,33 @@ test('NOAA Kp storm builder merges contiguous geomagnetic storm windows with lat
   assert.match(entries[0].title, /G3/);
 });
 
-test('HarmonyOS host wires static SHA-256 feed sync into startup, foreground, calendar, widgets, and subscriptions', () => {
+test('HarmonyOS host shares MirrorManifestClient across calendar feed and minor bodies with closed-loop comet auto-sync', () => {
+  const mirrorClientSrc = readEts('capability/MirrorManifestClient.ets');
+  assert.match(mirrorClientSrc, /https:\/\/skyinstrument\.cn/);
+  assert.match(mirrorClientSrc, /computeSha256Hex/);
+  assert.match(mirrorClientSrc, /fetchRootManifest/);
+  assert.match(mirrorClientSrc, /fetchVerifiedArtifact/);
+  assert.match(mirrorClientSrc, /isSafeMirrorRelativePath/);
+
   const serviceSrc = readEts('capability/RemoteCalendarFeedService.ets');
-  assert.match(serviceSrc, /https:\/\/skyinstrument\.cn/);
-  assert.match(serviceSrc, /computeSha256Hex/);
+  assert.match(serviceSrc, /MirrorManifestClient/);
+  assert.doesNotMatch(serviceSrc, /function computeSha256Hex/);
   assert.match(serviceSrc, /hasCurrentPrivacyConsent\(\)/);
   assert.match(serviceSrc, /OFFLINE_APPGALLERY_BUILD/);
+
+  const minorBodiesSrc = readEts('state/MinorBodiesStore.ets');
+  assert.match(minorBodiesSrc, /MirrorManifestClient/);
+  assert.doesNotMatch(minorBodiesSrc, /function computeSha256Hex/);
+  assert.match(minorBodiesSrc, /syncCometsIfDue/);
+  assert.match(minorBodiesSrc, /minor_bodies_auto_sync_v1\.json/);
+  assert.match(minorBodiesSrc, /7 \* 24 \* 3600 \* 1000/);
 
   const mainSrc = readEts('pages/MainWindowNativeNode.ets');
   assert.match(mainSrc, /this\.syncRemoteCalendarFeed\(false\)/);
   assert.match(mainSrc, /this\.calendarController\.refreshRemoteOverlay\(\)/);
   assert.match(mainSrc, /RemoteCalendarFeedService\.getInstance\(\)\.getEntries\(\)/);
+  assert.match(mainSrc, /e\.kind === 'comet-alert'/);
+  assert.match(mainSrc, /this\.minorBodiesStore\.syncCometsIfDue\(onlineAllowed, hasCometAlert\)/);
 
   const subFeedSrc = readEts('capability/AstronomySubscriptionFeed.ets');
   assert.match(subFeedSrc, /mergeRemoteCalendarEvents\(/);

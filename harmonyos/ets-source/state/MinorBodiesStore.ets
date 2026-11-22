@@ -1,14 +1,18 @@
-// 太阳系小天体管理（SolarSystemEditor 离线目录 + 阿里云国内镜像 skyinstrument.cn 实时 MPC 同步）域 store。
-import { http } from '@kit.NetworkKit'
-import { cryptoFramework } from '@kit.CryptoArchitectureKit'
+// 太阳系小天体管理（SolarSystemEditor 离线目录 + 统一境内镜像 MirrorManifestClient 实时 MPC 同步）域 store。
+import { fileIo } from '@kit.CoreFileKit'
 import { util } from '@kit.ArkTS'
+import hilog from '@ohos.hilog'
 import { CommandPort } from '../bridge/CommandPort'
 import { MinorBodyItem, StellariumBridgeResponse } from '../common/types/StellariumTypes'
 import { OFFLINE_APPGALLERY_BUILD } from '../common/types/MainWindowModels'
+import { hasCurrentPrivacyConsent } from '../qability/PrivacyConsent'
+import {
+  MirrorManifestClient,
+  findManifestSource
+} from '../capability/MirrorManifestClient'
 
-const MIRROR_ORIGIN: string = 'https://skyinstrument.cn'
-const MIRROR_MANIFEST_URL: string = MIRROR_ORIGIN + '/v1/manifest.json'
-const MIRROR_MANIFEST_MAX_AGE_MS: number = 24 * 3600 * 1000
+const COMET_AUTO_SYNC_FILE: string = 'minor_bodies_auto_sync_v1.json'
+const COMET_AUTO_SYNC_INTERVAL_MS: number = 7 * 24 * 3600 * 1000
 
 export interface MpcMirrorPackSpec {
   key: string
@@ -25,36 +29,11 @@ export const MPC_MIRROR_PACKS: Array<MpcMirrorPackSpec> = [
   { key: 'distant', sourceId: 'catalog.mpc.distant', kind: 'asteroid', maxItems: 350, label: '外海王星与半人马' }
 ]
 
-interface MirrorManifestSourceEntry {
-  id?: string
-  path?: string
-  bytes?: number
-  sha256?: string
-  available?: boolean
-  status?: string
-  lastSuccessAt?: string | null
-}
-
-interface MirrorManifestPayload {
-  generatedAt?: string
-  sources?: Array<MirrorManifestSourceEntry>
-}
-
-function bytesToHex(bytes: Uint8Array): string {
-  const hexChars = '0123456789abcdef'
-  let out = ''
-  for (let i = 0; i < bytes.length; i++) {
-    const b = bytes[i]
-    out += hexChars[(b >> 4) & 0x0f] + hexChars[b & 0x0f]
-  }
-  return out
-}
-
-async function computeSha256Hex(data: Uint8Array): Promise<string> {
-  const md = cryptoFramework.createMd('SHA256')
-  await md.update({ data: data })
-  const digest = await md.digest()
-  return bytesToHex(digest.data)
+interface PersistedCometSyncMeta {
+  version: number
+  lastCheckedAt: number
+  lastSyncedAt: number
+  cometsSha256: string
 }
 
 @Observed
@@ -79,10 +58,74 @@ export class MinorBodiesStore {
   private port: CommandPort | null = null
   private seq: number = 0
   private onFlashHint: (msg: string) => void = () => {}
+  private syncMetaPath: string = ''
+  private syncMetaHydrated: boolean = false
+  private autoCometSyncing: boolean = false
+  private lastCometCheckedAt: number = 0
+  private lastCometSyncedAt: number = 0
+  private lastCometSha256: string = ''
 
   bind(port: CommandPort, onFlashHint: (msg: string) => void): void {
     this.port = port
     this.onFlashHint = onFlashHint
+  }
+
+  initDir(filesDir: string): void {
+    const trimmed = filesDir.trim()
+    if (trimmed.length === 0) return
+    const nextPath = `${trimmed}/${COMET_AUTO_SYNC_FILE}`
+    if (this.syncMetaHydrated && this.syncMetaPath === nextPath) return
+    this.syncMetaPath = nextPath
+    this.syncMetaHydrated = true
+    this.loadCometSyncMetaSync()
+  }
+
+  private loadCometSyncMetaSync(): void {
+    if (this.syncMetaPath.length === 0) return
+    try {
+      if (!fileIo.accessSync(this.syncMetaPath)) return
+      const stat = fileIo.statSync(this.syncMetaPath)
+      if (stat.size <= 0 || stat.size > 16384) return
+      const file = fileIo.openSync(this.syncMetaPath, fileIo.OpenMode.READ_ONLY)
+      try {
+        const buf = new ArrayBuffer(stat.size)
+        const n = fileIo.readSync(file.fd, buf)
+        if (n <= 0) return
+        const text = util.TextDecoder.create('utf-8').decodeToString(new Uint8Array(buf, 0, n))
+        const parsed = JSON.parse(text) as PersistedCometSyncMeta
+        if (parsed !== null && typeof parsed === 'object' && parsed.version === 1) {
+          this.lastCometCheckedAt = Number.isFinite(parsed.lastCheckedAt) ? parsed.lastCheckedAt : 0
+          this.lastCometSyncedAt = Number.isFinite(parsed.lastSyncedAt) ? parsed.lastSyncedAt : 0
+          this.lastCometSha256 = typeof parsed.cometsSha256 === 'string' ? parsed.cometsSha256.toLowerCase() : ''
+        }
+      } finally {
+        fileIo.closeSync(file.fd)
+      }
+    } catch (_err) {
+      // Ignore corrupt/missing cache metadata
+    }
+  }
+
+  private persistCometSyncMetaSync(): void {
+    if (this.syncMetaPath.length === 0) return
+    try {
+      const payload: PersistedCometSyncMeta = {
+        version: 1,
+        lastCheckedAt: this.lastCometCheckedAt,
+        lastSyncedAt: this.lastCometSyncedAt,
+        cometsSha256: this.lastCometSha256
+      }
+      const encoded = new util.TextEncoder().encodeInto(JSON.stringify(payload))
+      const file = fileIo.openSync(this.syncMetaPath,
+        fileIo.OpenMode.CREATE | fileIo.OpenMode.TRUNC | fileIo.OpenMode.WRITE_ONLY)
+      try {
+        fileIo.writeSync(file.fd, encoded.buffer)
+      } finally {
+        fileIo.closeSync(file.fd)
+      }
+    } catch (_err) {
+      // Non-fatal
+    }
   }
 
   load(): void {
@@ -138,27 +181,76 @@ export class MinorBodiesStore {
     }, 0, 100, 300)
   }
 
-  private async httpGetBuffer(url: string, maxLimitBytes: number): Promise<Uint8Array> {
-    const req = http.createHttp()
+  // 静默自动同步最新可观测彗星（默认 7 天节流，或当云端日历下发新彗星预警时立即触发）：
+  // 复用 MirrorManifestClient 共享的 /v1/manifest.json 缓存 + SHA-256 哈希短路，无更新时零流量下载。
+  async syncCometsIfDue(onlineAllowed: boolean, forceForCalendarComet: boolean = false): Promise<boolean> {
+    if (OFFLINE_APPGALLERY_BUILD || !onlineAllowed || !hasCurrentPrivacyConsent()) return false
+    if (this.port === null || this.busy || this.autoCometSyncing) return false
+    const now = Date.now()
+    if (!forceForCalendarComet && this.lastCometCheckedAt > 0 &&
+      (now - this.lastCometCheckedAt) < COMET_AUTO_SYNC_INTERVAL_MS) {
+      return false
+    }
+    this.autoCometSyncing = true
     try {
-      const resp = await req.request(url, {
-        method: http.RequestMethod.GET,
-        connectTimeout: 15000,
-        readTimeout: 25000,
-        expectDataType: http.HttpDataType.ARRAY_BUFFER,
-        maxLimit: maxLimitBytes,
-        usingCache: false
+      const client = MirrorManifestClient.getInstance()
+      const manifest = await client.fetchRootManifest(false)
+      this.lastCometCheckedAt = Date.now()
+      const entry = findManifestSource(manifest, 'catalog.mpc.comets')
+      if (entry === undefined || entry.available !== true || typeof entry.path !== 'string' ||
+        typeof entry.sha256 !== 'string' || entry.sha256.length !== 64) {
+        this.persistCometSyncMetaSync()
+        return false
+      }
+      const remoteHash = entry.sha256.toLowerCase()
+      if (remoteHash === this.lastCometSha256) {
+        this.persistCometSyncMetaSync()
+        return false
+      }
+      const artifact = await client.fetchVerifiedArtifact(
+        entry.path,
+        remoteHash,
+        entry.bytes,
+        8 * 1024 * 1024,
+        '/v1/catalogs/mpc/'
+      )
+      if (!artifact.ok) {
+        this.persistCometSyncMetaSync()
+        return false
+      }
+      const mpcText = util.TextDecoder.create('utf-8').decodeToString(artifact.bytes)
+      const port = this.port
+      if (port === null) return false
+      return await new Promise<boolean>((resolve) => {
+        port.requestWhenReady('importMinorBodies', JSON.stringify({
+          action: 'importMpcText',
+          kind: 'comet',
+          text: mpcText,
+          maxItems: 1000
+        }), (r: StellariumBridgeResponse) => {
+          if (r.ok === true) {
+            const importedCount = Number(r.importedCount ?? 0)
+            this.lastCometSha256 = artifact.actualSha256
+            this.lastCometSyncedAt = Date.now()
+            this.persistCometSyncMetaSync()
+            this.mirrorStatusText = 'skyinstrument.cn · 已自动同步最新彗星（' + String(importedCount) + ' 颗）'
+            hilog.info(0x0000, 'StellariumArkUI', '[minor-bodies] auto-synced comets count=%{public}d trigger=%{public}s',
+              importedCount, forceForCalendarComet ? 'calendar-comet' : '7d-schedule')
+            resolve(true)
+          } else {
+            this.persistCometSyncMetaSync()
+            resolve(false)
+          }
+        }, () => {
+          this.persistCometSyncMetaSync()
+          resolve(false)
+        }, 0, 200, 60)
       })
-      if (resp.responseCode !== 200) {
-        throw new Error('HTTP ' + String(resp.responseCode))
-      }
-      const buf = resp.result as ArrayBuffer
-      if (buf === undefined || buf === null || buf.byteLength <= 0) {
-        throw new Error('empty_response')
-      }
-      return new Uint8Array(buf)
+    } catch (err) {
+      hilog.warn(0x0000, 'StellariumArkUI', '[minor-bodies] auto comet sync skipped: %{public}s', String(err))
+      return false
     } finally {
-      req.destroy()
+      this.autoCometSyncing = false
     }
   }
 
@@ -181,22 +273,9 @@ export class MinorBodiesStore {
     this.mirrorSyncingPack = packKey
     this.mirrorStatusText = '正在向国内镜像 skyinstrument.cn 校验清单…'
     try {
-      const manifestBytes = await this.httpGetBuffer(MIRROR_MANIFEST_URL, 2 * 1024 * 1024)
-      const decoder = util.TextDecoder.create('utf-8')
-      const manifestText = decoder.decodeToString(manifestBytes)
-      const manifest = JSON.parse(manifestText) as MirrorManifestPayload
-      const generatedMs = manifest.generatedAt !== undefined ? Date.parse(manifest.generatedAt) : NaN
-      if (!Number.isFinite(generatedMs) || Math.abs(Date.now() - generatedMs) > MIRROR_MANIFEST_MAX_AGE_MS * 30) {
-        // 允许容错时钟偏差，但要求时间戳合法
-      }
-      const sources = Array.isArray(manifest.sources) ? manifest.sources : []
-      let entry: MirrorManifestSourceEntry | undefined = undefined
-      for (const s of sources) {
-        if (s.id === spec.sourceId) {
-          entry = s
-          break
-        }
-      }
+      const client = MirrorManifestClient.getInstance()
+      const manifest = await client.fetchRootManifest(true)
+      const entry = findManifestSource(manifest, spec.sourceId)
       if (entry === undefined || entry.available !== true || typeof entry.path !== 'string' ||
         !entry.path.startsWith('/v1/catalogs/mpc/') || typeof entry.sha256 !== 'string' || entry.sha256.length !== 64) {
         this.busy = false
@@ -207,26 +286,33 @@ export class MinorBodiesStore {
       }
 
       this.mirrorStatusText = '正在下载并校验 SHA-256（' + spec.label + '）…'
-      const fileBytes = await this.httpGetBuffer(MIRROR_ORIGIN + entry.path, 8 * 1024 * 1024)
-      if (typeof entry.bytes === 'number' && entry.bytes > 0 && fileBytes.byteLength !== entry.bytes) {
+      const artifact = await client.fetchVerifiedArtifact(
+        entry.path,
+        entry.sha256,
+        entry.bytes,
+        8 * 1024 * 1024,
+        '/v1/catalogs/mpc/'
+      )
+      if (!artifact.ok) {
         this.busy = false
         this.mirrorSyncingPack = ''
-        this.mirrorStatusText = '文件大小与清单不符，已拒绝写入'
-        this.onFlashHint('国内镜像校验未通过，已保留本地数据')
-        return
-      }
-      const actualHash = await computeSha256Hex(fileBytes)
-      if (actualHash !== entry.sha256.toLowerCase()) {
-        this.busy = false
-        this.mirrorSyncingPack = ''
-        this.mirrorStatusText = 'SHA-256 校验未通过，已拒绝写入'
-        this.onFlashHint('国内镜像哈希校验失败，已拒绝写入')
+        if (artifact.errorKind === 'size-mismatch') {
+          this.mirrorStatusText = '文件大小与清单不符，已拒绝写入'
+          this.onFlashHint('国内镜像校验未通过，已保留本地数据')
+        } else if (artifact.errorKind === 'sha256-mismatch') {
+          this.mirrorStatusText = 'SHA-256 校验未通过，已拒绝写入'
+          this.onFlashHint('国内镜像哈希校验失败，已拒绝写入')
+        } else {
+          this.mirrorStatusText = '镜像同步失败（' + (artifact.code > 0 ? 'HTTP ' + String(artifact.code) : artifact.errorKind) + '），已保留本地离线目录'
+          this.onFlashHint('国内镜像同步失败，请稍后重试')
+        }
         return
       }
 
-      const mpcText = decoder.decodeToString(fileBytes)
+      const mpcText = util.TextDecoder.create('utf-8').decodeToString(artifact.bytes)
       this.mirrorStatusText = 'SHA-256 校验通过，正在导入星图…'
       const currentSpec = spec
+      const verifiedHash = artifact.actualSha256
       const updatedStamp = typeof entry.lastSuccessAt === 'string' && entry.lastSuccessAt.length >= 16
         ? entry.lastSuccessAt.slice(0, 16).replace('T', ' ') + ' UTC'
         : ''
@@ -241,6 +327,12 @@ export class MinorBodiesStore {
         if (r.ok === true) {
           const importedCount = Number(r.importedCount ?? 0)
           const totalParsed = Number(r.totalParsed ?? importedCount)
+          if (currentSpec.key === 'comets') {
+            this.lastCometSha256 = verifiedHash
+            this.lastCometCheckedAt = Date.now()
+            this.lastCometSyncedAt = Date.now()
+            this.persistCometSyncMetaSync()
+          }
           this.mirrorStatusText = 'skyinstrument.cn · SHA-256 已校验 · ' + currentSpec.label + '（导入 ' + String(importedCount) + ' 颗）' +
             (updatedStamp.length > 0 ? ' · ' + updatedStamp : '')
           this.onFlashHint('国内镜像同步完成：' + currentSpec.label + '（导入 ' + String(importedCount) + '/' + String(totalParsed) + ' 颗）')
