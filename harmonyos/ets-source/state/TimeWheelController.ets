@@ -1,12 +1,24 @@
 import { TimeWheelStore } from './TimeWheelStore'
 
-// 飞轮（「抽陀螺」）参数：无自动阻尼、无时长上限，连续同向甩动逐次叠加速度；
-// 反向甩动减速或反转；轻触/按住转轴即稳稳刹停。
-const FLYWHEEL_VELOCITY_SCALE: number = 0.78
-const FLYWHEEL_ACCUMULATE_GAIN: number = 0.92
-const FLYWHEEL_MAX_VELOCITY: number = 14.0
-const FLYWHEEL_START_VELOCITY: number = 0.06
-const FLYWHEEL_BRAKE_VELOCITY: number = 0.04
+// 飞轮（「抽陀螺」）参数：
+// - 以手指真实滑动窗口速度（而非放大后的位移）驱动飞轮，避免一甩就飙到失控高速；
+// - 同向连续甩动温和叠加速度并受控于合理上限；
+// - 反向推动立即识别新方向并反向旋转（轻推则稳稳刹停）；
+// - 轻触/按住停顿再抬手直接刹停。
+const FLYWHEEL_VELOCITY_SCALE: number = 0.45
+const FLYWHEEL_ACCUMULATE_GAIN: number = 0.50
+const FLYWHEEL_MAX_VELOCITY: number = 2.6
+const FLYWHEEL_START_VELOCITY: number = 0.08
+const FLYWHEEL_BRAKE_VELOCITY: number = 0.07
+const FLYWHEEL_REVERSE_THRESHOLD: number = 0.16
+const FLYWHEEL_HOLD_STOP_MS: number = 95
+const VELOCITY_WINDOW_MS: number = 85
+
+interface VelocitySample {
+  dx: number
+  dt: number
+  at: number
+}
 
 // 时间轮只处理横向拖动。竖向滑动属于面板 Scroll（向下翻看时间设置），
 // 不能在 Down 上抢走手势、暂停时间或在轻微 x 抖动时改时间。
@@ -54,6 +66,8 @@ export class TimeWheelController {
   private capturedSpinOnDown: boolean = false
   private lastSentLocalMs: number = Number.NaN
   private lastVisualVelocity: number = 0
+  private velocitySamples: VelocitySample[] = []
+  private lastMoveAtMs: number = 0
   // Haptic cadence is intentionally based on drag motion, not time-unit steps:
   // hour/month dragging needs hundreds of pixels per unit, so step-based ticks
   // were effectively inaudible. The service still throttles by the user's
@@ -213,6 +227,14 @@ export class TimeWheelController {
     const elapsedMs = Math.max(1, now - this.lastTouchMs)
     this.lastTouchX = x
     this.lastTouchMs = now
+    if (delta !== 0) {
+      this.lastMoveAtMs = now
+      this.velocitySamples.push({ dx: delta, dt: elapsedMs, at: now })
+      const cutoff = now - VELOCITY_WINDOW_MS
+      while (this.velocitySamples.length > 1 && this.velocitySamples[0].at < cutoff) {
+        this.velocitySamples.shift()
+      }
+    }
     const speed = Math.abs(delta) / elapsedMs
     const stepDelta = -delta * this.velocityMultiplier(speed) / this.store.tickSpacing
     const effectiveDelta = -stepDelta * this.store.tickSpacing
@@ -226,8 +248,7 @@ export class TimeWheelController {
       this.onTick(++this.hapticTickCounter)
     }
     this.store.timeWheelVisualOffset = this.dragCarry
-    const instantVelocity = effectiveDelta / elapsedMs
-    this.lastVisualVelocity = this.lastVisualVelocity * 0.45 + instantVelocity * 0.55
+    this.lastVisualVelocity = this.computeRawFingerVelocity(now)
     const local = this.store.dateAtFraction(this.gestureBaseMs, this.gestureSteps)
     const sendNative = now - this.lastNativePushMs >= 16
     this.applyDate(local, false, sendNative)
@@ -265,6 +286,8 @@ export class TimeWheelController {
     this.gestureTickOffset = this.pendingGestureTickOffset
     this.dragCarry = this.pendingDragCarry
     this.lastVisualVelocity = 0
+    this.velocitySamples = []
+    this.lastMoveAtMs = 0
     this.hapticTickCounter = 0
     this.lastDragHapticMs = 0
     this.lastInertiaHapticMs = 0
@@ -362,15 +385,38 @@ export class TimeWheelController {
     }
   }
 
+  private computeRawFingerVelocity(now: number): number {
+    const cutoff = now - VELOCITY_WINDOW_MS
+    let sumDx = 0
+    let sumDt = 0
+    for (let i = 0; i < this.velocitySamples.length; i++) {
+      const s = this.velocitySamples[i]
+      if (s.at < cutoff) continue
+      sumDx += s.dx
+      sumDt += s.dt
+    }
+    if (sumDt <= 0) return 0
+    // 下限 16ms，防止高刷屏单帧 1ms 抖动把速度放大几十倍
+    return sumDx / Math.max(16, sumDt)
+  }
+
   private startInertia(): void {
     const prevSpin = this.preTouchSpinVelocity
     this.preTouchSpinVelocity = 0
     this.capturedSpinOnDown = false
     this.pauseInertiaTimerOnly()
 
-    const flickVelocity = this.lastVisualVelocity * FLYWHEEL_VELOCITY_SCALE
-    // 若用户在松手前停住手指（慢拖/按住刹停），直接停止而不延续旧转速
-    if (Math.abs(flickVelocity) < FLYWHEEL_BRAKE_VELOCITY || this.gestureBaseMs <= 0) {
+    const now = Date.now()
+    const rawVel = this.computeRawFingerVelocity(now)
+    this.velocitySamples = []
+
+    // 松手前手指已停住 ≥95ms 或速度极微：直接稳稳刹停，不延续旧转速
+    if (this.lastMoveAtMs <= 0 || now - this.lastMoveAtMs > FLYWHEEL_HOLD_STOP_MS || this.gestureBaseMs <= 0) {
+      this.inertiaVelocity = 0
+      return
+    }
+    const flickVelocity = rawVel * FLYWHEEL_VELOCITY_SCALE
+    if (Math.abs(flickVelocity) < FLYWHEEL_BRAKE_VELOCITY) {
       this.inertiaVelocity = 0
       return
     }
@@ -378,11 +424,15 @@ export class TimeWheelController {
     let nextVelocity = 0
     if (prevSpin !== 0) {
       if ((flickVelocity > 0 && prevSpin > 0) || (flickVelocity < 0 && prevSpin < 0)) {
-        // 同向连续甩动：像抽陀螺一样逐次叠加速度
+        // 同向连续甩动：温和叠加速度并受合理上限约束
         nextVelocity = prevSpin + flickVelocity * FLYWHEEL_ACCUMULATE_GAIN
       } else {
-        // 反向甩动：抵消并可反向加速
-        nextVelocity = prevSpin + flickVelocity * 1.15
+        // 反向推动：手指已接住转轴并朝反方向施力，坚决顺应新方向（轻推则稳稳刹停，绝不继续倒着转）
+        if (Math.abs(flickVelocity) >= FLYWHEEL_REVERSE_THRESHOLD || Math.abs(prevSpin) < 0.45) {
+          nextVelocity = flickVelocity
+        } else {
+          nextVelocity = 0
+        }
       }
     } else {
       nextVelocity = flickVelocity
@@ -442,8 +492,8 @@ export class TimeWheelController {
     else if (this.store.timeWheelUnit === 'day') { baseMultiplier = 0.85 }
     else if (this.store.timeWheelUnit === 'hour') { baseMultiplier = 0.85 }
     else if (this.store.timeWheelUnit === 'minute') { baseMultiplier = 0.95 }
-    // 连续平滑加速曲线（取代 0.06x 极低阻尼与 2x/4x/8x 阶跃突变），保证慢拖跟手、快甩顺滑。
-    const boost = 1.0 + Math.min(2.6, Math.max(0, speed - 0.35) * 1.8)
+    // 克制的平滑跟手曲线（1.0x ~ 1.65x），慢拖精准、快划顺滑不乱飞
+    const boost = 1.0 + Math.min(0.65, Math.max(0, speed - 0.5) * 0.45)
     return baseMultiplier * boost
   }
 

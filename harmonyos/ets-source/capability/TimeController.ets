@@ -7,7 +7,14 @@ import hilog from '@ohos.hilog'
 import { I18n } from '../pages/I18n'
 import { StellariumBridgeResponse } from '../pages/StellariumTypes'
 import { CommandPort } from '../bridge/CommandPort'
-import { TimeStore } from '../state/TimeStore'
+import {
+  TimeStore,
+  TIME_SPEED_STEPS,
+  TIME_SPEED_IDX_STOP,
+  TIME_SPEED_IDX_REALTIME,
+  TIME_SPEED_IDX_REWIND_START,
+  TIME_SPEED_IDX_FAST_START
+} from '../state/TimeStore'
 import { TimeSettingsStore } from '../state/TimeSettingsStore'
 import { DeltaTStore } from '../state/DeltaTStore'
 import { dateToJD, jdToLocalTimeText } from '../common/derive/astro'
@@ -37,34 +44,11 @@ export interface TimeHostHooks extends BehaviorHostHooks {
   setLocation(name: string, lat: number, lon: number, alt: number): void
   // 时间轮拖动/惯性期间暂停后台轮询，避免与 60Hz 设时抢桥与重排。
   isTimeWheelInteracting?(): boolean
+  // 点击速度按钮前立即停止时间轮惯性自转，避免飞轮与引擎速率打架。
+  stopTimeWheel?(): void
   // 拖动时间轮前取消尚未触发的延迟布局重定位，避免 moveToSelectedAt 打断选中天体时间锚点。
   cancelSelectedObjectUiChange?(): void
 }
-
-// ===== 时间速率档位系统 =====
-// Stellarium 内部单位：Julian days per second (JD/s)
-// 1 JD = 86400 秒，所以 1x 实时 = 1/86400 ≈ 1.1574e-5 JD/s
-// 档位表：索引 0=暂停, 1=1x, 2=2x, 3=10x, 4=1分/秒, 5=1时/秒, 6=1天/秒, 7=10天/秒
-// 负索引 = 倒带：-1=-1x, -2=-1时/秒, -3=-1天/秒
-const TIME_SPEED_STEPS: number[] = [
-  -864000.0 / 86400.0,   // -10: 倒带 极速(1天/秒反向)
-  -360.0 / 86400.0,      // -9:  倒带 快进(1时/秒反向)
-  -60.0 / 86400.0,       // -8:  倒带(1分/秒反向)
-  -10.0 / 86400.0,       // -7:  倒带 10x
-  -2.0 / 86400.0,        // -6:  倒带 2x
-  -1.0 / 86400.0,        // -5:  倒带 1x
-  0,                      //  0:  停止
-  1.0 / 86400.0,         //  1:  实时 1x
-  2.0 / 86400.0,         //  2:  2x
-  10.0 / 86400.0,        //  3:  10x
-  60.0 / 86400.0,        //  4:  1分/秒
-  360.0 / 86400.0,       //  5:  1时/秒
-  86400.0 / 86400.0,     //  6:  1天/秒
-  864000.0 / 86400.0,    //  7:  10天/秒
-]
-// TIME_SPEED_STEPS 的"零点"索引（停止）和"实时"索引
-const TIME_SPEED_IDX_STOP = 6
-const TIME_SPEED_IDX_REALTIME = 7
 
 export class TimeController {
   private timeStore: TimeStore
@@ -137,6 +121,7 @@ export class TimeController {
 
   /** Apply speed at given step index. Clamps to valid range. */
   applySpeedStep(index: number): void {
+    this.hooks.stopTimeWheel?.()
     const idx: number = Math.max(0, Math.min(TIME_SPEED_STEPS.length - 1, index))
     const rate: number = TIME_SPEED_STEPS[idx]
     if (idx !== TIME_SPEED_IDX_STOP && idx !== TIME_SPEED_IDX_REALTIME) {
@@ -365,35 +350,55 @@ export class TimeController {
       this.timeStore.timeRateText = '1x'
       this.refreshTimeNow()
     } else if (id === 'rewind') {
-      // 倒带：单按钮循环升档 -1x → -2x → -10x → -1分/秒 → -1时/秒 → -1天/秒 → 回到-1x
-      let rewIdx = 5 // 默认从 -1x 起步（非倒带状态按下时）
-      if (this.timeStore.timeSpeedIndex < TIME_SPEED_IDX_STOP) {
-        // 已在倒带中：再点升一档（索引减小=更快反向）；到底(0)循环回 -1x
-        rewIdx = this.timeStore.timeSpeedIndex === 0 ? 5 : this.timeStore.timeSpeedIndex - 1
+      // 倒退：
+      // - 若当前在快进中，先朝正常方向逐档减速（10天→1天→1时→10分→1分→实时 1x）；
+      // - 若在实时/暂停态，直接切到 -10分/秒（肉眼立刻可见星空倒流）；
+      // - 若已在倒退中，逐档加快倒退（-1分→-10分→-1时→-1天→-10天，封顶不循环跳回）。
+      const cur = this.timeStore.timeSpeedIndex
+      let nextIdx = TIME_SPEED_IDX_REWIND_START
+      if (cur > TIME_SPEED_IDX_REALTIME) {
+        nextIdx = cur - 1
+      } else if (cur < TIME_SPEED_IDX_STOP) {
+        nextIdx = Math.max(0, cur - 1)
       }
-      this.applySpeedStep(rewIdx)
-      this.hooks.flashHint(I18n.t('s0763_rewind') + ' ' + this.timeStore.timeRateText)
+      this.applySpeedStep(nextIdx)
+      this.hooks.flashHint(nextIdx === TIME_SPEED_IDX_REALTIME
+        ? I18n.t('s0764_realtime') + ' 1x'
+        : I18n.t('s0763_rewind') + ' ' + this.timeStore.timeRateText)
       this.refreshTimeNow()
     } else if (id === 'faster' || id === 'fast' || id === 'warp') {
-      // 快进：单按钮循环升档 1x → 2x → 10x → 1分/秒 → 1时/秒 → 1天/秒 → 10天/秒 → 回到1x
-      let fwdIdx = TIME_SPEED_IDX_REALTIME // 默认回 1x（停止/倒带状态按下时从 1x 起步）
-      if (this.timeStore.timeSpeedIndex >= TIME_SPEED_IDX_REALTIME) {
-        // 已在正向：升一档；到顶(13)循环回 1x
-        fwdIdx = this.timeStore.timeSpeedIndex >= 13 ? TIME_SPEED_IDX_REALTIME : this.timeStore.timeSpeedIndex + 1
+      // 快进：
+      // - 若当前在倒退中，先朝正常方向逐档减速（-10天→-1天→-1时→-10分→-1分→实时 1x）；
+      // - 若在实时/暂停态，直接切到 10分/秒（肉眼立刻可见星空流转）；
+      // - 若已在快进中，逐档加快（1分→10分→1时→1天→10天，封顶不循环跳回）。
+      const cur = this.timeStore.timeSpeedIndex
+      const maxIdx = TIME_SPEED_STEPS.length - 1
+      let nextIdx = TIME_SPEED_IDX_FAST_START
+      if (cur < TIME_SPEED_IDX_STOP) {
+        nextIdx = cur + 1 === TIME_SPEED_IDX_STOP ? TIME_SPEED_IDX_REALTIME : cur + 1
+      } else if (cur > TIME_SPEED_IDX_REALTIME) {
+        nextIdx = Math.min(maxIdx, cur + 1)
       }
-      this.applySpeedStep(fwdIdx)
-      this.hooks.flashHint(I18n.t('s0765_fast') + ' ' + this.timeStore.timeRateText)
+      this.applySpeedStep(nextIdx)
+      this.hooks.flashHint(nextIdx === TIME_SPEED_IDX_REALTIME
+        ? I18n.t('s0764_realtime') + ' 1x'
+        : I18n.t('s0765_fast') + ' ' + this.timeStore.timeRateText)
       this.refreshTimeNow()
     } else if (id === 'slower') {
-      // 减速：向"停止"方向降一档（快进降档、倒带也降档），降到1x再点=停止，不会跨进反向
-      let prevIdx = this.timeStore.timeSpeedIndex
-      if (this.timeStore.timeSpeedIndex > TIME_SPEED_IDX_STOP) {
-        prevIdx = this.timeStore.timeSpeedIndex - 1
-      } else if (this.timeStore.timeSpeedIndex < TIME_SPEED_IDX_STOP) {
-        prevIdx = this.timeStore.timeSpeedIndex + 1
+      // 降速：始终向「实时 1x」收拢一档（不跨入反向），从 1x 再点则暂停。
+      const cur = this.timeStore.timeSpeedIndex
+      let nextIdx = cur
+      if (cur > TIME_SPEED_IDX_REALTIME) {
+        nextIdx = cur - 1
+      } else if (cur < TIME_SPEED_IDX_STOP) {
+        nextIdx = cur + 1 === TIME_SPEED_IDX_STOP ? TIME_SPEED_IDX_REALTIME : cur + 1
+      } else if (cur === TIME_SPEED_IDX_REALTIME) {
+        nextIdx = TIME_SPEED_IDX_STOP
       }
-      this.applySpeedStep(prevIdx)
-      this.hooks.flashHint(prevIdx === TIME_SPEED_IDX_STOP ? I18n.t('s0761_stop') : I18n.t('s0759_slower') + ' ' + this.timeStore.timeRateText)
+      this.applySpeedStep(nextIdx)
+      this.hooks.flashHint(nextIdx === TIME_SPEED_IDX_STOP
+        ? I18n.t('s0761_stop')
+        : (nextIdx === TIME_SPEED_IDX_REALTIME ? I18n.t('s0764_realtime') + ' 1x' : I18n.t('s0759_slower') + ' ' + this.timeStore.timeRateText))
       this.refreshTimeNow()
     } else if (id === '+12h') {
       this.advanceTime(12)

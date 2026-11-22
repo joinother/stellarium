@@ -21,9 +21,31 @@ export interface TimeHostHooks {
   applyAtmosphereResponse(response: StellariumBridgeResponse): void
 }
 
+// ===== 统一时间速率档位表（单一真相源，TimeController / TimeSpeedChips 共用）=====
+// Stellarium 内部单位：Julian days per second (JD/s)，1 JD = 86400 秒。
+// 每一档都有清晰肉眼可见的星空流转差异：1分/秒 · 10分/秒 · 1时/秒(3600s/s) · 1天/秒 · 10天/秒。
+export const TIME_SPEED_STEPS: number[] = [
+  -864000.0 / 86400.0,   //  0: -10天/秒
+  -86400.0 / 86400.0,    //  1: -1天/秒
+  -3600.0 / 86400.0,     //  2: -1时/秒
+  -600.0 / 86400.0,      //  3: -10分/秒（首次倒退默认档，肉眼立即可见）
+  -60.0 / 86400.0,       //  4: -1分/秒
+  0,                     //  5: 已暂停
+  1.0 / 86400.0,         //  6: 实时 1x
+  60.0 / 86400.0,        //  7: 1分/秒
+  600.0 / 86400.0,       //  8: 10分/秒（首次快进默认档，肉眼立即可见）
+  3600.0 / 86400.0,      //  9: 1时/秒
+  86400.0 / 86400.0,     // 10: 1天/秒
+  864000.0 / 86400.0,    // 11: 10天/秒
+]
+export const TIME_SPEED_IDX_STOP: number = 5
+export const TIME_SPEED_IDX_REALTIME: number = 6
+export const TIME_SPEED_IDX_REWIND_START: number = 3
+export const TIME_SPEED_IDX_FAST_START: number = 8
+
 @Observed
 export class TimeStore {
-  timeSpeedIndex: number = 7  // 7 = 1x 实时（默认档位）
+  timeSpeedIndex: number = TIME_SPEED_IDX_REALTIME
   siderealTimeText: string = '--'
   observationTimeText: string = '--'
 
@@ -32,7 +54,7 @@ export class TimeStore {
   pendingTimeRate: number = Number.NaN
   pendingTimeRateUntilMs: number = 0
   lastSyncedTimeRate: number = Number.NaN
-  lastNonZeroSpeedIndex: number = 7
+  lastNonZeroSpeedIndex: number = TIME_SPEED_IDX_REALTIME
 
   // ==== 手工日期时间选择器模型 ====
   // 时间面板（TimePanel → ManualTimeBlock）经 @Prop 消费；宿主 applyManualTime /

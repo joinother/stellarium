@@ -153,19 +153,21 @@ export function formatRate(rate: number): string {
   // Map common speeds to human-readable labels
   interface SpeedLabel { limit: number; label: string }
   const thresholds: SpeedLabel[] = [
-    { limit: 2.0 / secPerDay,     label: '2x' } as SpeedLabel,
-    { limit: 10.0 / secPerDay,    label: '10x' } as SpeedLabel,
-    { limit: 60.0 / secPerDay,    label: '1分/秒' } as SpeedLabel,
-    { limit: 360.0 / secPerDay,   label: '1时/秒' } as SpeedLabel,
-    { limit: 1.0,                label: '1天/秒' } as SpeedLabel,
-    { limit: 10.0,               label: '10天/秒' } as SpeedLabel,
+    { limit: 60.0 / secPerDay,     label: '1分/秒' } as SpeedLabel,
+    { limit: 600.0 / secPerDay,    label: '10分/秒' } as SpeedLabel,
+    { limit: 3600.0 / secPerDay,   label: '1时/秒' } as SpeedLabel,
+    { limit: 1.0,                  label: '1天/秒' } as SpeedLabel,
+    { limit: 10.0,                 label: '10天/秒' } as SpeedLabel,
   ] as SpeedLabel[]
   if (Math.abs(absRate - 1.0 / secPerDay) < 0.0000001) { return sign + '1x' }
   let speedLabel: string = ''
   for (const t of thresholds) {
-    if (absRate <= t.limit * 1.01) { speedLabel = t.label; break }
+    if (Math.abs(absRate - t.limit) <= t.limit * 0.03) { speedLabel = t.label; break }
   }
   if (speedLabel.length > 0) { return sign + speedLabel }
   const mult: number = absRate * secPerDay
-  return sign + mult.toFixed(0) + 'x'
+  if (mult >= 86400) { return sign + (mult / 86400).toFixed(0) + '天/秒' }
+  if (mult >= 3600) { return sign + (mult / 3600).toFixed(0) + '时/秒' }
+  if (mult >= 60) { return sign + (mult / 60).toFixed(0) + '分/秒' }
+  return sign + Math.max(1, Math.round(mult)).toString() + 'x'
 }

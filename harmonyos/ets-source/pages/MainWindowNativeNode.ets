@@ -4220,6 +4220,7 @@ export struct WindowNativeNode {
         setLocation: (name: string, lat: number, lon: number, alt: number): void => { this.locationCtl().setLocation(name, lat, lon, alt) },
         isTimeWheelInteracting: (): boolean => this.timeWheelStore.timeWheelDragging ||
           (this.timeWheelController !== undefined && this.timeWheelController.isInteracting()),
+        stopTimeWheel: (): void => { this.wheel().stop() },
         cancelSelectedObjectUiChange: (): void => { this.cancelSelectedObjectUiChange() }
       }
       this.timeControllerImpl = new TimeController(

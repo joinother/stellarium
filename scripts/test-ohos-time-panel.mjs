@@ -104,3 +104,78 @@ test('the tablet clock anchor keeps edgeMargin and skyWidth in the declared orde
   assert.doesNotMatch(canvas, /\.gesture\(/);
   assert.match(canvas, /\.hitTestBehavior\(HitTestMode\.None\)/);
 });
+
+test('time wheel flywheel caps runaway speed and immediately reverses when pushed in the opposite direction', () => {
+  const store = new TimeWheelStore();
+  store.timeWheelYear = 2026;
+  store.timeWheelMonth = 11;
+  store.timeWheelDay = 22;
+  store.timeWheelHour = 16;
+  store.timeWheelMinute = 0;
+  store.timeWheelSecond = 0;
+  store.timeWheelUnit = 'hour';
+  store.refreshTicks();
+
+  const wheel = new TimeWheelController(store, () => {}, () => {}, () => 8, () => {});
+  const realNow = Date.now;
+  let fakeNow = 100000;
+  Date.now = () => fakeNow;
+  try {
+    // 1. Spin hard to the left (negative visual velocity) multiple times.
+    for (let rep = 0; rep < 4; rep++) {
+      wheel.beginPan(300, 100);
+      fakeNow += 20;
+      wheel.updatePan(180);
+      fakeNow += 20;
+      wheel.updatePan(60);
+      fakeNow += 10;
+      wheel.endPan(false);
+    }
+    assert.equal(wheel.isSpinning(), true);
+    const leftVel = wheel.inertiaVelocity;
+    assert.ok(leftVel < -0.5, `expected strong leftward spin, got ${leftVel}`);
+    assert.ok(Math.abs(leftVel) <= 2.6 + 1e-6, `expected flywheel capped <= 2.6 vp/ms, got ${leftVel}`);
+
+    // 2. While spinning fast left, push hard to the RIGHT: must immediately spin RIGHT (positive)!
+    fakeNow += 30;
+    wheel.captureSpinOnTouchDown();
+    wheel.beginPan(80, 100);
+    fakeNow += 20;
+    wheel.updatePan(180);
+    fakeNow += 20;
+    wheel.updatePan(280);
+    fakeNow += 10;
+    wheel.endPan(false);
+    assert.equal(wheel.isSpinning(), true);
+    assert.ok(wheel.inertiaVelocity > 0.2, `expected immediate reversal to rightward spin, got ${wheel.inertiaVelocity}`);
+
+    // 3. Pause finger >= 100ms before lift: must brake cleanly without flinging.
+    fakeNow += 30;
+    wheel.captureSpinOnTouchDown();
+    wheel.beginPan(100, 100);
+    fakeNow += 20;
+    wheel.updatePan(160);
+    fakeNow += 120;
+    wheel.endPan(false);
+    assert.equal(wheel.isSpinning(), false);
+  } finally {
+    Date.now = realNow;
+    wheel.stop();
+  }
+});
+
+test('time speed ladder has true 1h/s (3600s/s), immediate visible first tap, and coherent rewind/fast/slower rules', async () => {
+  const { TIME_SPEED_STEPS, TIME_SPEED_IDX_STOP, TIME_SPEED_IDX_REALTIME, TIME_SPEED_IDX_FAST_START, TIME_SPEED_IDX_REWIND_START } =
+    await sourceModule('state/TimeStore.ets');
+  assert.equal(TIME_SPEED_STEPS[TIME_SPEED_IDX_STOP], 0);
+  assert.ok(Math.abs(TIME_SPEED_STEPS[TIME_SPEED_IDX_REALTIME] - 1 / 86400) < 1e-12);
+  assert.ok(Math.abs(TIME_SPEED_STEPS[TIME_SPEED_IDX_FAST_START] - 600 / 86400) < 1e-12, 'first fast tap must be 10m/s');
+  assert.ok(Math.abs(TIME_SPEED_STEPS[TIME_SPEED_IDX_FAST_START + 1] - 3600 / 86400) < 1e-12, '1h/s must be true 3600s/s');
+  assert.ok(Math.abs(TIME_SPEED_STEPS[TIME_SPEED_IDX_REWIND_START] - (-600 / 86400)) < 1e-12, 'first rewind tap must be -10m/s');
+  assert.ok(Math.abs(TIME_SPEED_STEPS[TIME_SPEED_IDX_REWIND_START - 1] - (-3600 / 86400)) < 1e-12, '-1h/s must be true -3600s/s');
+
+  const ctrlSrc = readFileSync(new URL('../harmonyos/ets-source/capability/TimeController.ets', import.meta.url), 'utf8');
+  assert.ok(ctrlSrc.includes('this.hooks.stopTimeWheel?.()'), 'speed buttons must stop spinning time wheel');
+  const chipsSrc = readFileSync(new URL('../harmonyos/ets-source/panels/time/TimeSpeedChips.ets', import.meta.url), 'utf8');
+  assert.ok(chipsSrc.includes('statusRateSummary()'), 'TimeSpeedChips must always display live speed summary');
+});
