@@ -35,6 +35,7 @@ export interface ArSkyRestoreSnapshot {
   mistHorizon: boolean
   fogEffect: boolean
   auroraEnabled: boolean
+  projection: string
   fovDeg: number
 }
 
@@ -112,15 +113,17 @@ export class ARController {
     if (this.savedSkyState === null) {
       this.savedSkyState = this.hooks.readSkyRestoreState()
     }
-    // 彻底隐藏虚拟地景、雾山地平线、明亮大气、雾气与高开销极光层，拉高 AR 帧率并消除虚拟山影
+    // 彻底隐藏虚拟地景、雾山地平线、明亮大气、雾气与高开销极光层；
+    // 切换至与真实针孔摄像头数学一致的中心透视投影（ProjectionPerspective）并对齐短边视场角（~45°），消除边缘畸变与角尺度滑移。
     this.port.fire('setAtmosphereFlag', 'landscape|0')
     this.port.fire('setActionChecked', 'actionShow_MistHorizon|0')
     this.port.fire('setAtmosphereFlag', 'atmosphere|0')
     this.port.fire('setAtmosphereFlag', 'fog|0')
     this.port.fire('setSkyDisplaySetting', 'auroraEnabled|0')
+    this.port.fire('setProjectionType', 'ProjectionPerspective')
     this.port.fire('setFOV', this.store.arCameraFovDeg.toFixed(1))
 
-    // 开启 AR 超低延迟姿态通道（120Hz + 36ms 前瞻预测），并在未开陀螺仪时自动启用
+    // 开启 AR 超低延迟姿态通道（120Hz + 44ms 前瞻预测），并在未开陀螺仪时自动启用
     this.hooks.setArLowLatencyGyro(true)
     if (!this.hooks.isGyroEnabled()) {
       this.hooks.enableGyroForAr()
@@ -150,6 +153,9 @@ export class ARController {
       this.port.fire('setAtmosphereFlag', snap.atmosphere ? 'atmosphere|1' : 'atmosphere|0')
       this.port.fire('setAtmosphereFlag', snap.fogEffect ? 'fog|1' : 'fog|0')
       this.port.fire('setSkyDisplaySetting', snap.auroraEnabled ? 'auroraEnabled|1' : 'auroraEnabled|0')
+      if (snap.projection.length > 0) {
+        this.port.fire('setProjectionType', snap.projection)
+      }
       this.port.fire('setFOV', snap.fovDeg.toFixed(1))
       this.hooks.applySkyRestoreState(snap)
     }

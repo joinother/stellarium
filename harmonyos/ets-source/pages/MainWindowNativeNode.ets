@@ -3416,6 +3416,7 @@ export struct WindowNativeNode {
           mistHorizon: this.layerStore.mistHorizon,
           fogEffect: this.layerStore.fogEffect,
           auroraEnabled: this.layerStore.auroraEnabled,
+          projection: this.currentProjection,
           fovDeg: Number.isFinite(this.fovSliderValue) && this.fovSliderValue >= 5 ? this.fovSliderValue : 60
         }),
         applySkyRestoreState: (snap: ArSkyRestoreSnapshot): void => {
@@ -3424,6 +3425,9 @@ export struct WindowNativeNode {
           this.layerStore.mistHorizon = snap.mistHorizon
           this.layerStore.fogEffect = snap.fogEffect
           this.layerStore.auroraEnabled = snap.auroraEnabled
+          if (snap.projection.length > 0) {
+            this.currentProjection = snap.projection
+          }
           this.fovSliderValue = snap.fovDeg
           this.refreshState()
         },
@@ -3434,6 +3438,7 @@ export struct WindowNativeNode {
             this.layerStore.mistHorizon = false
             this.layerStore.fogEffect = false
             this.layerStore.auroraEnabled = false
+            this.currentProjection = 'ProjectionPerspective'
             this.fovSliderValue = this.arStore.arCameraFovDeg
           }
         }

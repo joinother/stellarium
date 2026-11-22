@@ -6,7 +6,8 @@ export class ARStore {
   arCameraActive: boolean = false
   arCameraStarting: boolean = false
   arSkyBlend: number = 0.55
-  arCameraFovDeg: number = 60
+  // Stellarium setFOV 对应屏幕短边视场角；主流 24–26mm 等效广角主摄竖向 FOV ≈ 44°–46°
+  arCameraFovDeg: number = 45
   arHardwareSummary: string = ''
   arEngineSlamSupported: boolean = false
   arEngineDepthSupported: boolean = false

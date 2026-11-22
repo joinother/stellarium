@@ -16,11 +16,13 @@
 #include <array>
 #include <atomic>
 #include <cmath>
+#include <condition_variable>
 #include <cstddef>
 #include <cstdlib>
 #include <dlfcn.h>
 #include <mutex>
 #include <string>
+#include <thread>
 #include <vector>
 
 namespace {
@@ -43,6 +45,9 @@ struct EglState
     GLuint frameTexture = 0;
     GLuint arCompositeProgram = 0;
     GLuint arCameraTexture = 0;
+    GLuint lastSkyTexture = 0;
+    int lastSkyWidth = 0;
+    int lastSkyHeight = 0;
     int frameTextureWidth = 0;
     int frameTextureHeight = 0;
     bool submittedFrame = false;
@@ -71,6 +76,9 @@ struct ArCameraState
 EglState g_egl;
 ArCameraState g_ar;
 std::atomic<bool> g_arFrameAvailable {false};
+std::mutex g_arWakeMutex;
+std::condition_variable g_arWakeCv;
+std::atomic<bool> g_arPresentThreadStarted {false};
 OH_NativeXComponent_Callback g_xcomponentCallback;
 std::mutex g_renderMutex;
 std::atomic<std::uint64_t> g_presentationState {0};
@@ -78,6 +86,7 @@ std::atomic<std::uint64_t> g_presentationState {0};
 void onArCameraFrameAvailable(void*)
 {
     g_arFrameAvailable.store(true, std::memory_order_release);
+    g_arWakeCv.notify_one();
 }
 
 struct StarVertex
@@ -455,6 +464,61 @@ void drawSkyWithOptionalArCameraLocked(GLuint skyTexture, int viewportWidth, int
     glDrawArrays(GL_TRIANGLES, 0, 3);
 }
 
+// Camera-driven immediate compositor loop: whenever CameraKit delivers a new frame
+// (native 30fps), immediately re-composite it with the latest shared Stellarium sky
+// texture without waiting for Stellarium's next heavy Qt frame (~46ms).
+void ensureArCameraPresentThreadStarted()
+{
+    bool expected = false;
+    if (!g_arPresentThreadStarted.compare_exchange_strong(expected, true)) {
+        return;
+    }
+    std::thread([]() {
+        while (true) {
+            {
+                std::unique_lock<std::mutex> wakeLock(g_arWakeMutex);
+                g_arWakeCv.wait(wakeLock, []() {
+                    return g_arFrameAvailable.load(std::memory_order_acquire);
+                });
+            }
+            std::lock_guard<std::mutex> lock(g_renderMutex);
+            if (!g_ar.compositeEnabled || g_ar.destroyPending || g_ar.image == nullptr) {
+                g_arFrameAvailable.store(false, std::memory_order_release);
+                continue;
+            }
+            if (!g_arFrameAvailable.load(std::memory_order_acquire)) {
+                continue;
+            }
+            if (g_egl.display == EGL_NO_DISPLAY || g_egl.surface == EGL_NO_SURFACE ||
+                g_egl.context == EGL_NO_CONTEXT || g_egl.lastSkyTexture == 0 ||
+                g_egl.lastSkyWidth <= 0 || g_egl.lastSkyHeight <= 0) {
+                continue;
+            }
+            if (eglMakeCurrent(g_egl.display, g_egl.surface, g_egl.surface, g_egl.context) != EGL_TRUE) {
+                continue;
+            }
+            if (g_egl.frameProgram == 0) {
+                g_egl.frameProgram = createFrameProgram();
+            }
+            if (g_egl.frameProgram != 0) {
+                glDisable(GL_SCISSOR_TEST);
+                glDisable(GL_DEPTH_TEST);
+                glDisable(GL_STENCIL_TEST);
+                glDisable(GL_BLEND);
+                const auto viewport = fitPresentationFrame(g_egl.lastSkyWidth, g_egl.lastSkyHeight,
+                    g_egl.width > 0 ? g_egl.width : g_egl.lastSkyWidth,
+                    g_egl.height > 0 ? g_egl.height : g_egl.lastSkyHeight);
+                glViewport(viewport.left, viewport.bottom, viewport.width, viewport.height);
+                glClearColor(0.f, 0.f, 0.f, 1.f);
+                glClear(GL_COLOR_BUFFER_BIT);
+                drawSkyWithOptionalArCameraLocked(g_egl.lastSkyTexture, viewport.width, viewport.height);
+                eglSwapBuffers(g_egl.display, g_egl.surface);
+            }
+            eglMakeCurrent(g_egl.display, EGL_NO_SURFACE, EGL_NO_SURFACE, EGL_NO_CONTEXT);
+        }
+    }).detach();
+}
+
 bool initEgl(void* window)
 {
     g_egl.display = eglGetDisplay(EGL_DEFAULT_DISPLAY);
@@ -641,6 +705,9 @@ bool renderSubmittedTexture(GLuint texture, int frameWidth, int frameHeight,
     glViewport(viewport.left, viewport.bottom, viewport.width, viewport.height);
     glClearColor(0.f, 0.f, 0.f, 1.f);
     glClear(GL_COLOR_BUFFER_BIT);
+    g_egl.lastSkyTexture = texture;
+    g_egl.lastSkyWidth = frameWidth;
+    g_egl.lastSkyHeight = frameHeight;
     drawSkyWithOptionalArCameraLocked(texture, viewport.width, viewport.height);
     if (glGetError() != GL_NO_ERROR || eglSwapBuffers(g_egl.display, g_egl.surface) != EGL_TRUE) {
         OH_LOG_Print(LOG_APP, LOG_ERROR, STEL_ENTRY_LOG_DOMAIN, STEL_ENTRY_LOG_TAG,
@@ -730,6 +797,9 @@ void renderSubmittedFrame(const unsigned char* rgba, int frameWidth, int frameHe
     glViewport(viewport.left, viewport.bottom, viewport.width, viewport.height);
     glClearColor(0.f, 0.f, 0.f, 1.f);
     glClear(GL_COLOR_BUFFER_BIT);
+    g_egl.lastSkyTexture = g_egl.frameTexture;
+    g_egl.lastSkyWidth = frameWidth;
+    g_egl.lastSkyHeight = frameHeight;
     drawSkyWithOptionalArCameraLocked(g_egl.frameTexture, viewport.width, viewport.height);
     const GLenum drawError = glGetError();
     if (drawError != GL_NO_ERROR) {
@@ -1084,6 +1154,7 @@ static napi_value CreateArCameraSurface(napi_env env, napi_callback_info info)
                     g_ar.hasFrame = false;
                     g_arFrameAvailable.store(false, std::memory_order_release);
                     surfaceIdStr = std::to_string(sid);
+                    ensureArCameraPresentThreadStarted();
                     OH_LOG_Print(LOG_APP, LOG_INFO, STEL_ENTRY_LOG_DOMAIN, STEL_ENTRY_LOG_TAG,
                                  "[ar-camera] created OH_NativeImage surfaceId=%{public}s", surfaceIdStr.c_str());
                 } else {

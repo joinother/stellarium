@@ -305,8 +305,12 @@ export class ArCameraService {
         if (session.isFocusModeSupported(camera.FocusMode.FOCUS_MODE_CONTINUOUS_AUTO)) {
           session.setFocusMode(camera.FocusMode.FOCUS_MODE_CONTINUOUS_AUTO)
         }
+        const fl = session.getFocalLength()
+        if (Number.isFinite(fl) && fl > 0) {
+          hilog.info(LOG_DOMAIN, LOG_TAG, '[ar-camera] focalLength=%{public}smm', fl.toFixed(2))
+        }
       } catch (_focusErr) {
-        // Optional focus mode
+        // Optional focus mode / focal length probe
       }
 
       await session.start()

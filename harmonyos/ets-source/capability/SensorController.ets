@@ -966,10 +966,10 @@ export class SensorController {
         this.gyroVelFwd[1] * this.gyroVelFwd[1] +
         this.gyroVelFwd[2] * this.gyroVelFwd[2]
       )
-      // 静止死区 0.015 rad/s 防止停稳时微抖；运动时向前预测 36ms（上限 0.075 rad ≈ 4.3°）抵消渲染滞后。
+      // 静止死区 0.015 rad/s 防止停稳时微抖；运动时向前预测 44ms（上限 0.085 rad ≈ 4.9°）匹配实测渲染耗时。
       if (speed > 0.015) {
-        const leadSec = 0.036
-        const maxLeadRad = 0.075
+        const leadSec = 0.044
+        const maxLeadRad = 0.085
         const rawLeadRad = speed * leadSec
         const scale = rawLeadRad > maxLeadRad ? (maxLeadRad / speed) : leadSec
         dispatchFwd = gyroNormalizeVector([
