@@ -353,3 +353,32 @@ test('overlapping refreshes cannot publish concurrently', async (context) => {
   finally { release(); await active }
   assert.deepEqual(await readdir(root), ['v1'])
 })
+
+test('spaceflight-crew-json validates onboard astronaut payloads and rejects malformed records', async (context) => {
+  const crewSource = {
+    id: 'catalog.spaceflight.crew',
+    format: 'spaceflight-crew-json',
+    upstreamUrl: 'https://corquaid.github.io/international-space-station-APIs/JSON/people-in-space.json',
+    mirrorPath: '/v1/catalogs/spaceflight/people-in-space.json',
+  }
+  const validPayload = JSON.stringify({
+    number: 2,
+    iss_expedition: 75,
+    people: [
+      { name: 'Zhu Yangzhu', country: 'China', flag_code: 'cn', agency: 'CMSA', position: 'Commander', spacecraft: 'Shenzhou 23', iss: false },
+      { name: 'Pyotr Dubrov', country: 'Russia', flag_code: 'ru', agency: 'Roscosmos', position: 'Commander', spacecraft: 'Soyuz MS-29', iss: true },
+    ],
+  })
+  assert.equal(validatePayload(validPayload, crewSource), 2)
+  assert.throws(() => validatePayload(JSON.stringify({ people: [{ name: '', country: 'China', spacecraft: 'Shenzhou 23', iss: false }] }), crewSource), /invalid_payload/)
+  assert.throws(() => validatePayload(JSON.stringify({ people: [{ name: 'Alice', country: 'USA', spacecraft: 'Dragon', iss: 'yes' }] }), crewSource), /invalid_payload/)
+  const root = await workspace(context)
+  const result = await run(root, {
+    sources: [crewSource],
+    fetchImpl: async () => new Response(validPayload),
+  })
+  assert.equal(result.exitCode, 0)
+  assert.equal(result.manifest.sources[0].id, 'catalog.spaceflight.crew')
+  assert.equal(result.manifest.sources[0].status, 'fresh')
+  assert.equal(await readFile(join(root, crewSource.mirrorPath), 'utf8'), validPayload)
+})

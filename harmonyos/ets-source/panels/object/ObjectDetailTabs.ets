@@ -7,7 +7,7 @@ import { SatellitePass, StationComplexMember } from '../../pages/StellariumTypes
 import { ObjectDataTile, ObjectMetric, ObjectScheduleTile } from './DetailTiles'
 import { ObjectDataRow } from './DetailRows'
 import { ObjectDistanceNotice, SelectedCoordinateRows } from './DetailLiveRows'
-import { SatellitePassDetails, StationComplexSection } from './SatellitePassDetails'
+import { SatellitePassDetails, StationComplexSection, StationCrewSection } from './SatellitePassDetails'
 import { ConstellationCultureView } from './ConstellationCultureView'
 import { StructuredDetailRows } from './StructuredDetailRows'
 import { TabletInspectorMediaGroup } from './TabletInspectorMediaGroup'
@@ -92,6 +92,7 @@ export struct ObjectDetailObserveTab {
       if (this.store.selectedDistanceStatus === 'invalid_orbit' || this.store.selectedTleOutdated) {
         ObjectDistanceNotice({ text: this.distanceText })
       }
+      StationCrewSection({ store: this.store, tablet: false })
       if (this.store.selectedInfo.length > 0) {
         Text(this.store.selectedInfo).fontSize(12).fontColor(this.c.detailSub).lineHeight(18).width('100%')
           .padding({ top: 8, bottom: 2 })
@@ -189,6 +190,9 @@ export struct ObjectDetailDataTab {
             }
             Text('完整资料').fontSize(objectDetailFontSize(12, this.readableUi)).fontWeight(FontWeight.Medium).fontColor(this.c.fourth).width('100%')
             ObjectDistanceNotice({ text: this.distanceText })
+            StationCrewSection({
+              store: this.store, tablet: this.tablet
+            })
             TabletInspectorMediaGroup({
   store: this.mediaStore,
   detailStore: this.store,

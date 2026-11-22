@@ -315,6 +315,17 @@
       "runtimeDefault": "disabled"
     },
     {
+      "id": "catalog.spaceflight.crew",
+      "kind": "catalog",
+      "format": "spaceflight-crew-json",
+      "upstreamUrl": "https://corquaid.github.io/international-space-station-APIs/JSON/people-in-space.json",
+      "mirrorPath": "/v1/catalogs/spaceflight/people-in-space.json",
+      "localPath": "data/ohos/mirror-cache/spaceflight/people-in-space.json",
+      "output": "runtime-only",
+      "outboundFields": [],
+      "runtimeDefault": "disabled"
+    },
+    {
       "id": "realtime.planes",
       "kind": "realtime-query",
       "format": "aircraft-json",

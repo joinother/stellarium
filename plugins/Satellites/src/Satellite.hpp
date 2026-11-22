@@ -256,6 +256,8 @@ public:
 	//! Returns the (NORAD) catalog number. (For now, the ID string.)
 	QString getCatalogNumberString() const {return id;}
 	bool isOrbitValid() const { return initialized && orbitValid; }
+	bool isAfterLaunch(double JD) const { return JD >= jdLaunchYearJan1; }
+	double getLaunchJD() const { return jdLaunchYearJan1; }
 	bool shouldDisplayOrbit() const { return orbitDisplayed || orbitPreview; }
 	float getOrbitExpandProgress() const { return orbitExpandProgress; }
 	bool isStationComplexMember() const { return !stationComplexParentId.isEmpty(); }

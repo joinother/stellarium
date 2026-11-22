@@ -2,6 +2,19 @@ import { I18n } from '../../pages/I18n'
 import { UI_RADIUS_CONTROL, UI_RADIUS_MEDIA } from '../../common/ui/UiTokens'
 import { ObjectDetailStore } from '../../state/ObjectDetailStore'
 import { SatellitePass, StationComplexMember } from '../../pages/StellariumTypes'
+import {
+  StationCrewCountryCount,
+  StationCrewKey,
+  StationCrewMember,
+  StationCrewService,
+  StationCrewSnapshot,
+  flagEmojiForCountryCode,
+  localizeAstronautName,
+  localizeCountryName,
+  localizeCrewPosition,
+  localizeSpacecraftName,
+  resolveStationCrewKey
+} from '../../capability/StationCrewService'
 import { Theme, curves } from '@kit.ArkUI'
 import { DEFAULT_SLOTS, ThemeSlots, slotsFromTheme } from '../../state/StellariumTheme'
 
@@ -236,6 +249,190 @@ export struct StationComplexSection {
         .backgroundColor(this.c.soft)
         .border({ width: 0.5, color: this.c.border })
         .borderRadius(UI_RADIUS_CONTROL)
+    }
+  }
+}
+
+@Component
+export struct StationCrewSection {
+  @StorageProp('stellariumI18nLang') i18nLang: string = 'zh'
+  @StorageProp('stellariumSimDateLabel') simDateLabel: string = ''
+  @ObjectLink store: ObjectDetailStore
+  @Prop tablet: boolean
+  @State private c: ThemeSlots = DEFAULT_SLOTS
+  @State private refreshing: boolean = false
+
+  onWillApplyTheme(theme: Theme) { this.c = slotsFromTheme(theme) }
+
+  private isZh(): boolean {
+    return this.i18nLang.toLowerCase().startsWith('zh')
+  }
+
+  private resolveKey(): StationCrewKey {
+    // 显式读取 stationCrewRevision，确保镜像同步完成后触发细粒度重绘。
+    const _rev = this.store.stationCrewRevision
+    if (_rev < 0) return ''
+    const primaryId = this.store.selectedStationComplex !== undefined ? this.store.selectedStationComplex.primaryId : ''
+    return resolveStationCrewKey(
+      this.store.selectedCatalogId,
+      this.store.selectedEnglishName,
+      this.store.selectedName,
+      primaryId
+    )
+  }
+
+  private currentSnapshot(): StationCrewSnapshot {
+    return StationCrewService.getInstance().getSnapshotForStation(this.resolveKey())
+  }
+
+  private isHistoricalSimDate(): boolean {
+    const raw = this.simDateLabel.trim()
+    if (raw.length < 10) return false
+    const match = /^(\d{4})[-/](\d{1,2})[-/](\d{1,2})/.exec(raw)
+    if (match === null) return false
+    const simMs = Date.UTC(Number(match[1]), Number(match[2]) - 1, Number(match[3]))
+    if (!Number.isFinite(simMs)) return false
+    return Math.abs(Date.now() - simMs) > 21 * 24 * 3600 * 1000
+  }
+
+  private formatCountrySummary(countries: StationCrewCountryCount[], isZh: boolean): string {
+    const parts: string[] = []
+    for (let i = 0; i < countries.length; i++) {
+      const item = countries[i]
+      const flag = flagEmojiForCountryCode(item.flagCode, item.country)
+      const label = localizeCountryName(item.country, item.flagCode, isZh)
+      parts.push(flag + ' ' + label + ' ' + item.count.toString())
+    }
+    return parts.join(' · ')
+  }
+
+  private formatSourceTag(snap: StationCrewSnapshot, isZh: boolean): string {
+    if (this.refreshing) {
+      return isZh ? '正在从阿里云镜像同步…' : 'Syncing from mirror…'
+    }
+    if (snap.sourceKind === 'mirror' && snap.syncedAtMs > 0) {
+      const d = new Date(snap.syncedAtMs)
+      const hh = String(d.getHours()).padStart(2, '0')
+      const mm = String(d.getMinutes()).padStart(2, '0')
+      return isZh ? ('阿里云镜像 · ' + hh + ':' + mm) : ('Mirror · ' + hh + ':' + mm)
+    }
+    if (snap.sourceKind === 'cache') {
+      return isZh ? '本地镜像缓存 · 点击刷新' : 'Cached mirror · Tap to refresh'
+    }
+    return isZh ? '实时在轨名单 · 点击同步' : 'Onboard roster · Tap to sync'
+  }
+
+  private triggerManualRefresh(): void {
+    if (this.refreshing) return
+    this.refreshing = true
+    void StationCrewService.getInstance().syncIfNeeded(true).then(() => {
+      this.refreshing = false
+      this.store.stationCrewRevision += 1
+    }).catch(() => {
+      this.refreshing = false
+    })
+  }
+
+  build() {
+    if (this.resolveKey() !== '' && this.currentSnapshot().members.length > 0) {
+      Column({ space: 7 }) {
+        Row({ space: 6 }) {
+          Text(this.isZh()
+            ? ('在轨航天员' + (this.currentSnapshot().stationKey === 'iss' && this.currentSnapshot().issExpedition > 0
+              ? (' · 第 ' + this.currentSnapshot().issExpedition.toString() + ' 远征队')
+              : (this.currentSnapshot().stationKey === 'tiangong' ? ' · 天宫乘组' : '')))
+            : ('Onboard Crew' + (this.currentSnapshot().stationKey === 'iss' && this.currentSnapshot().issExpedition > 0
+              ? (' · Exp. ' + this.currentSnapshot().issExpedition.toString())
+              : (this.currentSnapshot().stationKey === 'tiangong' ? ' · Tiangong' : ''))))
+            .fontSize(this.tablet ? 13 : 12)
+            .fontWeight(FontWeight.Medium)
+            .fontColor(this.c.fourth)
+            .layoutWeight(1)
+            .maxLines(1)
+            .textOverflow({ overflow: TextOverflow.Ellipsis })
+          Text(this.isZh()
+            ? ('共 ' + this.currentSnapshot().members.length.toString() + ' 人')
+            : (this.currentSnapshot().members.length.toString() + ' onboard'))
+            .fontSize(10)
+            .fontColor(this.c.accent)
+            .padding({ left: 7, right: 7, top: 2, bottom: 2 })
+            .backgroundColor(this.c.softStrong)
+            .borderRadius(UI_RADIUS_MEDIA)
+        }.width('100%').alignItems(VerticalAlign.Center)
+
+        Row({ space: 6 }) {
+          Text(this.formatCountrySummary(this.currentSnapshot().countries, this.isZh()))
+            .fontSize(10.5)
+            .fontColor(this.c.sub)
+            .layoutWeight(1)
+            .maxLines(2)
+            .textOverflow({ overflow: TextOverflow.Ellipsis })
+          Text(this.formatSourceTag(this.currentSnapshot(), this.isZh()))
+            .fontSize(9.5)
+            .fontColor(this.c.tertiary)
+            .onClick(() => { this.triggerManualRefresh() })
+        }.width('100%').alignItems(VerticalAlign.Center)
+
+        Column({ space: 5 }) {
+          ForEach(this.currentSnapshot().members, (member: StationCrewMember) => {
+            Row({ space: 8 }) {
+              Text(flagEmojiForCountryCode(member.flagCode, member.country))
+                .fontSize(this.tablet ? 18 : 16)
+                .width(26)
+                .textAlign(TextAlign.Center)
+              Column({ space: 2 }) {
+                Row({ space: 6 }) {
+                  Text(localizeAstronautName(member.name, member.flagCode, this.isZh()))
+                    .fontSize(this.tablet ? 12 : 11.5)
+                    .fontWeight(FontWeight.Medium)
+                    .fontColor(this.c.fourth)
+                    .maxLines(1)
+                    .textOverflow({ overflow: TextOverflow.Ellipsis })
+                    .layoutWeight(1)
+                  if (member.position.length > 0) {
+                    Text(localizeCrewPosition(member.position, this.isZh()))
+                      .fontSize(9.5)
+                      .fontColor(member.position.toLowerCase() === 'commander' ? this.c.accent : this.c.sub)
+                      .padding({ left: 6, right: 6, top: 1.5, bottom: 1.5 })
+                      .backgroundColor(this.c.input)
+                      .borderRadius(UI_RADIUS_MEDIA)
+                  }
+                }.width('100%').alignItems(VerticalAlign.Center)
+                Text(
+                  localizeCountryName(member.country, member.flagCode, this.isZh())
+                  + (member.agency.length > 0 ? (' · ' + member.agency) : '')
+                  + (member.spacecraft.length > 0 ? (' · ' + localizeSpacecraftName(member.spacecraft, this.isZh())) : '')
+                )
+                  .fontSize(10)
+                  .fontColor(this.c.tertiary)
+                  .maxLines(1)
+                  .textOverflow({ overflow: TextOverflow.Ellipsis })
+                  .width('100%')
+              }.layoutWeight(1).alignItems(HorizontalAlign.Start)
+            }
+              .width('100%')
+              .padding({ left: 9, right: 9, top: 7, bottom: 7 })
+              .backgroundColor(this.c.bg)
+              .border({ width: 0.5, color: this.c.border })
+              .borderRadius(UI_RADIUS_CONTROL)
+          }, (member: StationCrewMember) => 'station-crew-' + member.id)
+        }.width('100%')
+
+        if (this.isHistoricalSimDate()) {
+          Text(this.isZh()
+            ? '注：以上为当前实时在轨乘组名单，不随历史时间轴回溯。'
+            : 'Note: Shows current real-time onboard crew, not historical expedition crew.')
+            .fontSize(9.5)
+            .fontColor(this.c.tertiary)
+            .width('100%')
+        }
+      }
+        .width('100%')
+        .padding({ left: 10, right: 10, top: 10, bottom: 10 })
+        .backgroundColor(this.c.soft)
+        .border({ width: 0.5, color: this.c.border })
+        .borderRadius(UI_RADIUS_CONTROL)
+        .margin({ top: 4, bottom: 4 })
     }
   }
 }

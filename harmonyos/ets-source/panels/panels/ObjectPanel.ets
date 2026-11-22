@@ -11,7 +11,7 @@ import { StructuredDetailRows } from '../object/StructuredDetailRows'
 import { SelectedCoordinateRows } from '../object/DetailLiveRows'
 import { TabletInspectorMediaGroup } from '../object/TabletInspectorMediaGroup'
 import { SatellitePass, StationComplexMember } from '../../pages/StellariumTypes'
-import { SatellitePassDetails, StationComplexSection } from '../object/SatellitePassDetails'
+import { SatellitePassDetails, StationComplexSection, StationCrewSection } from '../object/SatellitePassDetails'
 import { Lx200ObjectControls } from '../telescope/Lx200ObjectControls'
 import { QuickChipRow } from '../../common/ui/QuickChipRow'
 import { UI_RADIUS_CONTROL, UI_RADIUS_PILL } from '../../common/ui/UiTokens'
@@ -159,6 +159,9 @@ export struct ObjectPanel {
             .borderRadius(UI_RADIUS_CONTROL)
             .margin({ top: 8, bottom: 8 })
         }
+        StationCrewSection({
+          store: this.objectDetailStore, tablet: true
+        })
         if (this.fullInspectorRequested) {
           Divider().color(this.c.border).margin({ top: 8, bottom: 8 })
           TabletInspectorMediaGroup({

@@ -42,6 +42,7 @@ export class ObjectDetailStore {
   selectedSatellitePassesLoaded: boolean = false
   selectedSatellitePassesRequested: boolean = false
   selectedStationComplex: StationComplexInfo | undefined = undefined
+  stationCrewRevision: number = 0
   selectedCoordEq: string = ''
   selectedCoordEqJ2000: string = ''
   selectedCoordApparentAltAz: string = ''

@@ -465,6 +465,13 @@
       "mirrorPath": "/v1/catalogs/satellites/cubesat.csv",
       "format": "csv",
       "autoAdd": false
+    },
+    {
+      "id": "catalog.spaceflight.crew",
+      "upstreamUrl": "https://corquaid.github.io/international-space-station-APIs/JSON/people-in-space.json",
+      "mirrorPath": "/v1/catalogs/spaceflight/people-in-space.json",
+      "format": "spaceflight-crew-json",
+      "autoAdd": false
     }
   ]
 }

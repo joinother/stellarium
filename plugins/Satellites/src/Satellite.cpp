@@ -1599,7 +1599,7 @@ QString Satellite::getOperationalStatus() const
 double Satellite::getAngularRadius(const StelCore*) const
 {
 	double radius = 0.05 / 3600.; // assume 0.1 arcsecond default diameter
-	if (RCS>0.)
+	if (RCS>0. && orbitValid && std::isfinite(range) && range > 1e-3)
 	{
 		double halfSize = isISS ?
 			 109. * 0.5 :         // Special case: let's use max. size of ISS (109 meters: https://www.nasa.gov/feature/facts-and-figures)
@@ -1626,8 +1626,8 @@ void Satellite::setNewTleElements(const QString& tle1, const QString& tle2)
 	visibilityPoints.clear();
 	clearMotionTrail();
 	
-	parseInternationalDesignator(tle1);
 	calculateEpochFromLine1(tle1);
+	parseInternationalDesignator(tle1);
 	calculateSatDataFromLine2(tle2);
 }
 
@@ -1642,6 +1642,20 @@ void Satellite::update(const StelCore *core, const double JD, bool updateOrbit)
 	if (pSatWrapper)
 	{
 		epochTime = JD; // + timeShift; // We have "true" JD (UTC) from core, satellites don't need JDE!
+
+		if (JD < jdLaunchYearJan1)
+		{
+			propagationStatus = QStringLiteral("before_launch");
+			orbitValid = false;
+			range = 0.;
+			rangeRate = 0.;
+			visibility = gSatWrapper::UNKNOWN;
+			orbitPoints.clear();
+			visibilityPoints.clear();
+			clearMotionTrail();
+			hasUpdatedOnce = true;
+			return;
+		}
 
 		pSatWrapper->setEpoch(epochTime);
 		QString nextStatus = pSatWrapper->getPropagationStatus();
@@ -1835,6 +1849,12 @@ void Satellite::recalculateOrbitLines(void)
 
 void Satellite::updateOrbitLines()
 {
+	if (!isAfterLaunch(epochTime))
+	{
+		if (!orbitPoints.isEmpty())
+			recalculateOrbitLines();
+		return;
+	}
 	if (initialized && displayed && orbitValid && orbitLinesFlag && shouldDisplayOrbit())
 		computeOrbitPoints();
 }
@@ -1977,11 +1997,16 @@ bool Satellite::getCustomFiltersFlag() const
 void Satellite::parseInternationalDesignator(const QString& tle1)
 {
 	Q_ASSERT(!tle1.isEmpty());
-	
-	// The designator is encoded in chunk 3 on the first line.
-	QStringList tleData = tle1.split(" ");
-	QString rawString = tleData.at(2);
-	bool ok;
+
+	static constexpr double kSputnik1LaunchJD = 2436116.3115; // 1957-10-04 19:28:34 UTC
+
+	// Official NORAD TLE fixed columns 10-17 (0-indexed: 9..16) hold the COSPAR International Designator.
+	// Using fixed columns avoids mis-parsing multi-space TLE lines or blank designators.
+	QString rawString = (tle1.length() >= 17)
+		? tle1.mid(9, 8).trimmed()
+		: tle1.split(' ', Qt::SkipEmptyParts).value(2).trimmed();
+
+	bool ok = false;
 	int year = rawString.left(2).toInt(&ok);
 	if (!rawString.isEmpty() && ok)
 	{
@@ -1995,11 +2020,57 @@ void Satellite::parseInternationalDesignator(const QString& tle1)
 	}
 	else
 	{
-		year = 1957;
+		internationalDesignator.clear();
+		year = 0;
 		launchYear = 0;
 	}
-	
-	StelUtils::getJDFromDate(&jdLaunchYearJan1, year, 1, 1, 0, 0, 0);	
+
+	// Exact launch dates for flagship space stations & iconic observatories when local catalog lacks launchDate.
+	QString resolvedLaunchDate = launchDate;
+	if (resolvedLaunchDate.isEmpty())
+	{
+		static const QHash<QString, QString> kFlagshipLaunchDates = {
+			{ QStringLiteral("25544"), QStringLiteral("1998-11-20") }, // ISS (Zarya)
+			{ QStringLiteral("48274"), QStringLiteral("2021-04-29") }, // Tiangong (Tianhe)
+			{ QStringLiteral("53239"), QStringLiteral("2022-07-24") }, // CSS Wentian
+			{ QStringLiteral("54216"), QStringLiteral("2022-10-31") }, // CSS Mengtian
+			{ QStringLiteral("20580"), QStringLiteral("1990-04-24") }, // Hubble Space Telescope
+			{ QStringLiteral("37820"), QStringLiteral("2011-09-29") }, // Tiangong-1
+			{ QStringLiteral("41765"), QStringLiteral("2016-09-15") }, // Tiangong-2
+			{ QStringLiteral("25994"), QStringLiteral("1999-12-18") }, // Terra
+			{ QStringLiteral("27424"), QStringLiteral("2002-05-04") }, // Aqua
+		};
+		resolvedLaunchDate = kFlagshipLaunchDates.value(id);
+		if (!resolvedLaunchDate.isEmpty())
+			launchDate = resolvedLaunchDate;
+	}
+
+	QDate exactDate = resolvedLaunchDate.size() >= 10
+		? QDate::fromString(resolvedLaunchDate.left(10), Qt::ISODate)
+		: QDate();
+	if (exactDate.isValid())
+	{
+		StelUtils::getJDFromDate(&jdLaunchYearJan1, exactDate.year(), exactDate.month(), exactDate.day(), 0, 0, 0);
+		if (launchYear == 0)
+			launchYear = exactDate.year();
+	}
+	else if (year >= 1957)
+	{
+		StelUtils::getJDFromDate(&jdLaunchYearJan1, year, 1, 1, 0, 0, 0);
+	}
+	else if (tleEpochJD > kSputnik1LaunchJD)
+	{
+		// Blank COSPAR designator (e.g. unclassified/analyst/CubeSat TLEs): never default back to 1957-01-01
+		// and create 60-year ghost orbits; bound conservatively to 180 days before the TLE epoch.
+		jdLaunchYearJan1 = qMax(kSputnik1LaunchJD, tleEpochJD - 180.0);
+	}
+	else
+	{
+		jdLaunchYearJan1 = kSputnik1LaunchJD;
+	}
+
+	if (jdLaunchYearJan1 < kSputnik1LaunchJD)
+		jdLaunchYearJan1 = kSputnik1LaunchJD;
 }
 
 bool Satellite::operator <(const Satellite& another) const
@@ -2327,6 +2398,8 @@ void Satellite::draw(StelCore* core, StelPainter& painter)
 
 void Satellite::drawOrbit(StelCore *core, StelPainter& painter)
 {
+	if (!core || !orbitValid || !isAfterLaunch(core->getJD()))
+		return;
 	const int size = orbitPoints.size();
 	if (size < 2 || visibilityPoints.size() < size)
 		return;

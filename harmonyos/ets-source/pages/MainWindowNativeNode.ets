@@ -16,6 +16,7 @@ import { AstronomyCalendarCache } from '../state/AstronomyCalendarCache'
 import { AstronomyCalendarEvent } from '../state/AstronomyCalendarEvent'
 import { RemoteCalendarEntry } from '../state/RemoteCalendarFeed'
 import { RemoteCalendarFeedService } from '../capability/RemoteCalendarFeedService'
+import { StationCrewService, resolveStationCrewKey } from '../capability/StationCrewService'
 import { CalendarObserverContext } from '../state/AstronomyCalendarText'
 import { AstronomyCalendarPanel } from '../panels/panels/AstronomyCalendarPanel'
 import { WidgetStudioPanel } from '../panels/panels/WidgetStudioPanel'
@@ -3173,6 +3174,7 @@ export struct WindowNativeNode {
     if (dir.length > 0) {
       svc.initDir(dir)
       this.minorBodiesStore.initDir(dir)
+      StationCrewService.getInstance().initDir(dir)
     }
     if (this.remoteCalendarFeedStatus.length === 0) {
       this.remoteCalendarFeedStatus = svc.summaryText(this.i18nLang)
@@ -3207,6 +3209,11 @@ export struct WindowNativeNode {
       if (this.engineReady && onlineAllowed) {
         const hasCometAlert = res.changed && svc.getEntries().some((e: RemoteCalendarEntry) => e.kind === 'comet-alert')
         void this.minorBodiesStore.syncCometsIfDue(onlineAllowed, hasCometAlert)
+        void StationCrewService.getInstance().syncIfNeeded(false).then((changed: boolean) => {
+          if (changed) {
+            this.objectDetailStore.stationCrewRevision += 1
+          }
+        })
       }
     }).catch(() => {
       this.remoteCalendarFeedSyncing = false
@@ -8340,6 +8347,27 @@ export struct WindowNativeNode {
         this.objectDetailStore.selectedStationComplex = result.stationComplex
       } else if (isNewSelection) {
         this.objectDetailStore.selectedStationComplex = undefined
+      }
+      if (isNewSelection) {
+        const crewPrimaryId = this.objectDetailStore.selectedStationComplex !== undefined
+          ? this.objectDetailStore.selectedStationComplex.primaryId
+          : ''
+        if (resolveStationCrewKey(
+          this.objectDetailStore.selectedCatalogId,
+          this.objectDetailStore.selectedEnglishName,
+          this.objectDetailStore.selectedName,
+          crewPrimaryId
+        ) !== '') {
+          const crewDir = this.stellariumFilesDir()
+          if (crewDir.length > 0) {
+            StationCrewService.getInstance().initDir(crewDir)
+          }
+          void StationCrewService.getInstance().syncIfNeeded(false).then((changed: boolean) => {
+            if (changed) {
+              this.objectDetailStore.stationCrewRevision += 1
+            }
+          })
+        }
       }
       const ra: string = result.ra ? result.ra : ''
       const dec: string = result.dec ? result.dec : ''

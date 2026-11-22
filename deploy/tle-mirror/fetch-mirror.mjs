@@ -215,11 +215,27 @@ export function validatePayload(body, source) {
     requireValid(validCount > 0 && validCount * 20 >= lines.length * 19)
     return validCount
   }
+  if (source.format === 'spaceflight-crew-json') {
+    let value
+    try { value = JSON.parse(text) } catch { throw new MirrorError('invalid_payload') }
+    requireValid(object(value) && Array.isArray(value.people) && value.people.length <= 200)
+    if (value.number !== undefined) {
+      requireValid(typeof value.number === 'number' && Number.isInteger(value.number) && value.number >= 0 && value.number <= 200)
+    }
+    for (const person of value.people) {
+      requireValid(object(person))
+      requireValid(typeof person.name === 'string' && person.name.trim().length > 0 && person.name.length <= 120)
+      requireValid(typeof person.country === 'string' && person.country.trim().length > 0 && person.country.length <= 80)
+      requireValid(typeof person.spacecraft === 'string' && person.spacecraft.trim().length > 0 && person.spacecraft.length <= 120)
+      requireValid(typeof person.iss === 'boolean')
+    }
+    return value.people.length
+  }
   throw new MirrorError('unsupported_format')
 }
 
 export async function fetchOne(source, { fetchImpl = fetch, maxBytes = MAX_BYTES, timeoutMs = 60000 } = {}) {
-  requireValid(['csv', 'tle-3le', 'satnogs-json', 'json', 'mpc-comet-lines', 'mpc-minor-planet-lines'].includes(source.format) &&
+  requireValid(['csv', 'tle-3le', 'satnogs-json', 'json', 'mpc-comet-lines', 'mpc-minor-planet-lines', 'spaceflight-crew-json'].includes(source.format) &&
     (source.format !== 'json' || Object.hasOwn(CATALOGS, source.id)), 'unsupported_format')
   const controller = new AbortController()
   let reader

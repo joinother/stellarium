@@ -4705,7 +4705,7 @@ void Satellites::update(double deltaTime)
 	{
 		// Always refresh selected satellite's orbit immediately; amortize other orbit-displayed satellites
 		// to at most 1 per frame and skip them while scrubbing so orbit rebuilds never spike frame time.
-		if (selectedSat && selectedSat->shouldDisplayOrbit())
+		if (selectedSat && selectedSat->shouldDisplayOrbit() && selectedSat->isAfterLaunch(JD))
 			const_cast<Satellite*>(selectedSat)->updateOrbitLines();
 		if (!calendarScrub && !timeScrubJump && satBudgetTimer.nsecsElapsed() < budgetNs)
 		{
@@ -4716,7 +4716,7 @@ void Satellites::update(double deltaTime)
 			{
 				const int idx = (startIdx + checked) % totalSats;
 				Satellite* sat = satellites.at(idx).data();
-				if (!sat || sat == selectedSat || !sat->shouldDisplayOrbit())
+				if (!sat || sat == selectedSat || !sat->shouldDisplayOrbit() || !sat->isAfterLaunch(JD))
 					continue;
 				sat->updateOrbitLines();
 				break; // at most 1 background orbit rebuild per frame
@@ -5055,7 +5055,7 @@ void Satellites::draw(StelCore* core)
 			}
 		}
 
-		if (drawOrbits && (sat->shouldDisplayOrbit() || sat->orbitExpandProgress > 0.004f) && sat->orbitValid)
+		if (drawOrbits && st.afterLaunch && (sat->shouldDisplayOrbit() || sat->orbitExpandProgress > 0.004f) && sat->orbitValid)
 			orbitDraws.append(sat.data());
 	}
 
@@ -5376,6 +5376,7 @@ void Satellites::draw(StelCore* core)
 				it->alpha = qMax(0.f, it->alpha - satFadeOutStep);
 				SatelliteP satLock = it->satRef.toStrongRef();
 				if (it->alpha <= 0.008f || !satLock || !satLock->displayed || !satLock->orbitValid ||
+				    !satLock->isAfterLaunch(frameCtx.currentJD) ||
 				    (groundOccludes && satLock->elAzPosition[2] < -0.025))
 				{
 					it = s_satMarkerFadeMap.erase(it);
@@ -5573,6 +5574,7 @@ void Satellites::draw(StelCore* core)
 			it->alpha = allowDissolveLabels ? qMax(0.f, it->alpha - satFadeOutStep) : 0.f;
 			SatelliteP satLock = it->satRef.toStrongRef();
 			if (it->alpha <= 0.008f || !satLock || !satLock->displayed || !satLock->orbitValid ||
+			    !satLock->isAfterLaunch(frameCtx.currentJD) ||
 			    (groundOccludes && satLock->elAzPosition[2] < -0.025))
 			{
 				it = s_satLabelFadeMap.erase(it);
@@ -5615,7 +5617,7 @@ void Satellites::drawPointer(StelCore* core, StelPainter& painter)
 	{
 		const StelObjectP obj = newSelected[0];
 		const SatelliteP satellite = qSharedPointerDynamicCast<Satellite>(obj);
-		if (!satellite || !satellite->isOrbitValid()) return;
+		if (!satellite || !satellite->isOrbitValid() || !satellite->isAfterLaunch(core->getJD())) return;
 		Vec3d pos=obj->getJ2000EquatorialPos(core);
 		Vec3d screenpos;
 

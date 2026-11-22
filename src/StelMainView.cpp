@@ -1030,6 +1030,16 @@ void drawOhosSelectionReticle(StelCore* core)
 		s_ohosSelectionReticleKey.clear();
 		return;
 	}
+	if (obj->getType() == QLatin1String("Satellite"))
+	{
+		auto* sats = static_cast<Satellites*>(StelApp::getInstance().getModuleMgr().getModule(QStringLiteral("Satellites"), true));
+		const Satellite* sat = dynamic_cast<const Satellite*>(obj.data());
+		if (!sats || !sats->isDateInValidRange(core) || !sat || !sat->isOrbitValid() || !sat->isAfterLaunch(core->getJD()))
+		{
+			s_ohosSelectionReticleKey.clear();
+			return;
+		}
+	}
 
 	const StelProjectorP prj = core->getProjection(StelCore::FrameJ2000);
 	if (!prj)
