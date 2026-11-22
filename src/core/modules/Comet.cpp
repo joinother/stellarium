@@ -1203,34 +1203,29 @@ void main(void)
 			// Pure C-infinity Gaussian-envelope coverage (eliminates any circular halo/rim around the head!)
 			highp float sheetMask = 1.0 - exp(-1.65 * gNormSum);
 
-			// Fine, dense, silky Sekanina-Farrell striation fan (~35 deg spread from virtual solar push origin):
-			// High-density multi-octave bands (42 / 84 / 155) produce ~20-40+ fine silky strands (never chunky sawtooth
-			// blobs!), strictly confined to the curved comet sheet with zero detached stray streaks on the left edge.
+			// Gentle natural solar-wind striation fan (~35 deg total spread from virtual push origin 1.45*span behind head):
+			// Neither a 110-deg radial peacock wheel nor rigid parallel window blinds — soft tapered feathery plumes
+			// that grow out of the curved arch and dissolve gracefully in mid-sky (never harsh straight bars at top!).
 			highp vec2 striaPerp   = vec2(-u_striaDir.y, u_striaDir.x);
 			highp float spanPx     = max(u_striaSpanPx, 40.0);
-			highp vec2 striaOrigin = u_headPos - u_striaDir * (1.55 * spanPx);
+			highp vec2 striaOrigin = u_headPos - u_striaDir * (1.45 * spanPx);
 			highp vec2 fromOrigin  = v_screenPos - striaOrigin;
 			highp float rayAlong   = max(dot(fromOrigin, u_striaDir) / spanPx, 0.25);
 			highp float rayAcross  = dot(fromOrigin, striaPerp) / spanPx;
 			highp float rayCoord   = atan(rayAcross, rayAlong) * 2.5;
 
-			// Gentle organic curve warp + soft-to-silky strands with natural mist dispersion (some strands stay
-			// delicate & fine, others broaden and dissolve softly like cosmic mist — zero harsh pointy needles!)
-			highp float rWarp     = rayCoord + (vnoise(vec2(rayCoord * 4.6 + u_seed * 0.37, rayAlong * 0.70)) - 0.5) * 0.028;
-			highp float bSoft     = vnoise(vec2(rWarp * 22.0 + u_seed * 0.53, rayAlong * 0.26));
-			highp float bSilky    = vnoise(vec2(rWarp * 46.0 + u_seed * 1.37, rayAlong * 0.44));
-			highp float bDelicate = vnoise(vec2(rWarp * 82.0 + u_seed * 2.71, rayAlong * 0.68));
-			// Regional mist dispersion: parts of the tail disperse into soft smoky glow while neighbors show finer silk
-			highp float dispMix   = smoothstep(0.25, 0.78, vnoise(vec2(rWarp * 9.5 + u_seed * 1.91, rayAlong * 0.35)));
-			highp float fineCombo = 0.44 * bSoft + 0.38 * bSilky + 0.18 * bDelicate;
-			highp float mistyCombo = 0.78 * bSoft + 0.22 * bSilky;
-			highp float bristleBand = clamp(mix(fineCombo, mistyCombo, dispMix * 0.72), 0.0, 1.0);
+			// Slight gentle wind-curve warp so plumes feel organically curved and smoky rather than ruler-straight bars
+			highp float rWarp  = rayCoord + (vnoise(vec2(rayCoord * 4.2 + u_seed * 0.37, rayAlong * 0.85)) - 0.5) * 0.042;
+			highp float bBand1 = vnoise(vec2(rWarp * 15.0 + u_seed * 0.53, rayAlong * 0.26));
+			highp float bBand2 = vnoise(vec2(rWarp * 30.0 + u_seed * 1.37, rayAlong * 0.44));
+			highp float bBand3 = vnoise(vec2(rWarp * 56.0 + u_seed * 2.71, rayAlong * 0.72));
+			highp float bristleBand = clamp(0.54 * bBand1 + 0.36 * bBand2 + 0.10 * bBand3, 0.0, 1.0);
 			highp float fMid = vnoise(vec2(uAge * 22.0 + u_seed * 1.37, vBeta * 0.44));
 
 			// Subtle organic cloud turbulence warping vBeta so no edge ever reads like a rigid mathematical curve
-			highp float cloudWarp = ((vnoise(vec2(uAge * 4.4 + u_seed * 0.61, vBeta * 2.0)) - 0.5) * 0.036
-			                       + (vnoise(vec2(uAge * 9.5 + u_seed * 1.73, vBeta * 3.6)) - 0.5) * 0.015)
-			                       * smoothstep(0.18, 0.48, uAge);
+			highp float cloudWarp = ((vnoise(vec2(uAge * 4.4 + u_seed * 0.61, vBeta * 2.0)) - 0.5) * 0.042
+			                       + (vnoise(vec2(uAge * 9.5 + u_seed * 1.73, vBeta * 3.6)) - 0.5) * 0.018)
+			                       * smoothstep(0.12, 0.42, uAge);
 			highp float vOrg = clamp(vBeta + cloudWarp, 0.0, 1.0);
 
 			highp float omU = max(0.0, 1.0 - uAge);
@@ -1253,64 +1248,57 @@ void main(void)
 			mediump vec3 smoothColor = mix(headTint, midWarm, float(midBlend));
 			smoothColor = mix(smoothColor, outerWarm, float(outBlend));
 
-			// Striated great sunskirters (McNaught, West) — ONE UNIFIED CONTINUOUS TWIN-TAIL + MISTY STRIAE FABRIC:
-			//  1) Brighter outer arch (vTailB ~ 0.62), softer inner arch (vTailA ~ 0.26), and soft misty inter-tail
-			//     bridge form ONE single smooth twin-tail envelope.
-			//  2) ONE single continuous striation + mist-dispersion field modulates the ENTIRE twin-tail envelope
-			//     from inner arch straight across the valley to the gently feathered outer rim — so both tails share
-			//     the exact same unbroken connected striae, with some strands softly dispersing into cosmic mist!
+			// Striated great sunskirters (McNaught, West) — TWIN SWEEPING TAILS WITH INTER-TAIL STRIAE & SOFT MIST:
+			//  1) Rises from the head as ONE blazing ivory stem, then forks cleanly (uAge 0.18..0.56) into TWO
+			//     unmistakable grand-radius sweeping white tails:
+			//     - Outer leading arch (vTailB ~ 0.68): brighter, denser primary curved white arch (physical limb
+			//       brightening + dense fresh perihelion dust along the outer convex edge)
+			//     - Inner companion arch (vTailA ~ 0.27): softer, fainter inner curved sweeping white tail
+			//  2) ALL wind-swept striae + delicate white mist live *BETWEEN* both tails (bounded cleanly by
+			//     betweenMask so striations bridge gracefully across the twin-tail fan and melt softly into the sky).
 			highp float archFadeU    = pow(omU, 0.36) * smoothstep(1.0, 0.78, uAge);
-			highp float stemClean    = smoothstep(0.06, 0.26, uAge);
-			highp float forkGrow     = smoothstep(0.24, 0.60, uAge);
-			highp float striaOn      = smoothstep(0.22, 0.46, uAge);
-			highp float tuftShape    = smoothstep(0.16, 0.86, bristleBand);
+			highp float forkGrow     = smoothstep(0.18, 0.56, uAge);
+			highp float striaOn      = smoothstep(0.12, 0.34, uAge);
 
-			// Physical bifurcation from ONE slender bright stem (v=0.42) into BRIGHT outer arch (0.62) & SOFTER inner arch (0.26)
-			highp float vTailA       = mix(0.42, 0.26, forkGrow);
-			highp float vTailB       = mix(0.42, 0.62, forkGrow);
+			// Physical bifurcation from ONE bright stem (v=0.36) into BRIGHT outer arch (0.68) & SOFTER inner arch (0.27)
+			highp float vTailA       = mix(0.36, 0.27, forkGrow);
+			highp float vTailB       = mix(0.36, 0.68, forkGrow);
 
-			// Smooth, misty outer edge (gentle 0.038 organic modulation + wider misty fade where dispMix is high — zero sharp spikes!)
-			highp float vOuterEdge   = vTailB + (tuftShape - 0.48) * 0.038 * forkGrow * striaOn;
-			highp float dvB          = vOrg - vOuterEdge;
-			highp float wOuterFade   = mix(0.088, mix(0.11, 0.165, dispMix), striaOn);
-			highp float wTailB       = (dvB > 0.0) ? wOuterFade : mix(0.11, 0.105, forkGrow);
-			highp float topSkyFade   = smoothstep(0.95, 0.72, vOrg);
-
-			highp float outerEnv     = mix(1.22, 1.04, forkGrow)
+			// Outer leading arch: brighter, denser primary curved white arch (melts softly into dark sky above vTailB!)
+			highp float dvB          = vOrg - vTailB;
+			highp float wTailB       = (dvB > 0.0) ? mix(0.14, 0.108, forkGrow) : mix(0.17, 0.102, forkGrow);
+			highp float topSkyFade   = smoothstep(0.96, 0.70, vOrg);
+			highp float tailBBody    = mix(1.26, 1.06, forkGrow)
 			                         * exp(-pow(dvB / max(wTailB, 0.055), 2.0))
-			                         * topSkyFade;
+			                         * (0.90 + 0.20 * bristleBand)
+			                         * topSkyFade * archFadeU;
 
+			// Inner companion arch: softer, fainter inner curved sweeping white tail
 			highp float dvA          = vOrg - vTailA;
-			highp float wTailA       = (dvA < 0.0) ? 0.082 : 0.098;
-			highp float innerEnv     = 0.54 * forkGrow
-			                         * exp(-pow(dvA / max(wTailA, 0.055), 2.0));
+			highp float wTailA       = (dvA < 0.0) ? 0.088 : 0.105;
+			highp float tailABody    = 0.58 * forkGrow
+			                         * exp(-pow(dvA / max(wTailA, 0.055), 2.0))
+			                         * (0.82 + 0.36 * bristleBand)
+			                         * pow(omU, 0.40) * smoothstep(1.0, 0.78, uAge);
 
-			// Continuous misty bridge connecting both tails across the entire interior
-			highp float betweenMask  = smoothstep(vTailA - 0.04, vTailA + 0.08, vOrg)
-			                         * smoothstep(vOuterEdge + 0.08, vOuterEdge - 0.08, vOrg);
-			highp float valleyPatch  = vnoise(vec2(rWarp * 8.0 + u_seed * 2.13, vOrg * 2.6));
-			highp float bridgeEnv    = (0.24 + 0.16 * valleyPatch) * forkGrow * betweenMask;
+			// Inter-tail zone strictly BETWEEN inner and outer arches: coherent wind-swept striae + soft translucent white mist!
+			highp float betweenMask  = smoothstep(vTailA - 0.03, vTailA + 0.09, vOrg)
+			                         * smoothstep(vTailB + 0.08, vTailB - 0.07, vOrg);
+			highp float tuftShape    = smoothstep(0.18, 0.88, bristleBand);
+			highp float bridgeBias   = 1.0 - 0.42 * smoothstep(vTailB - 0.08, vTailA, vOrg); // brightest near outer arch, softer toward inner arch
+			highp float valleyPatch  = vnoise(vec2(rWarp * 7.5 + u_seed * 2.13, vOrg * 2.8));
+			highp float interMist    = (0.14 + 0.10 * valleyPatch) * forkGrow * betweenMask * archFadeU;
+			highp float interStriae  = 0.52 * striaOn * forkGrow * betweenMask * bridgeBias
+			                         * pow(tuftShape, 1.35) * archFadeU;
 
-			// ONE unified striae+mist field shared continuously across inner tail, bridge, and outer tail!
-			// Silky strands in structured regions (0.48..1.42) softening into dreamy cosmic mist in dispersed regions (0.74..1.20)
-			highp float silkyField   = 0.48 + 0.94 * pow(tuftShape, 1.15);
-			highp float mistyField   = 0.74 + 0.46 * tuftShape;
-			// Slightly stronger strand contrast in the bridge & outer edge, smoother at the clean sunward underside
-			highp float strandDepth  = mix(0.35, 1.0, smoothstep(vTailA - 0.04, vTailA + 0.14, vOrg)) * striaOn * stemClean;
-			highp float unifiedField = mix(1.0, mix(silkyField, mistyField, dispMix * 0.65), strandDepth);
-
-			highp float outerContrib = outerEnv * unifiedField * archFadeU;
-			highp float bridgeContrib = bridgeEnv * unifiedField * archFadeU;
-			highp float innerContrib = innerEnv * unifiedField * pow(omU, 0.42) * smoothstep(1.0, 0.78, uAge);
-
-			highp float striaeDensity = outerContrib + bridgeContrib + innerContrib;
+			highp float striaeDensity = tailBBody + tailABody + interMist + interStriae;
 			mediump vec3 hornColor   = mix(vec3(1.00, 0.99, 0.92), vec3(1.00, 0.92, 0.76), u_dustWarmth * 0.45);
 			mediump vec3 tailBColor  = mix(hornColor, vec3(0.95, 0.97, 1.00), float(forkGrow));
-			mediump vec3 striaCol    = vec3(0.78, 0.87, 1.00);
-			mediump vec3 tailAColor  = vec3(0.84, 0.90, 0.97);
-			mediump vec3 striaeColor = (tailBColor * float(outerContrib)
-			                          + striaCol * float(bridgeContrib)
-			                          + tailAColor * float(innerContrib)) / max(float(striaeDensity), 1e-4);
+			mediump vec3 striaCol    = vec3(0.76, 0.85, 1.00);
+			mediump vec3 tailAColor  = vec3(0.84, 0.90, 0.98);
+			mediump vec3 striaeColor = (tailBColor * float(tailBBody)
+			                          + striaCol * float(interMist + interStriae)
+			                          + tailAColor * float(tailABody)) / max(float(striaeDensity), 1e-4);
 
 			highp float extGrad = mix(1.0, float(u_tipExtRatio), max(uAge * 0.55, vBeta * 0.45));
 			highp float combinedDensity = mix(smoothDensity, striaeDensity, float(u_striaeStrength));
