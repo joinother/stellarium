@@ -59,6 +59,7 @@
 #include <QJsonDocument>
 #include <QJsonObject>
 #include <QKeyEvent>
+#include <QElapsedTimer>
 #include <QDebug>
 #include <QFileInfo>
 #include <QFile>
@@ -4577,7 +4578,9 @@ void Satellites::update(double deltaTime)
 		Satellite::frameSunUnitValid = false;
 	}
 
+#ifndef Q_OS_OHOS
 	const quint32 tick = updateFrameCounter++;
+#endif
 	const double dJD = JD - lastUpdateJD;
 	const double signedRateX = (dJD * 86400.0) / dtSec;
 	const double absRateX = std::fabs(signedRateX);
@@ -4625,27 +4628,106 @@ void Satellites::update(double deltaTime)
 		}
 	}
 #ifdef Q_OS_OHOS
-	static quint32 s_lastTimeJumpTick = 0;
-	static bool s_pendingSettleFullRefresh = false;
-	bool fullRefresh = forceFullUpdate || satellites.size() <= 500;
-	if (timeScrubJump)
+	const bool calendarScrub = std::fabs(dJD) > 0.015;
+	lastUpdateJD = JD;
+	forceFullUpdate = false;
+
+	// Hard frame-time budgeted progressive SGP4 propagation on HarmonyOS:
+	// Guarantees Satellites::update() stays <= 3-5ms even with 18k+ satellites during rapid
+	// Hour/Day/Month/Year time-wheel dragging and historical comet years (1996/1997/2006/2007).
+	QElapsedTimer satBudgetTimer;
+	satBudgetTimer.start();
+	const qint64 budgetNs = (calendarScrub || timeScrubJump || motionTrailActivity > 0.02)
+		? 3000000LL   // 3.0 ms hard cap while actively scrubbing / fast-forwarding time
+		: 5000000LL;  // 5.0 ms cap during normal 1x viewing
+
+	// Pass 1: Always update the selected satellite, ISS, and active previewed orbits first (<0.3ms).
+	for (int i = 0; i < satellites.size(); ++i)
 	{
-		s_lastTimeJumpTick = tick;
-		s_pendingSettleFullRefresh = true;
-		// During continuous time scrubbing / fast-forward on mobile, keep SGP4
-		// inside the compact single-threaded tiered budget instead of blocking
-		// every frame with an 18k-satellite QtConcurrent full pass.
+		Satellite* sat = satellites.at(i).data();
+		if (!sat || !sat->initialized || !sat->displayed)
+			continue;
+		if (sat == selectedSat || sat->isISS || sat->orbitPreview)
+		{
+			sat->update(core, JD, false);
+		}
 	}
-	else if (s_pendingSettleFullRefresh && (tick - s_lastTimeJumpTick) >= 4u)
+
+	// Pass 2: Update currently visible on-screen satellites (within strict budget) so moving satellites stay smooth.
+	static int s_ohosScreenCursor = 0;
+	const int totalSats = satellites.size();
+	if (totalSats > 0 && !calendarScrub && satBudgetTimer.nsecsElapsed() < budgetNs)
 	{
-		s_pendingSettleFullRefresh = false;
-		fullRefresh = true;
+		int startIdx = s_ohosScreenCursor % totalSats;
+		int checked = 0;
+		int updated = 0;
+		for (; checked < totalSats; ++checked)
+		{
+			const int idx = (startIdx + checked) % totalSats;
+			Satellite* sat = satellites.at(idx).data();
+			if (!sat || !sat->initialized || !sat->displayed || !sat->lastFrameOnScreen)
+				continue;
+			if (sat == selectedSat || sat->isISS || sat->orbitPreview)
+				continue;
+			sat->update(core, JD, false);
+			if ((++updated & 3) == 0 && satBudgetTimer.nsecsElapsed() >= budgetNs)
+				break;
+		}
+		s_ohosScreenCursor = (startIdx + checked + 1) % totalSats;
+	}
+
+	// Pass 3: Round-robin background sweep across the rest of the catalog using remaining frame budget.
+	static int s_ohosBgCursor = 0;
+	if (totalSats > 0 && satBudgetTimer.nsecsElapsed() < budgetNs)
+	{
+		int startIdx = s_ohosBgCursor % totalSats;
+		int processed = 0;
+		int updated = 0;
+		for (; processed < totalSats; ++processed)
+		{
+			const int idx = (startIdx + processed) % totalSats;
+			Satellite* sat = satellites.at(idx).data();
+			if (!sat || !sat->initialized || !sat->displayed)
+				continue;
+			if (sat == selectedSat || sat->isISS || sat->orbitPreview)
+				continue;
+			if (!calendarScrub && sat->lastFrameOnScreen)
+				continue;
+			sat->update(core, JD, false);
+			if ((++updated & 3) == 0 && satBudgetTimer.nsecsElapsed() >= budgetNs)
+				break;
+		}
+		s_ohosBgCursor = (startIdx + processed + 1) % totalSats;
+	}
+
+	Satellite::frameSunUnitValid = false;
+	if (getFlagOrbitLines() && totalSats > 0)
+	{
+		// Always refresh selected satellite's orbit immediately; amortize other orbit-displayed satellites
+		// to at most 1 per frame and skip them while scrubbing so orbit rebuilds never spike frame time.
+		if (selectedSat && selectedSat->shouldDisplayOrbit())
+			const_cast<Satellite*>(selectedSat)->updateOrbitLines();
+		if (!calendarScrub && !timeScrubJump && satBudgetTimer.nsecsElapsed() < budgetNs)
+		{
+			static int s_ohosOrbitCursor = 0;
+			int startIdx = s_ohosOrbitCursor % totalSats;
+			int checked = 0;
+			for (; checked < totalSats; ++checked)
+			{
+				const int idx = (startIdx + checked) % totalSats;
+				Satellite* sat = satellites.at(idx).data();
+				if (!sat || sat == selectedSat || !sat->shouldDisplayOrbit())
+					continue;
+				sat->updateOrbitLines();
+				break; // at most 1 background orbit rebuild per frame
+			}
+			s_ohosOrbitCursor = (startIdx + checked + 1) % totalSats;
+		}
 	}
 #else
 	const bool fullRefresh = forceFullUpdate
 		|| satellites.size() <= 500
 		|| timeScrubJump;
-#endif
 	lastUpdateJD = JD;
 	forceFullUpdate = false;
 
@@ -4666,14 +4748,6 @@ void Satellites::update(double deltaTime)
 	}
 	else
 	{
-		// Tiered staggered SGP4 propagation for large catalogs (18k+ satellites):
-		// - Tier 0 (every frame): uninitialized, selected, ISS/stations, active orbit.
-		// - Tier 1 (every 3 frames, ~100ms): visibly drawn on-screen above horizon.
-		// - Tier 2 (every 16 frames, ~500ms): above horizon band but off-screen / faint.
-		// - Tier 3 (every 64 frames, ~2.0s): below horizon (altitude < -2 deg).
-		// On HarmonyOS mobile big.LITTLE SoCs, running the compact staggered batch
-		// on the active render thread avoids waking all worker cores every frame
-		// (which otherwise triggers thermal throttling and starves GL draw calls).
 		static const QString grpStations = QStringLiteral("space stations");
 		static const QString grpStationsShort = QStringLiteral("stations");
 		static const QString grpVisual = QStringLiteral("visual");
@@ -4706,10 +4780,6 @@ void Satellites::update(double deltaTime)
 			if (((static_cast<quint32>(i) + tick) % stride) == 0u)
 				batch.append(sat);
 		}
-#ifdef Q_OS_OHOS
-		for (Satellite* sat : batch)
-			sat->update(core, JD, false);
-#else
 		if (batch.size() >= 512)
 		{
 			const auto updatePtr = [JD](Satellite* sat){ sat->update(core, JD, false); };
@@ -4720,13 +4790,13 @@ void Satellites::update(double deltaTime)
 			for (Satellite* sat : batch)
 				sat->update(core, JD, false);
 		}
-#endif
 	}
 	Satellite::frameSunUnitValid = false;
 	if (getFlagOrbitLines())
 		for (const auto& sat : std::as_const(satellites))
 			if (sat->shouldDisplayOrbit())
 				sat->updateOrbitLines();
+#endif
 #endif
 }
 

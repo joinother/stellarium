@@ -1647,7 +1647,7 @@ void Satellite::update(const StelCore *core, const double JD, bool updateOrbit)
 		QString nextStatus = pSatWrapper->getPropagationStatus();
 		if (nextStatus == QLatin1String("valid") && pSatWrapper->getSubPoint()[2] < 80.)
 			nextStatus = QStringLiteral("below_atmosphere_limit");
-		if (nextStatus != propagationStatus && nextStatus != QLatin1String("valid"))
+		if (nextStatus != propagationStatus && nextStatus != QLatin1String("valid") && std::fabs(JD - tleEpochJD) < 90.0)
 			qWarning() << "[Satellites][propagation]" << id << name << nextStatus
 				<< "tleAgeDays=" << JD - tleEpochJD << "sgp4Error=" << pSatWrapper->getPropagationError();
 		propagationStatus = nextStatus;
@@ -1658,6 +1658,7 @@ void Satellite::update(const StelCore *core, const double JD, bool updateOrbit)
 			rangeRate = 0.;
 			visibility = gSatWrapper::UNKNOWN;
 			clearMotionTrail();
+			hasUpdatedOnce = true;
 			return;
 		}
 		position                 = pSatWrapper->getTEMEPos();
