@@ -4,11 +4,18 @@
 // → hello.cpp 单通 GPU 亮度感知融合 + 复用现有 SensorController 姿态与罗盘偏置微调。
 // 隐私边界：仅在用户主动点击开启 AR 实景时才申请相机权限；退后台或关闭时立即释放相机。
 import { common } from '@kit.AbilityKit'
+import { fileIo } from '@kit.CoreFileKit'
+import { util } from '@kit.ArkTS'
+import hilog from '@ohos.hilog'
 import { CommandPort } from '../bridge/CommandPort'
 import { ARStore } from '../state/ARStore'
 import { GyroStore } from '../state/GyroStore'
 import { StellariumBridgeResponse } from '../common/types/StellariumTypes'
 import { ArCameraService } from './ArCameraService'
+
+const AR_RESTORE_SNAPSHOT_FILE: string = 'ar_sky_restore_v1.json'
+const AR_LOG_DOMAIN: number = 0x0000
+const AR_LOG_TAG: string = 'StellariumArkUI'
 
 // AR 能力探测 / 模式切换回包。
 export interface ArPreviewBridgeResponse extends StellariumBridgeResponse {
@@ -46,12 +53,108 @@ export class ARController {
   private hooks: ARHostHooks
   private savedSkyState: ArSkyRestoreSnapshot | null = null
   private resumeAfterForeground: boolean = false
+  private interruptedRestoreChecked: boolean = false
 
   constructor(store: ARStore, gyroStore: GyroStore, port: CommandPort, hooks: ARHostHooks) {
     this.store = store
     this.gyroStore = gyroStore
     this.port = port
     this.hooks = hooks
+  }
+
+  private restoreSnapshotPath(): string {
+    const ctx = this.hooks.abilityContext()
+    if (ctx === undefined || typeof ctx.filesDir !== 'string' || ctx.filesDir.trim().length === 0) {
+      return ''
+    }
+    return `${ctx.filesDir.trim()}/${AR_RESTORE_SNAPSHOT_FILE}`
+  }
+
+  private persistRestoreSnapshot(snap: ArSkyRestoreSnapshot): void {
+    const path = this.restoreSnapshotPath()
+    if (path.length === 0) return
+    try {
+      const encoded = new util.TextEncoder().encodeInto(JSON.stringify(snap))
+      const file = fileIo.openSync(path,
+        fileIo.OpenMode.CREATE | fileIo.OpenMode.TRUNC | fileIo.OpenMode.WRITE_ONLY)
+      try {
+        fileIo.writeSync(file.fd, encoded.buffer)
+      } finally {
+        fileIo.closeSync(file.fd)
+      }
+    } catch (err) {
+      hilog.warn(AR_LOG_DOMAIN, AR_LOG_TAG, '[ar-restore] persist snapshot failed: %{public}s', String(err))
+    }
+  }
+
+  private clearPersistedRestoreSnapshot(): void {
+    const path = this.restoreSnapshotPath()
+    if (path.length === 0) return
+    try {
+      if (fileIo.accessSync(path)) {
+        fileIo.unlinkSync(path)
+      }
+    } catch (_err) {
+      // Non-fatal
+    }
+  }
+
+  private readPersistedRestoreSnapshot(): ArSkyRestoreSnapshot | null {
+    const path = this.restoreSnapshotPath()
+    if (path.length === 0) return null
+    try {
+      if (!fileIo.accessSync(path)) return null
+      const stat = fileIo.statSync(path)
+      if (stat.size <= 0 || stat.size > 8192) return null
+      const file = fileIo.openSync(path, fileIo.OpenMode.READ_ONLY)
+      try {
+        const buf = new ArrayBuffer(stat.size)
+        const n = fileIo.readSync(file.fd, buf)
+        if (n <= 0) return null
+        const text = util.TextDecoder.create('utf-8').decodeToString(new Uint8Array(buf, 0, n))
+        const parsed = JSON.parse(text) as ArSkyRestoreSnapshot
+        if (parsed === null || typeof parsed !== 'object') return null
+        return {
+          atmosphere: parsed.atmosphere === true,
+          landscape: parsed.landscape === true,
+          mistHorizon: parsed.mistHorizon === true,
+          fogEffect: parsed.fogEffect === true,
+          auroraEnabled: parsed.auroraEnabled === true,
+          projection: typeof parsed.projection === 'string' ? parsed.projection : '',
+          fovDeg: Number.isFinite(parsed.fovDeg) && parsed.fovDeg >= 5 && parsed.fovDeg <= 150 ? parsed.fovDeg : 60
+        }
+      } finally {
+        fileIo.closeSync(file.fd)
+      }
+    } catch (_err) {
+      return null
+    }
+  }
+
+  private applyRestoreSnapshot(snap: ArSkyRestoreSnapshot): void {
+    this.port.fire('setAtmosphereFlag', snap.landscape ? 'landscape|1' : 'landscape|0')
+    this.port.fire('setActionChecked', snap.mistHorizon ? 'actionShow_MistHorizon|1' : 'actionShow_MistHorizon|0')
+    this.port.fire('setAtmosphereFlag', snap.atmosphere ? 'atmosphere|1' : 'atmosphere|0')
+    this.port.fire('setAtmosphereFlag', snap.fogEffect ? 'fog|1' : 'fog|0')
+    this.port.fire('setSkyDisplaySetting', snap.auroraEnabled ? 'auroraEnabled|1' : 'auroraEnabled|0')
+    if (snap.projection.length > 0) {
+      this.port.fire('setProjectionType', snap.projection)
+    }
+    this.port.fire('setFOV', snap.fovDeg.toFixed(1))
+    this.hooks.applySkyRestoreState(snap)
+  }
+
+  // 启动兜底：若上次处于 AR 实景模式时被强杀/异常退出，引擎可能仍停留在透视投影或隐藏地景，
+  // 本次引擎就绪后自动读取磁盘快照无损还原原投影、视场与天空图层。
+  restoreInterruptedArSkyStateIfNeeded(): void {
+    if (this.interruptedRestoreChecked || this.store.arCameraActive || this.store.arCameraStarting) return
+    this.interruptedRestoreChecked = true
+    const persisted = this.readPersistedRestoreSnapshot()
+    if (persisted === null) return
+    this.clearPersistedRestoreSnapshot()
+    this.applyRestoreSnapshot(persisted)
+    hilog.info(AR_LOG_DOMAIN, AR_LOG_TAG, '[ar-restore] restored interrupted AR sky state projection=%{public}s fov=%{public}s',
+      persisted.projection, persisted.fovDeg.toFixed(1))
   }
 
   // 探测本机真实相机与华为 AR Engine 硬件能力，并保留 native 桥预研状态查询。
@@ -109,9 +212,10 @@ export class ARController {
       return
     }
 
-    // 保存进入 AR 前的地景/大气/视场状态，退出时无损还原
+    // 保存进入 AR 前的地景/大气/视场/投影状态（同步落盘，防止强杀或异常退出后残留透视投影）
     if (this.savedSkyState === null) {
       this.savedSkyState = this.hooks.readSkyRestoreState()
+      this.persistRestoreSnapshot(this.savedSkyState)
     }
     // 彻底隐藏虚拟地景、雾山地平线、明亮大气、雾气与高开销极光层；
     // 切换至与真实针孔摄像头数学一致的中心透视投影（ProjectionPerspective）并对齐短边视场角（~45°），消除边缘畸变与角尺度滑移。
@@ -148,16 +252,10 @@ export class ARController {
     if (restoreSky && this.savedSkyState !== null) {
       const snap = this.savedSkyState
       this.savedSkyState = null
-      this.port.fire('setAtmosphereFlag', snap.landscape ? 'landscape|1' : 'landscape|0')
-      this.port.fire('setActionChecked', snap.mistHorizon ? 'actionShow_MistHorizon|1' : 'actionShow_MistHorizon|0')
-      this.port.fire('setAtmosphereFlag', snap.atmosphere ? 'atmosphere|1' : 'atmosphere|0')
-      this.port.fire('setAtmosphereFlag', snap.fogEffect ? 'fog|1' : 'fog|0')
-      this.port.fire('setSkyDisplaySetting', snap.auroraEnabled ? 'auroraEnabled|1' : 'auroraEnabled|0')
-      if (snap.projection.length > 0) {
-        this.port.fire('setProjectionType', snap.projection)
-      }
-      this.port.fire('setFOV', snap.fovDeg.toFixed(1))
-      this.hooks.applySkyRestoreState(snap)
+      this.clearPersistedRestoreSnapshot()
+      this.applyRestoreSnapshot(snap)
+    } else if (restoreSky) {
+      this.clearPersistedRestoreSnapshot()
     }
 
     if (wasActive) {

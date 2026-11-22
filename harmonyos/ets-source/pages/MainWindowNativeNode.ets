@@ -2843,7 +2843,7 @@ export struct WindowNativeNode {
           setScriptMetadata: (raw: Object | undefined): void => { this.scriptPlaybackCtl().setScriptMetadata(raw) },
           reloadConfigurationSettings: (): void => { this.settingsCtl().loadConfigurationSettings() },
           // 引擎启动确认后由 StartupBridge 调用；立即读引擎状态，不排队、不延时。
-          refreshRuntimeState: (): void => { this.engineReady = true; this.refreshStateNow(); this.callInteractive('setTouchPickRadius', this.viewSettingsStore.touchPickRadiusVp.toString(), () => {}); this.syncStarBrightnessFromEngine(); this.consumeCardRoute(); void this.notificationCtl().refreshSubscriptions(); this.scheduleCardSnapshotSync(1800); setTimeout(() => { this.ensureCalendarPreviewLoaded(); this.syncRemoteCalendarFeed(false) }, 600) },
+          refreshRuntimeState: (): void => { this.engineReady = true; this.arCtl().restoreInterruptedArSkyStateIfNeeded(); this.refreshStateNow(); this.callInteractive('setTouchPickRadius', this.viewSettingsStore.touchPickRadiusVp.toString(), () => {}); this.syncStarBrightnessFromEngine(); this.consumeCardRoute(); void this.notificationCtl().refreshSubscriptions(); this.scheduleCardSnapshotSync(1800); setTimeout(() => { this.ensureCalendarPreviewLoaded(); this.syncRemoteCalendarFeed(false) }, 600) },
           // Startbridge 的「引擎就绪」以 StelApp::isInitialized() 为准：
           // 出帧就绪可能早于 init 完成，提前投放查询会在 init 期间堆积重试链。
           enginePresentationReady: (): boolean => isEngineReady()
