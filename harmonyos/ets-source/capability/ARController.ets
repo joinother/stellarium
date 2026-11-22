@@ -23,6 +23,7 @@ export interface ARHostHooks {
   abilityContext(): common.UIAbilityContext | undefined
   isGyroEnabled(): boolean
   enableGyroForAr(): void
+  setArLowLatencyGyro(enabled: boolean): void
   readSkyRestoreState(): ArSkyRestoreSnapshot
   applySkyRestoreState(snapshot: ArSkyRestoreSnapshot): void
   onArCameraActiveChanged(active: boolean): void
@@ -33,6 +34,7 @@ export interface ArSkyRestoreSnapshot {
   landscape: boolean
   mistHorizon: boolean
   fogEffect: boolean
+  auroraEnabled: boolean
   fovDeg: number
 }
 
@@ -110,14 +112,16 @@ export class ARController {
     if (this.savedSkyState === null) {
       this.savedSkyState = this.hooks.readSkyRestoreState()
     }
-    // 彻底隐藏虚拟地景、雾山地平线、明亮大气与雾气，避免实景下出现虚拟山体暗影
+    // 彻底隐藏虚拟地景、雾山地平线、明亮大气、雾气与高开销极光层，拉高 AR 帧率并消除虚拟山影
     this.port.fire('setAtmosphereFlag', 'landscape|0')
     this.port.fire('setActionChecked', 'actionShow_MistHorizon|0')
     this.port.fire('setAtmosphereFlag', 'atmosphere|0')
     this.port.fire('setAtmosphereFlag', 'fog|0')
+    this.port.fire('setSkyDisplaySetting', 'auroraEnabled|0')
     this.port.fire('setFOV', this.store.arCameraFovDeg.toFixed(1))
 
-    // 自动启用四源传感器陀螺仪对准
+    // 开启 AR 超低延迟姿态通道（120Hz + 36ms 前瞻预测），并在未开陀螺仪时自动启用
+    this.hooks.setArLowLatencyGyro(true)
     if (!this.hooks.isGyroEnabled()) {
       this.hooks.enableGyroForAr()
     }
@@ -135,6 +139,7 @@ export class ARController {
     this.resumeAfterForeground = false
     this.store.arCameraActive = false
     this.store.arCameraStarting = false
+    this.hooks.setArLowLatencyGyro(false)
     await ArCameraService.getInstance().stop()
 
     if (restoreSky && this.savedSkyState !== null) {
@@ -144,6 +149,7 @@ export class ARController {
       this.port.fire('setActionChecked', snap.mistHorizon ? 'actionShow_MistHorizon|1' : 'actionShow_MistHorizon|0')
       this.port.fire('setAtmosphereFlag', snap.atmosphere ? 'atmosphere|1' : 'atmosphere|0')
       this.port.fire('setAtmosphereFlag', snap.fogEffect ? 'fog|1' : 'fog|0')
+      this.port.fire('setSkyDisplaySetting', snap.auroraEnabled ? 'auroraEnabled|1' : 'auroraEnabled|0')
       this.port.fire('setFOV', snap.fovDeg.toFixed(1))
       this.hooks.applySkyRestoreState(snap)
     }

@@ -3409,11 +3409,13 @@ export struct WindowNativeNode {
         },
         isGyroEnabled: (): boolean => this.gyroStore.gyroscopeEnabled,
         enableGyroForAr: (): void => { this.gyroCtl().toggleGyroscope(true) },
+        setArLowLatencyGyro: (enabled: boolean): void => { this.gyroCtl().setArLowLatencyMode(enabled) },
         readSkyRestoreState: (): ArSkyRestoreSnapshot => ({
           atmosphere: this.layerStore.atmosphere,
           landscape: this.layerStore.ground,
           mistHorizon: this.layerStore.mistHorizon,
           fogEffect: this.layerStore.fogEffect,
+          auroraEnabled: this.layerStore.auroraEnabled,
           fovDeg: Number.isFinite(this.fovSliderValue) && this.fovSliderValue >= 5 ? this.fovSliderValue : 60
         }),
         applySkyRestoreState: (snap: ArSkyRestoreSnapshot): void => {
@@ -3421,6 +3423,7 @@ export struct WindowNativeNode {
           this.layerStore.ground = snap.landscape
           this.layerStore.mistHorizon = snap.mistHorizon
           this.layerStore.fogEffect = snap.fogEffect
+          this.layerStore.auroraEnabled = snap.auroraEnabled
           this.fovSliderValue = snap.fovDeg
           this.refreshState()
         },
@@ -3430,6 +3433,7 @@ export struct WindowNativeNode {
             this.layerStore.ground = false
             this.layerStore.mistHorizon = false
             this.layerStore.fogEffect = false
+            this.layerStore.auroraEnabled = false
             this.fovSliderValue = this.arStore.arCameraFovDeg
           }
         }

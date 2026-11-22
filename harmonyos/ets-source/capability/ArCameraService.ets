@@ -187,9 +187,9 @@ export class ArCameraService {
       const w = p.size.width
       const h = p.size.height
       if (w < 640 || h < 480) continue
-      // 优先选择 1080p / 1440x1080 / 720p 级别的流畅高画质流，避免 4K 预览增加功耗
+      // 优先选择 1280×720（720p）低延迟高流畅度流：相比 1080p 减少 55% GPU 纹理带宽与 ISP 帧延迟
       const pixels = w * h
-      const targetPixels = 1920 * 1080
+      const targetPixels = 1280 * 720
       const distancePenalty = Math.abs(pixels - targetPixels) / targetPixels
       const ratioBonus = (Math.abs((w / h) - (16 / 9)) < 0.08 || Math.abs((w / h) - (4 / 3)) < 0.08) ? 0.5 : 0
       const score = 10 - distancePenalty + ratioBonus
@@ -283,6 +283,23 @@ export class ArCameraService {
       await session.commitConfig()
 
       this.applyPreviewRotation(previewOut)
+
+      // 优先锁定更高预览帧率区间，减少实景画面拖影与延迟
+      try {
+        const ranges = previewOut.getSupportedFrameRates()
+        if (ranges !== undefined && ranges.length > 0) {
+          let best = ranges[0]
+          for (const r of ranges) {
+            if (r.max > best.max || (r.max === best.max && r.min > best.min)) {
+              best = r
+            }
+          }
+          previewOut.setFrameRate(best.min, best.max)
+          hilog.info(LOG_DOMAIN, LOG_TAG, '[ar-camera] frameRate range=%{public}d..%{public}d', best.min, best.max)
+        }
+      } catch (_fpsErr) {
+        // Optional frame rate hint
+      }
 
       try {
         if (session.isFocusModeSupported(camera.FocusMode.FOCUS_MODE_CONTINUOUS_AUTO)) {

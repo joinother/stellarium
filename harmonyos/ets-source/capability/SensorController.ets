@@ -130,6 +130,10 @@ export class SensorController {
   private gyroLastSampleMs: number = 0
   private gyroLastDispatchMs: number = 0
   private gyroLastRawQ: number[] = [0, 0, 0, 1]
+  private arLowLatencyMode: boolean = false
+  private gyroRawPrevFwd: number[] = []
+  private gyroVelFwd: number[] = [0, 0, 0]
+  private gyroRawPrevMs: number = 0
 
   constructor(
     gyroStore: GyroStore,
@@ -233,6 +237,30 @@ export class SensorController {
     this.gyroLastDisplayRotationCheckMs = Date.now()
   }
 
+  // AR 实景超低延迟模式：120Hz 采样 + 9ms 轻滤波 + 36ms 角速度前瞻预测，抵消星图渲染耗时以对齐实景相机帧。
+  setArLowLatencyMode(enabled: boolean): void {
+    if (this.arLowLatencyMode === enabled) return
+    this.arLowLatencyMode = enabled
+    this.gyroRawPrevFwd = []
+    this.gyroVelFwd = [0, 0, 0]
+    this.gyroRawPrevMs = 0
+    if (this.gyroRotationSubscribed && this.gyroRotationCallback !== undefined) {
+      const cb = this.gyroRotationCallback
+      const nextInterval = enabled ? 8333333 : 16666667
+      try {
+        this.sensorPort.unsubscribeRotationVector(cb)
+        this.sensorPort.subscribeRotationVector(cb, nextInterval)
+        hilog.info(0x0000, 'StellariumArkUI', '[gyro-probe] arLowLatency=%{public}s rotation intervalNs=%{public}d',
+          enabled.toString(), nextInterval)
+      } catch (_err) {
+        try {
+          this.sensorPort.subscribeRotationVector(cb, 16666667)
+        } catch (_err2) {
+        }
+      }
+    }
+  }
+
   startGyroscope(): void {
     if (!this.hooks.canUseSensors()) {
       this.gyroStore.gyroscopePending = false
@@ -295,6 +323,9 @@ export class SensorController {
     this.gyroFilteredGravityDevice = []
     this.gyroFilteredMagneticDevice = []
     this.gyroMagneticHeading = Number.NaN
+    this.gyroRawPrevFwd = []
+    this.gyroVelFwd = [0, 0, 0]
+    this.gyroRawPrevMs = 0
     this.gyroStore.gyroCompassAzAlignment = 0
     this.gyroStore.gyroCompassText = '罗盘 --'
     this.gyroStore.gyroCompassAngle = 0
@@ -309,13 +340,25 @@ export class SensorController {
     const rotationSupported = this.sensorPort.probeSensor('rotation-vector') !== undefined
     const rotationCallback = this.gyroRotationCallback
     if (rotationSupported && rotationCallback !== undefined) {
+      const intervalNs = this.arLowLatencyMode ? 8333333 : 16666667
       try {
-        this.sensorPort.subscribeRotationVector(rotationCallback, 16666667)
+        this.sensorPort.subscribeRotationVector(rotationCallback, intervalNs)
         this.gyroRotationSubscribed = true
         this.gyroUsingRotationVector = true
-        hilog.info(0x0000, 'StellariumArkUI', '[gyro-probe] subscribed sensor=rotation-vector intervalNs=16666667')
+        hilog.info(0x0000, 'StellariumArkUI', '[gyro-probe] subscribed sensor=rotation-vector intervalNs=%{public}d', intervalNs)
       } catch (error) {
-        hilog.error(0x0000, 'StellariumArkUI', '[gyro-probe] subscribe failed sensor=rotation-vector error=%{public}s', JSON.stringify(error))
+        if (this.arLowLatencyMode) {
+          try {
+            this.sensorPort.subscribeRotationVector(rotationCallback, 16666667)
+            this.gyroRotationSubscribed = true
+            this.gyroUsingRotationVector = true
+            hilog.info(0x0000, 'StellariumArkUI', '[gyro-probe] subscribed sensor=rotation-vector fallback intervalNs=16666667')
+          } catch (fallbackErr) {
+            hilog.error(0x0000, 'StellariumArkUI', '[gyro-probe] subscribe failed sensor=rotation-vector error=%{public}s', JSON.stringify(fallbackErr))
+          }
+        } else {
+          hilog.error(0x0000, 'StellariumArkUI', '[gyro-probe] subscribe failed sensor=rotation-vector error=%{public}s', JSON.stringify(error))
+        }
       }
     }
 
@@ -412,6 +455,9 @@ export class SensorController {
     this.gyroFilteredGravityDevice = []
     this.gyroFilteredMagneticDevice = []
     this.gyroMagneticHeading = Number.NaN
+    this.gyroRawPrevFwd = []
+    this.gyroVelFwd = [0, 0, 0]
+    this.gyroRawPrevMs = 0
     this.gyroStore.gyroCompassAzAlignment = 0
     this.gyroStore.gyroCompassText = '罗盘 --'
     this.gyroStore.gyroCompassAngle = 0
@@ -850,6 +896,23 @@ export class SensorController {
     this.gyroRawAltitude = rawAltAz[1]
 
     const now = Date.now()
+    if (this.arLowLatencyMode && this.gyroRawPrevFwd.length === 3 && this.gyroRawPrevMs > 0) {
+      const velDt = Math.max(0.004, Math.min(0.08, (now - this.gyroRawPrevMs) / 1000))
+      const rawVx = (forward[0] - this.gyroRawPrevFwd[0]) / velDt
+      const rawVy = (forward[1] - this.gyroRawPrevFwd[1]) / velDt
+      const rawVz = (forward[2] - this.gyroRawPrevFwd[2]) / velDt
+      const vAlpha = 1 - Math.exp(-velDt / 0.018)
+      this.gyroVelFwd = [
+        this.gyroVelFwd[0] + (rawVx - this.gyroVelFwd[0]) * vAlpha,
+        this.gyroVelFwd[1] + (rawVy - this.gyroVelFwd[1]) * vAlpha,
+        this.gyroVelFwd[2] + (rawVz - this.gyroVelFwd[2]) * vAlpha
+      ]
+    } else {
+      this.gyroVelFwd = [0, 0, 0]
+    }
+    this.gyroRawPrevFwd = [forward[0], forward[1], forward[2]]
+    this.gyroRawPrevMs = now
+
     let poseSmoothingAmount = 1
     if (this.gyroFwd.length !== 3) {
       this.gyroFwd = forward
@@ -859,13 +922,13 @@ export class SensorController {
       this.gyroLastSampleMs = now
       if (dt <= 0) { dt = 1 / 60 }
       if (dt > 0.25) { dt = 0.25 }
-      // ROTATION_VECTOR is already sensor-fused. A long second low-pass filter
-      // made the sky trail the Pad by roughly 100 ms, which felt like dropped
-      // frames even when rendering was healthy. Keep only enough damping for
-      // hand tremor and use the same time-based amount for forward and up.
-      let tau = 0.045
-      if (this.gyroStore.gyroscopeSensitivityText === 'Low') { tau = 0.08 }
-      else if (this.gyroStore.gyroscopeSensitivityText === 'High') { tau = 0.025 }
+      // ROTATION_VECTOR is already sensor-fused. In AR mode keep tau ultra-short
+      // (9ms) so stars stay tightly locked to the live camera stream.
+      let tau = this.arLowLatencyMode ? 0.009 : 0.045
+      if (!this.arLowLatencyMode) {
+        if (this.gyroStore.gyroscopeSensitivityText === 'Low') { tau = 0.08 }
+        else if (this.gyroStore.gyroscopeSensitivityText === 'High') { tau = 0.025 }
+      }
       poseSmoothingAmount = 1 - Math.exp(-dt / tau)
       this.gyroFwd = gyroNormalizeVector([
         this.gyroFwd[0] + (forward[0] - this.gyroFwd[0]) * poseSmoothingAmount,
@@ -888,14 +951,39 @@ export class SensorController {
     }
     this.emitGyroPoseProbe('sample', forward, up, rawAltAz[0], rawAltAz[1])
 
-    if (now - this.gyroLastDispatchMs < 16) { return }
+    const minDispatchMs = this.arLowLatencyMode ? 8 : 16
+    if (now - this.gyroLastDispatchMs < minDispatchMs) { return }
     this.gyroLastDispatchMs = now
-    const altAz = this.gyroVectorAltAz(this.gyroFwd)
+
+    let dispatchFwd = this.gyroFwd
+    let dispatchUp = this.gyroUp
+    if (this.arLowLatencyMode) {
+      const speed = Math.sqrt(
+        this.gyroVelFwd[0] * this.gyroVelFwd[0] +
+        this.gyroVelFwd[1] * this.gyroVelFwd[1] +
+        this.gyroVelFwd[2] * this.gyroVelFwd[2]
+      )
+      // 静止死区 0.015 rad/s 防止停稳时微抖；运动时向前预测 36ms（上限 0.075 rad ≈ 4.3°）抵消渲染滞后。
+      if (speed > 0.015) {
+        const leadSec = 0.036
+        const maxLeadRad = 0.075
+        const rawLeadRad = speed * leadSec
+        const scale = rawLeadRad > maxLeadRad ? (maxLeadRad / speed) : leadSec
+        dispatchFwd = gyroNormalizeVector([
+          this.gyroFwd[0] + this.gyroVelFwd[0] * scale,
+          this.gyroFwd[1] + this.gyroVelFwd[1] * scale,
+          this.gyroFwd[2] + this.gyroVelFwd[2] * scale
+        ])
+        dispatchUp = this.gyroOrthonormalizeUp(dispatchFwd, this.gyroUp)
+      }
+    }
+
+    const altAz = this.gyroVectorAltAz(dispatchFwd)
     this.gyroLastAz = altAz[0]
     this.gyroLastAlt = altAz[1]
     this.updateGyroTargetGuide()
     this.port.fire('setGyroView', this.gyroLastAz.toFixed(3) + '|' + this.gyroLastAlt.toFixed(3) + '|'
-      + this.gyroUp[0].toFixed(5) + '|' + this.gyroUp[1].toFixed(5) + '|' + this.gyroUp[2].toFixed(5))
+      + dispatchUp[0].toFixed(5) + '|' + dispatchUp[1].toFixed(5) + '|' + dispatchUp[2].toFixed(5))
     this.gyroEventCount += 1
     this.gyroDispatchCount += 1
     if (this.gyroEventCount % 20 === 0 && this.gyroStore.gyroscopeStatus !== I18n.t('m_gyro_working')) {
