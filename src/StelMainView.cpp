@@ -8721,16 +8721,63 @@ extern "C" __attribute__((visibility("default"))) const char* StellariumOhos_com
 			}
 			if (!found && !query.isEmpty() && preferredModule.isEmpty())
 			{
-				// Resolve Solar System bodies (Sun, Moon, planets, planetary moons) before
-				// Satellites so names like Sun/Mercury/Mars/Jupiter/Earth/Phobos/Io/Titan
+				// Resolve Solar System bodies (Sun, Moon, planets, planetary moons, comets)
+				// before Satellites so names like Sun/Mercury/Mars/Jupiter/Earth/Phobos/Io/Titan
 				// are never shadowed by artificial satellites in any locale.
 				if (auto* solarSystem = GETSTELMODULE(SolarSystem))
 				{
 					StelObjectP body = solarSystem->searchByNameI18n(query);
 					if (!body)
 						body = solarSystem->searchByName(query);
+					if (!body && query.size() >= 4)
+					{
+						// Match periodic comets whose Stellarium SolarSystem name appends the
+						// perihelion year, e.g. MPC "161P/Hartley-IRAS" -> "161P/Hartley-IRAS (2026)".
+						// When multiple apparitions exist, prefer the one closest to the current
+						// simulation year.
+						int simYear = 2026;
+						if (core)
+						{
+							int y = 0, m = 0, d = 0;
+							StelUtils::getDateFromJulianDay(core->getJD(), &y, &m, &d);
+							if (y > 0) simYear = y;
+						}
+						const QString qLower = query.toLower();
+						const QString qPrefixParen = qLower + QLatin1String(" (");
+						static const QRegularExpression trailingYearRe(QStringLiteral("\\((\\d{4})\\)\\s*$"));
+						auto scoreCandidate = [&](const QString& enLower, bool isPrefix) -> int {
+							int score = isPrefix ? 0 : 10000;
+							const auto match = trailingYearRe.match(enLower);
+							if (match.hasMatch())
+								score += std::abs(match.captured(1).toInt() - simYear);
+							else
+								score += 500;
+							return score;
+						};
+						PlanetP bestMatch;
+						int bestScore = 1000000;
+						for (const auto& planet : solarSystem->getAllPlanets())
+						{
+							if (!planet) continue;
+							const QString enLower = planet->getEnglishName().toLower();
+							const bool isPrefix = enLower.startsWith(qPrefixParen) || enLower.startsWith(qLower);
+							const bool isContains = !isPrefix && enLower.contains(qLower);
+							if (!isPrefix && !isContains) continue;
+							const int score = scoreCandidate(enLower, isPrefix);
+							if (score < bestScore)
+							{
+								bestScore = score;
+								bestMatch = planet;
+							}
+						}
+						if (bestMatch)
+							body = qSharedPointerCast<StelObject>(bestMatch);
+					}
 					if (body)
+					{
 						found = objectMgr->setSelectedObject(body);
+						query = body->getEnglishName();
+					}
 				}
 			}
 			if (!found)

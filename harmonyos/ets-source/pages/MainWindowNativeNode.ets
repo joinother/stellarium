@@ -3195,8 +3195,19 @@ export struct WindowNativeNode {
           const showerCode = event.showerCode?.trim() ?? ''
           const rawTarget = event.target?.trim() ?? ''
           let searchArg = rawTarget
-          if (rawTarget === 'North' || rawTarget === 'South' || rawTarget === 'East' || rawTarget === 'West') {
+          let cardinalAltAz = ''
+          if (rawTarget === 'North') {
             searchArg = ''
+            cardinalAltAz = '180|18|0.8'
+          } else if (rawTarget === 'East') {
+            searchArg = ''
+            cardinalAltAz = '90|18|0.8'
+          } else if (rawTarget === 'South') {
+            searchArg = ''
+            cardinalAltAz = '0|18|0.8'
+          } else if (rawTarget === 'West') {
+            searchArg = ''
+            cardinalAltAz = '270|18|0.8'
           } else if (isSat && satId.length > 0) {
             searchArg = `object|Satellite|${satId}`
           } else if (isMeteor && showerCode.length > 0) {
@@ -3212,9 +3223,12 @@ export struct WindowNativeNode {
           } else if (isMeteor) {
             this.commandPort().fire('setMeteorShowersFlag', 'enabled|1')
             this.commandPort().fire('setMeteorShowersFlag', 'marker|1')
+          } else if (event.kind === 'aurora-alert' && !this.layerStore.auroraEnabled) {
+            this.layerStore.auroraEnabled = true
+            this.commandPort().fire('setSkyDisplaySetting', 'auroraEnabled|1')
           }
           const runJump = (): void => {
-            // 直接切换至事件时刻（不做耗时数秒的时间旋转过渡），随后选中并居中锁定目标星体。
+            // 直接切换至事件时刻（不做耗时数秒的时间旋转过渡），随后选中并居中锁定目标星体（或转向目标方位）。
             this.callInteractive('setJD', event.jd.toString(), () => {
               this.refreshDockClock()
               this.syncSimulatedDateLabel(event.jd)
@@ -3227,6 +3241,9 @@ export struct WindowNativeNode {
                     this.refreshState()
                   }
                 })
+              } else if (cardinalAltAz.length > 0 && !this.gyroStore.gyroscopeEnabled) {
+                this.callNativeFire('moveToAltAz', cardinalAltAz)
+                this.refreshState()
               } else {
                 this.refreshState()
               }
@@ -5136,12 +5153,20 @@ export struct WindowNativeNode {
         const satMatch = /^(?:satellite-pass-|pass:)(\d+)(?:[-:]|$)/.exec(eventId)
         const satId = satMatch ? satMatch[1] : (/^\d+$/.test(target) ? target : '')
         const isSatelliteLanding = panel === 'satellites' || kind === 'satellite-pass'
-        const searchArg = (isSatelliteLanding && satId.length > 0) ? `object|Satellite|${satId}` : target
+        const cardinalAltAz = target === 'North' ? '180|18|0.8'
+          : (target === 'East' ? '90|18|0.8'
+            : (target === 'South' ? '0|18|0.8'
+              : (target === 'West' ? '270|18|0.8' : '')))
+        const searchArg = cardinalAltAz.length > 0 ? ''
+          : ((isSatelliteLanding && satId.length > 0) ? `object|Satellite|${satId}` : target)
         if (isSatelliteLanding) {
           this.satelliteCtl().setSatelliteFlag('hints', true)
           if (this.satelliteStore !== undefined && !this.satelliteStore.satOrbitLines) {
             this.satelliteCtl().setSatelliteFlag('orbitLines', true)
           }
+        } else if (kind === 'aurora-alert' && !this.layerStore.auroraEnabled) {
+          this.layerStore.auroraEnabled = true
+          this.commandPort().fire('setSkyDisplaySetting', 'auroraEnabled|1')
         }
         const focusTarget = (): void => {
           if (searchArg.length > 0) {
@@ -5172,6 +5197,9 @@ export struct WindowNativeNode {
                 }
               }
             })
+          } else if (cardinalAltAz.length > 0 && !(this.gyroStore !== undefined && this.gyroStore.gyroscopeEnabled === true)) {
+            this.callNativeFire('moveToAltAz', cardinalAltAz)
+            this.refreshState()
           } else {
             if (kind === 'find') this.gyroCtl().toggleGyroscope(true)
             this.refreshState()
