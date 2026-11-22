@@ -22,6 +22,12 @@
 #define COMET_HPP
 
 #include "Planet.hpp"
+#include <memory>
+
+class QOpenGLBuffer;
+class QOpenGLShaderProgram;
+class QOpenGLVertexArrayObject;
+class QOpenGLContext;
 
 /*! \class Comet
 	\author Bogdan Marinov, Georg Zotti (orbit computation enhancements, tails)
@@ -117,6 +123,9 @@ public:
 	// re-implementation of Planet's update() to prepare tails (extinction etc). @param deltaTime: ms (since last call)
 	void update(int deltaTime) override;
 
+	//! Release shared OpenGL shader/buffer resources used by procedural comet rendering.
+	static void deinitShader();
+
 protected:
 	// components for Planet::getInfoString() that are overridden here:
 	//! Any flags&Name information to be displayed
@@ -142,6 +151,15 @@ private:
 	Vec2f getComaDiameterAndTailLengthAU() const;
 	void drawTail(StelCore* core, StelProjector::ModelViewTranformP transfo, bool gas);
 	void drawComa(StelCore* core, StelProjector::ModelViewTranformP transfo);
+	void drawProceduralTail(StelCore* core, const StelProjectorP& prj, bool gas,
+				const Vec3d& cometEcl, const Vec3d& observerEcl,
+				const Vec3d& antiSun, const Vec3d& trailDir, double velNorm,
+				double comaRadAU, double tailLenAU, float baseIntensity, float twilightFade);
+	void drawProceduralComa(StelCore* core, const StelProjectorP& prj,
+				const Vec3d& cometEcl, const Vec3d& observerEcl,
+				const Vec3d& antiSun, double comaRadAU,
+				float vMagnitude, float screenRd, float twilightFade);
+	static bool ensureShaders();
 
 	//! compute a coma, faked as simple disk to be tilted towards the observer.
 	//! @param diameter Diameter of Coma [AU]
@@ -195,6 +213,14 @@ private:
 	static QVector<unsigned short> tailIndices; // computed only once for all comets!
 	static StelTextureSP comaTexture;
 	static StelTextureSP tailTexture;      // it seems not really necessary to have different textures. gas tail is just painted blue.
+
+	float renderSeed; // deterministic per-comet procedural pattern seed
+	static std::unique_ptr<QOpenGLShaderProgram> tailShaderProgram;
+	static std::unique_ptr<QOpenGLShaderProgram> comaShaderProgram;
+	static std::unique_ptr<QOpenGLVertexArrayObject> cometVAO;
+	static std::unique_ptr<QOpenGLBuffer> cometVBO;
+	static QOpenGLContext* shaderContext;
+	static bool shaderInitFailed;
 };
 
 #endif //COMET_HPP

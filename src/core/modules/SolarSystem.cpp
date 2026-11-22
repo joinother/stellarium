@@ -438,6 +438,7 @@ void SolarSystem::releaseVAO()
 
 void SolarSystem::deinit()
 {
+	Comet::deinitShader();
 	Planet::deinitShader();
 	Planet::deinitFBO();
 }
