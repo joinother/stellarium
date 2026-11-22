@@ -283,8 +283,17 @@ export function resolveStationCrewKey(
 
 export function flagEmojiForCountryCode(flagCode: string, countryName: string): string {
   let code = flagCode.trim().toUpperCase()
+  const c = countryName.trim().toLowerCase()
+  // 中国香港/澳门/台湾及西藏/新疆/内蒙古等地区统一归口中国主权规范，不渲染独立旗帜
+  if (code === 'HK' || code === 'MO' || code === 'TW' ||
+    c === 'hong kong' || c === 'hong kong sar' || c === 'hong kong, china' ||
+    c === 'macau' || c === 'macao' || c === 'macao sar' || c === 'macao, china' ||
+    c === 'taiwan' || c === 'taiwan, china' || c === 'republic of china' || c === 'roc' || c === 'chinese taipei' ||
+    c === 'tibet' || c === 'xizang' || c === 'xizang, china' ||
+    c === 'xinjiang' || c === 'xinjiang, china' || c === 'inner mongolia' || c === 'inner mongolia, china') {
+    code = 'CN'
+  }
   if (code.length !== 2) {
-    const c = countryName.trim().toLowerCase()
     if (c === 'china') code = 'CN'
     else if (c === 'united states' || c === 'usa') code = 'US'
     else if (c === 'russia' || c === 'russian federation') code = 'RU'
@@ -316,10 +325,29 @@ export function flagEmojiForCountryCode(flagCode: string, countryName: string): 
 }
 
 export function localizeCountryName(country: string, flagCode: string, isZh: boolean, countryZh: string = ''): string {
-  if (!isZh) return country
-  if (countryZh.trim().length > 0) return countryZh.trim()
   const code = flagCode.trim().toLowerCase()
   const key = country.trim().toLowerCase()
+  // 港澳台及边疆自治区规范表述（中英文均受保护）
+  if (code === 'hk' || key === 'hong kong' || key === 'hong kong sar' || key === 'hong kong, china') {
+    return isZh ? '中国香港特别行政区' : 'Hong Kong, China'
+  }
+  if (code === 'mo' || key === 'macau' || key === 'macao' || key === 'macao sar' || key === 'macao, china') {
+    return isZh ? '中国澳门特别行政区' : 'Macao, China'
+  }
+  if (code === 'tw' || key === 'taiwan' || key === 'taiwan, china' || key === 'republic of china' || key === 'roc' || key === 'chinese taipei') {
+    return isZh ? '中国台湾地区' : 'Taiwan, China'
+  }
+  if (key === 'tibet' || key === 'xizang' || key === 'xizang, china') {
+    return isZh ? '中国西藏自治区' : 'Xizang, China'
+  }
+  if (key === 'xinjiang' || key === 'xinjiang, china' || key === 'east turkestan') {
+    return isZh ? '中国新疆维吾尔自治区' : 'Xinjiang, China'
+  }
+  if (key === 'inner mongolia' || key === 'inner mongolia, china') {
+    return isZh ? '中国内蒙古自治区' : 'Inner Mongolia, China'
+  }
+  if (!isZh) return country
+  if (countryZh.trim().length > 0) return countryZh.trim()
   if (code === 'cn' || key === 'china') return '中国'
   if (code === 'us' || key === 'united states' || key === 'usa') return '美国'
   if (code === 'ru' || key === 'russia' || key === 'russian federation') return '俄罗斯'

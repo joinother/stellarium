@@ -354,31 +354,58 @@ test('overlapping refreshes cannot publish concurrently', async (context) => {
   assert.deepEqual(await readdir(root), ['v1'])
 })
 
-test('spaceflight-crew-json validates onboard astronaut payloads and rejects malformed records', async (context) => {
+test('spaceflight-crew-json validates onboard astronaut payloads, strips external URLs, and rejects malformed records', async (context) => {
   const crewSource = {
     id: 'catalog.spaceflight.crew',
     format: 'spaceflight-crew-json',
     upstreamUrl: 'https://corquaid.github.io/international-space-station-APIs/JSON/people-in-space.json',
     mirrorPath: '/v1/catalogs/spaceflight/people-in-space.json',
   }
-  const validPayload = JSON.stringify({
+  const upstreamPayload = JSON.stringify({
     number: 2,
     iss_expedition: 75,
+    expedition_url: 'https://en.wikipedia.org/wiki/Expedition_75',
     people: [
-      { name: 'Zhu Yangzhu', country: 'China', flag_code: 'cn', agency: 'CMSA', position: 'Commander', spacecraft: 'Shenzhou 23', iss: false },
-      { name: 'Pyotr Dubrov', country: 'Russia', flag_code: 'ru', agency: 'Roscosmos', position: 'Commander', spacecraft: 'Soyuz MS-29', iss: true },
+      {
+        id: 1,
+        name: 'Zhu Yangzhu',
+        country: 'China',
+        flag_code: 'cn',
+        agency: 'CMSA',
+        position: 'Commander',
+        spacecraft: 'Shenzhou 23',
+        iss: false,
+        url: 'https://en.wikipedia.org/wiki/Zhu_Yangzhu',
+        instagram: 'https://www.instagram.com/example/',
+      },
+      {
+        id: 2,
+        name: 'Pyotr Dubrov',
+        country: 'Russia',
+        flag_code: 'ru',
+        agency: 'Roscosmos',
+        position: 'Commander',
+        spacecraft: 'Soyuz MS-29',
+        iss: true,
+        twitter: 'https://x.com/example',
+      },
     ],
   })
-  assert.equal(validatePayload(validPayload, crewSource), 2)
+  assert.equal(validatePayload(upstreamPayload, crewSource), 2)
   assert.throws(() => validatePayload(JSON.stringify({ people: [{ name: '', country: 'China', spacecraft: 'Shenzhou 23', iss: false }] }), crewSource), /invalid_payload/)
+  assert.throws(() => validatePayload(JSON.stringify({ people: [{ name: 'Alice https://spam.example', country: 'USA', spacecraft: 'Dragon', iss: true }] }), crewSource), /invalid_payload/)
   assert.throws(() => validatePayload(JSON.stringify({ people: [{ name: 'Alice', country: 'USA', spacecraft: 'Dragon', iss: 'yes' }] }), crewSource), /invalid_payload/)
   const root = await workspace(context)
   const result = await run(root, {
     sources: [crewSource],
-    fetchImpl: async () => new Response(validPayload),
+    fetchImpl: async () => new Response(upstreamPayload),
   })
   assert.equal(result.exitCode, 0)
   assert.equal(result.manifest.sources[0].id, 'catalog.spaceflight.crew')
   assert.equal(result.manifest.sources[0].status, 'fresh')
-  assert.equal(await readFile(join(root, crewSource.mirrorPath), 'utf8'), validPayload)
+  const published = await readFile(join(root, crewSource.mirrorPath), 'utf8')
+  assert.doesNotMatch(published, /https?:\/\/|instagram|twitter|facebook|wikipedia/i)
+  const parsed = JSON.parse(published)
+  assert.equal(parsed.people.length, 2)
+  assert.equal(parsed.people[0].name, 'Zhu Yangzhu')
 })

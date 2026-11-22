@@ -1,16 +1,17 @@
 #!/usr/bin/env node
 // 构建星象仪空间站在轨航天员中文化静态源（/v1/spaceflight/crew.json + manifest.json）。
-// 数据来源：本地镜像 /srv/tle-mirror/v1/catalogs/spaceflight/people-in-space.json（零重复抓上游）；
-// 中文名优先取维基百科权威中文词条，未命中词条时调用服务器 DeepSeek AI 一次性翻译并永久缓存到
-// /var/lib/skyinstrument/crew-zh-cache.json，后续刷新零额外 Token 消耗。
+// 数据来源：本地镜像 /srv/tle-mirror/v1/catalogs/spaceflight/people-in-space.json（零重复抓上游、已去外链脱敏）；
+// 中文名优先取永久缓存，未命中时调用服务器 DeepSeek AI 一次性翻译并写入 /var/lib/skyinstrument/crew-zh-cache.json；
+// 发布前强制执行中国主权与规范地名校验（中国香港特别行政区/中国澳门特别行政区/中国台湾地区/西藏/新疆等）及内容安全门禁。
 
 import { createHash, randomUUID } from 'node:crypto'
 import { mkdir, open, readFile, rename, rm } from 'node:fs/promises'
 import { basename, dirname, join } from 'node:path'
+import { pathToFileURL } from 'node:url'
 
 const COUNTRY_ZH = {
-  cn: '中国', china: '中国',
-  us: '美国', 'united states': '美国', usa: '美国',
+  cn: '中国', china: '中国', "people's republic of china": '中国', prc: '中国',
+  us: '美国', 'united states': '美国', 'united states of america': '美国', usa: '美国',
   ru: '俄罗斯', russia: '俄罗斯', 'russian federation': '俄罗斯',
   ca: '加拿大', canada: '加拿大',
   jp: '日本', japan: '日本',
@@ -34,6 +35,52 @@ const COUNTRY_ZH = {
   be: '比利时', belgium: '比利时',
 }
 
+// 中国港澳台及边疆/自治区主权与规范表述强制映射（统一归口中国 flag_code='cn'，不与主权国家并列）。
+const CHINA_REGION_RULES = [
+  {
+    codes: new Set(['hk']),
+    names: new Set(['hong kong', 'hong kong sar', 'hong kong, china', '香港', '香港特别行政区', '中国香港', '中国香港特别行政区']),
+    countryEn: 'Hong Kong, China',
+    countryZh: '中国香港特别行政区',
+    flagCode: 'cn',
+  },
+  {
+    codes: new Set(['mo']),
+    names: new Set(['macau', 'macao', 'macau sar', 'macao sar', 'macao, china', 'macau, china', '澳门', '澳門', '澳门特别行政区', '中国澳门', '中国澳门特别行政区']),
+    countryEn: 'Macao, China',
+    countryZh: '中国澳门特别行政区',
+    flagCode: 'cn',
+  },
+  {
+    codes: new Set(['tw']),
+    names: new Set(['taiwan', 'taiwan, china', 'republic of china', 'roc', 'chinese taipei', 'formosa', '台湾', '台灣', '中华民国', '中華民國', '中国台湾', '中国台湾地区', '中华台北']),
+    countryEn: 'Taiwan, China',
+    countryZh: '中国台湾地区',
+    flagCode: 'cn',
+  },
+  {
+    codes: new Set([]),
+    names: new Set(['tibet', 'xizang', 'xizang, china', 'tibet autonomous region', '西藏', '西藏自治区', '中国西藏', '中国西藏自治区']),
+    countryEn: 'Xizang, China',
+    countryZh: '中国西藏自治区',
+    flagCode: 'cn',
+  },
+  {
+    codes: new Set([]),
+    names: new Set(['xinjiang', 'xinjiang, china', 'east turkestan', 'east turkistan', '新疆', '新疆维吾尔自治区', '中国新疆', '中国新疆维吾尔自治区', '东突', '东突厥斯坦']),
+    countryEn: 'Xinjiang, China',
+    countryZh: '中国新疆维吾尔自治区',
+    flagCode: 'cn',
+  },
+  {
+    codes: new Set([]),
+    names: new Set(['inner mongolia', 'inner mongolia, china', '内蒙古', '内蒙古自治区', '中国内蒙古自治区']),
+    countryEn: 'Inner Mongolia, China',
+    countryZh: '中国内蒙古自治区',
+    flagCode: 'cn',
+  },
+]
+
 const AGENCY_ZH = {
   cmsa: '中国载人航天',
   cnsa: '中国国家航天局',
@@ -47,6 +94,8 @@ const AGENCY_ZH = {
   ssa: '沙特航天局',
   axiom: '公理航天',
   spacex: '太空探索技术公司',
+  tasa: '中国台湾地区航天机构',
+  nspo: '中国台湾地区航天机构',
 }
 
 const POSITION_ZH = {
@@ -58,6 +107,14 @@ const POSITION_ZH = {
   'spaceflight participant': '太空飞行参与者',
 }
 
+const HARD_SAFETY_PATTERNS = [
+  /https?:\/\//i,
+  /<\s*\/?\s*(?:script|iframe|a\b|img\b|style|object|embed)/i,
+  /[\x00-\x08\x0b\x0c\x0e-\x1f]/,
+  /(?:台独|港独|藏独|疆独|东突|中华民国|中華民國|台湾国|台灣國|满洲国|滿洲國)/,
+  /(?:颠覆国家|推翻政府|分裂国家|煽动颠覆|色情|裸聊|约炮|赌博|博彩|刷单|杀猪盘|洗钱|毒品|冰毒|仿真枪)/,
+]
+
 function hasCjk(text) {
   return typeof text === 'string' && /[\u4e00-\u9fff]/.test(text)
 }
@@ -66,7 +123,7 @@ function cleanZhName(raw) {
   if (typeof raw !== 'string') return ''
   const cleaned = raw
     .replace(/\s*[（(][^）)]*[）)]\s*$/g, '')
-    .replace(/[·•・\.\s]+/g, (m) => (m.includes('·') || m.includes('•') || m.includes('・') ? '·' : ''))
+    .replace(/[·•・.\s]+/g, (m) => (m.includes('·') || m.includes('•') || m.includes('・') ? '·' : ''))
     .trim()
   if (!hasCjk(cleaned) || cleaned.length > 24 || /https?:\/\/|[<>{}[\]]/.test(cleaned)) {
     return ''
@@ -74,10 +131,25 @@ function cleanZhName(raw) {
   return cleaned
 }
 
-function translateCountryZh(country, flagCode) {
-  const code = String(flagCode || '').trim().toLowerCase()
-  const key = String(country || '').trim().toLowerCase()
-  return COUNTRY_ZH[code] || COUNTRY_ZH[key] || String(country || '').trim()
+export function normalizeRegionCompliance(country, flagCode) {
+  const rawCountry = String(country || '').trim()
+  const lowCountry = rawCountry.toLowerCase()
+  const lowCode = String(flagCode || '').trim().toLowerCase()
+  for (const rule of CHINA_REGION_RULES) {
+    if ((lowCode && rule.codes.has(lowCode)) || rule.names.has(lowCountry)) {
+      return {
+        country: rule.countryEn,
+        countryZh: rule.countryZh,
+        flagCode: rule.flagCode,
+      }
+    }
+  }
+  const countryZh = COUNTRY_ZH[lowCode] || COUNTRY_ZH[lowCountry] || rawCountry
+  return {
+    country: rawCountry,
+    countryZh,
+    flagCode: lowCode,
+  }
 }
 
 function translateAgencyZh(agency) {
@@ -104,6 +176,36 @@ function translateSpacecraftZh(spacecraft) {
   if (/^Dragon\s+/i.test(raw)) return `龙飞船 ${raw.slice(7)}`
   if (/starliner/i.test(raw)) return `星际客机 ${raw.replace(/starliner/i, '').trim()}`.trim()
   return raw
+}
+
+export function assertSafeCrewOutput(doc) {
+  if (!doc || typeof doc !== 'object' || !Array.isArray(doc.people)) {
+    throw new Error('safety_check_failed: invalid crew document structure')
+  }
+  for (const person of doc.people) {
+    if (!person || typeof person !== 'object') {
+      throw new Error('safety_check_failed: invalid person record')
+    }
+    const code = String(person.flag_code || '').trim().toLowerCase()
+    if (code === 'tw' || code === 'hk' || code === 'mo') {
+      throw new Error(`safety_check_failed: non-compliant sovereign flag_code=${code}`)
+    }
+    const cz = String(person.countryZh || '').trim()
+    if (/^(?:台湾|台灣|香港|澳门|澳門|西藏|新疆)$/.test(cz)) {
+      throw new Error(`safety_check_failed: non-compliant standalone region label=${cz}`)
+    }
+    for (const [field, val] of Object.entries(person)) {
+      if (typeof val !== 'string') continue
+      if (val.length > 120) {
+        throw new Error(`safety_check_failed: field ${field} exceeds max length`)
+      }
+      for (const pattern of HARD_SAFETY_PATTERNS) {
+        if (pattern.test(val)) {
+          throw new Error(`safety_check_failed: blocked content in field ${field}`)
+        }
+      }
+    }
+  }
 }
 
 async function parseKeyValueConf(filePath) {
@@ -143,7 +245,7 @@ async function lookupZhWikiNames(people) {
     const titles = [...titleToKey.keys()].join('|')
     const url = `https://en.wikipedia.org/w/api.php?action=query&prop=langlinks&lllang=zh&lllimit=50&format=json&titles=${encodeURIComponent(titles)}`
     const resp = await fetch(url, {
-      signal: AbortSignal.timeout(12000),
+      signal: AbortSignal.timeout(8000),
       headers: { 'user-agent': 'SkyInstrumentMirror/1.0 (+https://skyinstrument.cn)' },
     })
     if (!resp.ok) return result
@@ -169,14 +271,18 @@ async function translateBatchWithLlm(unresolved, conf) {
   if (unresolved.length === 0 || !conf.LLM_KEY) return out
   const endpoint = conf.LLM_ENDPOINT || 'https://api.deepseek.com/chat/completions'
   const model = conf.LLM_MODEL || 'deepseek-chat'
-  const items = unresolved.map((p) => ({
-    name: p.name,
-    country: p.country,
-    agency: p.agency || '',
-    spacecraft: p.spacecraft || '',
-  }))
+  const items = unresolved.map((p) => {
+    const norm = normalizeRegionCompliance(p.country, p.flag_code)
+    return {
+      name: p.name,
+      country: norm.countryZh,
+      agency: p.agency || '',
+      spacecraft: p.spacecraft || '',
+    }
+  })
   const prompt =
     '请把以下在轨航天员信息翻译为简体中文标准译名（遵循中国载人航天官方及新华社规范译名；外国姓名用中间点“·”连接，不要保留英文）。\n' +
+    '合规红线：严格遵循中华人民共和国主权与官方规范地名表述（香港→中国香港特别行政区、澳门→中国澳门特别行政区、台湾→中国台湾地区、西藏→中国西藏自治区、新疆→中国新疆维吾尔自治区）；严禁输出网址、HTML标签或任何不当表述。\n' +
     '待翻译列表：\n' + JSON.stringify(items) + '\n\n' +
     '只返回一个 JSON 对象，格式为 {"translations":[{"name":"原英文名","nameZh":"标准中文姓名","agencyZh":"中文机构名","spacecraftZh":"中文飞船名"}]}，不要输出任何解释或代码块标记。'
   try {
@@ -190,7 +296,7 @@ async function translateBatchWithLlm(unresolved, conf) {
       body: JSON.stringify({
         model,
         messages: [
-          { role: 'system', content: '你是专业的航天科技与新闻翻译专家，只输出严格 JSON。' },
+          { role: 'system', content: '你是严谨的中文航天科技翻译专家，严格遵循中华人民共和国规范地名与主权表述，只输出严格 JSON。' },
           { role: 'user', content: prompt },
         ],
         temperature: 0.1,
@@ -225,6 +331,48 @@ async function translateBatchWithLlm(unresolved, conf) {
     console.warn(`[crew-feed] LLM translation skipped: ${err?.message || err}`)
   }
   return out
+}
+
+export function buildEnrichedCrewDocument(rawDoc, cache = {}) {
+  const enrichedPeople = rawDoc.people.map((p, index) => {
+    const name = String(p.name || '').trim()
+    const rawCountry = String(p.country || '').trim()
+    const rawFlagCode = String(p.flag_code || '').trim().toLowerCase()
+    const region = normalizeRegionCompliance(rawCountry, rawFlagCode)
+    const agency = String(p.agency || '').trim()
+    const position = String(p.position || '').trim()
+    const spacecraft = String(p.spacecraft || '').trim()
+    const key = `${name}|${rawCountry}`
+    const cached = cache[key] || {}
+    const nameZh = cleanZhName(cached.nameZh) || name
+    const agencyZh = translateAgencyZh(agency) || cached.agencyZh || agency
+    const spacecraftZh = translateSpacecraftZh(spacecraft) || cached.spacecraftZh || spacecraft
+    return {
+      id: typeof p.id === 'number' && Number.isFinite(p.id) ? p.id : index + 1,
+      name,
+      nameZh,
+      country: region.country,
+      countryZh: region.countryZh,
+      flag_code: region.flagCode,
+      agency,
+      agencyZh,
+      position,
+      positionZh: translatePositionZh(position),
+      spacecraft,
+      spacecraftZh,
+      iss: p.iss === true,
+      launched: typeof p.launched === 'number' && Number.isFinite(p.launched) ? p.launched : 0,
+    }
+  })
+
+  const outputDoc = {
+    schemaVersion: 1,
+    number: enrichedPeople.length,
+    iss_expedition: typeof rawDoc.iss_expedition === 'number' ? rawDoc.iss_expedition : 0,
+    people: enrichedPeople,
+  }
+  assertSafeCrewOutput(outputDoc)
+  return outputDoc
 }
 
 async function atomicWrite(destination, text, mode = 0o644) {
@@ -326,42 +474,7 @@ async function main() {
     }
   }
 
-  const enrichedPeople = rawDoc.people.map((p, index) => {
-    const name = String(p.name || '').trim()
-    const country = String(p.country || '').trim()
-    const flagCode = String(p.flag_code || '').trim().toLowerCase()
-    const agency = String(p.agency || '').trim()
-    const position = String(p.position || '').trim()
-    const spacecraft = String(p.spacecraft || '').trim()
-    const key = `${name}|${country}`
-    const cached = cache[key] || {}
-    const nameZh = cleanZhName(cached.nameZh) || name
-    const agencyZh = translateAgencyZh(agency) || cached.agencyZh || agency
-    const spacecraftZh = translateSpacecraftZh(spacecraft) || cached.spacecraftZh || spacecraft
-    return {
-      id: typeof p.id === 'number' && Number.isFinite(p.id) ? p.id : index + 1,
-      name,
-      nameZh,
-      country,
-      countryZh: translateCountryZh(country, flagCode),
-      flag_code: flagCode,
-      agency,
-      agencyZh,
-      position,
-      positionZh: translatePositionZh(position),
-      spacecraft,
-      spacecraftZh,
-      iss: p.iss === true,
-      launched: typeof p.launched === 'number' && Number.isFinite(p.launched) ? p.launched : 0,
-    }
-  })
-
-  const outputDoc = {
-    schemaVersion: 1,
-    number: enrichedPeople.length,
-    iss_expedition: typeof rawDoc.iss_expedition === 'number' ? rawDoc.iss_expedition : 0,
-    people: enrichedPeople,
-  }
+  const outputDoc = buildEnrichedCrewDocument(rawDoc, cache)
   const payloadText = `${JSON.stringify(outputDoc, null, 2)}\n`
   const payloadBuf = Buffer.from(payloadText, 'utf8')
   const payloadSha = sha256Hex(payloadBuf)
@@ -383,7 +496,7 @@ async function main() {
   } catch {}
 
   if (previousManifest?.sha256 === payloadSha && previousManifest?.bytes === payloadBuf.length) {
-    console.log(`crew-feed unchanged (${enrichedPeople.length} astronauts, sha256=${payloadSha.slice(0, 12)})`)
+    console.log(`crew-feed unchanged (${outputDoc.people.length} astronauts, sha256=${payloadSha.slice(0, 12)})`)
     return
   }
 
@@ -394,13 +507,15 @@ async function main() {
     feedPath: '/v1/spaceflight/crew.json',
     bytes: payloadBuf.length,
     sha256: payloadSha,
-    count: enrichedPeople.length,
+    count: outputDoc.people.length,
   }
   await atomicWrite(manifestPath, `${JSON.stringify(manifest, null, 2)}\n`, 0o644)
-  console.log(`crew-feed published (${enrichedPeople.length} astronauts, sha256=${payloadSha.slice(0, 12)})`)
+  console.log(`crew-feed published (${outputDoc.people.length} astronauts, sha256=${payloadSha.slice(0, 12)})`)
 }
 
-main().catch((err) => {
-  console.error(`[crew-feed] fatal: ${err?.message || err}`)
-  process.exit(1)
-})
+if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
+  main().catch((err) => {
+    console.error(`[crew-feed] fatal: ${err?.message || err}`)
+    process.exit(1)
+  })
+}

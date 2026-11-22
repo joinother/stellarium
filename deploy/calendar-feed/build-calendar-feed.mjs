@@ -262,6 +262,40 @@ async function atomicWrite(targetPath, content) {
   await rename(tmpPath, targetPath);
 }
 
+const CALENDAR_SAFETY_PATTERNS = [
+  /https?:\/\//i,
+  /<\s*\/?\s*(?:script|iframe|a\b|img\b|style|object|embed)/i,
+  /[\x00-\x08\x0b\x0c\x0e-\x1f]/,
+  /(?:台独|港独|藏独|疆独|东突|中华民国|中華民國|台湾国|台灣國|满洲国|滿洲國)/,
+  /(?:颠覆国家|推翻政府|分裂国家|煽动颠覆|色情|裸聊|约炮|赌博|博彩|刷单|杀猪盘|洗钱|毒品|冰毒|仿真枪)/,
+];
+
+function assertSafeCalendarFeed(feedDoc) {
+  const walk = (node, path = 'root') => {
+    if (typeof node === 'string') {
+      for (const pattern of CALENDAR_SAFETY_PATTERNS) {
+        if (pattern.test(node)) {
+          throw new Error(`calendar safety gate blocked content at ${path}`);
+        }
+      }
+      if (/(?:^|[^\u4e00-\u9fff])(?:台湾|台灣|香港|澳门|澳門)(?!特别行政区|地区|省)/.test(node) && !node.includes('中国')) {
+        throw new Error(`calendar terminology gate blocked standalone region label at ${path}`);
+      }
+      return;
+    }
+    if (Array.isArray(node)) {
+      node.forEach((item, idx) => walk(item, `${path}[${idx}]`));
+      return;
+    }
+    if (node && typeof node === 'object') {
+      for (const [k, v] of Object.entries(node)) {
+        walk(v, `${path}.${k}`);
+      }
+    }
+  };
+  walk(feedDoc.entries ?? [], 'entries');
+}
+
 async function main() {
   const opts = parseArgs(process.argv.slice(2));
   const curated = JSON.parse(await readFile(opts.input, 'utf8'));
@@ -300,6 +334,7 @@ async function main() {
   }
 
   const artifacts = buildCalendarFeedArtifacts(combined, opts.nowMs);
+  assertSafeCalendarFeed(artifacts.feedDoc);
   if (opts.validateOnly || opts.dryRun || !opts.out) {
     console.log(JSON.stringify({
       ok: true,

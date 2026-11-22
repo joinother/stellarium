@@ -100,6 +100,31 @@ function parseCsv(text) {
   return rows
 }
 
+function hasUnsafeText(value) {
+  return typeof value === 'string' && /https?:\/\/|<\s*\/?\s*(?:script|iframe|a\b|img\b)|[\x00-\x08\x0b\x0c\x0e-\x1f]/i.test(value)
+}
+
+export function sanitizeSpaceflightCrewPayload(text) {
+  const value = JSON.parse(text)
+  const cleanPeople = value.people.map((person, index) => ({
+    id: typeof person.id === 'number' && Number.isInteger(person.id) ? person.id : index + 1,
+    name: person.name.trim(),
+    country: person.country.trim(),
+    flag_code: typeof person.flag_code === 'string' ? person.flag_code.trim().toLowerCase().slice(0, 8) : '',
+    agency: typeof person.agency === 'string' ? person.agency.trim().slice(0, 80) : '',
+    position: typeof person.position === 'string' ? person.position.trim().slice(0, 80) : '',
+    spacecraft: person.spacecraft.trim(),
+    launched: typeof person.launched === 'number' && Number.isFinite(person.launched) ? Math.trunc(person.launched) : 0,
+    iss: person.iss === true,
+  }))
+  const cleanDoc = {
+    number: cleanPeople.length,
+    iss_expedition: typeof value.iss_expedition === 'number' && Number.isInteger(value.iss_expedition) ? value.iss_expedition : 0,
+    people: cleanPeople,
+  }
+  return Buffer.from(`${JSON.stringify(cleanDoc, null, 2)}\n`, 'utf8')
+}
+
 export function validatePayload(body, source) {
   const text = body.replace(/^\uFEFF/, '').replaceAll('\r\n', '\n').trim()
   requireValid(text.length > 0 && !/^\s*(?:<!doctype|<html|invalid query|error\b)/i.test(text))
@@ -224,9 +249,12 @@ export function validatePayload(body, source) {
     }
     for (const person of value.people) {
       requireValid(object(person))
-      requireValid(typeof person.name === 'string' && person.name.trim().length > 0 && person.name.length <= 120)
-      requireValid(typeof person.country === 'string' && person.country.trim().length > 0 && person.country.length <= 80)
-      requireValid(typeof person.spacecraft === 'string' && person.spacecraft.trim().length > 0 && person.spacecraft.length <= 120)
+      requireValid(typeof person.name === 'string' && person.name.trim().length > 0 && person.name.length <= 120 && !hasUnsafeText(person.name))
+      requireValid(typeof person.country === 'string' && person.country.trim().length > 0 && person.country.length <= 80 && !hasUnsafeText(person.country))
+      requireValid(typeof person.spacecraft === 'string' && person.spacecraft.trim().length > 0 && person.spacecraft.length <= 120 && !hasUnsafeText(person.spacecraft))
+      requireValid((person.agency === undefined || (typeof person.agency === 'string' && !hasUnsafeText(person.agency))) &&
+        (person.position === undefined || (typeof person.position === 'string' && !hasUnsafeText(person.position))) &&
+        (person.flag_code === undefined || (typeof person.flag_code === 'string' && !hasUnsafeText(person.flag_code))))
       requireValid(typeof person.iss === 'boolean')
     }
     return value.people.length
@@ -272,6 +300,9 @@ export async function fetchOne(source, { fetchImpl = fetch, maxBytes = MAX_BYTES
       try { text = new TextDecoder('utf-8', { fatal: true }).decode(payload) }
       catch { throw new MirrorError('invalid_encoding') }
       validatePayload(text, source)
+      if (source.format === 'spaceflight-crew-json') {
+        return sanitizeSpaceflightCrewPayload(text)
+      }
       return payload
     }
     return await Promise.race([download(), deadline])
