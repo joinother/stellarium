@@ -3696,6 +3696,8 @@ export struct WindowNativeNode {
         onStarBrightnessChange: (normalized: number, dragging: boolean): void => {
           this.handleStarBrightnessChange(normalized, dragging)
         },
+        // 现实星等开启时星点亮度固定 1.0×，双指上下滑只保留 AR 天空抠像调节。
+        starBrightnessGestureEnabled: (): boolean => !this.layerStore.realisticStarVisibility,
         arCameraActive: (): boolean => this.arStore.arCameraActive,
         arSkyBlendValue: (): number => this.arStore.arSkyBlend,
         onArSkyBlendChange: (value: number, dragging: boolean): void => {
@@ -7812,6 +7814,22 @@ export struct WindowNativeNode {
     return this.isExpandedLayout
   }
 
+  // 顶部提示气泡（actionHint / 文化推荐）的基准 Y：平板/悬停态贴近安全区，手机端让开状态栏。
+  private topHintY(): number {
+    return (this.isExpandedLayout || this.isFoldHoverLayout) ? 16 : 58
+  }
+
+  // 文化推荐带“切换/×”按钮，比 actionHint 宽：手机端给右上角陀螺仪/音频按钮让出右侧空位。
+  private skyCultureSuggestWidth(): number {
+    if (this.isExpandedLayout) return 340
+    return Math.max(240, Math.round(this.skyWidth - 92))
+  }
+
+  private skyCultureSuggestLeft(): number {
+    const width = this.skyCultureSuggestWidth()
+    return this.isExpandedLayout ? Math.max(16, Math.round((this.skyWidth - width) / 2)) : 22
+  }
+
   private compactDockWidthPercent(): number {
     if (this.isFoldHoverLayout) {
       return 58
@@ -9740,6 +9758,14 @@ export struct WindowNativeNode {
       this.layerViewStore.starBrightnessScale = scale
       this.starBrightnessValue = absoluteScaleToStarBrightness(scale)
     }
+    // 现实星等开启时星点亮度固定 1.0×：修正旧配置/旧预设遗留的偏移，回写引擎归位。
+    if (this.layerStore.realisticStarVisibility &&
+        Math.abs(this.layerViewStore.starBrightnessScale - 1.0) > 0.01) {
+      this.layerViewStore.starBrightnessScale = 1.0
+      this.starBrightnessValue = 0.5
+      this.starBrightnessHudVisible = false
+      this.commandPort().requestInteractive('setSkyDisplaySetting', 'starBrightnessReset|1', (): void => {})
+    }
     if (result.toneDisplayAdaptationLuminance !== undefined) {
       this.layerViewStore.toneDisplayAdaptationLuminance = Math.round(result.toneDisplayAdaptationLuminance as number)
     }
@@ -9968,6 +9994,8 @@ export struct WindowNativeNode {
   }
 
   private handleStarBrightnessChange(normalized: number, dragging: boolean): void {
+    // 现实星等开启时星点亮度固定 1.0×（双指手势已在 SkyInputController 屏蔽）。
+    if (this.layerStore.realisticStarVisibility) return
     const clamped = Math.max(0, Math.min(1, normalized))
     this.starBrightnessValue = clamped
     this.layerViewStore.starBrightnessScale = starBrightnessToAbsoluteScale(clamped)
@@ -10736,11 +10764,10 @@ export struct WindowNativeNode {
             overlayWidth: this.viewCoordinateOverlayWidth(),
             overlayLeft: this.viewCoordinateOverlayLeft(),
             overlayTop: this.viewCoordinateOverlayTop(),
-            hintTop: (this.isExpandedLayout || this.isFoldHoverLayout) ? 16 : 58,
+            hintTop: this.topHintY(),
             actionHint: this.actionHint,
             starBrightnessHudVisible: this.starBrightnessHudVisible,
             starBrightnessValue: this.starBrightnessValue,
-            realisticStarVisibility: this.layerStore.realisticStarVisibility,
             onHandleViewCoordinateTouch: (event: TouchEvent) => { this.viewCoordinateCtl().handleViewCoordinateTouch(event) }
           })
         }
@@ -11042,7 +11069,7 @@ export struct WindowNativeNode {
         Row({ space: 8 }) {
           Text('✦').fontSize(12).fontColor(this.hostSlots().accent)
           Column({ space: 1 }) {
-            Text('推荐切换「' + this.skyCultureSuggestName + '」')
+            Text('推荐「' + this.skyCultureSuggestName + '」')
               .fontSize(12).fontColor(this.hostSlots().text).fontWeight(FontWeight.Medium).maxLines(1).textOverflow({ overflow: TextOverflow.Ellipsis })
             Text(this.skyCultureSuggestReason)
               .fontSize(10).fontColor(this.hostSlots().sub).maxLines(1)
@@ -11063,13 +11090,14 @@ export struct WindowNativeNode {
             .width(26).height(26).padding(0)
             .onClick(() => { this.dismissSkyCultureSuggest() })
         }
-        .width(this.isExpandedLayout ? 340 : '88%')
+        .width(this.skyCultureSuggestWidth())
         .padding({ left: 14, right: 10, top: 9, bottom: 9 })
         .backgroundColor(this.hostSlots().panelGlassStrong)
         .border({ width: 0.5, color: this.hostSlots().border })
         .borderRadius(UI_RADIUS_PILL)
         .shadow({ radius: 18, color: 'rgba(0,0,0,0.28)', offsetY: 6 })
-        .position({ x: this.isExpandedLayout ? Math.max(16, Math.round((this.skyWidth - 340) / 2)) : '6%', y: Math.max(80, this.skyHeight - 166) })
+        // 固定在普通提示（actionHint）下方 44 vp，不随提示出现/消失移动。
+        .position({ x: this.skyCultureSuggestLeft(), y: this.topHintY() + 44 })
         .zIndex(140)
       }
 
@@ -11721,7 +11749,15 @@ export struct WindowNativeNode {
         onRefreshSurvey: () => { this.surveyCtl().loadSurveyState() },
         onSelectSpectral: (id: string) => { this.surveyCtl().setSpectralDataset(id) },
         onCloseSpectral: () => { this.surveyCtl().closeSpectralView() },
-        onSetSkyDisplay: (setting: string, value: boolean | number) => { this.layerCtl().setSkyDisplaySetting(setting, value) },
+        onSetSkyDisplay: (setting: string, value: boolean | number) => {
+          // 开启现实星等时立即收起星点亮度 HUD；亮度随后固定为 1.0×。
+          if (setting === 'realisticStarVisibility' && value === true) {
+            this.clearStarBrightnessHudTimer()
+            this.starBrightnessHudVisible = false
+            this.starBrightnessValue = 0.5
+          }
+          this.layerCtl().setSkyDisplaySetting(setting, value)
+        },
         onLoadAtmosphere: () => { this.loadAtmosphereParams() },
         onStarMagLimit: (value: number) => { this.layerCtl().applyStarMagLimit(value) },
         onMilkyWayBright: (value: number) => { this.layerCtl().applyMilkyWayBright(value) },

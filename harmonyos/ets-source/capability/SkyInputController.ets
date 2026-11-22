@@ -99,6 +99,8 @@ export interface SkyInputHostHooks {
   // 双指上下滑调整星点亮度（可选钩子，兼容旧单测桩）
   starBrightnessValue?: () => number
   onStarBrightnessChange?: (normalized: number, dragging: boolean) => void
+  // 现实星等开启时星点亮度固定 1.0×，双指上下滑不再调节星点亮度（可选钩子，兼容旧单测桩）。
+  starBrightnessGestureEnabled?: () => boolean
   arCameraActive?: () => boolean
   arSkyBlendValue?: () => number
   onArSkyBlendChange?: (value: number, dragging: boolean) => void
@@ -131,6 +133,8 @@ export class SkyInputController {
   private static readonly TWO_FINGER_UNDECIDED: number = 1
   private static readonly TWO_FINGER_PINCH: number = 2
   private static readonly TWO_FINGER_BRIGHTNESS: number = 3
+  // 现实星等开启时，双指竖向平行滑动被识别但整体忽略，避免退化成捏合缩放。
+  private static readonly TWO_FINGER_SUPPRESSED: number = 4
   // 点击防误触阈值：超长停驻、多指松手尾指回弹、屏幕边缘掌托误触均不触发点选。
   private static readonly MAX_TAP_DURATION_MS: number = 420
   private static readonly MULTI_TOUCH_TAP_COOLDOWN_MS: number = 180
@@ -596,7 +600,16 @@ export class SkyInputController {
     this.commandPort.fire('setAbsoluteStarScale', absScale.toFixed(3))
   }
 
+  // AR 天空抠像始终允许；普通星点亮度仅在关闭现实星等时可调。
+  private starBrightnessGestureAllowed(): boolean {
+    if (this.hooks.arCameraActive !== undefined && this.hooks.arCameraActive()) return true
+    return this.hooks.starBrightnessGestureEnabled === undefined ||
+      this.hooks.starBrightnessGestureEnabled()
+  }
+
   private applyTwoFingerBrightness(centerY: number, forceFlush: boolean): void {
+    // 防御：手势锁定后若现实星等被打开，立即停止继续写入亮度。
+    if (!this.starBrightnessGestureAllowed()) return
     const travelHeight = Math.max(320, this.hooks.skyHeight())
     // 双指竖向平行滑动：AR 模式下实时调节天空抠像分界点；非 AR 模式下调节星点亮度
     const delta = ((this.twoFingerStartCenterY - centerY) / travelHeight) * 1.5
@@ -623,6 +636,10 @@ export class SkyInputController {
 
   private finishTwoFingerBrightness(): void {
     if (this.twoFingerMode !== SkyInputController.TWO_FINGER_BRIGHTNESS) {
+      return
+    }
+    if (!this.starBrightnessGestureAllowed()) {
+      this.brightnessNativePushPending = false
       return
     }
     if (this.hooks.arCameraActive !== undefined && this.hooks.arCameraActive()) {
@@ -875,12 +892,21 @@ export class SkyInputController {
           if (sameVerticalDir &&
               Math.abs(centerDy) >= Math.abs(centerDx) * 1.15 &&
               Math.abs(centerDy) >= distDelta * 1.15) {
+            // 现实星等开启时星点亮度固定 1.0×：识别为亮度手势但整体忽略。
+            // AR 模式仍用同一手势调节天空抠像分界点，不受此限制。
+            if (!this.starBrightnessGestureAllowed()) {
+              this.twoFingerMode = SkyInputController.TWO_FINGER_SUPPRESSED
+              return
+            }
             this.twoFingerMode = SkyInputController.TWO_FINGER_BRIGHTNESS
             this.applyTwoFingerBrightness(centerY, true)
             return
           }
           this.startPinchFrom(centerX, centerY, Math.max(1, this.twoFingerStartDist))
           // 进入捏合分支后顺延更新当前帧缩放比，避免首帧顿挫
+        }
+        if (this.twoFingerMode === SkyInputController.TWO_FINGER_SUPPRESSED) {
+          return
         }
         if (this.twoFingerMode === SkyInputController.TWO_FINGER_BRIGHTNESS) {
           this.applyTwoFingerBrightness(centerY, false)

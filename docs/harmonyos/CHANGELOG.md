@@ -1,5 +1,26 @@
 > **身份图例**：本文件真机记录中出现的 `com.cnchensh.stellarium` 是**本机调试签名身份**（本机 DevEco 自动生成，非发布身份）；发布身份为 `com.joinother.skyinstrument`。构建脚本 `build-ohos-hap-windows.ps1 -Install` 从产物 `pack.info` 读取实际包名，仓库不写死任何签名身份（见 `docs/harmonyos/release/BUNDLE-IDENTITY-CLEANUP.md`）。
 
+## [2026-11-22] 新增真机控件树读屏/断言封装 `ohos-ui-dump.mjs`
+
+- **修改文件：** `scripts/ohos-ui-dump.mjs`（新增）、`scripts/test-ohos-ui-dump.mjs`（新增）、`docs/harmonyos/DEVELOPMENT-MCP-WORKFLOW.md`、`docs/harmonyos/CHANGELOG.md`。
+- **核心改动：**
+  1. **读屏封装：** 新增 `scripts/ohos-ui-dump.mjs`，底层调用 `uitest dumpLayout -b com.joinother.skyinstrument` 读取富属性控件树，支持 `--id` / `--text` / `--text-contains` / `--type` 查询，以及 `--expect-present/-absent/-visible/-hidden/-enabled/-disabled/-opacity/-background/-bg-alpha/-bounds` 断言（opacity/alpha 支持 `--tolerance`）。原始树默认保存到 `build/ui-layout.json`。
+  2. **前台与设备处理：** 默认按发布包名读取；应用不在前台或窗口不可读时以退出码 2 提示先 `aa start`；支持 `--device` / `--hdc` / `--window` / `--display` / `--no-merge` / `--no-save` / `--json` / `--first` / `--dump-only`。`--hdc` 支持 `HDC` / `HDC_BIN` / `DEVECO_HOME` 与 Windows/macOS DevEco 默认路径。
+  3. **测试：** 新增 `scripts/test-ohos-ui-dump.mjs`，覆盖属性解析、树展开、选择器、断言、歧义与参数组合校验。
+- **验证：** 主机 8 项测试通过；真机 `192.168.3.95:36717` 验证 `loc-open-map-current` 的 present/visible/enabled、文本查询、`--json`、`--dump-only`、`--no-save`，以及应用退到后台时的空树退出码 2。
+- **能力边界：** 控件树不暴露字体大小/字重/字体颜色、`backdropBlur`、XComponent/GL 渲染内容与实际像素；这些仍需截图或录屏。`devecocli ui layout` 是简化投影；DevEco MCP 只有 10 个代码智能工具，没有设备/UI 工具。
+
+## [2026-11-22] 本地星文化推荐移至顶部 + 现实星等固定星点亮度
+
+- **修改文件：** `harmonyos/ets-source/pages/MainWindowNativeNode.ets`、`harmonyos/ets-source/capability/SkyInputController.ets`、`harmonyos/ets-source/capability/LayerController.ets`、`harmonyos/ets-source/panels/layers/LayerViewTabs.ets`、`harmonyos/ets-source/panels/shell/HarmonyShell.ets`、`scripts/test-ohos-sky-input.mjs`、`scripts/test-ohos-sky-tone-grs-meteors.mjs`、`scripts/test-ohos-media-cultures-landscapes.mjs`、`docs/harmonyos/CHANGELOG.md`。
+- **核心改动：**
+  1. **文化推荐移到顶部：** 切换地点/年代触发的本地传统星文化推荐胶囊从底部 `skyHeight - 166` 移到顶部，固定挂在普通提示（`actionHint`）下方 44 vp，不随提示出现/消失移动；新增 `topHintY()` 统一平板/手机基准（16/58 vp）。手机端胶囊宽度改为 `skyWidth - 92` 并左对齐，避开右上角陀螺仪/音频按钮；标题精简为“推荐「文化名」”，在避让后的宽度内完整显示。
+  2. **现实星等固定星点亮度 1.0×：** `SkyInputController` 新增 `starBrightnessGestureEnabled` 钩子与 `TWO_FINGER_SUPPRESSED` 模式：现实星等开启时双指竖向平行滑动被识别后整体忽略，不会退化为捏合缩放；AR 天空抠像手势不受影响。`LayerController` 将 `absoluteStarScale` 偏移写入改写为 `starBrightnessReset`，开启现实星等时无条件归位；`MainWindowNativeNode` 在状态回读时修正旧配置遗留偏移并收起 HUD。图层面板星点亮度滑杆在现实星等开启时禁用（45% 透明度），说明文字改为“固定 1.0×，双指上下滑不再调节”；移除 `HarmonyShell` 中已不可达的现实星等 HUD 提示行。
+  3. **测试修复：** `test-ohos-media-cultures-landscapes.mjs` 改用 `fileURLToPath` 与 data-URL 加载 `.ts`，兼容 Windows 路径、CRLF 与 Node 的 TS 加载限制，使文化推荐断言可在本机执行。
+- **验证：** 主机 53 项相关测试通过（含新增的“现实星等开启时双指亮度手势被忽略”用例）；UI contract（41 面板 / 57 静态 id / 91 anchor / 352 文件）、i18n、命令目录（438）通过。真机：深链切换地点后推荐胶囊显示在顶部；现实星等开启时图层面板显示“50% · 1.00×”，滑杆禁用且点击不改变数值，`getAbsoluteStarScale` 返回 1。
+- **构建/安装：** BUILD SUCCESSFUL，signed HAP 803.2 MB（842,245,667 字节），安装并启动成功（`192.168.3.95:36717`，2026-11-22 20:01）。
+- **真机复核：** 最终构建中推荐胶囊位于顶部左侧，标题“推荐「chinese」”完整显示，右边缘不再覆盖陀螺仪/音频按钮；图层面板现实星等开启时星点亮度锁定 1.00×，滑杆置灰且点击无效。
+
 ## [2026-11-22] 地点出站：分享标 + 仿系统大弹窗（规划路线 / 查看地点）
 
 - **修改文件：** `harmonyos/ets-source/pages/MainWindowNativeNode.ets`、`harmonyos/ets-source/panels/panels/PlacePanel.ets`、`harmonyos/ets-source/panels/location/CityChipsRow.ets`、`harmonyos/ets-source/panels/location/LocationFullScreenMap.ets`、`harmonyos/ets-source/common/location/MapAppCatalog.ets`（新增）、`harmonyos/ets-source/capability/I18n.ets`、`harmonyos/module.json5`、`scripts/test-ohos-location-map-outbound.mjs`、`scripts/test-ohos-location-share.mjs`、`scripts/build-ohos-minor-body-meshes.mjs`、`docs/harmonyos/json/ui-contract-baseline.json`、`docs/harmonyos/NETWORK-INVENTORY.md`、`docs/harmonyos/CHANGELOG.md`。

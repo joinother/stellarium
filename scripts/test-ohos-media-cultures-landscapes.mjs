@@ -2,8 +2,11 @@ import test from 'node:test'
 import assert from 'node:assert/strict'
 import { readdirSync, readFileSync, statSync } from 'node:fs'
 import path from 'node:path'
+import { fileURLToPath } from 'node:url'
 
-const ROOT = path.resolve(new URL('..', import.meta.url).pathname)
+// fileURLToPath keeps Windows drive-letter paths intact; URL.pathname yields
+// "/E:/..." and path.resolve then prepends the cwd drive again.
+const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
 
 function read(rel) {
   return readFileSync(path.join(ROOT, rel), 'utf8')
@@ -39,7 +42,8 @@ function extractKeys(tsSource, exportName) {
   const start = tsSource.indexOf(`export const ${exportName}`)
   assert.ok(start >= 0, `missing export ${exportName}`)
   const openBrace = tsSource.indexOf('{', tsSource.indexOf('=', start))
-  const end = tsSource.indexOf('\n}\n', openBrace)
+  // Match the closing brace at column 0 under both LF and CRLF checkouts.
+  const end = tsSource.indexOf('\n}', openBrace)
   assert.ok(end > openBrace, `could not locate end of ${exportName}`)
   const body = tsSource.slice(openBrace + 1, end)
   const keys = []
@@ -135,7 +139,10 @@ test('landscape bridge exposes previewPath and localizedDescription, and LayerLa
 
 test('spacetime sky-culture recommender and scannable typography helpers work accurately', async () => {
   const { stripTypeScriptTypes } = await import('node:module')
-  const storiesMod = await import('../harmonyos/ets-source/common/derive/SkyCultureStoriesZh.ts')
+  // Node cannot import .ts files directly; strip types and load through a data
+  // URL, matching the other OHOS source tests.
+  const storiesMod = await import('data:text/javascript,' + encodeURIComponent(
+    stripTypeScriptTypes(read('harmonyos/ets-source/common/derive/SkyCultureStoriesZh.ts'))))
   const recSrc = stripTypeScriptTypes(read('harmonyos/ets-source/common/derive/SkyCultureRecommender.ts'))
     .replace(/import\s*\{[^}]*\}\s*from\s*['"]\.\/SkyCultureStoriesZh['"];?/, '')
     .replace(/export\s+function\s+/g, 'function ')
@@ -189,6 +196,11 @@ test('spacetime sky-culture recommender and scannable typography helpers work ac
   const hostSrc = read('harmonyos/ets-source/pages/MainWindowNativeNode.ets')
   assert.match(hostSrc, /scheduleSpacetimeCultureSuggest/)
   assert.match(hostSrc, /jumpToSkyCultureYear/)
+  // 文化推荐固定挂在普通提示（actionHint）下方，不再贴底或随提示显隐移动；手机端给右上角快捷按钮让位。
+  assert.match(hostSrc, /private topHintY\(\): number/)
+  assert.match(hostSrc, /y: this\.topHintY\(\) \+ 44/)
+  assert.match(hostSrc, /Math\.max\(240, Math\.round\(this\.skyWidth - 92\)\)/)
+  assert.doesNotMatch(hostSrc, /skyHeight - 166/)
   assert.match(skyCultureTabSrc, /此时此地推荐/)
   assert.match(skyCultureTabSrc, /阅读文化故事/)
   assert.match(skyCultureTabSrc, /时空变更时推荐匹配文化/)

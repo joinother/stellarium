@@ -7,6 +7,7 @@ const read = path => fs.readFileSync(new URL(`../${path}`, import.meta.url), 'ut
 const tabsSrc = read('harmonyos/ets-source/panels/layers/LayerViewTabs.ets');
 const controllerSrc = read('harmonyos/ets-source/capability/LayerController.ets');
 const shellSrc = read('harmonyos/ets-source/panels/shell/HarmonyShell.ets');
+const hostSrc = read('harmonyos/ets-source/pages/MainWindowNativeNode.ets');
 const mainViewSrc = read('src/StelMainView.cpp');
 const meteorSrc = read('src/core/modules/Meteor.cpp');
 const sporadicSrc = read('src/core/modules/SporadicMeteor.cpp');
@@ -120,11 +121,14 @@ test('StelMainView exposes tone mapping, star brightness scale, GRS and meteor p
   }
 });
 
-test('realistic star visibility harmonizes cleanly with two-finger star brightness and tone mapping', () => {
+test('realistic star visibility pins star brightness at 1.0x and disables the brightness gesture', () => {
   assert.match(controllerSrc, /resetStarScaleForRealistic/);
   assert.match(controllerSrc, /starBrightnessReset\|1/);
-  assert.match(shellSrc, /@Prop realisticStarVisibility: boolean = true/);
-  assert.match(shellSrc, /现实星等基准/);
+  assert.match(controllerSrc, /pinStarBrightness/);
+  assert.match(hostSrc, /starBrightnessGestureEnabled: \(\): boolean => !this\.layerStore\.realisticStarVisibility/);
+  assert.match(tabsSrc, /星点亮度固定 1\.0×/);
+  assert.match(tabsSrc, /\.enabled\(!this\.layerStore\.realisticStarVisibility\)/);
+  assert.doesNotMatch(shellSrc, /@Prop realisticStarVisibility/);
   assert.match(tabsSrc, /色调映射与亮度调和/);
   assert.match(tabsSrc, /木星大红斑校准 \(GRS\)/);
   assert.match(tabsSrc, /✦ 试看流星/);

@@ -404,7 +404,7 @@ export struct LayerSkyTab {
               .fontSize(panelFontSize(13, this.readableUi)).fontWeight(FontWeight.Medium).fontColor(this.c.text)
             InfoTipButton({
               title: '色调映射与亮度调和',
-              tip: '三层互不冲突：①「现实星等」决定白天/光污染下哪些暗星可见；②「双指星点亮度」仅调节已见恒星的显示倍率（重开现实星等自动归位 1.0×）；③「色调映射」控制整体天穹的暗部细节、对比度与屏幕伽马曲线。'
+              tip: '三层分工：①「现实星等」决定白天/光污染下哪些暗星可见，并固定星点亮度 1.0×；②「星点亮度」仅在关闭现实星等时可调（含双指上下滑）；③「色调映射」控制整体天穹的暗部细节、对比度与屏幕伽马曲线。'
             })
           }.alignItems(VerticalAlign.Center)
           Text('Lda ' + this.layerViewStore.toneDisplayAdaptationLuminance.toFixed(0) +
@@ -427,7 +427,7 @@ export struct LayerSkyTab {
           // 星点亮度与现实星等调和条（与天穹双指上下滑双向同步）
           Column({ space: 4 }) {
             Row({ space: 6 }) {
-              Text('星点亮度（双指同步）')
+              Text(this.layerStore.realisticStarVisibility ? '星点亮度（现实星等固定）' : '星点亮度（双指同步）')
                 .fontSize(11).fontColor(this.c.text).layoutWeight(1)
               Text(this.starBrightnessPercent().toString() + '% · ' + this.layerViewStore.starBrightnessScale.toFixed(2) + '×')
                 .fontSize(11).fontColor(this.isStarBrightnessOffset() ? this.c.accent : this.c.sub)
@@ -447,18 +447,18 @@ export struct LayerSkyTab {
             })
               .sliderInteractionMode(SliderInteraction.SLIDE_AND_CLICK)
               .width('100%').trackColor(this.c.softStrong).selectedColor(this.c.accent)
+              .enabled(!this.layerStore.realisticStarVisibility)
+              .opacity(this.layerStore.realisticStarVisibility ? 0.45 : 1)
               .showSteps(false).showTips(false)
               .onChange((value: number, mode: SliderChangeMode) => {
                 const scale = Math.round(starBrightnessToAbsoluteScale(value / 100) * 1000) / 1000
                 this.commitToneSlider('absoluteStarScale', scale, mode)
               })
             Text(this.layerStore.realisticStarVisibility
-              ? (this.isStarBrightnessOffset()
-                ? '现实星等开启中，当前星点已手动偏移；重新开启现实星等或点「归位 1.0×」可恢复物理基准'
-                : '现实星等物理基准（1.0×）生效中：双指上下滑可临时微调视觉亮度')
+              ? '现实星等开启：星点亮度固定 1.0×，双指上下滑不再调节星点亮度'
               : '教学常亮模式：白天也可自由调亮恒星与深空，与双指上下滑实时联动')
               .fontSize(10)
-              .fontColor(this.layerStore.realisticStarVisibility && this.isStarBrightnessOffset() ? this.c.accent : this.c.sub)
+              .fontColor(this.c.sub)
               .width('100%')
           }.width('100%').padding(8).backgroundColor(this.c.rowBg).borderRadius(UI_RADIUS_CONTROL)
 
