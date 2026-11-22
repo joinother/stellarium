@@ -21,6 +21,10 @@
       "value": "用于根据你的观测位置匹配当地星空。"
     },
     {
+      "name": "stellarium_permission_reason_camera",
+      "value": "用于在开启 AR 实景观星时将真实天空画面与星图叠加融合（仅本地实时渲染，不存储或上传）。"
+    },
+    {
       "name": "i0001",
       "value": "点击任意处进入星图"
     },

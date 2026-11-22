@@ -1,4 +1,4 @@
-import { Theme } from '@kit.ArkUI'
+import { Theme, curves } from '@kit.ArkUI'
 import { DEFAULT_SLOTS, ThemeSlots, slotsFromTheme } from '../../state/StellariumTheme'
 import { I18n } from '../../pages/I18n'
 import {
@@ -132,8 +132,12 @@ export struct QuickPanel {
   @ObjectLink store: QuickPanelStore
   @ObjectLink nightModeStore: NightModeStore
   @Prop values: Record<string, boolean>
+  @Prop gyroActive: boolean = false
+  @Prop arCameraActive: boolean = false
+  @Prop arCameraStarting: boolean = false
   @State private c: ThemeSlots = DEFAULT_SLOTS
   onToggle: (id: string, value: boolean) => void = () => {}
+  onToggleArCamera: () => void = () => {}
   onHint: (text: string) => void = () => {}
 
   onWillApplyTheme(theme: Theme): void { this.c = slotsFromTheme(theme) }
@@ -184,6 +188,51 @@ export struct QuickPanel {
         onDragBegin: (id: string) => { this.store.beginDrag(id) },
         onDropOnSlot: (slotId: string) => { this.store.dropOnSlot(slotId) }
       })
+      // 开启「转动手机（陀螺仪）」后，从快捷网格下方顺滑伸出一个极简「AR 实景相机」标签，无需专门大面板。
+      if (this.gyroActive && !this.store.editable) {
+        Row({ space: 8 }) {
+          SymbolGlyph($r('sys.symbol.camera'))
+            .fontSize(17)
+            .fontColor([this.arCameraActive ? this.c.onAccent : this.c.accent])
+          Text(this.arCameraStarting
+            ? '正在开启 AR 实景…'
+            : (this.arCameraActive ? 'AR 实景已开启' : 'AR 实景相机'))
+            .fontSize(12.5)
+            .fontWeight(FontWeight.Medium)
+            .fontColor(this.arCameraActive ? this.c.onAccent : this.c.text)
+          Text(this.arCameraActive ? '双指上下滑调抠像' : '自动抠出树叶与建筑')
+            .fontSize(10.5)
+            .fontColor(this.arCameraActive ? this.c.onAccent : this.c.tertiary)
+            .opacity(this.arCameraActive ? 0.85 : 1)
+            .layoutWeight(1)
+            .maxLines(1)
+            .textOverflow({ overflow: TextOverflow.Ellipsis })
+          Text(this.arCameraActive ? '关闭' : '开启')
+            .fontSize(11)
+            .fontWeight(FontWeight.Medium)
+            .fontColor(this.arCameraActive ? this.c.onAccent : this.c.accent)
+            .padding({ left: 10, right: 10, top: 4, bottom: 4 })
+            .borderRadius(UI_RADIUS_PILL)
+            .backgroundColor(this.arCameraActive ? 'rgba(255,255,255,0.20)' : this.c.accentSoft)
+        }
+          .width('100%')
+          .height(38)
+          .padding({ left: 12, right: 8 })
+          .margin({ top: 10 })
+          .borderRadius(UI_RADIUS_PILL)
+          .backgroundColor(this.arCameraActive ? this.c.accent : this.c.input)
+          .border({ width: 0.5, color: this.arCameraActive ? this.c.accent : this.c.border })
+          .alignItems(VerticalAlign.Center)
+          .clickEffect({ level: ClickEffectLevel.LIGHT })
+          .enabled(!this.arCameraStarting)
+          .transition(TransitionEffect.asymmetric(
+            TransitionEffect.OPACITY.animation({ duration: 200, curve: Curve.EaseOut })
+              .combine(TransitionEffect.translate({ x: 0, y: -12 }).animation({ duration: 260, curve: curves.springMotion(0.45, 0.88) })),
+            TransitionEffect.OPACITY.animation({ duration: 150, curve: Curve.EaseIn })
+              .combine(TransitionEffect.translate({ x: 0, y: -8 }).animation({ duration: 150, curve: Curve.EaseIn }))
+          ))
+          .onClick(() => { this.onToggleArCamera() })
+      }
       // 默认只有 6×2；用顶部抓手向上拖动（或进入编辑态）才显示分隔线与更多按钮。
       if (this.store.expanded || this.store.editable) {
         Row()

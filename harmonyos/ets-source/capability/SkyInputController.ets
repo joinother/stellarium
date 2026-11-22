@@ -99,6 +99,9 @@ export interface SkyInputHostHooks {
   // 双指上下滑调整星点亮度（可选钩子，兼容旧单测桩）
   starBrightnessValue?: () => number
   onStarBrightnessChange?: (normalized: number, dragging: boolean) => void
+  arCameraActive?: () => boolean
+  arSkyBlendValue?: () => number
+  onArSkyBlendChange?: (value: number, dragging: boolean) => void
 }
 
 // 星点亮度归一化值 b ∈ [0, 1]（默认 0.5 对应 Stellarium 默认 absoluteStarScale=1.0）
@@ -177,6 +180,7 @@ export class SkyInputController {
   private twoFingerStartCenterX: number = 0
   private twoFingerStartCenterY: number = 0
   private twoFingerBrightnessStart: number = 0.5
+  private arBlendCached: number = 0.55
   private starBrightnessCached: number = 0.5
   private brightnessLastNativePushMs: number = 0
   private brightnessNativePushPending: boolean = false
@@ -564,7 +568,9 @@ export class SkyInputController {
     this.twoFingerStartDist = distance(x0, y0, x1, y1)
     this.twoFingerStartCenterX = (x0 + x1) / 2
     this.twoFingerStartCenterY = (y0 + y1) / 2
-    this.twoFingerBrightnessStart = this.currentStarBrightness()
+    this.twoFingerBrightnessStart = (this.hooks.arCameraActive !== undefined && this.hooks.arCameraActive())
+      ? clamp(this.hooks.arSkyBlendValue !== undefined ? this.hooks.arSkyBlendValue() : 0.55, 0, 1)
+      : this.currentStarBrightness()
     this.brightnessNativePushPending = false
     this.pinchCenterX = this.twoFingerStartCenterX
     this.pinchCenterY = this.twoFingerStartCenterY
@@ -592,9 +598,16 @@ export class SkyInputController {
 
   private applyTwoFingerBrightness(centerY: number, forceFlush: boolean): void {
     const travelHeight = Math.max(320, this.hooks.skyHeight())
-    // 双指竖向平行滑动：满屏行程对应 1.5x 亮度增益（上滑增亮、下滑变暗）
+    // 双指竖向平行滑动：AR 模式下实时调节天空抠像分界点；非 AR 模式下调节星点亮度
     const delta = ((this.twoFingerStartCenterY - centerY) / travelHeight) * 1.5
     const next = clamp(this.twoFingerBrightnessStart + delta, 0, 1)
+    if (this.hooks.arCameraActive !== undefined && this.hooks.arCameraActive()) {
+      this.arBlendCached = next
+      if (this.hooks.onArSkyBlendChange !== undefined) {
+        this.hooks.onArSkyBlendChange(next, true)
+      }
+      return
+    }
     this.starBrightnessCached = next
     if (this.hooks.onStarBrightnessChange) {
       this.hooks.onStarBrightnessChange(next, true)
@@ -610,6 +623,12 @@ export class SkyInputController {
 
   private finishTwoFingerBrightness(): void {
     if (this.twoFingerMode !== SkyInputController.TWO_FINGER_BRIGHTNESS) {
+      return
+    }
+    if (this.hooks.arCameraActive !== undefined && this.hooks.arCameraActive()) {
+      if (this.hooks.onArSkyBlendChange !== undefined) {
+        this.hooks.onArSkyBlendChange(this.arBlendCached, false)
+      }
       return
     }
     if (this.brightnessNativePushPending) {

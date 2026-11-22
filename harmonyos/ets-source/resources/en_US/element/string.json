@@ -21,6 +21,10 @@
       "value": "Used to match the sky map with your observing location."
     },
     {
+      "name": "stellarium_permission_reason_camera",
+      "value": "Used for AR sky-camera overlay while AR mode is active."
+    },
+    {
       "name": "i0001",
       "value": "Tap anywhere to enter the sky"
     },

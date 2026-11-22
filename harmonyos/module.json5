@@ -155,6 +155,16 @@
         }
       },
       {
+        "name": "ohos.permission.CAMERA",
+        "reason": "$string:stellarium_permission_reason_camera",
+        "usedScene": {
+          "abilities": [
+            "QAbility"
+          ],
+          "when": "inuse"
+        }
+      },
+      {
         "name": "ohos.permission.PUBLISH_AGENT_REMINDER",
         "usedScene": {
           "abilities": [

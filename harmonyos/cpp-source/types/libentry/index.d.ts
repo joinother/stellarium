@@ -3,6 +3,10 @@ export const setEnv: (name: string, value: string) => boolean;
 export const command: (name: string, payload: string) => string;
 export const isPresentationReady: () => boolean;
 export const isEngineReady: () => boolean;
+export const probeArHardware: () => string;
+export const createArCameraSurface: () => string;
+export const destroyArCameraSurface: () => void;
+export const setArCameraComposite: (enabled: boolean, blend: number, cameraAspect: number) => void;
 export const renderDetailModelSphere: (
   texture: ArrayBuffer,
   textureWidth: number,

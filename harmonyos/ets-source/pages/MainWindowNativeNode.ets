@@ -97,7 +97,7 @@ import {
   isEventEligibleForLiveView
 } from '../capability/LiveViewController'
 import { SurveyController, SurveyHostHooks } from '../capability/SurveyController'
-import { ARController, ARHostHooks } from '../capability/ARController'
+import { ARController, ARHostHooks, ArSkyRestoreSnapshot } from '../capability/ARController'
 import { KeyboardShortcutController, KeyboardShortcutHostHooks, KeyboardShortcutInputHooks } from '../capability/KeyboardShortcutController'
 import { TimeTransitionController, TimeTransitionHostHooks } from '../capability/TimeTransitionController'
 import { publishAstronomyCard } from '../qability/AstronomyCardService'
@@ -1645,6 +1645,9 @@ export struct WindowNativeNode {
         void AudioEngine.getInstance().start()
       }
       this.gyroCtl().resumeAfterForeground()
+      if (this.arControllerImpl !== null) {
+        this.arControllerImpl.onApplicationForegroundChanged(true)
+      }
       this.viewCoordinateCtl().syncViewCoordinateTimer()
       this.syncDockClockTimer()
       this.skyCultureCtl().syncSkyCultureTimeFollowTimer()
@@ -1671,6 +1674,9 @@ export struct WindowNativeNode {
     this.keyboardShortcutCtl().setSkyFocused(false)
     void AudioEngine.getInstance().stop()
     this.gyroCtl().pauseForBackground()
+    if (this.arControllerImpl !== null) {
+      this.arControllerImpl.onApplicationForegroundChanged(false)
+    }
   }
   // 时间轮交互控制器（普通类，非可观测）：拖动/惯性/轨道重基准/引擎推送。
   // 跨域依赖以回调注入：引擎推送、暂停速度、UTC 偏移。
@@ -1777,6 +1783,9 @@ export struct WindowNativeNode {
   }
 
   private updateResponsiveLayout(source: string): void {
+    if (this.arStore.arCameraActive && this.arControllerImpl !== null) {
+      this.arControllerImpl.refreshDisplayRotation()
+    }
     const width = this.skyWidth > 1 ? this.skyWidth : 1
     const height = this.skyHeight > 1 ? this.skyHeight : 1
     const shortSide = Math.min(width, height)
@@ -2609,6 +2618,9 @@ export struct WindowNativeNode {
     this.clearStarBrightnessHudTimer()
     this.keyboardShortcutCtl().setSkyFocused(false)
     this.gyroCtl().stopGyroscope(false)
+    if (this.arControllerImpl !== null) {
+      void this.arControllerImpl.disableArCamera(false)
+    }
     this.detailConnectorCtl().stop()
     this.objectInspectorMediaCtl().stopObjectInspectorMediaWarmup()
     this.objectInspectorMediaCtl().stopBodyDetailWarmup()
@@ -2677,6 +2689,9 @@ export struct WindowNativeNode {
     try {
       this.hapticFeedback?.suspend()
       this.gyroCtl().stopGyroscope(false)
+      if (this.arControllerImpl !== null) {
+        void this.arControllerImpl.disableArCamera(false)
+      }
       privacyManager.disableService()
       AppStorage.setOrCreate('stellariumPrivacyHostReady', false)
       this.privacyNativeStartupAllowed = false
@@ -3379,13 +3394,47 @@ export struct WindowNativeNode {
     return this.surveyControllerImpl
   }
 
-  // AR 预研控制器惰性构造。状态已在 ARStore（只搬行为）；UI 提示经 hooks 回注。
+  // AR 实景观星与预研控制器惰性构造。状态已在 ARStore；相机启动/陀螺仪联动/星图恢复经 hooks 回注。
   private arCtl(): ARController {
     if (this.arControllerImpl === null) {
       const hooks: ARHostHooks = {
-        flashHint: (text: ResourceStr): void => this.flashHint(text)
+        flashHint: (text: ResourceStr): void => this.flashHint(text),
+        canStartCamera: (): boolean => this.privacyNativeStartupAllowed && this.applicationInForeground && hasCurrentPrivacyConsent(),
+        abilityContext: (): common.UIAbilityContext | undefined => {
+          try {
+            return this.getUIContext().getHostContext() as common.UIAbilityContext
+          } catch (_err) {
+            return undefined
+          }
+        },
+        isGyroEnabled: (): boolean => this.gyroStore.gyroscopeEnabled,
+        enableGyroForAr: (): void => { this.gyroCtl().toggleGyroscope(true) },
+        readSkyRestoreState: (): ArSkyRestoreSnapshot => ({
+          atmosphere: this.layerStore.atmosphere,
+          landscape: this.layerStore.ground,
+          mistHorizon: this.layerStore.mistHorizon,
+          fogEffect: this.layerStore.fogEffect,
+          fovDeg: Number.isFinite(this.fovSliderValue) && this.fovSliderValue >= 5 ? this.fovSliderValue : 60
+        }),
+        applySkyRestoreState: (snap: ArSkyRestoreSnapshot): void => {
+          this.layerStore.atmosphere = snap.atmosphere
+          this.layerStore.ground = snap.landscape
+          this.layerStore.mistHorizon = snap.mistHorizon
+          this.layerStore.fogEffect = snap.fogEffect
+          this.fovSliderValue = snap.fovDeg
+          this.refreshState()
+        },
+        onArCameraActiveChanged: (active: boolean): void => {
+          if (active) {
+            this.layerStore.atmosphere = false
+            this.layerStore.ground = false
+            this.layerStore.mistHorizon = false
+            this.layerStore.fogEffect = false
+            this.fovSliderValue = this.arStore.arCameraFovDeg
+          }
+        }
       }
-      this.arControllerImpl = new ARController(this.arStore, this.commandPort(), hooks)
+      this.arControllerImpl = new ARController(this.arStore, this.gyroStore, this.commandPort(), hooks)
     }
     return this.arControllerImpl
   }
@@ -3490,7 +3539,12 @@ export struct WindowNativeNode {
         navigationMouseEnabled: (): boolean => this.navigationStore.navigationMouseEnabled,
         navigationMouseZoomEnabled: (): boolean => this.navigationStore.navigationMouseZoomEnabled,
         gyroscopeEnabled: (): boolean => this.gyroStore.gyroscopeEnabled,
-        stopGyroscope: (updateStatus: boolean): void => this.gyroCtl().stopGyroscope(updateStatus),
+        stopGyroscope: (updateStatus: boolean): void => {
+          this.gyroCtl().stopGyroscope(updateStatus)
+          if (this.arStore.arCameraActive) {
+            void this.arCtl().disableArCamera(true)
+          }
+        },
         angleMeasureEnabled: (): boolean => this.tools.angleMeasureEnabled,
         measureAngleAt: (x: number, y: number): void => this.measureAngleAt(x, y),
         requestSkySelection: (x: number, y: number, source: string): void => this.requestSkySelection(x, y, source),
@@ -3559,6 +3613,15 @@ export struct WindowNativeNode {
         starBrightnessValue: (): number => absoluteScaleToStarBrightness(this.layerViewStore.starBrightnessScale),
         onStarBrightnessChange: (normalized: number, dragging: boolean): void => {
           this.handleStarBrightnessChange(normalized, dragging)
+        },
+        arCameraActive: (): boolean => this.arStore.arCameraActive,
+        arSkyBlendValue: (): number => this.arStore.arSkyBlend,
+        onArSkyBlendChange: (value: number, dragging: boolean): void => {
+          this.arCtl().setSkyBlend(value)
+          if (!dragging) {
+            const pct = Math.round(value * 100)
+            this.flashHint(pct >= 92 ? ('暗夜透叠 ' + String(pct) + '%') : ('天空抠像 ' + String(pct) + '%'))
+          }
         }
       }
       this.skyInputControllerImpl = new SkyInputController(this.commandPort(), this.nightModeStore, hooks)
@@ -4013,7 +4076,12 @@ export struct WindowNativeNode {
         gyroscopeEnabled: (): boolean => this.gyroStore.gyroscopeEnabled,
         setGyroscopeEnabled: (value: boolean): void => { this.gyroStore.gyroscopeEnabled = value },
         startGyroscope: (): void => this.gyroCtl().startGyroscope(),
-        stopGyroscope: (updateStatus: boolean): void => this.gyroCtl().stopGyroscope(updateStatus),
+        stopGyroscope: (updateStatus: boolean): void => {
+          this.gyroCtl().stopGyroscope(updateStatus)
+          if (this.arStore.arCameraActive) {
+            void this.arCtl().disableArCamera(true)
+          }
+        },
         stopSkyInertia: (): void => this.skyInputCtl().stopSkyInertia(),
         stopCompetingTasks: (): void => {
           this.detailConnectorCtl().stopDetailAutoRefresh()
@@ -6109,6 +6177,15 @@ export struct WindowNativeNode {
         return true
       }
     }
+    if (this.arStore.arCameraActive && !this.panelVisible) {
+      const arPillW = 368
+      const arPillH = 44
+      const arPillX = (this.skyWidth - arPillW) / 2
+      const arPillY = this.landingTimePillY()
+      if (x >= arPillX - 12 && x <= arPillX + arPillW + 12 && y >= arPillY - 8 && y <= arPillY + arPillH + 8) {
+        return true
+      }
+    }
     if (this.satPromptBannerVisible()) {
       const promptW = this.satAlertCardWidth()
       const promptH = this.satAlertCardHeight()
@@ -7024,11 +7101,13 @@ export struct WindowNativeNode {
     const candidateRows = showMore ? quickCandidateRowsFor(this.quickPanelStore.order) : 0
     const candidates = candidateRows > 0 ? (10 + 1 + 12 + candidateRows * cell + (candidateRows - 1) * 6) : 0
     const editableExtra = this.quickPanelStore.editable ? (8 + 28) : 0
+    // 开启转动手机（陀螺仪）且非编辑态时，下方伸出 38vp 的「AR 实景相机」快捷标签（上距 10）。
+    const arTabExtra = (this.gyroStore.gyroscopeVisualEnabled() && !this.quickPanelStore.editable) ? (10 + 38) : 0
     // 理论高度之外再留 4 物理像素的「取整余量」：内容里有两类逐项物理像素对齐 ——
     // 每行 6 格按浮点宽均分后各自对齐（每行最多多占 1px），以及固定 chrome（抓手 / 头部 / 内外边距）
     // 各自对齐。真机 Mate 80 Pro 实测真实占用比理论值多约 2px，第二行下沿就被 Scroll 视口切掉；
     // 4px 不足半个 vp，肉眼不可见，但保证视口永远不小于内容。
-    const grid = slots + candidates + editableExtra + this.getUIContext().px2vp(4)
+    const grid = slots + arTabExtra + candidates + editableExtra + this.getUIContext().px2vp(4)
     const header = this.timeStore.panelSubtitle(this.activePanel).length > 0 ? 56 : 44
     if (this.isExpandedLayout) {
       // PanelHandle 高 30（28 + margin 2），floatingPanel 内边距 18。
@@ -7342,7 +7421,11 @@ export struct WindowNativeNode {
       return
     }
     if (id === 'gyroscope') {
-      if (value) this.syncEquatorialOffForGyro()
+      if (value) {
+        this.syncEquatorialOffForGyro()
+      } else if (this.arStore.arCameraActive) {
+        void this.arCtl().disableArCamera(true)
+      }
       this.gyroCtl().requestGyroscopeToggle(value)
       return
     }
@@ -10455,6 +10538,59 @@ export struct WindowNativeNode {
         }
       }
 
+      if (this.arStore.arCameraActive && !this.panelVisible) {
+        Row({ space: 8 }) {
+          SymbolGlyph($r('sys.symbol.camera'))
+            .fontSize(15)
+            .fontColor([this.hostSlots().accent])
+          Text(this.arStore.arSkyBlend >= 0.92 ? '暗夜' : '抠像')
+            .fontSize(11)
+            .fontWeight(FontWeight.Medium)
+            .fontColor(this.hostSlots().sub)
+          Slider({ value: this.arStore.arSkyBlend, min: 0, max: 1, step: 0.02, style: SliderStyle.OutSet })
+            .width(116)
+            .blockColor(this.hostSlots().accent)
+            .trackColor(this.hostSlots().bgStrong)
+            .selectedColor(this.hostSlots().accent)
+            .onChange((v: number) => { this.arCtl().setSkyBlend(v) })
+          Button('-1°')
+            .fontSize(11)
+            .fontColor(this.hostSlots().text)
+            .backgroundColor(this.hostSlots().soft)
+            .borderRadius(UI_RADIUS_PILL)
+            .height(26)
+            .padding({ left: 7, right: 7 })
+            .onClick(() => { this.arCtl().nudgeCompassOffset(-1) })
+          Button('+1°')
+            .fontSize(11)
+            .fontColor(this.hostSlots().text)
+            .backgroundColor(this.hostSlots().soft)
+            .borderRadius(UI_RADIUS_PILL)
+            .height(26)
+            .padding({ left: 7, right: 7 })
+            .onClick(() => { this.arCtl().nudgeCompassOffset(1) })
+          Button('×')
+            .fontSize(13)
+            .fontColor(this.hostSlots().text)
+            .backgroundColor(this.hostSlots().errorBg)
+            .borderRadius(UI_RADIUS_PILL)
+            .width(28)
+            .height(26)
+            .padding({ left: 0, right: 0 })
+            .onClick(() => { void this.arCtl().disableArCamera(true) })
+        }
+          .padding({ left: 12, right: 8, top: 6, bottom: 6 })
+          .backgroundColor(this.hostSlots().overlayPanel)
+          .border({ width: 0.5, color: this.hostSlots().border })
+          .borderRadius(UI_RADIUS_PILL)
+          .shadow({ radius: 16, color: this.hostSlots().shadowSoft, offsetX: 0, offsetY: 4 })
+          .alignItems(VerticalAlign.Center)
+          .position({ x: '50%', y: this.landingTimePillY() })
+          .markAnchor({ x: '50%', y: 0 })
+          .zIndex(94)
+          .transition(TransitionEffect.OPACITY.animation({ duration: 180, curve: Curve.EaseOut }))
+      }
+
       if (this.satPromptBannerVisible() && this.satPromptEvent !== undefined) {
         SatellitePassAlertCard({
           event: this.satPromptEvent,
@@ -11126,7 +11262,18 @@ export struct WindowNativeNode {
         store: this.quickPanelStore,
         nightModeStore: this.nightModeStore,
         values: this.quickActionValues(),
+        gyroActive: this.gyroStore.gyroscopeVisualEnabled(),
+        arCameraActive: this.arStore.arCameraActive,
+        arCameraStarting: this.arStore.arCameraStarting,
         onToggle: (id: string, value: boolean) => { this.quickToggle(id, value) },
+        onToggleArCamera: () => {
+          const willEnable = !this.arStore.arCameraActive
+          void this.arCtl().toggleArCamera().then(() => {
+            if (willEnable && this.arStore.arCameraActive) {
+              this.closePanel()
+            }
+          })
+        },
         onHint: (text: string) => { this.flashHint(text) }
       })
     } else if (this.activePanel === 'pointerCoordinates') {
@@ -11672,6 +11819,13 @@ export struct WindowNativeNode {
     } else if (this.activePanel === 'ar') {
       ARPreviewPanel({
         arStore: this.arStore,
+        gyroStore: this.gyroStore,
+        onToggleCamera: () => { void this.arCtl().toggleArCamera() },
+        onSetSkyBlend: (value: number) => { this.arCtl().setSkyBlend(value) },
+        onSetCameraFov: (fovDeg: number) => { this.arCtl().setCameraFov(fovDeg) },
+        onNudgeCompass: (deltaDeg: number) => { this.arCtl().nudgeCompassOffset(deltaDeg) },
+        onResetCompass: () => { this.arCtl().resetCompassOffset() },
+        onClosePanelForFullAr: () => { this.closePanel() },
         onSetMode: (mode: string) => { this.arCtl().setMode(mode) },
         onSetRevealProgress: (value: number) => { this.arCtl().setRevealProgress(value) }
       })

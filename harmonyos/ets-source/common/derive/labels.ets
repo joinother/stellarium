@@ -530,6 +530,9 @@ export function panelTitleFor(activePanel: string, configTab: number, isExpanded
   if (activePanel === 'place') {
     return I18n.t('i0014')
   }
+  if (activePanel === 'ar') {
+    return I18n.getLanguage().startsWith('zh') ? 'AR 实景观星' : 'AR Sky View'
+  }
   if (activePanel === 'devTools') {
     return I18n.t('panel_dev_tools')
   }

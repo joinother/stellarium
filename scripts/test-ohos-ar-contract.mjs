@@ -28,8 +28,25 @@ for (const token of ['getARCapabilities', 'getARState', 'setARMode', 'setARRevea
   assert.match(cli, new RegExp(token), `${token} missing from CLI documentation`);
 }
 
-assert.match(arPanel, /不会打开摄像头/);
+const arCamera = read('harmonyos/ets-source/capability/ArCameraService.ets');
+const quickPanel = read('harmonyos/ets-source/panels/panels/QuickPanel.ets');
+const helloCpp = read('harmonyos/cpp-source/hello.cpp');
+const moduleJson = read('harmonyos/module.json5');
+
+assert.match(arPanel, /开启 AR 实景观星/);
 assert.match(arPanel, /sky-only/);
+assert.match(arPanel, /罗盘微调/);
+assert.match(quickPanel, /AR 实景相机/);
+assert.match(quickPanel, /onToggleArCamera/);
+assert.match(arController, /actionShow_MistHorizon\|0/);
+assert.match(arCamera, /SystemCapability\.Multimedia\.Camera\.Core/);
+assert.match(arCamera, /ohos\.permission\.CAMERA/);
+assert.match(arCamera, /createArCameraSurface/);
+assert.match(helloCpp, /OH_NativeImage_Create/);
+assert.match(helloCpp, /GL_OES_EGL_image_external_essl3/);
+assert.match(helloCpp, /skyMask/);
+assert.match(helloCpp, /HMS_AREngine_CheckSupported/);
+assert.match(moduleJson, /ohos\.permission\.CAMERA/);
 assert.match(roadmap, /相机背景/);
 assert.match(roadmap, /环境 Mesh/);
 assert.match(roadmap, /抠除地景/);

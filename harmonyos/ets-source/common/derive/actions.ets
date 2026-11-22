@@ -69,8 +69,8 @@ export function skyDataHubActions(): ShellAction[] {
     { label: I18n.t('panel_meteorshowers'), icon: 'meteor', panel: 'meteorshowers' },
     { label: I18n.pluginName('Scenery3d'), icon: 'scenery3d', panel: 'scenery3d' },
     { label: I18n.t('nebula_texture_title'), icon: 'catalog_nebula', panel: 'nebulaTextures' },
-    // 「AR 预研」入口暂时下线（2026-11）：面板与 ARStore/ARController 代码保留，需要时把下面这行放回来即可。
-    // { label: 'AR 预研', icon: 'gyro', panel: 'ar' },
+    // AR 实景相机入口已整合进「快捷开关」（开启转动手机/陀螺仪后自动伸出标签），不再单独占用大面板菜单项。
+    // { label: 'AR 实景观星', icon: 'gyro', panel: 'ar' },
     { label: I18n.t('panel_catalogs'), icon: 'catalogs', panel: 'catalogs' },
     { label: I18n.t('more_plugins_manage'), icon: 'settings', panel: 'pluginManager' }
   ]

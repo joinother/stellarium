@@ -21,6 +21,10 @@
       "value": "用於將星圖與您的觀測位置對齊。"
     },
     {
+      "name": "stellarium_permission_reason_camera",
+      "value": "用於在開啟 AR 實景觀星時將真實天空畫面與星圖疊加融合（僅本機即時渲染，不儲存或上傳）。"
+    },
+    {
       "name": "i0001",
       "value": "點擊任意處進入星圖"
     },

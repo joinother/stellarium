@@ -21,6 +21,10 @@
       "value": "관측 위치의 하늘 지도와 일치시키는 데 사용됩니다."
     },
     {
+      "name": "stellarium_permission_reason_camera",
+      "value": "AR 실경 별자리 모드에서 실제 하늘과 성도를 겹쳐 표시하는 데 사용합니다."
+    },
+    {
       "name": "i0001",
       "value": "아무 곳이나 탭하여 하늘로"
     },

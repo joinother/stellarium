@@ -21,6 +21,10 @@
       "value": "観測地の星空と一致させるために使用します。"
     },
     {
+      "name": "stellarium_permission_reason_camera",
+      "value": "AR 星空カメラ合成モードで実景と星図を重ねて表示するために使用します。"
+    },
+    {
       "name": "i0001",
       "value": "どこでもタップして星空へ"
     },

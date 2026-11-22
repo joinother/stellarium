@@ -7,11 +7,15 @@
 
 #include <EGL/egl.h>
 #include <GLES3/gl3.h>
+#include <GLES2/gl2ext.h>
 #include <ace/xcomponent/native_interface_xcomponent.h>
 #include <hilog/log.h>
+#include <native_image/native_image.h>
 
+#include <algorithm>
 #include <array>
 #include <atomic>
+#include <cmath>
 #include <cstddef>
 #include <cstdlib>
 #include <dlfcn.h>
@@ -37,6 +41,8 @@ struct EglState
     GLuint starBuffer = 0;
     GLuint frameProgram = 0;
     GLuint frameTexture = 0;
+    GLuint arCompositeProgram = 0;
+    GLuint arCameraTexture = 0;
     int frameTextureWidth = 0;
     int frameTextureHeight = 0;
     bool submittedFrame = false;
@@ -44,10 +50,35 @@ struct EglState
     bool zeroCopyUnavailable = false;
 };
 
+struct ArCameraState
+{
+    OH_NativeImage* image = nullptr;
+    uint64_t surfaceId = 0;
+    bool attachPending = false;
+    bool destroyPending = false;
+    bool hasFrame = false;
+    bool compositeEnabled = false;
+    float skyBlend = 0.55f;
+    float cameraAspect = 16.0f / 9.0f;
+    float transform[16] = {
+        1.0f, 0.0f, 0.0f, 0.0f,
+        0.0f, 1.0f, 0.0f, 0.0f,
+        0.0f, 0.0f, 1.0f, 0.0f,
+        0.0f, 0.0f, 0.0f, 1.0f
+    };
+};
+
 EglState g_egl;
+ArCameraState g_ar;
+std::atomic<bool> g_arFrameAvailable {false};
 OH_NativeXComponent_Callback g_xcomponentCallback;
 std::mutex g_renderMutex;
 std::atomic<std::uint64_t> g_presentationState {0};
+
+void onArCameraFrameAvailable(void*)
+{
+    g_arFrameAvailable.store(true, std::memory_order_release);
+}
 
 struct StarVertex
 {
@@ -228,6 +259,202 @@ void main()
     return program;
 }
 
+GLuint createArCompositeProgram()
+{
+    constexpr const char* vertexShader = R"(#version 300 es
+out vec2 v_texCoord;
+void main()
+{
+    vec2 position = vec2(-1.0, -1.0);
+    vec2 texCoord = vec2(0.0, 0.0);
+    if (gl_VertexID == 1) {
+        position = vec2(3.0, -1.0);
+        texCoord = vec2(2.0, 0.0);
+    } else if (gl_VertexID == 2) {
+        position = vec2(-1.0, 3.0);
+        texCoord = vec2(0.0, 2.0);
+    }
+    gl_Position = vec4(position, 0.0, 1.0);
+    v_texCoord = texCoord;
+})";
+
+    constexpr const char* fragmentShader = R"(#version 300 es
+#extension GL_OES_EGL_image_external_essl3 : require
+precision mediump float;
+uniform sampler2D u_frame;
+uniform samplerExternalOES u_camera;
+uniform mat4 u_camTransform;
+uniform float u_blend;
+uniform float u_screenAspect;
+uniform float u_cameraAspect;
+in vec2 v_texCoord;
+out vec4 fragColor;
+void main()
+{
+    vec2 cropUv = v_texCoord;
+    if (u_screenAspect > 0.01 && u_cameraAspect > 0.01) {
+        if (u_screenAspect > u_cameraAspect) {
+            float scaleY = u_cameraAspect / u_screenAspect;
+            cropUv.y = (cropUv.y - 0.5) * scaleY + 0.5;
+        } else {
+            float scaleX = u_screenAspect / u_cameraAspect;
+            cropUv.x = (cropUv.x - 0.5) * scaleX + 0.5;
+        }
+    }
+    vec2 camUv = clamp((u_camTransform * vec4(cropUv, 0.0, 1.0)).xy, vec2(0.0), vec2(1.0));
+    vec3 cam = texture(u_camera, camUv).rgb;
+    vec3 sky = texture(u_frame, v_texCoord).rgb;
+
+    float b = clamp(u_blend, 0.0, 1.0);
+    // 1080p pixel-level Sky Luminance Keying (auto-cuts out dark trees, leaves, roofs, buildings):
+    // Sky pixels have higher luminance (and cool/blue chroma bias outdoors) than silhouetted foreground.
+    float camLuma = dot(cam, vec3(0.2126, 0.7152, 0.0722));
+    float blueBias = max(0.0, cam.b - max(cam.r, cam.g)) * 0.28;
+    float skySignal = clamp(camLuma + blueBias, 0.0, 1.0);
+
+    // b in [0.02..0.90] sweeps the sky-vs-foreground luminance cutoff from bright sky (0.88) down to dim twilight (0.06).
+    float keyRange = clamp(b / 0.90, 0.0, 1.0);
+    float cutPoint = mix(0.88, 0.06, keyRange);
+    float feather = 0.085;
+    float skyMask = smoothstep(cutPoint - feather, cutPoint + feather, skySignal) * smoothstep(0.0, 0.04, b);
+
+    // Inside keyed sky region: smoothly darken bright real sky and fuse deep crisp stars, constellations & labels.
+    vec3 skyBackdrop = cam * mix(0.22, 0.08, keyRange);
+    vec3 skyGlow = 1.0 - (1.0 - skyBackdrop) * (1.0 - clamp(sky * 1.18, 0.0, 1.0));
+    float skyPeak = max(sky.r, max(sky.g, sky.b));
+    vec3 skyRegion = mix(skyGlow, max(skyGlow, sky), smoothstep(0.05, 0.30, skyPeak) * 0.65);
+
+    // Foreground (trees, leaves, buildings where skyMask -> 0) stays 100% real camera occluding the stars!
+    vec3 keyedResult = mix(cam, skyRegion, skyMask);
+
+    // Pitch-black rural night fallback (b > 0.90 -> 1.0): smoothly crossfade to full-screen night star overlay.
+    float nightOverlayMix = smoothstep(0.90, 1.0, b);
+    vec3 nightOverlay = 1.0 - (1.0 - cam * 0.35) * (1.0 - clamp(sky * 1.18, 0.0, 1.0));
+    nightOverlay = mix(nightOverlay, max(nightOverlay, sky), smoothstep(0.05, 0.30, skyPeak) * 0.65);
+    vec3 finalRgb = mix(keyedResult, nightOverlay, nightOverlayMix);
+    fragColor = vec4(finalRgb, 1.0);
+})";
+
+    const GLuint vs = compileShader(GL_VERTEX_SHADER, vertexShader);
+    const GLuint fs = compileShader(GL_FRAGMENT_SHADER, fragmentShader);
+    if (vs == 0 || fs == 0) {
+        glDeleteShader(vs);
+        glDeleteShader(fs);
+        return 0;
+    }
+
+    const GLuint program = glCreateProgram();
+    glAttachShader(program, vs);
+    glAttachShader(program, fs);
+    glLinkProgram(program);
+    glDeleteShader(vs);
+    glDeleteShader(fs);
+
+    GLint ok = GL_FALSE;
+    glGetProgramiv(program, GL_LINK_STATUS, &ok);
+    if (ok != GL_TRUE) {
+        char log[512] = {};
+        glGetProgramInfoLog(program, sizeof(log), nullptr, log);
+        OH_LOG_Print(LOG_APP, LOG_ERROR, STEL_ENTRY_LOG_DOMAIN, STEL_ENTRY_LOG_TAG,
+                     "ar composite program link failed: %{public}s", log);
+        glDeleteProgram(program);
+        return 0;
+    }
+
+    return program;
+}
+
+void cleanupArCameraGlResourcesLocked()
+{
+    if (g_ar.image != nullptr) {
+        OH_NativeImage_UnsetOnFrameAvailableListener(g_ar.image);
+        OH_NativeImage_DetachContext(g_ar.image);
+        OH_NativeImage_Destroy(&g_ar.image);
+    }
+    if (g_egl.arCameraTexture != 0) {
+        glDeleteTextures(1, &g_egl.arCameraTexture);
+        g_egl.arCameraTexture = 0;
+    }
+    g_ar.surfaceId = 0;
+    g_ar.attachPending = false;
+    g_ar.destroyPending = false;
+    g_ar.hasFrame = false;
+    g_ar.compositeEnabled = false;
+    g_arFrameAvailable.store(false, std::memory_order_release);
+}
+
+void drawSkyWithOptionalArCameraLocked(GLuint skyTexture, int viewportWidth, int viewportHeight)
+{
+    if (g_ar.destroyPending) {
+        cleanupArCameraGlResourcesLocked();
+    } else if (g_ar.compositeEnabled && g_ar.image != nullptr) {
+        if (g_ar.attachPending) {
+            if (g_egl.arCameraTexture == 0) {
+                glGenTextures(1, &g_egl.arCameraTexture);
+            }
+            glActiveTexture(GL_TEXTURE1);
+            glBindTexture(GL_TEXTURE_EXTERNAL_OES, g_egl.arCameraTexture);
+            glTexParameteri(GL_TEXTURE_EXTERNAL_OES, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+            glTexParameteri(GL_TEXTURE_EXTERNAL_OES, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+            glTexParameteri(GL_TEXTURE_EXTERNAL_OES, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+            glTexParameteri(GL_TEXTURE_EXTERNAL_OES, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+            const int32_t attachRet = OH_NativeImage_AttachContext(g_ar.image, g_egl.arCameraTexture);
+            if (attachRet == 0) {
+                g_ar.attachPending = false;
+                OH_LOG_Print(LOG_APP, LOG_INFO, STEL_ENTRY_LOG_DOMAIN, STEL_ENTRY_LOG_TAG,
+                             "[ar-camera] attached native image to OES texture=%{public}u", g_egl.arCameraTexture);
+            } else {
+                OH_LOG_Print(LOG_APP, LOG_WARN, STEL_ENTRY_LOG_DOMAIN, STEL_ENTRY_LOG_TAG,
+                             "[ar-camera] attach context failed ret=%{public}d", attachRet);
+            }
+        }
+        if (!g_ar.attachPending && g_arFrameAvailable.exchange(false, std::memory_order_acquire)) {
+            const int32_t updateRet = OH_NativeImage_UpdateSurfaceImage(g_ar.image);
+            if (updateRet == 0) {
+                if (OH_NativeImage_GetTransformMatrixV2(g_ar.image, g_ar.transform) != 0) {
+                    OH_NativeImage_GetTransformMatrix(g_ar.image, g_ar.transform);
+                }
+                if (!g_ar.hasFrame) {
+                    OH_LOG_Print(LOG_APP, LOG_INFO, STEL_ENTRY_LOG_DOMAIN, STEL_ENTRY_LOG_TAG,
+                                 "[ar-camera] first camera frame latched for GPU sky fusion");
+                }
+                g_ar.hasFrame = true;
+            }
+        }
+    }
+
+    if (g_ar.compositeEnabled && g_ar.hasFrame && g_egl.arCameraTexture != 0) {
+        if (g_egl.arCompositeProgram == 0) {
+            g_egl.arCompositeProgram = createArCompositeProgram();
+        }
+        if (g_egl.arCompositeProgram != 0) {
+            glUseProgram(g_egl.arCompositeProgram);
+            glActiveTexture(GL_TEXTURE0);
+            glBindTexture(GL_TEXTURE_2D, skyTexture);
+            glUniform1i(glGetUniformLocation(g_egl.arCompositeProgram, "u_frame"), 0);
+            glActiveTexture(GL_TEXTURE1);
+            glBindTexture(GL_TEXTURE_EXTERNAL_OES, g_egl.arCameraTexture);
+            glUniform1i(glGetUniformLocation(g_egl.arCompositeProgram, "u_camera"), 1);
+            glUniformMatrix4fv(glGetUniformLocation(g_egl.arCompositeProgram, "u_camTransform"), 1, GL_FALSE, g_ar.transform);
+            glUniform1f(glGetUniformLocation(g_egl.arCompositeProgram, "u_blend"), g_ar.skyBlend);
+            const float screenAspect = (viewportHeight > 0)
+                ? static_cast<float>(viewportWidth) / static_cast<float>(viewportHeight)
+                : 1.0f;
+            glUniform1f(glGetUniformLocation(g_egl.arCompositeProgram, "u_screenAspect"), screenAspect);
+            glUniform1f(glGetUniformLocation(g_egl.arCompositeProgram, "u_cameraAspect"), g_ar.cameraAspect);
+            glDrawArrays(GL_TRIANGLES, 0, 3);
+            glActiveTexture(GL_TEXTURE0);
+            return;
+        }
+    }
+
+    glUseProgram(g_egl.frameProgram);
+    glActiveTexture(GL_TEXTURE0);
+    glBindTexture(GL_TEXTURE_2D, skyTexture);
+    glUniform1i(glGetUniformLocation(g_egl.frameProgram, "u_frame"), 0);
+    glDrawArrays(GL_TRIANGLES, 0, 3);
+}
+
 bool initEgl(void* window)
 {
     g_egl.display = eglGetDisplay(EGL_DEFAULT_DISPLAY);
@@ -337,6 +564,13 @@ bool shareContextWithQt(EGLDisplay qtDisplay, EGLContext qtContext)
     // it once with Qt's context as the share context so GL textures remain on
     // the GPU and can be sampled by the XComponent compositor.
     eglMakeCurrent(g_egl.display, EGL_NO_SURFACE, EGL_NO_SURFACE, EGL_NO_CONTEXT);
+    if (g_ar.image != nullptr) {
+        OH_NativeImage_DetachContext(g_ar.image);
+        g_ar.attachPending = true;
+        g_ar.hasFrame = false;
+    }
+    g_egl.arCompositeProgram = 0;
+    g_egl.arCameraTexture = 0;
     if (g_egl.context != EGL_NO_CONTEXT)
         eglDestroyContext(g_egl.display, g_egl.context);
 
@@ -407,11 +641,7 @@ bool renderSubmittedTexture(GLuint texture, int frameWidth, int frameHeight,
     glViewport(viewport.left, viewport.bottom, viewport.width, viewport.height);
     glClearColor(0.f, 0.f, 0.f, 1.f);
     glClear(GL_COLOR_BUFFER_BIT);
-    glUseProgram(g_egl.frameProgram);
-    glActiveTexture(GL_TEXTURE0);
-    glBindTexture(GL_TEXTURE_2D, texture);
-    glUniform1i(glGetUniformLocation(g_egl.frameProgram, "u_frame"), 0);
-    glDrawArrays(GL_TRIANGLES, 0, 3);
+    drawSkyWithOptionalArCameraLocked(texture, viewport.width, viewport.height);
     if (glGetError() != GL_NO_ERROR || eglSwapBuffers(g_egl.display, g_egl.surface) != EGL_TRUE) {
         OH_LOG_Print(LOG_APP, LOG_ERROR, STEL_ENTRY_LOG_DOMAIN, STEL_ENTRY_LOG_TAG,
                      "zero-copy presentation failed: %{public}x", eglGetError());
@@ -500,11 +730,7 @@ void renderSubmittedFrame(const unsigned char* rgba, int frameWidth, int frameHe
     glViewport(viewport.left, viewport.bottom, viewport.width, viewport.height);
     glClearColor(0.f, 0.f, 0.f, 1.f);
     glClear(GL_COLOR_BUFFER_BIT);
-    glUseProgram(g_egl.frameProgram);
-    glActiveTexture(GL_TEXTURE0);
-    glBindTexture(GL_TEXTURE_2D, g_egl.frameTexture);
-    glUniform1i(glGetUniformLocation(g_egl.frameProgram, "u_frame"), 0);
-    glDrawArrays(GL_TRIANGLES, 0, 3);
+    drawSkyWithOptionalArCameraLocked(g_egl.frameTexture, viewport.width, viewport.height);
     const GLenum drawError = glGetError();
     if (drawError != GL_NO_ERROR) {
         OH_LOG_Print(LOG_APP, LOG_ERROR, STEL_ENTRY_LOG_DOMAIN, STEL_ENTRY_LOG_TAG,
@@ -531,7 +757,14 @@ void renderSubmittedFrame(const unsigned char* rgba, int frameWidth, int frameHe
 
 void destroyEgl()
 {
+    std::lock_guard<std::mutex> lock(g_renderMutex);
     if (g_egl.display != EGL_NO_DISPLAY) {
+        if (g_egl.surface != EGL_NO_SURFACE && g_egl.context != EGL_NO_CONTEXT) {
+            eglMakeCurrent(g_egl.display, g_egl.surface, g_egl.surface, g_egl.context);
+        }
+        cleanupArCameraGlResourcesLocked();
+        if (g_egl.arCompositeProgram != 0)
+            glDeleteProgram(g_egl.arCompositeProgram);
         eglMakeCurrent(g_egl.display, EGL_NO_SURFACE, EGL_NO_SURFACE, EGL_NO_CONTEXT);
         if (g_egl.starBuffer != 0)
             glDeleteBuffers(1, &g_egl.starBuffer);
@@ -787,6 +1020,134 @@ static napi_value IsPresentationReady(napi_env env, napi_callback_info info)
     return result;
 }
 
+static napi_value ProbeArHardware(napi_env env, napi_callback_info info)
+{
+    using CheckSupportedFunc = int32_t (*)(int32_t);
+    bool arEngineLib = false;
+    bool slam = false;
+    bool depth = false;
+    bool mesh = false;
+    bool semantic = false;
+
+    void* handle = dlopen("libarengine_ndk.z.so", RTLD_LAZY);
+    if (handle != nullptr) {
+        arEngineLib = true;
+        auto checkFn = reinterpret_cast<CheckSupportedFunc>(dlsym(handle, "HMS_AREngine_CheckSupported"));
+        if (checkFn != nullptr) {
+            slam = (checkFn(0) == 0);      // ARENGINE_FEATURE_TYPE_SLAM
+            depth = (checkFn(1) == 0);     // ARENGINE_FEATURE_TYPE_DEPTH
+            mesh = (checkFn(2) == 0);      // ARENGINE_FEATURE_TYPE_MESH
+            semantic = (checkFn(5) == 0);  // ARENGINE_FEATURE_TYPE_SEMANTIC
+        }
+        dlclose(handle);
+    }
+
+    const std::string json = std::string("{\"nativeImage\":true,\"arEngineLib\":") +
+        (arEngineLib ? "true" : "false") +
+        ",\"slam\":" + (slam ? "true" : "false") +
+        ",\"depth\":" + (depth ? "true" : "false") +
+        ",\"mesh\":" + (mesh ? "true" : "false") +
+        ",\"semantic\":" + (semantic ? "true" : "false") + "}";
+    OH_LOG_Print(LOG_APP, LOG_INFO, STEL_ENTRY_LOG_DOMAIN, STEL_ENTRY_LOG_TAG,
+                 "[ar-probe] hardware=%{public}s", json.c_str());
+
+    napi_value result;
+    napi_create_string_utf8(env, json.c_str(), json.size(), &result);
+    return result;
+}
+
+static napi_value CreateArCameraSurface(napi_env env, napi_callback_info info)
+{
+    std::string surfaceIdStr;
+    {
+        std::lock_guard<std::mutex> lock(g_renderMutex);
+        if (g_ar.image != nullptr) {
+            g_ar.destroyPending = false;
+            g_ar.hasFrame = false;
+            g_arFrameAvailable.store(false, std::memory_order_release);
+            if (g_ar.surfaceId != 0) {
+                surfaceIdStr = std::to_string(g_ar.surfaceId);
+            }
+        }
+        if (g_ar.image == nullptr) {
+            OH_NativeImage* img = OH_NativeImage_Create(0, GL_TEXTURE_EXTERNAL_OES);
+            if (img != nullptr) {
+                uint64_t sid = 0;
+                const int32_t sidRet = OH_NativeImage_GetSurfaceId(img, &sid);
+                if (sidRet == 0 && sid != 0) {
+                    OH_OnFrameAvailableListener listener { nullptr, onArCameraFrameAvailable };
+                    OH_NativeImage_SetOnFrameAvailableListener(img, listener);
+                    g_ar.image = img;
+                    g_ar.surfaceId = sid;
+                    g_ar.attachPending = true;
+                    g_ar.destroyPending = false;
+                    g_ar.hasFrame = false;
+                    g_arFrameAvailable.store(false, std::memory_order_release);
+                    surfaceIdStr = std::to_string(sid);
+                    OH_LOG_Print(LOG_APP, LOG_INFO, STEL_ENTRY_LOG_DOMAIN, STEL_ENTRY_LOG_TAG,
+                                 "[ar-camera] created OH_NativeImage surfaceId=%{public}s", surfaceIdStr.c_str());
+                } else {
+                    OH_LOG_Print(LOG_APP, LOG_ERROR, STEL_ENTRY_LOG_DOMAIN, STEL_ENTRY_LOG_TAG,
+                                 "[ar-camera] OH_NativeImage_GetSurfaceId failed ret=%{public}d", sidRet);
+                    OH_NativeImage_Destroy(&img);
+                }
+            } else {
+                OH_LOG_Print(LOG_APP, LOG_ERROR, STEL_ENTRY_LOG_DOMAIN, STEL_ENTRY_LOG_TAG,
+                             "[ar-camera] OH_NativeImage_Create failed");
+            }
+        }
+    }
+    napi_value result;
+    napi_create_string_utf8(env, surfaceIdStr.c_str(), surfaceIdStr.size(), &result);
+    return result;
+}
+
+static napi_value DestroyArCameraSurface(napi_env env, napi_callback_info info)
+{
+    {
+        std::lock_guard<std::mutex> lock(g_renderMutex);
+        g_ar.compositeEnabled = false;
+        g_ar.hasFrame = false;
+        g_arFrameAvailable.store(false, std::memory_order_release);
+        if (g_ar.image != nullptr) {
+            g_ar.destroyPending = true;
+        }
+    }
+    OH_LOG_Print(LOG_APP, LOG_INFO, STEL_ENTRY_LOG_DOMAIN, STEL_ENTRY_LOG_TAG,
+                 "[ar-camera] scheduled native image teardown");
+    napi_value undef;
+    napi_get_undefined(env, &undef);
+    return undef;
+}
+
+static napi_value SetArCameraComposite(napi_env env, napi_callback_info info)
+{
+    size_t argc = 3;
+    napi_value args[3] = { nullptr, nullptr, nullptr };
+    napi_get_cb_info(env, info, &argc, args, nullptr, nullptr);
+
+    bool enabled = false;
+    double blend = 0.72;
+    double cameraAspect = 16.0 / 9.0;
+    if (argc >= 1) napi_get_value_bool(env, args[0], &enabled);
+    if (argc >= 2) napi_get_value_double(env, args[1], &blend);
+    if (argc >= 3) napi_get_value_double(env, args[2], &cameraAspect);
+
+    {
+        std::lock_guard<std::mutex> lock(g_renderMutex);
+        g_ar.compositeEnabled = enabled;
+        if (std::isfinite(blend)) {
+            g_ar.skyBlend = static_cast<float>(std::max(0.0, std::min(1.0, blend)));
+        }
+        if (std::isfinite(cameraAspect) && cameraAspect > 0.1 && cameraAspect < 10.0) {
+            g_ar.cameraAspect = static_cast<float>(cameraAspect);
+        }
+    }
+    napi_value undef;
+    napi_get_undefined(env, &undef);
+    return undef;
+}
+
 EXTERN_C_START
 static napi_value Init(napi_env env, napi_value exports)
 {
@@ -800,6 +1161,11 @@ static napi_value Init(napi_env env, napi_value exports)
         // StelApp::isInitialized()：引擎真正初始化完成（早于出帧），
         // 启动查询必须等它，否则重试链在 init 期间堆积触发 appfreeze。
         { "isEngineReady", nullptr, IsEngineReady, nullptr, nullptr, nullptr, napi_default, nullptr },
+        // AR 实景相机 GPU 融合与硬件能力探测（OH_NativeImage + GL_TEXTURE_EXTERNAL_OES）。
+        { "probeArHardware", nullptr, ProbeArHardware, nullptr, nullptr, nullptr, napi_default, nullptr },
+        { "createArCameraSurface", nullptr, CreateArCameraSurface, nullptr, nullptr, nullptr, napi_default, nullptr },
+        { "destroyArCameraSurface", nullptr, DestroyArCameraSurface, nullptr, nullptr, nullptr, napi_default, nullptr },
+        { "setArCameraComposite", nullptr, SetArCameraComposite, nullptr, nullptr, nullptr, napi_default, nullptr },
     };
     napi_define_properties(env, exports, sizeof(desc) / sizeof(desc[0]), desc);
     registerDetailModelNapi(env, exports);
