@@ -1,5 +1,21 @@
 > **身份图例**：本文件真机记录中出现的 `com.cnchensh.stellarium` 是**本机调试签名身份**（本机 DevEco 自动生成，非发布身份）；发布身份为 `com.joinother.skyinstrument`。构建脚本 `build-ohos-hap-windows.ps1 -Install` 从产物 `pack.info` 读取实际包名，仓库不写死任何签名身份（见 `docs/harmonyos/release/BUNDLE-IDENTITY-CLEANUP.md`）。
 
+## [2026-11-22] 修复 Dock 入口恢复跨域子页（更多→图层、快捷→位置）
+
+- **修改文件：** `harmonyos/ets-source/pages/MainWindowNativeNode.ets`、`scripts/test-ohos-dock-hit-regression.mjs`、`docs/harmonyos/CHANGELOG.md`。
+- **现象：** 点击“更多功能”弹出图层面板而不是更多目录；点击“快捷开关”打开位置面板。
+- **根因：** Dock 面板记忆把 `panelNavigationStack[0]` 当作入口归属。跨入口子页会把原入口留在栈根：
+  - “更多 → 设置 → 打开天空图层”后，`activePanel='layers'` 但栈根仍是 `more`；保存时把 `layers` 记在 `more` 名下，之后点“更多”恢复成图层面板。
+  - “快捷 → 点击标题 → 位置”后，`activePanel='place'` 但栈根是 `quick`；切到图层再点“快捷”，恢复成位置面板。
+- **修复：**
+  1. `currentDockRootOwner()` 以当前可见面板的 `panelRouteRoot(activePanel)` 为准；栈根只在没有活动面板时兜底，Dock 高亮也随之落在真实面板所属入口。
+  2. `saveCurrentDockPanelMemory()` 在栈根与当前面板域名不一致时丢弃返回栈，避免跨域返回链。
+  3. 恢复记忆前校验 `panelRouteRoot(saved.activePanel) === item.panel`；不兼容的旧记忆删除并按入口本页打开。
+- **验证：** 新增 `test-ohos-dock-hit-regression.mjs` 用例（面板域名归属与源码守卫），4 项通过。真机（`192.168.3.95:36717`，HAP 803.2 MB / 842,245,420 字节）复测：
+  - 更多 → 设置 → 前往（图层）→ 关闭 → 更多：打开更多目录，不再恢复图层；
+  - 快捷 → 点击标题（位置）→ 图层 → 快捷：打开快捷面板，不再恢复位置；
+  - 同一入口内的记忆仍保留：更多 → 设置 → 更多（收起）→ 更多，恢复设置面板。
+
 ## [2026-11-22] 新增真机控件树读屏/断言封装 `ohos-ui-dump.mjs`
 
 - **修改文件：** `scripts/ohos-ui-dump.mjs`（新增）、`scripts/test-ohos-ui-dump.mjs`（新增）、`docs/harmonyos/DEVELOPMENT-MCP-WORKFLOW.md`、`docs/harmonyos/CHANGELOG.md`。

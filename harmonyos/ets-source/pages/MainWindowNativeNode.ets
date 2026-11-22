@@ -5994,13 +5994,17 @@ export struct WindowNativeNode {
   }
 
   private currentDockRootOwner(): string {
+    // 以“当前可见面板”为准。跨入口子页（更多 → 设置 → 天空图层、快捷 → 位置）
+    // 会让 panelNavigationStack[0] 仍指向原 Dock 入口；继续用它会把图层面板
+    // 记在“更多”名下，之后点击“更多”就恢复成图层面板。
+    if (this.activePanel.length > 0) return panelRouteRoot(this.activePanel)
     if (this.panelNavigationStack.length > 0) {
       const rootEntry = this.panelNavigationStack[0].split('#')[0]
       if (rootEntry === 'search' || rootEntry === 'time' || rootEntry === 'quick' || rootEntry === 'layers' || rootEntry === 'more') {
         return rootEntry
       }
     }
-    return panelRouteRoot(this.activePanel)
+    return ''
   }
 
   private dockActivePanel(): string {
@@ -6038,9 +6042,17 @@ export struct WindowNativeNode {
     this.captureCurrentPanelScroll()
     const owner = this.currentDockRootOwner()
     if (owner.length === 0) return
+    // 跨入口子页会把原入口的返回栈带进来；栈根与当前面板域名不一致时丢弃，
+    // 避免下次从 Dock 恢复出一个跨域返回链。
+    const stackRoot = this.panelNavigationStack.length > 0
+      ? this.panelNavigationStack[0].split('#')[0]
+      : ''
+    const stack = stackRoot.length === 0 || stackRoot === owner
+      ? this.panelNavigationStack.slice()
+      : []
     this.dockPanelMemory.set(owner, {
       activePanel: this.activePanel,
-      stack: this.panelNavigationStack.slice(),
+      stack: stack,
       viewTab: this.viewTab,
       configTab: this.configTab
     })
@@ -6983,7 +6995,8 @@ export struct WindowNativeNode {
       this.saveCurrentDockPanelMemory()
     }
     const saved = this.dockPanelMemory.get(item.panel)
-    if (saved !== undefined && saved.activePanel.length > 0) {
+    if (saved !== undefined && saved.activePanel.length > 0 &&
+        panelRouteRoot(saved.activePanel) === item.panel) {
       this.panelNavigationStack = saved.stack.slice()
       this.panelNavigationDepth = saved.stack.length
       this.viewTab = saved.viewTab
@@ -6993,6 +7006,8 @@ export struct WindowNativeNode {
       this.setPanel(saved.activePanel, true, true)
       return
     }
+    // 旧会话可能留下跨域记忆（例如“更多”名下存了图层）；丢弃后打开入口本页。
+    if (saved !== undefined) this.dockPanelMemory.delete(item.panel)
     this.pendingScrollRestoreOffsetY = this.panelScrollOffsets.get(this.currentPanelScrollKey(item.panel)) ?? 0
     this.setPanel(item.panel)
   }

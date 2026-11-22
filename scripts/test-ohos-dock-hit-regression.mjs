@@ -35,6 +35,31 @@ test('top-level pointer hit surface uses local coordinates without duplicate cli
   assert.match(page, /event\.stopPropagation\(\)/);
 });
 
+test('Dock memory never restores a panel from another Dock entry', () => {
+  const page = read('../harmonyos/ets-source/pages/MainWindowNativeNode.ets');
+  const actions = read('../harmonyos/ets-source/common/derive/actions.ets');
+  const routeRootSource = actions
+    .match(/export function panelRouteRoot[\s\S]*?\n\}/)[0]
+    .replace('export ', '')
+    .replace(/: string/g, '');
+  const panelRouteRoot = new Function(`${routeRootSource}; return panelRouteRoot;`)();
+
+  // Reported cases: More → Settings → sky layers, and Quick title → Place.
+  // Layers belongs to the Layers entry and Place to More, so neither may be
+  // restored under the entry that happened to open it.
+  assert.equal(panelRouteRoot('layers'), 'layers');
+  assert.equal(panelRouteRoot('place'), 'more');
+  assert.notEqual(panelRouteRoot('layers'), 'more');
+  assert.notEqual(panelRouteRoot('place'), 'quick');
+
+  // The visible panel decides the Dock owner; the navigation stack can still
+  // point at the entry that opened a cross-domain subpage.
+  assert.match(page, /if \(this\.activePanel\.length > 0\) return panelRouteRoot\(this\.activePanel\)/);
+  assert.match(page, /stackRoot\.length === 0 \|\| stackRoot === owner/);
+  assert.match(page, /panelRouteRoot\(saved\.activePanel\) === item\.panel/);
+  assert.match(page, /if \(saved !== undefined\) this\.dockPanelMemory\.delete\(item\.panel\)/);
+});
+
 test('every shell draws the Dock at the same supplied hit-test baseline', () => {
   for (const name of ['ExpandedShell', 'CompactShell', 'HoverObservatoryShell']) {
     const source = read(`../harmonyos/ets-source/panels/shell/${name}.ets`);
