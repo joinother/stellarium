@@ -8,7 +8,7 @@
 //   node deploy/calendar-feed/build-calendar-feed.mjs --validate-only --input deploy/calendar-feed/curated-events.json
 
 import { createHash } from 'node:crypto';
-import { mkdir, readFile, rename, writeFile } from 'node:fs/promises';
+import { mkdir, readdir, readFile, rename, unlink, writeFile } from 'node:fs/promises';
 import { dirname, resolve } from 'node:path';
 
 const NOAA_KP_FORECAST_URL = 'https://services.swpc.noaa.gov/products/noaa-planetary-k-index-forecast.json';
@@ -313,9 +313,36 @@ async function main() {
   }
 
   await mkdir(opts.out, { recursive: true });
+  // Idempotent no-churn guard: if existing feed.json already holds identical entries and manifest.json
+  // is valid, keep existing generation untouched so timers never trigger unnecessary client downloads
+  // or accumulate redundant feed-<gen>.json files.
+  try {
+    const prevFeed = JSON.parse(await readFile(resolve(opts.out, 'feed.json'), 'utf8'));
+    const prevManifest = JSON.parse(await readFile(resolve(opts.out, 'manifest.json'), 'utf8'));
+    if (prevManifest && Number.isSafeInteger(prevManifest.generation) &&
+        JSON.stringify(prevFeed?.entries ?? null) === JSON.stringify(artifacts.feedDoc.entries)) {
+      console.log(`Calendar feed unchanged gen=${prevManifest.generation} entries=${artifacts.feedDoc.entries.length}`);
+      return;
+    }
+  } catch {
+    // First publish or corrupt previous files -> write fresh artifacts.
+  }
+
   await atomicWrite(resolve(opts.out, artifacts.feedFileName), artifacts.feedJson);
   await atomicWrite(resolve(opts.out, 'feed.json'), artifacts.feedJson);
   await atomicWrite(resolve(opts.out, 'manifest.json'), artifacts.manifestJson);
+
+  // Retain only the latest 3 immutable feed-<generation>.json generations.
+  try {
+    const names = (await readdir(opts.out))
+      .filter(n => /^feed-\d+\.json$/.test(n))
+      .sort();
+    for (const stale of names.slice(0, Math.max(0, names.length - 3))) {
+      await unlink(resolve(opts.out, stale));
+    }
+  } catch {
+    // Non-fatal cleanup
+  }
   console.log(`Published calendar feed gen=${artifacts.manifestDoc.generation} entries=${artifacts.feedDoc.entries.length} sha256=${artifacts.manifestDoc.sha256}`);
 }
 
