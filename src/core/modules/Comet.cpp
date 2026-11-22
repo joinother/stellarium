@@ -942,49 +942,40 @@ void main(void)
 	highp float oneMinusV2 = max(0.0, 1.0 - v * v);
 	highp float oneMinusU = max(0.0, 1.0 - u);
 
-	// C1-smooth curved parabolic head onset scaled to physical coma radius (no gap on long tails, no flat edge on short tails)
-	highp float headSpan = clamp(u_headU * 2.2, 0.006, 0.14);
-	highp float uCurved = u - headSpan * 0.45 * v * v;
-	highp float headRamp = smoothstep(0.0, headSpan, uCurved);
-	highp float headEnvelope = headRamp * headRamp;
+	// Seamless parabolic head onset starting slightly sunward of the nucleus (-0.38 R_coma),
+	// so the tail is already glowing right inside the core with zero dark gap and zero flat edge.
+	highp float headSpan = clamp(u_headU * 0.90, 0.0025, 0.06);
+	highp float uCurved = u - headSpan * 0.52 * v * v;
+	highp float headEnvelope = smoothstep(0.0, headSpan, uCurved);
 
 	mediump float density = 0.0;
 	mediump vec3 tint = vec3(1.0);
 
 	if (u_isGas > 0.5)
 	{
-		// Soft, translucent sapphire-cobalt ion fan (airbrushed mist, never a sharp white laser beam)
-		highp float edgeMask = pow(oneMinusV2, 2.1);
-		highp float across = 0.58 * exp(-v * v * 2.8) + 0.42 * exp(-v * v * 1.15);
-		// Natural inverse-power longitudinal fade from head to tip (never a uniform lightsaber)
+		// Pure silky translucent sapphire-cobalt ion fan (single ultra-soft mist octave, zero zebra stripes)
+		highp float edgeMask = pow(oneMinusV2, 2.2);
+		highp float across = 0.56 * exp(-v * v * 2.6) + 0.44 * exp(-v * v * 1.10);
 		highp float along  = pow(oneMinusU, 1.45) / pow(1.0 + 3.0 * u, 1.35);
 
-		// Ultra-soft painterly longitudinal plasma mist (low contrast, zero harsh bars/stripes)
-		highp float rayOnset = smoothstep(0.08, 0.38, u);
-		highp float mist1 = fbm3(vec2(u * 0.95 - u_phase * 0.20 + u_seed * 3.1, v * 2.6 + u_seed * 9.7));
-		highp float mist2 = fbm3(vec2(u * 1.80 - u_phase * 0.32 + u_seed * 6.7, v * 5.2 + u_seed * 17.3));
-		highp float softWisps = mix(0.76, 1.24, clamp(0.65 * mist1 + 0.35 * mist2, 0.0, 1.0));
-		highp float gasMod = mix(1.0, softWisps, rayOnset * 0.78);
+		highp float rayOnset = smoothstep(0.08, 0.40, u);
+		highp float softRay = vnoise(vec2(u * 0.75 + u_seed * 3.1, v * 2.1 + u_seed * 9.7));
+		highp float gasMod = mix(1.0, mix(0.86, 1.14, softRay), rayOnset);
 
 		density = float(headEnvelope * along * edgeMask * across * gasMod);
 		tint = mix(vec3(0.24, 0.54, 1.00), vec3(0.11, 0.34, 0.96), float(smoothstep(0.02, 0.35, u)));
 	}
 	else
 	{
-		// Lush, velvety Finson-Probstein creamy-ivory dust fan (zero periodic stripes!)
-		highp float edgeMask = pow(oneMinusV2, 2.2);
+		// Pure velvety Finson-Probstein creamy-ivory dust fan (analytical Gaussian + ultra-subtle mist, zero zebra stripes)
+		highp float edgeMask = pow(oneMinusV2, 2.3);
 		highp float vAsym = (v < 0.0) ? (v * 1.42) : (v * 0.72);
-		highp float across = 0.74 * exp(-vAsym * vAsym * 2.75) + 0.32 * exp(-vAsym * vAsym * 1.05);
-		// Smooth photographic inverse-power falloff: luminous parabolic inner cone fading seamlessly into space
-		highp float along  = pow(oneMinusU, 1.50) / pow(1.0 + 3.6 * u, 1.45);
+		highp float across = 0.74 * exp(-vAsym * vAsym * 2.65) + 0.32 * exp(-vAsym * vAsym * 1.02);
+		highp float along  = pow(oneMinusU, 1.50) / pow(1.0 + 3.5 * u, 1.42);
 
-		// Soft organic cloudiness & delicate feathery veil ONLY in outer trailing fan (no sine waves, no stripes)
-		highp float plumeOnset = smoothstep(0.18, 0.62, u);
-		highp float trailingMask = smoothstep(-0.30, 0.45, v);
-		highp float cloud1 = fbm3(vec2(u * 1.15 - vAsym * 0.32 + u_seed * 2.1, vAsym * 1.7 + u_seed * 5.7));
-		highp float cloud2 = fbm3(vec2(u * 2.10 - vAsym * 0.48 + u_seed * 7.3, vAsym * 3.1 + u_seed * 11.3));
-		highp float softVeil = mix(0.82, 1.18, clamp(0.68 * cloud1 + 0.32 * cloud2, 0.0, 1.0));
-		highp float dustMod = mix(1.0, softVeil, plumeOnset * float(u_striaeStrength) * mix(0.25, 1.0, trailingMask));
+		highp float mistOnset = smoothstep(0.20, 0.65, u);
+		highp float softMist = vnoise(vec2(u * 0.85 + u_seed * 2.1, vAsym * 1.15 + u_seed * 5.7));
+		highp float dustMod = mix(1.0, mix(0.94, 1.06, softMist), mistOnset * float(u_striaeStrength));
 
 		density = float(headEnvelope * along * edgeMask * across * dustMod);
 		mediump vec3 innerTint = mix(vec3(1.00, 0.98, 0.91), vec3(1.00, 0.94, 0.80), u_warmth);
@@ -994,7 +985,11 @@ void main(void)
 		tint = mix(tint, outerTint, float(smoothstep(0.45, 0.92, u)));
 	}
 
-	FRAG_COLOR = vec4(v_color * tint * density, 0.0);
+	mediump vec3 outRgb = v_color * tint * density;
+	// 1-LSB screen-space dithering eliminates 8-bit framebuffer contour banding on long faint tails
+	highp float dither = (hash12(gl_FragCoord.xy) - 0.5) / 255.0;
+	outRgb = max(vec3(0.0), outRgb + vec3(float(dither)) * smoothstep(0.0, 0.015, density));
+	FRAG_COLOR = vec4(outRgb, 0.0);
 }
 )";
 
@@ -1015,18 +1010,18 @@ void main(void)
 		discard;
 
 	// Strictly smooth radial envelope reaching zero well inside the quad (never visible box edges)
-	highp float outerMask = smoothstep(0.96, 0.58, r);
+	highp float outerMask = smoothstep(0.96, 0.55, r);
 
 	// Gentle smooth parabolic bow-shock shift toward the Sun (C-infinity smooth, zero crease)
 	highp vec2 shifted = v_uv + u_sunDir2D * (0.065 * (1.0 - r * r));
 	highp float rs = length(shifted);
 
 	// 1. Crisp warm creamy-white central condensation (pseudo-nucleus)
-	highp float pseudoNucleus = (exp(-r * r * 240.0) * 1.15 + exp(-r * r * 42.0) * 0.42) * float(1.0 - u_nucleusSuppress);
-	// 2. Smooth inner coma (warm ivory-white for dust-rich great comets, emerald-cyan C2 for green comets)
-	highp float innerComa = exp(-rs * rs * 13.5);
+	highp float pseudoNucleus = (exp(-r * r * 190.0) * 1.10 + exp(-r * r * 30.0) * 0.48) * float(1.0 - u_nucleusSuppress);
+	// 2. Broad smooth inner coma overlapping seamlessly into the tail root
+	highp float innerComa = exp(-rs * rs * 7.8);
 	// 3. Soft gossamer outer halo
-	highp float outerHalo = exp(-rs * rs * 4.2) * 0.45;
+	highp float outerHalo = exp(-rs * rs * 3.0) * 0.44;
 
 	mediump vec3 innerColor = mix(vec3(0.98, 0.95, 0.88), vec3(0.32, 0.88, 0.74), u_greenWeight);
 	mediump vec3 outerColor = mix(vec3(0.68, 0.78, 0.92), vec3(0.36, 0.78, 0.82), u_greenWeight);
@@ -1035,7 +1030,10 @@ void main(void)
 	                 + innerColor * float(innerComa) * 0.58
 	                 + outerColor * float(outerHalo) * 0.32;
 
-	FRAG_COLOR = vec4(rgb * v_color * float(outerMask), 0.0);
+	mediump vec3 outRgb = rgb * v_color * float(outerMask);
+	highp float dither = (hash12(gl_FragCoord.xy) - 0.5) / 255.0;
+	outRgb = max(vec3(0.0), outRgb + vec3(float(dither)) * smoothstep(0.0, 0.02, float(innerComa + outerHalo)));
+	FRAG_COLOR = vec4(outRgb, 0.0);
 }
 )";
 
@@ -1127,6 +1125,8 @@ void Comet::drawProceduralTail(StelCore* core, const StelProjectorP& prj, bool g
 
 	const double bend = qBound(0.14, (0.16 + 7.2 * velNorm) * static_cast<double>(curvatureScale), 0.78);
 	const double widthFact = static_cast<double>(qBound(0.55f, dustTailWidthFactor, 2.2f)) * static_cast<double>(qBound(0.35f, fanWidthScale, 1.85f));
+	// Start slightly sunward of the nucleus so the parabolic tail root glows right through the core (zero gap)
+	const double headStartOffset = -0.38 * comaRadAU;
 
 	for (int i = 0; i <= N; ++i)
 	{
@@ -1141,8 +1141,8 @@ void Comet::drawProceduralTail(StelCore* core, const StelProjectorP& prj, bool g
 			const double lag = 0.020 * u;
 			Vec3d dir = antiSun + trailDir * lag;
 			dir.normalize();
-			centers[i] = dir * (tailLenAU * u);
-			halfWidths[i] = comaRadAU * (0.55 + 1.15 * std::sqrt(u))
+			centers[i] = antiSun * (headStartOffset * (1.0 - u)) + dir * (tailLenAU * u);
+			halfWidths[i] = comaRadAU * (0.62 + 1.15 * std::sqrt(u))
 			              + tailLenAU * (0.042 * std::pow(u, 0.82) + 0.032 * u);
 		}
 		else
@@ -1150,9 +1150,9 @@ void Comet::drawProceduralTail(StelCore* core, const StelProjectorP& prj, bool g
 			// Smooth Finson-Probstein parabolic head separating cleanly into a broad sweeping dust fan
 			const double arcX = u - 0.14 * bend * bend * u * u * u;
 			const double arcY = (0.28 * u + 0.72 * u * u) * bend;
-			centers[i] = antiSun * (tailLenAU * arcX)
+			centers[i] = antiSun * (headStartOffset * (1.0 - u) + tailLenAU * arcX)
 			           + trailDir * (tailLenAU * arcY);
-			halfWidths[i] = comaRadAU * (0.68 + 1.85 * std::sqrt(u))
+			halfWidths[i] = comaRadAU * (0.76 + 1.85 * std::sqrt(u))
 			              + tailLenAU * (0.068 * std::pow(u, 0.74) + 0.098 * std::pow(u, 1.35)) * widthFact;
 		}
 	}

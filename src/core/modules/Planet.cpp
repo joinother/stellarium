@@ -6713,8 +6713,9 @@ Vec4d Planet::getClosestRTSTime(const StelCore *core, const double altitude) con
 
 Vec4d Planet::getRTSTime(const StelCore *core, const double altitude) const
 {
-	// During transitions, return invalid results and save lots of time.
-	if (core->getCurrentObserver()->isTraveling())
+	// During transitions or high-speed time warp, skip multi-pass full-core RTS recalculation
+	// (each pass calls core->update(0) across all minor bodies, stalling interactive time scrubbing).
+	if (core->getCurrentObserver()->isTraveling() || std::fabs(core->getTimeRate()) > 100.0 * StelCore::JD_SECOND)
 		return Vec4d(0., 0., 0., -1000.);
 
 	// Keep time in sync (method from line 592) to fix slow down of time when the moon is selected

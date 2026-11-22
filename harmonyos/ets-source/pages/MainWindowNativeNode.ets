@@ -3735,7 +3735,9 @@ export struct WindowNativeNode {
         },
         activePanel: (): string => this.activePanel,
         panelVisible: (): boolean => this.panelVisible,
-        skyDragging: (): boolean => this.skyDragging,
+        skyDragging: (): boolean => this.skyDragging
+          || this.timeWheelStore.timeWheelDragging
+          || (this.timeWheelController !== undefined && this.timeWheelController.isInteracting()),
         skyWidth: (): number => this.skyWidth,
         skyHeight: (): number => this.skyHeight,
         isFoldHoverLayout: (): boolean => this.isFoldHoverLayout,
