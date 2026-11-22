@@ -151,15 +151,14 @@ private:
 	Vec2f getComaDiameterAndTailLengthAU() const;
 	void drawTail(StelCore* core, StelProjector::ModelViewTranformP transfo, bool gas);
 	void drawComa(StelCore* core, StelProjector::ModelViewTranformP transfo);
-	void drawProceduralTail(StelCore* core, const StelProjectorP& prj, bool gas,
-				const Vec3d& cometEcl, const Vec3d& observerEcl,
-				const Vec3d& antiSun, const Vec3d& trailDir, double velNorm,
-				double comaRadAU, double tailLenAU, float baseIntensity, float twilightFade,
-				float fanWidthScale, float curvatureScale, float striaeStrength, float warmth);
-	void drawProceduralComa(StelCore* core, const StelProjectorP& prj,
-				const Vec3d& cometEcl, const Vec3d& observerEcl,
-				const Vec3d& antiSun, double comaRadAU,
-				float vMagnitude, float screenRd, float twilightFade, float greenWeight);
+	void drawAnalyticalComet(StelCore* core, const StelProjectorP& prj,
+				 const Vec3d& cometEcl, const Vec3d& observerEcl,
+				 const Vec3d& antiSun, const Vec3d& trailDir, double velNorm,
+				 double comaRadAU, double gasLenAU, double dustLenAU,
+				 bool showTail, float vMagnitude, float screenRd,
+				 float comaIntensity, float gasIntensity, float dustIntensity,
+				 float twilightFade, float fanWidthScale, float curvatureScale,
+				 float warmth, float greenWeight);
 	static bool ensureShaders();
 
 	//! compute a coma, faked as simple disk to be tilted towards the observer.
@@ -215,9 +214,8 @@ private:
 	static StelTextureSP comaTexture;
 	static StelTextureSP tailTexture;      // it seems not really necessary to have different textures. gas tail is just painted blue.
 
-	float renderSeed; // deterministic per-comet procedural pattern seed
-	static std::unique_ptr<QOpenGLShaderProgram> tailShaderProgram;
-	static std::unique_ptr<QOpenGLShaderProgram> comaShaderProgram;
+	float renderSeed; // deterministic per-comet seed
+	static std::unique_ptr<QOpenGLShaderProgram> cometShaderProgram;
 	static std::unique_ptr<QOpenGLVertexArrayObject> cometVAO;
 	static std::unique_ptr<QOpenGLBuffer> cometVBO;
 	static QOpenGLContext* shaderContext;
