@@ -27,8 +27,10 @@ import {
   formatRegionDateTime
 } from '../../state/ObserverRegionScope'
 import { UI_MOTION_STANDARD_MS, UI_OPTION_ANIMATION_MS, UI_RADIUS_CARD, UI_RADIUS_CONTROL, UI_RADIUS_PILL } from '../../common/ui/UiTokens'
-import { uiFadeUpTransition, uiSlideTransition } from '../../common/ui/UiMotion'
+import { uiFadeUpTransition, uiEnterSlideTransition } from '../../common/ui/UiMotion'
 import { InfoTipButton } from '../../common/ui/InfoTipButton'
+import { getIcon } from '../../common/ui/ShellIcons'
+import { tintMatrixFor } from '../../common/ui/IconTint'
 
 export interface AstronomyCalendarPanelHost {
   previousMonth(): void
@@ -99,6 +101,38 @@ export struct AstronomyCalendarPanel {
   @State private viewMode: 'list' | 'grid' = 'list'
   @State private transitionDir: number = 1
   @State private filterDrawerOpen: boolean = false
+  @State private showPastEvents: boolean = false
+
+  private startOfTodayMs(): number {
+    const now = new Date()
+    return new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime()
+  }
+
+  private isViewingCurrentMonth(): boolean {
+    const now = new Date()
+    return this.calendarStore.year === now.getFullYear() && this.calendarStore.month === (now.getMonth() + 1)
+  }
+
+  private shouldFoldPastEventsInList(): boolean {
+    return this.viewMode === 'list' &&
+      this.calendarStore.selectedDay === 0 &&
+      !this.filterActive() &&
+      this.isViewingCurrentMonth()
+  }
+
+  private pastEventsInList(): AstronomyCalendarEvent[] {
+    if (!this.shouldFoldPastEventsInList()) return []
+    const cutoff = this.startOfTodayMs()
+    return this.calendarStore.visibleEvents().filter((ev: AstronomyCalendarEvent) => ev.at < cutoff)
+  }
+
+  private mainEventsInList(): AstronomyCalendarEvent[] {
+    const all = this.calendarStore.visibleEvents()
+    if (!this.shouldFoldPastEventsInList()) return all
+    const cutoff = this.startOfTodayMs()
+    const upcoming = all.filter((ev: AstronomyCalendarEvent) => ev.at >= cutoff)
+    return upcoming.length > 0 ? upcoming : all
+  }
 
   onWillApplyTheme(theme: Theme): void {
     this.c = slotsFromTheme(theme)
@@ -462,7 +496,71 @@ export struct AstronomyCalendarPanel {
 
   @Builder
   monthGrid() {
-    Column({ space: 6 }) {
+    Column({ space: 8 }) {
+      // 月份切换仅在「月历」视图显示；左右箭头用居中 SVG 图标，彻底消除字符基线偏移。
+      Row({ space: 8 }) {
+        Row() {
+          Image(getIcon('chevron_right', false))
+            .width(16)
+            .height(16)
+            .rotate({ angle: 180 })
+            .supportSvg2(true)
+            .colorFilter(tintMatrixFor(this.c.text))
+        }
+          .width(34)
+          .height(34)
+          .justifyContent(FlexAlign.Center)
+          .alignItems(VerticalAlign.Center)
+          .backgroundColor(this.c.softStrong)
+          .borderRadius(UI_RADIUS_PILL)
+          .opacity((this.calendarStore.year === 1 && this.calendarStore.month === 1) ? 0.35 : 1)
+          .clickEffect({ level: ClickEffectLevel.LIGHT })
+          .accessibilityText(this.t('上个月', 'Previous month'))
+          .enabled(!(this.calendarStore.year === 1 && this.calendarStore.month === 1))
+          .onClick(() => { this.animateAction(-1, () => { this.host.previousMonth() }) })
+
+        Row({ space: 6 }) {
+          Text(calendarMonthTitle(this.language, this.calendarStore.year, this.calendarStore.month))
+            .fontSize(this.panelFontSize + 1)
+            .fontWeight(FontWeight.Medium)
+            .fontColor(this.c.text)
+            .maxLines(1)
+          if (!this.isViewingCurrentMonth()) {
+            Text(this.t('本月', 'Today'))
+              .fontSize(this.panelFontSize - 4)
+              .fontWeight(FontWeight.Medium)
+              .fontColor(this.c.accent)
+              .padding({ left: 7, right: 7, top: 2, bottom: 2 })
+              .backgroundColor(this.c.softStrong)
+              .borderRadius(UI_RADIUS_PILL)
+              .clickEffect({ level: ClickEffectLevel.LIGHT })
+              .onClick(() => { this.animateAction(0, () => { this.host.goToCurrentMonth?.() }) })
+          }
+        }
+          .layoutWeight(1)
+          .justifyContent(FlexAlign.Center)
+          .alignItems(VerticalAlign.Center)
+
+        Row() {
+          Image(getIcon('chevron_right', false))
+            .width(16)
+            .height(16)
+            .supportSvg2(true)
+            .colorFilter(tintMatrixFor(this.c.text))
+        }
+          .width(34)
+          .height(34)
+          .justifyContent(FlexAlign.Center)
+          .alignItems(VerticalAlign.Center)
+          .backgroundColor(this.c.softStrong)
+          .borderRadius(UI_RADIUS_PILL)
+          .opacity((this.calendarStore.year === 3000 && this.calendarStore.month === 12) ? 0.35 : 1)
+          .clickEffect({ level: ClickEffectLevel.LIGHT })
+          .accessibilityText(this.t('下个月', 'Next month'))
+          .enabled(!(this.calendarStore.year === 3000 && this.calendarStore.month === 12))
+          .onClick(() => { this.animateAction(1, () => { this.host.nextMonth() }) })
+      }.width('100%').alignItems(VerticalAlign.Center)
+
       Row() {
         ForEach(this.weekdayLabels(), (label: string) => {
           Text(label).fontSize(this.panelFontSize - 3).fontColor(this.c.sub)
@@ -750,22 +848,6 @@ export struct AstronomyCalendarPanel {
     Column({ space: 14 }) {
       if (this.calendarStore.selectedEventId === '') {
         Column({ space: 12 }) {
-          Row({ space: 10 }) {
-            Button('‹', { type: ButtonType.Circle }).width(40).height(40).fontSize(25)
-              .backgroundColor(this.c.softStrong).fontColor(this.c.text)
-              .clickEffect({ level: ClickEffectLevel.LIGHT })
-              .accessibilityText(this.t('上个月', 'Previous month'))
-              .enabled(!(this.calendarStore.year === 1 && this.calendarStore.month === 1))
-              .onClick(() => { this.animateAction(-1, () => { this.host.previousMonth() }) })
-            Text(calendarMonthTitle(this.language, this.calendarStore.year, this.calendarStore.month))
-              .layoutWeight(1).fontSize(this.panelFontSize + 2).fontColor(this.c.text).textAlign(TextAlign.Center)
-            Button('›', { type: ButtonType.Circle }).width(40).height(40).fontSize(25)
-              .backgroundColor(this.c.softStrong).fontColor(this.c.text)
-              .clickEffect({ level: ClickEffectLevel.LIGHT })
-              .accessibilityText(this.t('下个月', 'Next month'))
-              .enabled(!(this.calendarStore.year === 3000 && this.calendarStore.month === 12))
-              .onClick(() => { this.animateAction(1, () => { this.host.nextMonth() }) })
-          }.width('100%')
           Row({ space: 6 }) {
             Button(this.t('列表', 'List'), { type: ButtonType.Normal })
               .height(34).layoutWeight(1).fontSize(this.panelFontSize - 2).borderRadius(UI_RADIUS_CONTROL)
@@ -834,13 +916,50 @@ export struct AstronomyCalendarPanel {
           if (this.viewMode === 'grid') {
             this.monthGrid()
           }
-          ForEach(this.calendarStore.visibleEvents(), (event: AstronomyCalendarEvent) => {
+          // 列表默认与搜索「近期天象」保持一致，直接展示今天及之后的近期天象；
+          // 本月已过天象折叠收纳在顶部一行，需要回看时点开即可，避免一进列表先看到十几天前的旧事件。
+          if (this.pastEventsInList().length > 0) {
+            Column({ space: 8 }) {
+              Row({ space: 6 }) {
+                Text(this.t(`本月已过天象（${this.pastEventsInList().length}）`,
+                  `Earlier this month (${this.pastEventsInList().length})`))
+                  .fontSize(this.panelFontSize - 3)
+                  .fontColor(this.c.sub)
+                  .layoutWeight(1)
+                Text(this.showPastEvents ? this.t('收起', 'Hide') : this.t('展开', 'Show'))
+                  .fontSize(this.panelFontSize - 3)
+                  .fontColor(this.c.accent)
+              }
+                .width('100%')
+                .padding({ left: 12, right: 12, top: 8, bottom: 8 })
+                .backgroundColor(this.c.soft)
+                .border({ width: 0.6, color: this.c.border })
+                .borderRadius(UI_RADIUS_CONTROL)
+                .alignItems(VerticalAlign.Center)
+                .clickEffect({ level: ClickEffectLevel.LIGHT })
+                .onClick(() => {
+                  this.animateAction(0, () => { this.showPastEvents = !this.showPastEvents })
+                })
+              if (this.showPastEvents) {
+                ForEach(this.pastEventsInList(), (event: AstronomyCalendarEvent) => {
+                  Button({ type: ButtonType.Normal }) {
+                    this.eventCard(event, false)
+                  }.width('100%').padding(0).borderRadius(UI_RADIUS_CARD).backgroundColor(Color.Transparent)
+                    .opacity(0.76)
+                    .clickEffect({ level: ClickEffectLevel.LIGHT, scale: 0.98 })
+                    .accessibilityText(`${this.date(event)} ${event.title}`)
+                    .onClick(() => { this.host.selectEvent(event.id) })
+                }, (event: AstronomyCalendarEvent) => `past:${event.id}:${event.title}:${this.calendarStore.filterRevision}`)
+              }
+            }.width('100%')
+          }
+          ForEach(this.mainEventsInList(), (event: AstronomyCalendarEvent) => {
             Button({ type: ButtonType.Normal }) {
               this.eventCard(event, false)
             }.width('100%').padding(0).borderRadius(UI_RADIUS_CARD).backgroundColor(Color.Transparent)
               .clickEffect({ level: ClickEffectLevel.LIGHT, scale: 0.98 })
               .accessibilityText(`${this.date(event)} ${event.title}`)
-              .onClick(() => { this.animateAction(1, () => { this.host.selectEvent(event.id) }) })
+              .onClick(() => { this.host.selectEvent(event.id) })
           }, (event: AstronomyCalendarEvent) => `${event.id}:${event.title}:${this.calendarStore.filterRevision}`)
           if (this.calendarStore.loading || this.calendarStore.loadingMore) {
             LoadingProgress().width(28).height(28).color(this.c.sub)
@@ -883,14 +1002,10 @@ export struct AstronomyCalendarPanel {
               }.width('100%').alignItems(VerticalAlign.Center).padding({ top: 4, bottom: 4 })
             }
           }
-        }.width('100%').transition(uiSlideTransition(-1))
+        }.width('100%').transition(uiEnterSlideTransition(-1))
       } else {
         Column({ space: 14 }) {
-          Button(this.t('‹  所有天象', '‹  All events'), { type: ButtonType.Normal })
-            .height(40).fontSize(this.panelFontSize).fontColor(this.c.text).backgroundColor(this.c.softStrong)
-            .borderRadius(UI_RADIUS_PILL).padding({ left: 14, right: 16 }).alignSelf(ItemAlign.Start)
-            .clickEffect({ level: ClickEffectLevel.LIGHT })
-            .onClick(() => { this.animateAction(-1, () => { this.host.showMonthEvents() }) })
+          // 统一使用顶栏唯一的「< 天象详情」返回键退回列表，不再在内容区堆叠第二个返回按钮。
           ForEach(this.calendarStore.selectedEvents(), (event: AstronomyCalendarEvent) => {
             this.eventCard(event, true)
             Row({ space: 8 }) {
@@ -1028,7 +1143,7 @@ export struct AstronomyCalendarPanel {
               })
             }
           }, (event: AstronomyCalendarEvent) => `${event.id}:${event.title}:${this.isEventReminded(event.id) ? 1 : 0}:${this.calendarStore.regionId}`)
-        }.width('100%').alignItems(HorizontalAlign.Start).transition(uiSlideTransition(1))
+        }.width('100%').alignItems(HorizontalAlign.Start).transition(uiEnterSlideTransition(1))
       }
       if (this.calendarStore.error !== '') {
         Text(this.calendarStore.error).fontSize(this.panelFontSize).fontColor(this.c.sub)

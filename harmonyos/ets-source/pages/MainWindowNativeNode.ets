@@ -5810,6 +5810,9 @@ export struct WindowNativeNode {
   }
 
   private canGoBackPanel(): boolean {
+    if (this.activePanel === 'calendar' && this.calendarStore.selectedEventId.length > 0) {
+      return true
+    }
     return this.panelNavigationDepth > 0 || panelRouteParent(this.activePanel).length > 0
   }
 
@@ -10688,7 +10691,7 @@ export struct WindowNativeNode {
           // 平板/展开布局也用顶部抓手：快捷面板自下而上展开，上拉显示更多按钮。
           PanelHandle({ onDrag: (offsetY: number) => { this.updateExpandedPanelDrag(offsetY) }, onDragFinish: () => { this.settleExpandedPanelDrag() } })
           PanelHeader({
-            title: panelTitleFor(this.activePanel, this.configTab, this.isExpandedLayout, this.timeStore.timePanelClockText(), this.quickPanelLocationLabel()), subtitle: this.timeStore.panelSubtitle(this.activePanel), canGoBack: this.canGoBackPanel(),
+            title: panelTitleFor(this.activePanel, this.configTab, this.isExpandedLayout, this.timeStore.timePanelClockText(), this.quickPanelLocationLabel(), this.calendarStore.selectedEventId.length > 0), subtitle: this.timeStore.panelSubtitle(this.activePanel), canGoBack: this.canGoBackPanel(),
             routeOpacity: this.panelRouteOpacity, routeOffsetX: this.panelRouteOffsetX,
             headerActionLabel: this.panelHeaderActionLabel(),
             headerActionIcon: this.panelHeaderActionIcon(),
@@ -10803,7 +10806,7 @@ export struct WindowNativeNode {
         Column() {
           PanelHandle({ onDrag: (offsetY: number) => { this.updateCompactPanelDrag(offsetY) }, onDragFinish: () => { this.settleCompactPanelDrag() } })
           PanelHeader({
-            title: panelTitleFor(this.activePanel, this.configTab, this.isExpandedLayout, this.timeStore.timePanelClockText(), this.quickPanelLocationLabel()), subtitle: this.timeStore.panelSubtitle(this.activePanel), canGoBack: this.canGoBackPanel(),
+            title: panelTitleFor(this.activePanel, this.configTab, this.isExpandedLayout, this.timeStore.timePanelClockText(), this.quickPanelLocationLabel(), this.calendarStore.selectedEventId.length > 0), subtitle: this.timeStore.panelSubtitle(this.activePanel), canGoBack: this.canGoBackPanel(),
             routeOpacity: this.panelRouteOpacity, routeOffsetX: this.panelRouteOffsetX,
             headerActionLabel: this.panelHeaderActionLabel(),
             headerActionIcon: this.panelHeaderActionIcon(),
@@ -11394,7 +11397,7 @@ export struct WindowNativeNode {
           selectEvent: (id: string) => {
             this.captureCurrentPanelScroll()
             this.calendarCtl().selectEvent(id)
-            this.restoreScrollKeyAsync('calendar:detail:' + id, 28)
+            this.restoreScrollKeyAsync('calendar:detail:' + id, 0)
           },
           showMonthEvents: () => {
             this.captureCurrentPanelScroll()

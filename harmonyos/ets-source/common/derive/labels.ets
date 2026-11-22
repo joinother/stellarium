@@ -499,8 +499,13 @@ export function quickLocationLabel(source: string, displayName: string,
 // 面板标题文本（计划 §14.3 A2-5；原宿主 private panelTitle 逐字迁出）。
 // 读宿主控制器状态（activePanel / configTab / isExpandedLayout）与时间面板实时钟文本，
 // 按 §14.8 规则 6 改为显式入参，其余逐字不变。
-export function panelTitleFor(activePanel: string, configTab: number, isExpandedLayout: boolean, timeText: string, locationLabel: string = ''): ResourceStr {
-  if (activePanel === 'calendar') return I18n.getLanguage().startsWith('zh') ? '天象日历' : 'Astronomy calendar'
+export function panelTitleFor(activePanel: string, configTab: number, isExpandedLayout: boolean, timeText: string, locationLabel: string = '', calendarDetailOpen: boolean = false): ResourceStr {
+  if (activePanel === 'calendar') {
+    if (calendarDetailOpen) {
+      return I18n.getLanguage().startsWith('zh') ? '天象详情' : 'Event details'
+    }
+    return I18n.getLanguage().startsWith('zh') ? '天象日历' : 'Astronomy calendar'
+  }
   if (activePanel === 'more') {
     return I18n.t('c_more_functions')
   }

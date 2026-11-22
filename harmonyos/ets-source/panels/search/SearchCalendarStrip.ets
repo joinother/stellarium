@@ -197,7 +197,7 @@ export struct SearchCalendarStrip {
   build() {
     Column({ space: 8 }) {
       Row({ space: 4 }) {
-        Text(this.isZh() ? '日历' : 'Calendar')
+        Text(this.isZh() ? '近期天象' : 'Upcoming')
           .fontSize(15)
           .fontWeight(FontWeight.Bold)
           .fontColor(this.c.text)
@@ -207,7 +207,7 @@ export struct SearchCalendarStrip {
           .supportSvg2(true)
           .colorFilter(tintMatrixFor(this.c.sub))
         Blank()
-        Text(this.isZh() ? '全部' : 'All')
+        Text(this.isZh() ? '全部日历' : 'All')
           .fontSize(11)
           .fontColor(this.c.sub)
       }
