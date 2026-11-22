@@ -37,6 +37,11 @@ CONTROL_FILES = (
     '/etc/systemd/system/skyinstrument-status-page.service',
     '/etc/systemd/system/skyinstrument-status-page.timer',
 )
+# 镜像健康状态页（每 5 分钟刷新 checkedAt 时间戳）与动态状态页同理，不作为高频变更触发器；
+# 其结构校验仍由每日定时 content-audit 覆盖。
+IGNORED_DYNAMIC_FILES = (
+    '/srv/tle-mirror/v1/status.json',
+)
 
 
 def served_dirs():
@@ -65,7 +70,7 @@ def snapshot():
         for dp, _dn, fns in os.walk(root):
             for fn in fns:
                 p = os.path.join(dp, fn)
-                if os.path.islink(p):
+                if os.path.islink(p) or p in IGNORED_DYNAMIC_FILES:
                     continue
                 try:
                     st = os.stat(p)

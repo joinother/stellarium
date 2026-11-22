@@ -5,8 +5,8 @@ Wants=network-online.target
 
 [Service]
 Type=oneshot
-User=tlemirror
-Group=tlemirror
+User=tle-mirror
+Group=tle-mirror
 ExecStart=/usr/bin/node /opt/tle-mirror/calendar-feed/build-calendar-feed.mjs --input /opt/tle-mirror/calendar-feed/curated-events.json --with-noaa --mpc-comets /srv/tle-mirror/v1/catalogs/mpc/comets.txt --out /srv/tle-mirror/v1/calendar
 NoNewPrivileges=true
 PrivateTmp=true

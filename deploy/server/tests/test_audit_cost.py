@@ -132,6 +132,19 @@ class AuditCostTests(unittest.TestCase):
         self.assertFalse(self.audit.should_skip_free_ai_review('skyinstrument/website/current/index.html'))
         self.assertFalse(self.audit.should_skip_free_ai_review('tle-mirror/v1/injected.html'))
 
+    def test_quickcheck_ignores_periodic_mirror_status_json(self):
+        watcher = load_script('skyinstrument-quickcheck')
+        status_file = self.root / 'status.json'
+        status_file.write_text('{"checkedAt":"t1"}')
+        normal_file = self.root / 'page.html'
+        normal_file.write_text('<p>hi</p>')
+        watcher.CONTROL_FILES = ()
+        watcher.IGNORED_DYNAMIC_FILES = (str(status_file),)
+        with patch.object(watcher, 'served_dirs', return_value=[str(self.root)]):
+            snap = watcher.snapshot()
+        self.assertNotIn(str(status_file), snap)
+        self.assertIn(str(normal_file), snap)
+
 
 if __name__ == '__main__':
     unittest.main()

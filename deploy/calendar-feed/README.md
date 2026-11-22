@@ -37,8 +37,8 @@ node deploy/calendar-feed/build-calendar-feed.mjs \
 ## Deploying on `skyinstrument.cn` (Shanghai ECS)
 
 ```bash
-install -d -o tlemirror -g tlemirror /opt/tle-mirror/calendar-feed /srv/tle-mirror/v1/calendar
-install -m 644 -o tlemirror -g tlemirror deploy/calendar-feed/build-calendar-feed.mjs deploy/calendar-feed/curated-events.json /opt/tle-mirror/calendar-feed/
+install -d -o tle-mirror -g tle-mirror /opt/tle-mirror/calendar-feed /srv/tle-mirror/v1/calendar
+install -m 644 -o tle-mirror -g tle-mirror deploy/calendar-feed/build-calendar-feed.mjs deploy/calendar-feed/curated-events.json /opt/tle-mirror/calendar-feed/
 install -m 644 deploy/calendar-feed/skyinstrument-calendar-feed.service deploy/calendar-feed/skyinstrument-calendar-feed.timer /etc/systemd/system/
 systemctl daemon-reload
 systemctl enable --now skyinstrument-calendar-feed.timer
