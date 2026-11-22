@@ -1,0 +1,16 @@
+[Unit]
+Description=Build Skyinstrument Chinese-localized onboard space station crew feed
+After=network-online.target tle-mirror.service
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+ExecStart=/usr/bin/node /opt/tle-mirror/crew-feed/build-crew-feed.mjs --input /srv/tle-mirror/v1/catalogs/spaceflight/people-in-space.json --out /srv/tle-mirror/v1/spaceflight --cache /var/lib/skyinstrument/crew-zh-cache.json --audit-conf /etc/skyinstrument/audit.conf
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadOnlyPaths=/etc/skyinstrument/audit.conf /srv/tle-mirror/v1/catalogs/spaceflight
+ReadWritePaths=/srv/tle-mirror/v1/spaceflight /var/lib/skyinstrument
+MemoryMax=128M
+TimeoutStartSec=45

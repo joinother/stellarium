@@ -9,6 +9,7 @@ import {
   StationCrewService,
   StationCrewSnapshot,
   flagEmojiForCountryCode,
+  localizeAgencyName,
   localizeAstronautName,
   localizeCountryName,
   localizeCrewPosition,
@@ -300,7 +301,7 @@ export struct StationCrewSection {
     for (let i = 0; i < countries.length; i++) {
       const item = countries[i]
       const flag = flagEmojiForCountryCode(item.flagCode, item.country)
-      const label = localizeCountryName(item.country, item.flagCode, isZh)
+      const label = localizeCountryName(item.country, item.flagCode, isZh, item.countryZh)
       parts.push(flag + ' ' + label + ' ' + item.count.toString())
     }
     return parts.join(' · ')
@@ -382,7 +383,7 @@ export struct StationCrewSection {
                 .textAlign(TextAlign.Center)
               Column({ space: 2 }) {
                 Row({ space: 6 }) {
-                  Text(localizeAstronautName(member.name, member.flagCode, this.isZh()))
+                  Text(localizeAstronautName(member, this.isZh()))
                     .fontSize(this.tablet ? 12 : 11.5)
                     .fontWeight(FontWeight.Medium)
                     .fontColor(this.c.fourth)
@@ -390,7 +391,7 @@ export struct StationCrewSection {
                     .textOverflow({ overflow: TextOverflow.Ellipsis })
                     .layoutWeight(1)
                   if (member.position.length > 0) {
-                    Text(localizeCrewPosition(member.position, this.isZh()))
+                    Text(localizeCrewPosition(member.position, this.isZh(), member.positionZh))
                       .fontSize(9.5)
                       .fontColor(member.position.toLowerCase() === 'commander' ? this.c.accent : this.c.sub)
                       .padding({ left: 6, right: 6, top: 1.5, bottom: 1.5 })
@@ -399,9 +400,9 @@ export struct StationCrewSection {
                   }
                 }.width('100%').alignItems(VerticalAlign.Center)
                 Text(
-                  localizeCountryName(member.country, member.flagCode, this.isZh())
-                  + (member.agency.length > 0 ? (' · ' + member.agency) : '')
-                  + (member.spacecraft.length > 0 ? (' · ' + localizeSpacecraftName(member.spacecraft, this.isZh())) : '')
+                  localizeCountryName(member.country, member.flagCode, this.isZh(), member.countryZh)
+                  + (member.agency.length > 0 ? (' · ' + localizeAgencyName(member.agency, this.isZh(), member.agencyZh)) : '')
+                  + (member.spacecraft.length > 0 ? (' · ' + localizeSpacecraftName(member.spacecraft, this.isZh(), member.spacecraftZh)) : '')
                 )
                   .fontSize(10)
                   .fontColor(this.c.tertiary)

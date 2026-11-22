@@ -1,0 +1,11 @@
+[Unit]
+Description=Refresh Skyinstrument localized onboard astronaut feed every 3 hours
+
+[Timer]
+OnBootSec=6min
+OnUnitActiveSec=3h
+AccuracySec=2min
+Persistent=true
+
+[Install]
+WantedBy=timers.target

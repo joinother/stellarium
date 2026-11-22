@@ -4641,19 +4641,20 @@ void Satellites::update(double deltaTime)
 		? 3000000LL   // 3.0 ms hard cap while actively scrubbing / fast-forwarding time
 		: 5000000LL;  // 5.0 ms cap during normal 1x viewing
 
-	// Pass 1: Always update the selected satellite, ISS, and active previewed orbits first (<0.3ms).
+	// Pass 1: Always update the selected satellite, ISS, previewed orbits, and orbit-displayed satellites (<0.3ms).
 	for (int i = 0; i < satellites.size(); ++i)
 	{
 		Satellite* sat = satellites.at(i).data();
 		if (!sat || !sat->initialized || !sat->displayed)
 			continue;
-		if (sat == selectedSat || sat->isISS || sat->orbitPreview)
+		if (sat == selectedSat || sat->isISS || sat->orbitPreview || sat->orbitDisplayed)
 		{
 			sat->update(core, JD, false);
 		}
 	}
 
-	// Pass 2: Update currently visible on-screen satellites (within strict budget) so moving satellites stay smooth.
+	// Pass 2: Update on-screen and near-horizon rising satellites (within strict budget) so moving satellites
+	// and fast-time streaks glide smoothly across the sky during Minute/Hour time-travel scrubbing.
 	static int s_ohosScreenCursor = 0;
 	const int totalSats = satellites.size();
 	if (totalSats > 0 && !calendarScrub && satBudgetTimer.nsecsElapsed() < budgetNs)
@@ -4665,9 +4666,11 @@ void Satellites::update(double deltaTime)
 		{
 			const int idx = (startIdx + checked) % totalSats;
 			Satellite* sat = satellites.at(idx).data();
-			if (!sat || !sat->initialized || !sat->displayed || !sat->lastFrameOnScreen)
+			if (!sat || !sat->initialized || !sat->displayed)
 				continue;
-			if (sat == selectedSat || sat->isISS || sat->orbitPreview)
+			if (!sat->lastFrameOnScreen && sat->elAzPosition[2] < -0.25)
+				continue;
+			if (sat == selectedSat || sat->isISS || sat->orbitPreview || sat->orbitDisplayed)
 				continue;
 			sat->update(core, JD, false);
 			if ((++updated & 3) == 0 && satBudgetTimer.nsecsElapsed() >= budgetNs)
@@ -4689,9 +4692,9 @@ void Satellites::update(double deltaTime)
 			Satellite* sat = satellites.at(idx).data();
 			if (!sat || !sat->initialized || !sat->displayed)
 				continue;
-			if (sat == selectedSat || sat->isISS || sat->orbitPreview)
+			if (sat == selectedSat || sat->isISS || sat->orbitPreview || sat->orbitDisplayed)
 				continue;
-			if (!calendarScrub && sat->lastFrameOnScreen)
+			if (!calendarScrub && (sat->lastFrameOnScreen || sat->elAzPosition[2] >= -0.25))
 				continue;
 			sat->update(core, JD, false);
 			if ((++updated & 3) == 0 && satBudgetTimer.nsecsElapsed() >= budgetNs)
@@ -4703,15 +4706,17 @@ void Satellites::update(double deltaTime)
 	Satellite::frameSunUnitValid = false;
 	if (getFlagOrbitLines() && totalSats > 0)
 	{
-		// Always refresh selected satellite's orbit immediately; amortize other orbit-displayed satellites
-		// to at most 1 per frame and skip them while scrubbing so orbit rebuilds never spike frame time.
+		// Always refresh selected satellite's orbit immediately, and keep orbit-displayed satellites
+		// (ISS, HST, NOAA, etc.) continuously synced during time travel within the frame budget.
 		if (selectedSat && selectedSat->shouldDisplayOrbit() && selectedSat->isAfterLaunch(JD))
 			const_cast<Satellite*>(selectedSat)->updateOrbitLines();
-		if (!calendarScrub && !timeScrubJump && satBudgetTimer.nsecsElapsed() < budgetNs)
+		if (satBudgetTimer.nsecsElapsed() < budgetNs + 1000000LL)
 		{
 			static int s_ohosOrbitCursor = 0;
 			int startIdx = s_ohosOrbitCursor % totalSats;
 			int checked = 0;
+			int rebuilt = 0;
+			const int maxRebuilds = calendarScrub ? 1 : 2;
 			for (; checked < totalSats; ++checked)
 			{
 				const int idx = (startIdx + checked) % totalSats;
@@ -4719,7 +4724,8 @@ void Satellites::update(double deltaTime)
 				if (!sat || sat == selectedSat || !sat->shouldDisplayOrbit() || !sat->isAfterLaunch(JD))
 					continue;
 				sat->updateOrbitLines();
-				break; // at most 1 background orbit rebuild per frame
+				if (++rebuilt >= maxRebuilds || satBudgetTimer.nsecsElapsed() >= budgetNs + 1000000LL)
+					break;
 			}
 			s_ohosOrbitCursor = (startIdx + checked + 1) % totalSats;
 		}
