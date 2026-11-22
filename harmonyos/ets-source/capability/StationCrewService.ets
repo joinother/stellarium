@@ -94,7 +94,7 @@ interface PersistedStationCrewCache {
 const CREW_MANIFEST_URL: string = MIRROR_ORIGIN + '/v1/spaceflight/manifest.json'
 const ROOT_MANIFEST_SOURCE_ID: string = 'catalog.spaceflight.crew'
 const CACHE_FILE_NAME: string = 'station_crew_cache_v2.json'
-const AUTO_SYNC_INTERVAL_MS: number = 3 * 60 * 60 * 1000
+const AUTO_SYNC_INTERVAL_MS: number = 2 * 60 * 60 * 1000
 const MAX_CREW_BYTES: number = 512 * 1024
 
 // 离线中文兜底快照（与阿里云镜像 /v1/spaceflight/crew.json 保持一致）：

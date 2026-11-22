@@ -695,6 +695,7 @@ export interface SatelliteUpdateSettings {
 	lastCheckResult?: number
   mirrorStatus?: string
   mirrorCheckedAt?: string
+  mirrorAccelerationEnabled?: boolean
   mirrorStaleSources?: string[]
   mirrorUnavailableSources?: string[]
   updatesEnabled: boolean

@@ -225,6 +225,29 @@ static bool isSatelliteMirror(const QUrl& url)
 			|| url.path().startsWith(QStringLiteral("/v1/catalogs/satellites/")));
 }
 
+static bool isSatelliteMirrorAccelerationEnabled()
+{
+#if defined(Q_OS_OHOS) || defined(__OHOS__)
+	return StelApp::getInstance().getSettings()->value("Satellites/mirror_acceleration_enabled", true).toBool();
+#else
+	return StelApp::getInstance().getSettings()->value("Satellites/mirror_acceleration_enabled", false).toBool();
+#endif
+}
+
+// Transparent transport-layer mirror accelerator for known CelesTrak GP CSV group feeds.
+// Never mutates saved user configuration; non-CelesTrak custom URLs always pass through untouched.
+static QUrl resolveSatelliteMirrorUrl(const QUrl& url)
+{
+	if (!url.host().endsWith(QStringLiteral("celestrak.org"), Qt::CaseInsensitive))
+		return url;
+	static const QRegularExpression groupRE(QStringLiteral("GROUP=([A-Za-z0-9\\-]+)"),
+		QRegularExpression::CaseInsensitiveOption);
+	const QRegularExpressionMatch match = groupRE.match(url.toString(QUrl::None));
+	if (!match.hasMatch())
+		return url;
+	return QUrl(QStringLiteral("https://skyinstrument.cn/v1/catalogs/satellites/%1.csv").arg(match.captured(1)));
+}
+
 static QDateTime satelliteManifestDate(const QJsonValue& value)
 {
 	const QString text = value.toString();
@@ -1406,21 +1429,18 @@ void Satellites::restoreDefaults(void)
 	loadSettings();
 }
 
-#if defined(__OHOS__)
-// HarmonyOS：CelesTrak 在国内直连经常超时或 403，把它的分组源改走自建镜像
-// （https://skyinstrument.cn/v1/catalogs/satellites/<group>.csv）。非 CelesTrak 的源原样保留。
-static QString ohosMirrorTleUrl(const QString& url)
+#if defined(Q_OS_OHOS) || defined(__OHOS__)
+// Restore previously auto-rewritten skyinstrument.cn CSV mirror URLs back to canonical
+// upstream CelesTrak URLs (one-time migration) so user-visible source lists stay truthful.
+static QString canonicalizeLegacyMirrorSourceUrl(const QString& url)
 {
-	static const QString mirrorBase = QStringLiteral("https://skyinstrument.cn/v1/catalogs/satellites/");
-	static const QRegularExpression groupRE(QStringLiteral("GROUP=([A-Za-z0-9\\-]+)"),
+	static const QRegularExpression mirrorRE(
+		QStringLiteral("^https://skyinstrument\\.cn/v1/catalogs/satellites/([A-Za-z0-9\\-]+)\\.csv$"),
 		QRegularExpression::CaseInsensitiveOption);
-	if (!url.contains(QStringLiteral("celestrak.org"), Qt::CaseInsensitive))
-		return url;
-	const QRegularExpressionMatch match = groupRE.match(url);
+	const QRegularExpressionMatch match = mirrorRE.match(url.trimmed());
 	if (!match.hasMatch())
 		return url;
-	QString group = match.captured(1);
-	return mirrorBase + group + QStringLiteral(".csv");
+	return QStringLiteral("https://celestrak.org/NORAD/elements/gp.php?GROUP=%1&FORMAT=CSV").arg(match.captured(1));
 }
 #endif
 
@@ -1448,12 +1468,12 @@ void Satellites::restoreDefaultTleSources()
 	// Details: https://celestrak.org/NORAD/documentation/gp-data-formats.php
 	QString celestrackBaseURL = "https://celestrak.org/NORAD/elements/gp.php?GROUP=%1&FORMAT=CSV";
 	QStringList urls;
-	// TLE sources from Celestrak
+	// Keep official upstream CelesTrak URLs in saved configuration; when domestic mirror acceleration
+	// is enabled, updateFromOnlineSources() transparently routes them via skyinstrument.cn at request time.
 	for (auto group = celestrak.begin(); group != celestrak.end(); ++group)
 	{
 		QString url = celestrackBaseURL.arg(group.key());
-#if defined(__OHOS__)
-		url = ohosMirrorTleUrl(url);
+#if defined(Q_OS_OHOS) || defined(__OHOS__)
 		// 随包目录就是这四组合并出来的，默认勾选它们，其余分组留给用户按需开启。
 		const bool ohosDefaultOn = group.key() == QStringLiteral("stations") ||
 			group.key() == QStringLiteral("visual") ||
@@ -1501,7 +1521,8 @@ void Satellites::restoreDefaultSettings()
 	conf->setValue("invisible_satellite_color", "0.2,0.2,0.2");
 	conf->setValue("transit_satellite_color", "0.0,0.0,0.0");
 	conf->setValue("hint_font_size", 10);
-#if defined(Q_OS_OHOS)
+#if defined(Q_OS_OHOS) || defined(__OHOS__)
+	conf->setValue("mirror_acceleration_enabled", true);
 	conf->setValue("update_frequency_hours", 2);
 #else
 	conf->setValue("update_frequency_hours", 72);
@@ -1673,7 +1694,10 @@ void Satellites::loadSettings()
 	}
 
 #if defined(Q_OS_OHOS) || defined(__OHOS__)
-	// 老配置里存的是 celestrak.org/amsat/mmccants 境外直连地址；迁移/清理到境内镜像，避免刷新超时/403。
+	// One-time migration: restore previously auto-rewritten skyinstrument.cn CSV mirror URLs
+	// back to official CelesTrak upstream URLs (mirror routing now happens transparently at request
+	// time via mirror_acceleration_enabled). Never overwrites or deletes user-added custom sources.
+	if (!conf->value("ohos_tle_sources_official_v1", false).toBool())
 	{
 		QStringList migrated;
 		bool changed = false;
@@ -1681,25 +1705,22 @@ void Satellites::loadSettings()
 		{
 			const bool autoAdd = entry.startsWith(QStringLiteral("1,"));
 			const QString url = autoAdd ? entry.mid(2) : entry;
-			if (url.contains(QStringLiteral("amsat.org"), Qt::CaseInsensitive)
-				|| url.contains(QStringLiteral("mmccants.org"), Qt::CaseInsensitive))
-			{
+			const QString official = canonicalizeLegacyMirrorSourceUrl(url);
+			if (official != url)
 				changed = true;
-				continue;
-			}
-			const QString mirrored = ohosMirrorTleUrl(url);
-			if (mirrored != url)
-				changed = true;
-			migrated << (autoAdd ? QStringLiteral("1,") + mirrored : mirrored);
+			migrated << (autoAdd ? QStringLiteral("1,") + official : official);
 		}
 		if (changed)
 		{
 			updateUrls = migrated;
 			conf->endGroup();
 			saveTleSources(migrated);
-			qWarning() << "[Satellites] migrated CelesTrak sources to the OHOS mirror and removed legacy direct URLs";
+			qInfo() << "[Satellites] restored official CelesTrak source URLs (transparent mirror acceleration active)";
 			conf->beginGroup("Satellites");
 		}
+		if (!conf->contains("mirror_acceleration_enabled"))
+			conf->setValue("mirror_acceleration_enabled", true);
+		conf->setValue("ohos_tle_sources_official_v1", true);
 	}
 #endif
 	
@@ -3662,6 +3683,7 @@ void Satellites::updateFromOnlineSources()
 		progressBar->setFormat(QString("%1 %v/%m").arg(q_("Loading TLE")));
 	}
 
+	const bool mirrorAccel = isSatelliteMirrorAccelerationEnabled();
 	for (auto url : std::as_const(updateUrls))
 	{
 		TleSource source;
@@ -3687,6 +3709,8 @@ void Satellites::updateFromOnlineSources()
 			emit updateStateChanged(updateState);
 			return;
 		}
+		if (mirrorAccel)
+			source.url = resolveSatelliteMirrorUrl(source.url);
 		updateSources.append(source);
 	}
 	bool needsManifest = false;

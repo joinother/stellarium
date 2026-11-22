@@ -116,6 +116,7 @@ export class SatelliteController {
   // 单个更新设置写回 → 重载来源。
   setSatelliteUpdateSetting(key: string, value: boolean | number): void {
     if (key === 'updatesEnabled' && value === this.satelliteStore.satUpdateSettings.updatesEnabled) return
+    if (key === 'mirrorAccelerationEnabled' && value === (this.satelliteStore.satUpdateSettings.mirrorAccelerationEnabled ?? true)) return
     const payload: Record<string, boolean | number> = {}
     payload[key] = value
     this.port.requestInteractive('setSatelliteUpdateSetting', JSON.stringify(payload), (r: StellariumBridgeResponse) => {

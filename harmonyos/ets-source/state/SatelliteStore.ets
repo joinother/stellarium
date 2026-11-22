@@ -41,7 +41,8 @@ export class SatelliteStore {
   satSources: SatelliteSource[] = []
   satUpdateSettings: SatelliteUpdateSettings = {
     updatesEnabled: true, autoAddEnabled: false, autoRemoveEnabled: false,
-    autoDisplayEnabled: true, updateFrequencyHours: 2, secondsToUpdate: 0, updateState: 1
+    autoDisplayEnabled: true, mirrorAccelerationEnabled: true,
+    updateFrequencyHours: 2, secondsToUpdate: 0, updateState: 1
   }
   satSourceInput: string = ''
   satTleFileInput: string = ''

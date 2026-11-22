@@ -18757,6 +18757,7 @@ extern "C" __attribute__((visibility("default"))) const char* StellariumOhos_com
 				value["lastCheckResult"] = preferences->value("Satellites/last_check_result", -1).toInt();
 				value["mirrorStatus"] = preferences->value("Satellites/mirror_status").toString();
 				value["mirrorCheckedAt"] = preferences->value("Satellites/mirror_checked_at").toString();
+				value["mirrorAccelerationEnabled"] = preferences->value("Satellites/mirror_acceleration_enabled", true).toBool();
 				value["mirrorStaleSources"] = QJsonDocument::fromJson(preferences->value("Satellites/mirror_stale_sources").toString().toUtf8()).array();
 				value["mirrorUnavailableSources"] = QJsonDocument::fromJson(preferences->value("Satellites/mirror_unavailable_sources").toString().toUtf8()).array();
 				return value;
@@ -18884,6 +18885,13 @@ extern "C" __attribute__((visibility("default"))) const char* StellariumOhos_com
 					else if (key == QStringLiteral("autoAddEnabled")) { sats->setAutoAddEnabled(boolValue(it.value())); changed = true; }
 					else if (key == QStringLiteral("autoRemoveEnabled")) { sats->setAutoRemoveEnabled(boolValue(it.value())); changed = true; }
 					else if (key == QStringLiteral("autoDisplayEnabled")) { sats->setAutoDisplayEnabled(boolValue(it.value())); changed = true; }
+					else if (key == QStringLiteral("mirrorAccelerationEnabled"))
+					{
+						QSettings* preferences = StelApp::getInstance().getSettings();
+						preferences->setValue("Satellites/mirror_acceleration_enabled", boolValue(it.value()));
+						preferences->sync();
+						changed = true;
+					}
 					else if (key == QStringLiteral("updateFrequencyHours"))
 					{
 						bool parsed = it.value().isDouble();

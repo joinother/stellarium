@@ -752,6 +752,23 @@ export struct SatellitesPanel {
             }, (hours: number) => String(hours))
           }.width('100%').alignItems(VerticalAlign.Center)
         }
+
+        if (!this.satelliteStore.satOffline) {
+          Row({ space: 6 }) {
+            Text(this.isZh() ? '国内镜像加速' : 'CN Mirror Acceleration')
+              .fontSize(13).fontColor(this.c.text)
+            InfoTipButton({
+              title: this.isZh() ? '国内镜像加速' : 'CN Mirror Acceleration',
+              tip: this.isZh()
+                ? '来源列表保留 CelesTrak 官方地址；开启后在拉取时透明经由阿里云镜像 skyinstrument.cn（含 SHA-256 校验）加速转发。关闭后直连官方源；您手动添加的自定义来源始终按原地址请求。'
+                : 'Keeps official CelesTrak URLs in your source list while transparently accelerating requests via skyinstrument.cn with SHA-256 verification. Disable to connect directly; custom URLs are always fetched verbatim.'
+            })
+            Blank()
+            Toggle({ type: ToggleType.Switch, isOn: this.satelliteStore.satUpdateSettings.mirrorAccelerationEnabled ?? true })
+              .enabled(this.satelliteStore.satUpdateSettings.updateState !== 0)
+              .onChange((value: boolean) => { this.onSetUpdateSetting('mirrorAccelerationEnabled', value) })
+          }.width('100%').alignItems(VerticalAlign.Center)
+        }
       }
         .width('100%').padding(14).backgroundColor(this.c.soft)
         .border({ width: 0.6, color: this.c.border }).borderRadius(UI_RADIUS_CARD)

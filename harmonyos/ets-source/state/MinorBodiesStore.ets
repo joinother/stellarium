@@ -12,7 +12,7 @@ import {
 } from '../capability/MirrorManifestClient'
 
 const COMET_AUTO_SYNC_FILE: string = 'minor_bodies_auto_sync_v1.json'
-const COMET_AUTO_SYNC_INTERVAL_MS: number = 7 * 24 * 3600 * 1000
+const COMET_AUTO_SYNC_INTERVAL_MS: number = 24 * 3600 * 1000
 
 export interface MpcMirrorPackSpec {
   key: string

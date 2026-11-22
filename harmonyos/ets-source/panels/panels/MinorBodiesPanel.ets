@@ -238,7 +238,7 @@ export struct MinorBodiesPanel {
                 .fontSize(this.fs(11.5)).fontWeight(FontWeight.Medium).fontColor(this.c.text).layoutWeight(1)
               InfoTipButton({
                 title: '国内镜像安全同步说明',
-                tip: '通过自有境内镜像 skyinstrument.cn 静态获取国际小行星中心（MPC）每日更新的彗星与小行星轨道。「最新可观测彗星」每 7 天或云端日历推送新彗星预警时也会在后台静默校验更新；其余小行星目录按需点选同步。写入前均核验 manifest.json 与 SHA-256 哈希，不上传经纬度、搜索词或设备标识。'
+                tip: '通过自有境内镜像 skyinstrument.cn 静态获取国际小行星中心（MPC）每日更新的彗星与小行星轨道。「最新可观测彗星」每 24 小时或云端日历推送新彗星预警时也会在后台静默校验更新（哈希未变自动跳过）；其余小行星目录按需点选同步。写入前均核验 manifest.json 与 SHA-256 哈希，不上传经纬度、搜索词或设备标识。'
               })
             }.width('100%').alignItems(VerticalAlign.Center)
 
