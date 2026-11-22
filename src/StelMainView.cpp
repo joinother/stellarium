@@ -17468,6 +17468,109 @@ extern "C" __attribute__((visibility("default"))) const char* StellariumOhos_com
 			result["ok"] = true;
 			return result;
 		}
+		if (commandName == "addOcularEquipment" || commandName == "updateOcularEquipment" ||
+		    commandName == "deleteOcularEquipment" || commandName == "moveOcularEquipment")
+		{
+			Oculars* oculars = GETSTELMODULE(Oculars);
+			if (!oculars) { result["ok"] = false; result["error"] = "Oculars plugin not loaded"; return result; }
+			QJsonParseError parseError;
+			const QJsonDocument document = QJsonDocument::fromJson(arg.toUtf8(), &parseError);
+			if (parseError.error != QJsonParseError::NoError || !document.isObject())
+			{
+				result["ok"] = false;
+				result["error"] = "invalid json";
+				return result;
+			}
+			const QJsonObject object = document.object();
+			const QString kind = object.value("kind").toString();
+			const int index = object.value("index").toInt(-1);
+			const QString action = commandName == "addOcularEquipment" ? "add" :
+				(commandName == "updateOcularEquipment" ? "update" :
+				 (commandName == "deleteOcularEquipment" ? "delete" : "move"));
+			QVariantMap item = object.value("item").toObject().toVariantMap();
+			if (action == "move") item["delta"] = object.value("delta").toInt(0);
+			const QVariantMap applied = oculars->applyOhosEquipmentAction(kind, action, index, item);
+			result["ok"] = applied.value("ok").toBool();
+			if (applied.contains("error")) result["error"] = applied.value("error").toString();
+			if (applied.contains("index")) result["index"] = applied.value("index").toInt();
+			if (applied.contains("kind")) result["kind"] = applied.value("kind").toString();
+			markOhosInteraction();
+			return result;
+		}
+		if (commandName == "exportOcularEquipment")
+		{
+			Oculars* oculars = GETSTELMODULE(Oculars);
+			if (!oculars) { result["ok"] = false; result["error"] = "Oculars plugin not loaded"; return result; }
+			result["ok"] = true;
+			result["json"] = QString::fromUtf8(oculars->exportOhosEquipmentJson());
+			return result;
+		}
+		if (commandName == "importOcularEquipment")
+		{
+			Oculars* oculars = GETSTELMODULE(Oculars);
+			if (!oculars) { result["ok"] = false; result["error"] = "Oculars plugin not loaded"; return result; }
+			QJsonParseError parseError;
+			const QJsonDocument document = QJsonDocument::fromJson(arg.toUtf8(), &parseError);
+			if (parseError.error != QJsonParseError::NoError || !document.isObject())
+			{
+				result["ok"] = false;
+				result["error"] = "bad_document";
+				return result;
+			}
+			QJsonObject object = document.object();
+			bool append = false;
+			if (object.value("document").isObject())
+			{
+				append = object.value("append").toBool(false);
+				object = object.value("document").toObject();
+			}
+			const QVariantMap applied = oculars->importOhosEquipmentJson(
+				QJsonDocument(object).toJson(QJsonDocument::Compact), append);
+			result["ok"] = applied.value("ok").toBool();
+			if (applied.contains("error")) result["error"] = applied.value("error").toString();
+			if (applied.contains("index")) result["index"] = applied.value("index").toInt();
+			if (applied.contains("kind")) result["kind"] = applied.value("kind").toString();
+			if (applied.contains("counts"))
+				result["counts"] = QJsonObject::fromVariantMap(applied.value("counts").toMap());
+			markOhosInteraction();
+			return result;
+		}
+		if (commandName == "setTelradFov")
+		{
+			Oculars* oculars = GETSTELMODULE(Oculars);
+			if (!oculars) { result["ok"] = false; result["error"] = "Oculars plugin not loaded"; return result; }
+			QJsonParseError parseError;
+			const QJsonDocument document = QJsonDocument::fromJson(arg.toUtf8(), &parseError);
+			if (parseError.error != QJsonParseError::NoError || !document.isArray())
+			{
+				result["ok"] = false;
+				result["error"] = "invalid json";
+				return result;
+			}
+			const QJsonArray array = document.array();
+			if (array.size() != 4)
+			{
+				result["ok"] = false;
+				result["error"] = "usage: [fov1,fov2,fov3,fov4]";
+				return result;
+			}
+			float fov[4];
+			for (int i = 0; i < 4; ++i)
+			{
+				const double value = array.at(i).toDouble(-1.0);
+				if (value < 0.0 || value > 30.0)
+				{
+					result["ok"] = false;
+					result["error"] = "invalid telrad fov";
+					return result;
+				}
+				fov[i] = static_cast<float>(value);
+			}
+			oculars->setTelradFOV(Vec4f(fov[0], fov[1], fov[2], fov[3]));
+			markOhosInteraction();
+			result["ok"] = true;
+			return result;
+		}
 		if (commandName == "setOcularSetting")
 		{
 			Oculars* oculars = GETSTELMODULE(Oculars);
@@ -17501,6 +17604,7 @@ extern "C" __attribute__((visibility("default"))) const char* StellariumOhos_com
 			else if (setting == "initFov") oculars->setFlagInitFovUsage(enabled);
 			else if (setting == "initDirection") oculars->setFlagInitDirectionUsage(enabled);
 			else if (setting == "oagLimits") oculars->setFlagShowOAGLimits(enabled);
+			else if (setting == "ccdCenter") oculars->setFlagShowCCDCenter(enabled);
 			else if (setting == "guiPanelEnabled") oculars->enableGuiPanel(enabled);
 			else if (setting == "maskOpacity")
 			{

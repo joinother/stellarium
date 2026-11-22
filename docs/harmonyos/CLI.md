@@ -1,5 +1,20 @@
 # Stellarium 鸿蒙 CLI
 
+## 目镜器材配置与导入导出（2026-11-22）
+
+目镜插件新增器材 CRUD、Telrad 四圈视场与传感器中心标记命令。器材配置仍写入可写用户目录的 `ocular.ini`，每次增删改后立即 `sync()`；导入导出是用户主动触发的本地文件操作，不联网。
+
+- `addOcularEquipment` / `updateOcularEquipment` / `deleteOcularEquipment` / `moveOcularEquipment` 的 payload 为 JSON：
+  `{"kind":"ocular|telescope|lens|ccd","index":0,"item":{...}}`；`move` 另带 `"delta":-1|1`。
+- `item` 字段：目镜 `name/apparentFov/focalLength/fieldStop/binocular/permanentCrosshair`；增倍镜 `name/multiplier`；望远镜 `name/diameter/focalLength/horizontalFlipped/verticalFlipped/equatorial`；传感器 `name/resolutionX/resolutionY/chipWidth/chipHeight/binningX/binningY/rotation/hasOAG/prismHeight/prismWidth/prismDistance/prismPosAngle`。
+- 范围校验与 PC 版一致（目镜视场 1–120°、焦距 1–500 mm；增倍倍率 0.01–9；传感器分辨率 1–100000、合并 1–4、OAG 棱镜尺寸 ≥0.1 mm）。名称空白、索引越界、删除最后一件目镜/望远镜/传感器分别返回 `name_empty`、`bad_index`、`last_item`。
+- 成功回包 `{ok:true,index}`；`add` 的 `index` 为新增项下标。UI 事件会刷新目镜面板。
+- `setTelradFov` 接受四元素 JSON 数组（每项 0–30°，0 表示隐藏该圈），例如 `[0.5,2,4,0]`；`setOcularSetting ccdCenter|1` 控制传感器中心十字标记。
+- `exportOcularEquipment` 返回 `{ok:true,json}`，文档格式为 `stellarium-ohos-oculars-equipment` v1，含 `oculars/lenses/telescopes/ccds/selected`。
+- `importOcularEquipment` 接受原始文档或信封 `{"append":true|false,"document":{...}}`。原生侧先完整校验再原子替换或追加；文件上限 512 KB、每类最多 500 项。错误码：`bad_document/bad_format/bad_version/item_invalid/file_too_large/too_many_items`。
+- 手机端「目镜 → 通用 → 配置管理」提供导出/导入按钮，导入前选择替换或追加；文件选择与读写由宿主 `HostMediaPort` 完成。
+- UI 语义命令：`setOcularsTab 0..5` 切换页签（0 通用、1 目镜、2 增倍镜、3 传感器、4 望远镜、5 关于）；`setOcularsScroll <非负vp>` 滚动当前页；`openOcularEquipmentEditor kind|index` 打开器材编辑器（`index=-1` 为新增，省略同 `-1`）；`closeOcularEquipmentEditor` 关闭。这些命令只改变界面状态，读写仍走上述原生命令。
+
 ## 选星调时与绚丽夜间诊断（2026-11-15）
 
 `getViewAnchorState` 增加 `jd/timeRate/gyroActive/tracking/autoMove`、`viewMount/upMount/viewAltAz/upAltAz` 三维向量、`horizonRollDefined/horizonRollDeg` 与选中对象投影信息；`rollErrorDeg` 仍表示相对当前 mount 规范向上的误差。非地平坐标架的自然极轴倾斜不能当成地平线 bug。极点附近地平滚转可能无定义，应先检查 `horizonRollDefined`。

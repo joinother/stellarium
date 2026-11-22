@@ -61,6 +61,12 @@ export class TelescopeStore {
   ocularCcdCropVSize: number = 250
   ocularCcdPrismRotation: number = 0
   ocularGuiPanelEnabled: boolean = true
+  ocularCcdCenter: boolean = true
+  ocularTelradFov: number[] = [0.5, 2, 4, 0]
+  // 目镜面板当前页签（0 通用 / 1 目镜 / 2 增倍镜 / 3 传感器 / 4 望远镜 / 5 关于）。
+  ocularPanelTab: number = 0
+  ocularEquipmentBusy: boolean = false
+  ocularEquipmentError: string = ''
   ocularMagnification: number = 0
   ocularActualFov: number = 0
   ocularExitPupil: number = 0
@@ -110,6 +116,21 @@ export class TelescopeStore {
     if (kind === 'Telescope') return this.telescopeIndex
     if (kind === 'Lens') return this.lensIndex
     return this.ccdIndex
+  }
+
+  ocularInstrumentItem(kind: string, index: number): OcularInstrumentItem | undefined {
+    const items = this.ocularInstrumentItems(kind)
+    for (let i = 0; i < items.length; i++) {
+      if (items[i].index === index) return items[i]
+    }
+    return undefined
+  }
+
+  ocularKindLabel(kind: string): string {
+    if (kind === 'Ocular') return I18n.t('ocular_device_ocular')
+    if (kind === 'Telescope') return I18n.t('ocular_device_telescope')
+    if (kind === 'Lens') return I18n.t('ocular_device_lens')
+    return I18n.t('ocular_device_sensor')
   }
 
   ocularInstrumentSummary(kind: string, item: OcularInstrumentItem): string {
@@ -224,6 +245,15 @@ export class TelescopeStore {
       this.ocularCcdCropVSize = o.ccdCropVSize ?? 250
       this.ocularCcdPrismRotation = o.ccdPrismRotation ?? 0
       this.ocularGuiPanelEnabled = o.guiPanelEnabled
+      this.ocularCcdCenter = o.ccdCenter !== false
+      // Vec4f 回读是 float，直接显示会出现 0.6000000238418579；按 0.001° 归一化。
+      const telradSource: number[] = o.telradFov !== undefined ? o.telradFov : [0.5, 2, 4, 0]
+      const telrad: number[] = []
+      for (let i = 0; i < 4; i++) {
+        const value = i < telradSource.length && Number.isFinite(telradSource[i]) ? telradSource[i] : 0
+        telrad.push(Math.round(value * 1000) / 1000)
+      }
+      this.ocularTelradFov = telrad
       this.ocularMagnification = o.magnification ?? 0
       this.ocularActualFov = o.actualFov ?? 0
       this.ocularExitPupil = o.exitPupil ?? 0

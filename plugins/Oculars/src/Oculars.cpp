@@ -48,6 +48,10 @@
 #include <QDir>
 #include <QFont>
 #include <QGraphicsWidget>
+#include <QJsonArray>
+#include <QJsonDocument>
+#include <QJsonObject>
+#include <QJsonValue>
 #include <QKeyEvent>
 #include <QMenu>
 #include <QMouseEvent>
@@ -244,6 +248,234 @@ QSettings* Oculars::getSettings()
 	return settings;
 }
 
+namespace {
+
+bool equipmentNumber(const QVariantMap& item, const char* key, double fallback, double& value)
+{
+	const QVariant raw = item.value(QLatin1String(key));
+	if (raw.isNull())
+	{
+		value = fallback;
+		return true;
+	}
+	bool ok = false;
+	value = raw.toDouble(&ok);
+	return ok;
+}
+
+int equipmentInt(const QVariantMap& item, const char* key, int fallback)
+{
+	const QVariant raw = item.value(QLatin1String(key));
+	bool ok = false;
+	const int value = raw.toInt(&ok);
+	return ok ? value : fallback;
+}
+
+bool equipmentBool(const QVariantMap& item, const char* key, bool fallback)
+{
+	const QVariant raw = item.value(QLatin1String(key));
+	return raw.isNull() ? fallback : raw.toBool();
+}
+
+bool equipmentRange(double value, double minimum, double maximum)
+{
+	return std::isfinite(value) && value >= minimum && value <= maximum;
+}
+
+QString equipmentName(const QVariantMap& item, const QString& fallback)
+{
+	const QVariant raw = item.value(QStringLiteral("name"));
+	const QString name = raw.isNull() ? fallback : raw.toString();
+	return name.trimmed();
+}
+
+bool fillOcular(Ocular* ocular, const QVariantMap& item, QString& error)
+{
+	const QString name = equipmentName(item, ocular->name());
+	if (name.isEmpty()) { error = QStringLiteral("name_empty"); return false; }
+	double apparentFov = ocular->apparentFOV();
+	double focalLength = ocular->effectiveFocalLength();
+	double fieldStop = ocular->fieldStop();
+	if (!equipmentNumber(item, "apparentFov", apparentFov, apparentFov) ||
+	    !equipmentNumber(item, "focalLength", focalLength, focalLength) ||
+	    !equipmentNumber(item, "fieldStop", fieldStop, fieldStop))
+	{
+		error = QStringLiteral("value_invalid");
+		return false;
+	}
+	if (!equipmentRange(apparentFov, 1.0, 120.0) ||
+	    !equipmentRange(focalLength, 1.0, 500.0) ||
+	    !equipmentRange(fieldStop, 0.0, 200.0))
+	{
+		error = QStringLiteral("value_invalid");
+		return false;
+	}
+	ocular->setName(name);
+	ocular->setApparentFOV(apparentFov);
+	ocular->setEffectiveFocalLength(focalLength);
+	ocular->setFieldStop(fieldStop);
+	ocular->setBinoculars(equipmentBool(item, "binocular", ocular->isBinoculars()));
+	ocular->setPermanentCrosshair(equipmentBool(item, "permanentCrosshair", ocular->hasPermanentCrosshair()));
+	if (item.contains(QStringLiteral("reticlePath")))
+		ocular->setReticlePath(item.value(QStringLiteral("reticlePath")).toString());
+	return true;
+}
+
+bool fillLens(Lens* lens, const QVariantMap& item, QString& error)
+{
+	const QString name = equipmentName(item, lens->getName());
+	if (name.isEmpty()) { error = QStringLiteral("name_empty"); return false; }
+	double multiplier = lens->getMultipler();
+	if (!equipmentNumber(item, "multiplier", multiplier, multiplier) ||
+	    !equipmentRange(multiplier, 0.01, 9.0))
+	{
+		error = QStringLiteral("value_invalid");
+		return false;
+	}
+	lens->setName(name);
+	lens->setMultipler(multiplier);
+	return true;
+}
+
+bool fillTelescope(Telescope* telescope, const QVariantMap& item, QString& error)
+{
+	const QString name = equipmentName(item, telescope->name());
+	if (name.isEmpty()) { error = QStringLiteral("name_empty"); return false; }
+	double diameter = telescope->diameter();
+	double focalLength = telescope->focalLength();
+	if (!equipmentNumber(item, "diameter", diameter, diameter) ||
+	    !equipmentNumber(item, "focalLength", focalLength, focalLength) ||
+	    !equipmentRange(diameter, 1.0, 999999.0) ||
+	    !equipmentRange(focalLength, 1.0, 9999999.0))
+	{
+		error = QStringLiteral("value_invalid");
+		return false;
+	}
+	telescope->setName(name);
+	telescope->setDiameter(diameter);
+	telescope->setFocalLength(focalLength);
+	telescope->setHFlipped(equipmentBool(item, "horizontalFlipped", telescope->isHFlipped()));
+	telescope->setVFlipped(equipmentBool(item, "verticalFlipped", telescope->isVFlipped()));
+	telescope->setEquatorial(equipmentBool(item, "equatorial", telescope->isEquatorial()));
+	return true;
+}
+
+bool fillCcd(CCD* ccd, const QVariantMap& item, QString& error)
+{
+	const QString name = equipmentName(item, ccd->name());
+	if (name.isEmpty()) { error = QStringLiteral("name_empty"); return false; }
+	const int resolutionX = equipmentInt(item, "resolutionX", ccd->resolutionX());
+	const int resolutionY = equipmentInt(item, "resolutionY", ccd->resolutionY());
+	const int binningX = equipmentInt(item, "binningX", ccd->binningX());
+	const int binningY = equipmentInt(item, "binningY", ccd->binningY());
+	double chipWidth = ccd->chipWidth();
+	double chipHeight = ccd->chipHeight();
+	double rotation = ccd->chipRotAngle();
+	double prismHeight = ccd->prismHeight();
+	double prismWidth = ccd->prismWidth();
+	double prismDistance = ccd->prismDistance();
+	double prismPosAngle = ccd->prismPosAngle();
+	const bool hasOag = equipmentBool(item, "hasOAG", ccd->hasOAG());
+	if (!equipmentNumber(item, "chipWidth", chipWidth, chipWidth) ||
+	    !equipmentNumber(item, "chipHeight", chipHeight, chipHeight) ||
+	    !equipmentNumber(item, "rotation", rotation, rotation) ||
+	    !equipmentNumber(item, "prismHeight", prismHeight, prismHeight) ||
+	    !equipmentNumber(item, "prismWidth", prismWidth, prismWidth) ||
+	    !equipmentNumber(item, "prismDistance", prismDistance, prismDistance) ||
+	    !equipmentNumber(item, "prismPosAngle", prismPosAngle, prismPosAngle))
+	{
+		error = QStringLiteral("value_invalid");
+		return false;
+	}
+	if (resolutionX < 1 || resolutionX > 100000 ||
+	    resolutionY < 1 || resolutionY > 100000 ||
+	    binningX < 1 || binningX > 4 || binningY < 1 || binningY > 4 ||
+	    !equipmentRange(chipWidth, 0.1, 9999.0) ||
+	    !equipmentRange(chipHeight, 0.1, 9999.0) ||
+	    !equipmentRange(rotation, -360.0, 360.0) ||
+	    !equipmentRange(prismHeight, 0.0, 9999.0) ||
+	    !equipmentRange(prismWidth, 0.0, 9999.0) ||
+	    !equipmentRange(prismDistance, 0.0, 100000.0) ||
+	    !equipmentRange(prismPosAngle, 0.0, 360.0))
+	{
+		error = QStringLiteral("value_invalid");
+		return false;
+	}
+	if (hasOag && (prismHeight < 0.1 || prismWidth < 0.1 || prismDistance < 0.1))
+	{
+		error = QStringLiteral("value_invalid");
+		return false;
+	}
+	ccd->setName(name);
+	ccd->setResolutionX(resolutionX);
+	ccd->setResolutionY(resolutionY);
+	ccd->setChipWidth(chipWidth);
+	ccd->setChipHeight(chipHeight);
+	ccd->setChipRotAngle(rotation);
+	ccd->setBinningX(binningX);
+	ccd->setBinningY(binningY);
+	ccd->setHasOAG(hasOag);
+	ccd->setPrismHeight(prismHeight);
+	ccd->setPrismWidth(prismWidth);
+	ccd->setPrismDistance(prismDistance);
+	ccd->setPrismPosAngle(prismPosAngle);
+	return true;
+}
+
+QVariantMap ocularToMap(const Ocular* ocular)
+{
+	QVariantMap item;
+	item["name"] = ocular->name();
+	item["apparentFov"] = ocular->apparentFOV();
+	item["focalLength"] = ocular->effectiveFocalLength();
+	item["fieldStop"] = ocular->fieldStop();
+	item["binocular"] = ocular->isBinoculars();
+	item["permanentCrosshair"] = ocular->hasPermanentCrosshair();
+	item["reticlePath"] = ocular->reticlePath();
+	return item;
+}
+
+QVariantMap lensToMap(const Lens* lens)
+{
+	QVariantMap item;
+	item["name"] = lens->getName();
+	item["multiplier"] = lens->getMultipler();
+	return item;
+}
+
+QVariantMap telescopeToMap(const Telescope* telescope)
+{
+	QVariantMap item;
+	item["name"] = telescope->name();
+	item["diameter"] = telescope->diameter();
+	item["focalLength"] = telescope->focalLength();
+	item["horizontalFlipped"] = telescope->isHFlipped();
+	item["verticalFlipped"] = telescope->isVFlipped();
+	item["equatorial"] = telescope->isEquatorial();
+	return item;
+}
+
+QVariantMap ccdToMap(const CCD* ccd)
+{
+	QVariantMap item;
+	item["name"] = ccd->name();
+	item["resolutionX"] = ccd->resolutionX();
+	item["resolutionY"] = ccd->resolutionY();
+	item["chipWidth"] = ccd->chipWidth();
+	item["chipHeight"] = ccd->chipHeight();
+	item["binningX"] = ccd->binningX();
+	item["binningY"] = ccd->binningY();
+	item["rotation"] = ccd->chipRotAngle();
+	item["hasOAG"] = ccd->hasOAG();
+	item["prismHeight"] = ccd->prismHeight();
+	item["prismWidth"] = ccd->prismWidth();
+	item["prismDistance"] = ccd->prismDistance();
+	item["prismPosAngle"] = ccd->prismPosAngle();
+	return item;
+}
+
+} // namespace
+
 QVariantMap Oculars::getOhosInstrumentState() const
 {
 	QVariantMap state;
@@ -264,6 +496,7 @@ QVariantMap Oculars::getOhosInstrumentState() const
 		item["fieldStop"] = ocular->fieldStop();
 		item["binocular"] = ocular->isBinoculars();
 		item["permanentCrosshair"] = ocular->hasPermanentCrosshair();
+		item["reticlePath"] = ocular->reticlePath();
 		hasBinocular = hasBinocular || ocular->isBinoculars();
 		ocularItems.append(item);
 	}
@@ -306,6 +539,11 @@ QVariantMap Oculars::getOhosInstrumentState() const
 		item["binningX"] = ccd->binningX();
 		item["binningY"] = ccd->binningY();
 		item["rotation"] = ccd->chipRotAngle();
+		item["hasOAG"] = ccd->hasOAG();
+		item["prismHeight"] = ccd->prismHeight();
+		item["prismWidth"] = ccd->prismWidth();
+		item["prismDistance"] = ccd->prismDistance();
+		item["prismPosAngle"] = ccd->prismPosAngle();
 		ccdItems.append(item);
 	}
 
@@ -344,6 +582,10 @@ QVariantMap Oculars::getOhosInstrumentState() const
 	state["ccdCropVSize"] = getCcdCropOverlayVSize();
 	state["ccdPrismRotation"] = getSelectedCCDPrismPositionAngle();
 	state["guiPanelEnabled"] = getFlagGuiPanelEnabled();
+	state["ccdCenter"] = getFlagShowCCDCenter();
+	QVariantList telradFovList;
+	for (int i = 0; i < 4; ++i) telradFovList.append(telradFOV[i]);
+	state["telradFov"] = telradFovList;
 
 	Ocular* ocular = selectedOcularIndex >= 0 && selectedOcularIndex < oculars.size() ? oculars.at(selectedOcularIndex) : Q_NULLPTR;
 	Telescope* telescope = selectedTelescopeIndex >= 0 && selectedTelescopeIndex < telescopes.size() ? telescopes.at(selectedTelescopeIndex) : Q_NULLPTR;
@@ -370,6 +612,437 @@ QVariantMap Oculars::getOhosInstrumentState() const
 	}
 
 	return state;
+}
+
+namespace {
+
+template <typename T, typename Fill>
+bool readEquipmentArray(const QJsonValue& value, int maxItems, QList<T*>& out,
+			QString& error, int& errorIndex, Fill fill)
+{
+	if (!value.isArray())
+	{
+		error = QStringLiteral("bad_document");
+		return false;
+	}
+	const QJsonArray array = value.toArray();
+	if (array.size() > maxItems)
+	{
+		error = QStringLiteral("too_many_items");
+		return false;
+	}
+	for (int i = 0; i < array.size(); ++i)
+	{
+		if (!array.at(i).isObject())
+		{
+			error = QStringLiteral("item_invalid");
+			errorIndex = i;
+			return false;
+		}
+		T* object = new T();
+		QString itemError;
+		if (!fill(object, array.at(i).toObject().toVariantMap(), itemError))
+		{
+			delete object;
+			error = itemError;
+			errorIndex = i;
+			return false;
+		}
+		out.append(object);
+	}
+	return true;
+}
+
+void clearEquipmentLists(QList<Ocular*>& oculars, QList<Telescope*>& telescopes,
+			 QList<Lens*>& lenses, QList<CCD*>& ccds)
+{
+	for (Ocular* ocular : oculars) delete ocular;
+	for (Telescope* telescope : telescopes) delete telescope;
+	for (Lens* lens : lenses) delete lens;
+	for (CCD* ccd : ccds) delete ccd;
+	oculars.clear();
+	telescopes.clear();
+	lenses.clear();
+	ccds.clear();
+}
+
+QVariantMap equipmentError(const QString& code, int index = -1, const QString& kind = QString())
+{
+	QVariantMap result;
+	result["ok"] = false;
+	result["error"] = code;
+	if (index >= 0) result["index"] = index;
+	if (!kind.isEmpty()) result["kind"] = kind;
+	return result;
+}
+
+} // namespace
+
+QVariantMap Oculars::applyOhosEquipmentAction(const QString& kind, const QString& action,
+					      int index, const QVariantMap& item)
+{
+	if (settings == Q_NULLPTR)
+		return equipmentError(QStringLiteral("plugin_unavailable"));
+
+	const QString normalizedKind = kind.trimmed().toLower();
+	const QString normalizedAction = action.trimmed().toLower();
+	const bool isOcular = normalizedKind == QLatin1String("ocular");
+	const bool isTelescope = normalizedKind == QLatin1String("telescope");
+	const bool isLens = normalizedKind == QLatin1String("lens");
+	const bool isCcd = normalizedKind == QLatin1String("ccd");
+	if (!isOcular && !isTelescope && !isLens && !isCcd)
+		return equipmentError(QStringLiteral("unknown_kind"), -1, normalizedKind);
+
+	if (normalizedAction == QLatin1String("add"))
+	{
+		QString error;
+		int newIndex = -1;
+		if (isOcular)
+		{
+			const bool wasEmpty = oculars.isEmpty();
+			Ocular* ocular = new Ocular();
+			ocular->setName(QStringLiteral(""));
+			if (!fillOcular(ocular, item, error)) { delete ocular; return equipmentError(error); }
+			oculars.append(ocular);
+			newIndex = oculars.size() - 1;
+			if (wasEmpty && selectedOcularIndex < 0) selectedOcularIndex = newIndex;
+		}
+		else if (isTelescope)
+		{
+			const bool wasEmpty = telescopes.isEmpty();
+			Telescope* telescope = new Telescope();
+			if (!fillTelescope(telescope, item, error)) { delete telescope; return equipmentError(error); }
+			telescopes.append(telescope);
+			newIndex = telescopes.size() - 1;
+			if (wasEmpty && selectedTelescopeIndex < 0) selectedTelescopeIndex = newIndex;
+		}
+		else if (isLens)
+		{
+			Lens* lens = new Lens();
+			if (!fillLens(lens, item, error)) { delete lens; return equipmentError(error); }
+			lenses.append(lens);
+			newIndex = lenses.size() - 1;
+		}
+		else
+		{
+			const bool wasEmpty = ccds.isEmpty();
+			CCD* ccd = new CCD();
+			if (!fillCcd(ccd, item, error)) { delete ccd; return equipmentError(error); }
+			ccds.append(ccd);
+			newIndex = ccds.size() - 1;
+			if (wasEmpty && selectedCCDIndex < 0) selectedCCDIndex = newIndex;
+		}
+		maxEyepieceAngle = 0.0;
+		determineMaxEyepieceAngle();
+		updateLists();
+		persistEquipmentSettings();
+		QVariantMap result;
+		result["ok"] = true;
+		result["index"] = newIndex;
+		return result;
+	}
+
+	if (normalizedAction == QLatin1String("update"))
+	{
+		QString error;
+		if (isOcular)
+		{
+			if (index < 0 || index >= oculars.size()) return equipmentError(QStringLiteral("bad_index"));
+			if (!fillOcular(oculars.at(index), item, error)) return equipmentError(error, index, normalizedKind);
+		}
+		else if (isTelescope)
+		{
+			if (index < 0 || index >= telescopes.size()) return equipmentError(QStringLiteral("bad_index"));
+			if (!fillTelescope(telescopes.at(index), item, error)) return equipmentError(error, index, normalizedKind);
+		}
+		else if (isLens)
+		{
+			if (index < 0 || index >= lenses.size()) return equipmentError(QStringLiteral("bad_index"));
+			if (!fillLens(lenses.at(index), item, error)) return equipmentError(error, index, normalizedKind);
+		}
+		else
+		{
+			if (index < 0 || index >= ccds.size()) return equipmentError(QStringLiteral("bad_index"));
+			if (!fillCcd(ccds.at(index), item, error)) return equipmentError(error, index, normalizedKind);
+		}
+		maxEyepieceAngle = 0.0;
+		determineMaxEyepieceAngle();
+		updateLists();
+		persistEquipmentSettings();
+		if (isOcular && selectedOcularIndex >= 0) selectOcularAtIndex(selectedOcularIndex);
+		else if (isTelescope && selectedTelescopeIndex >= 0) selectTelescopeAtIndex(selectedTelescopeIndex);
+		else if (isLens && selectedLensIndex >= 0) selectLensAtIndex(selectedLensIndex);
+		else if (isCcd && selectedCCDIndex >= 0) selectCCDAtIndex(selectedCCDIndex);
+		QVariantMap result;
+		result["ok"] = true;
+		result["index"] = index;
+		return result;
+	}
+
+	if (normalizedAction == QLatin1String("delete"))
+	{
+		if (isOcular)
+		{
+			if (index < 0 || index >= oculars.size()) return equipmentError(QStringLiteral("bad_index"));
+			if (oculars.size() <= 1) return equipmentError(QStringLiteral("last_item"), index, normalizedKind);
+			delete oculars.takeAt(index);
+			if (selectedOcularIndex == index) selectedOcularIndex = qMin(index, oculars.size() - 1);
+			else if (selectedOcularIndex > index) --selectedOcularIndex;
+		}
+		else if (isTelescope)
+		{
+			if (index < 0 || index >= telescopes.size()) return equipmentError(QStringLiteral("bad_index"));
+			if (telescopes.size() <= 1) return equipmentError(QStringLiteral("last_item"), index, normalizedKind);
+			delete telescopes.takeAt(index);
+			if (selectedTelescopeIndex == index) selectedTelescopeIndex = qMin(index, telescopes.size() - 1);
+			else if (selectedTelescopeIndex > index) --selectedTelescopeIndex;
+		}
+		else if (isLens)
+		{
+			if (index < 0 || index >= lenses.size()) return equipmentError(QStringLiteral("bad_index"));
+			delete lenses.takeAt(index);
+			if (selectedLensIndex == index) selectedLensIndex = -1;
+			else if (selectedLensIndex > index) --selectedLensIndex;
+		}
+		else
+		{
+			if (index < 0 || index >= ccds.size()) return equipmentError(QStringLiteral("bad_index"));
+			if (ccds.size() <= 1) return equipmentError(QStringLiteral("last_item"), index, normalizedKind);
+			delete ccds.takeAt(index);
+			if (selectedCCDIndex == index) selectedCCDIndex = qMin(index, ccds.size() - 1);
+			else if (selectedCCDIndex > index) --selectedCCDIndex;
+		}
+		maxEyepieceAngle = 0.0;
+		determineMaxEyepieceAngle();
+		updateLists();
+		persistEquipmentSettings();
+		QVariantMap result;
+		result["ok"] = true;
+		result["index"] = index;
+		return result;
+	}
+
+	if (normalizedAction == QLatin1String("move"))
+	{
+		int target = index + item.value(QStringLiteral("delta")).toInt();
+		int count = isOcular ? oculars.size() : (isTelescope ? telescopes.size() : (isLens ? lenses.size() : ccds.size()));
+		if (index < 0 || index >= count) return equipmentError(QStringLiteral("bad_index"));
+		target = qBound(0, target, count - 1);
+		if (target != index)
+		{
+			if (isOcular) oculars.insert(target, oculars.takeAt(index));
+			else if (isTelescope) telescopes.insert(target, telescopes.takeAt(index));
+			else if (isLens) lenses.insert(target, lenses.takeAt(index));
+			else ccds.insert(target, ccds.takeAt(index));
+			if (isOcular)
+			{
+				if (selectedOcularIndex == index) selectedOcularIndex = target;
+				else if (index < selectedOcularIndex && selectedOcularIndex <= target) --selectedOcularIndex;
+				else if (target <= selectedOcularIndex && selectedOcularIndex < index) ++selectedOcularIndex;
+			}
+			else if (isTelescope)
+			{
+				if (selectedTelescopeIndex == index) selectedTelescopeIndex = target;
+				else if (index < selectedTelescopeIndex && selectedTelescopeIndex <= target) --selectedTelescopeIndex;
+				else if (target <= selectedTelescopeIndex && selectedTelescopeIndex < index) ++selectedTelescopeIndex;
+			}
+			else if (isLens)
+			{
+				if (selectedLensIndex == index) selectedLensIndex = target;
+				else if (index < selectedLensIndex && selectedLensIndex <= target) --selectedLensIndex;
+				else if (target <= selectedLensIndex && selectedLensIndex < index) ++selectedLensIndex;
+			}
+			else
+			{
+				if (selectedCCDIndex == index) selectedCCDIndex = target;
+				else if (index < selectedCCDIndex && selectedCCDIndex <= target) --selectedCCDIndex;
+				else if (target <= selectedCCDIndex && selectedCCDIndex < index) ++selectedCCDIndex;
+			}
+		}
+		updateLists();
+		persistEquipmentSettings();
+		QVariantMap result;
+		result["ok"] = true;
+		result["index"] = target;
+		return result;
+	}
+
+	return equipmentError(QStringLiteral("bad_action"), index, normalizedKind);
+}
+
+QByteArray Oculars::exportOhosEquipmentJson() const
+{
+	QJsonObject root;
+	root["format"] = QStringLiteral("stellarium-ohos-oculars-equipment");
+	root["version"] = 1;
+	QJsonArray ocularData;
+	for (const Ocular* ocular : oculars) ocularData.append(QJsonObject::fromVariantMap(ocularToMap(ocular)));
+	QJsonArray lensData;
+	for (const Lens* lens : lenses) lensData.append(QJsonObject::fromVariantMap(lensToMap(lens)));
+	QJsonArray telescopeData;
+	for (const Telescope* telescope : telescopes) telescopeData.append(QJsonObject::fromVariantMap(telescopeToMap(telescope)));
+	QJsonArray ccdData;
+	for (const CCD* ccd : ccds) ccdData.append(QJsonObject::fromVariantMap(ccdToMap(ccd)));
+	root["oculars"] = ocularData;
+	root["lenses"] = lensData;
+	root["telescopes"] = telescopeData;
+	root["ccds"] = ccdData;
+	QJsonObject selected;
+	selected["ocular"] = selectedOcularIndex;
+	selected["telescope"] = selectedTelescopeIndex;
+	selected["lens"] = selectedLensIndex;
+	selected["ccd"] = selectedCCDIndex;
+	root["selected"] = selected;
+	return QJsonDocument(root).toJson(QJsonDocument::Compact);
+}
+
+QVariantMap Oculars::importOhosEquipmentJson(const QByteArray& json, bool append)
+{
+	if (settings == Q_NULLPTR)
+		return equipmentError(QStringLiteral("plugin_unavailable"));
+	if (json.size() > 512 * 1024)
+		return equipmentError(QStringLiteral("file_too_large"));
+
+	QJsonParseError parseError;
+	const QJsonDocument document = QJsonDocument::fromJson(json, &parseError);
+	if (parseError.error != QJsonParseError::NoError || !document.isObject())
+		return equipmentError(QStringLiteral("bad_document"));
+	const QJsonObject root = document.object();
+	if (root.value(QStringLiteral("format")).toString() != QLatin1String("stellarium-ohos-oculars-equipment"))
+		return equipmentError(QStringLiteral("bad_format"));
+	if (root.value(QStringLiteral("version")).toInt(-1) != 1)
+		return equipmentError(QStringLiteral("bad_version"));
+
+	QList<Ocular*> newOculars;
+	QList<Telescope*> newTelescopes;
+	QList<Lens*> newLenses;
+	QList<CCD*> newCcds;
+	QString error;
+	int errorIndex = -1;
+
+	if (!readEquipmentArray<Ocular>(root.value(QStringLiteral("oculars")), 500, newOculars,
+					error, errorIndex,
+					[](Ocular* object, const QVariantMap& item, QString& itemError)
+					{ return fillOcular(object, item, itemError); }))
+	{
+		clearEquipmentLists(newOculars, newTelescopes, newLenses, newCcds);
+		return equipmentError(error, errorIndex, QStringLiteral("ocular"));
+	}
+	if (!readEquipmentArray<Telescope>(root.value(QStringLiteral("telescopes")), 500, newTelescopes,
+					   error, errorIndex,
+					   [](Telescope* object, const QVariantMap& item, QString& itemError)
+					   { return fillTelescope(object, item, itemError); }))
+	{
+		clearEquipmentLists(newOculars, newTelescopes, newLenses, newCcds);
+		return equipmentError(error, errorIndex, QStringLiteral("telescope"));
+	}
+	if (!readEquipmentArray<Lens>(root.value(QStringLiteral("lenses")), 500, newLenses,
+				      error, errorIndex,
+				      [](Lens* object, const QVariantMap& item, QString& itemError)
+				      { return fillLens(object, item, itemError); }))
+	{
+		clearEquipmentLists(newOculars, newTelescopes, newLenses, newCcds);
+		return equipmentError(error, errorIndex, QStringLiteral("lens"));
+	}
+	if (!readEquipmentArray<CCD>(root.value(QStringLiteral("ccds")), 500, newCcds,
+				     error, errorIndex,
+				     [](CCD* object, const QVariantMap& item, QString& itemError)
+				     { return fillCcd(object, item, itemError); }))
+	{
+		clearEquipmentLists(newOculars, newTelescopes, newLenses, newCcds);
+		return equipmentError(error, errorIndex, QStringLiteral("ccd"));
+	}
+
+	if (!append && (newOculars.isEmpty() || newTelescopes.isEmpty() || newCcds.isEmpty()))
+	{
+		clearEquipmentLists(newOculars, newTelescopes, newLenses, newCcds);
+		return equipmentError(QStringLiteral("bad_document"));
+	}
+	if (append && (oculars.size() + newOculars.size() < 1 ||
+		       telescopes.size() + newTelescopes.size() < 1 ||
+		       ccds.size() + newCcds.size() < 1))
+	{
+		clearEquipmentLists(newOculars, newTelescopes, newLenses, newCcds);
+		return equipmentError(QStringLiteral("bad_document"));
+	}
+
+	if (append)
+	{
+		oculars.append(newOculars);
+		telescopes.append(newTelescopes);
+		lenses.append(newLenses);
+		ccds.append(newCcds);
+	}
+	else
+	{
+		clearEquipmentLists(oculars, telescopes, lenses, ccds);
+		oculars = newOculars;
+		telescopes = newTelescopes;
+		lenses = newLenses;
+		ccds = newCcds;
+		const QJsonObject selected = root.value(QStringLiteral("selected")).toObject();
+		selectedOcularIndex = selected.value(QStringLiteral("ocular")).toInt(0);
+		selectedTelescopeIndex = selected.value(QStringLiteral("telescope")).toInt(0);
+		selectedLensIndex = selected.value(QStringLiteral("lens")).toInt(-1);
+		selectedCCDIndex = selected.value(QStringLiteral("ccd")).toInt(0);
+	}
+	newOculars.clear();
+	newTelescopes.clear();
+	newLenses.clear();
+	newCcds.clear();
+
+	selectedOcularIndex = oculars.isEmpty() ? -1 : qBound(0, selectedOcularIndex, oculars.size() - 1);
+	selectedTelescopeIndex = telescopes.isEmpty() ? -1 : qBound(0, selectedTelescopeIndex, telescopes.size() - 1);
+	selectedCCDIndex = ccds.isEmpty() ? -1 : qBound(0, selectedCCDIndex, ccds.size() - 1);
+	// -1 是「不使用增倍镜」的有效选择，不能被夹到 0。
+	if (selectedLensIndex >= 0)
+		selectedLensIndex = lenses.isEmpty() ? -1 : qBound(0, selectedLensIndex, lenses.size() - 1);
+
+	maxEyepieceAngle = 0.0;
+	determineMaxEyepieceAngle();
+	updateLists();
+	persistEquipmentSettings();
+	selectOcularAtIndex(selectedOcularIndex);
+	selectTelescopeAtIndex(selectedTelescopeIndex);
+	selectCCDAtIndex(selectedCCDIndex);
+	selectLensAtIndex(selectedLensIndex);
+
+	QVariantMap counts;
+	counts["oculars"] = oculars.size();
+	counts["telescopes"] = telescopes.size();
+	counts["lenses"] = lenses.size();
+	counts["ccds"] = ccds.size();
+	QVariantMap result;
+	result["ok"] = true;
+	result["counts"] = counts;
+	return result;
+}
+
+void Oculars::persistEquipmentSettings()
+{
+	if (settings == Q_NULLPTR)
+		return;
+	settings->remove(QStringLiteral("ccd"));
+	settings->remove(QStringLiteral("ocular"));
+	settings->remove(QStringLiteral("telescope"));
+	settings->remove(QStringLiteral("lens"));
+	int index = 0;
+	for (CCD* ccd : std::as_const(ccds)) ccd->writeToSettings(settings, index++);
+	index = 0;
+	for (Ocular* ocular : std::as_const(oculars)) ocular->writeToSettings(settings, index++);
+	index = 0;
+	for (Telescope* telescope : std::as_const(telescopes)) telescope->writeToSettings(settings, index++);
+	index = 0;
+	for (Lens* lens : std::as_const(lenses)) lens->writeToSettings(settings, index++);
+	settings->setValue(QStringLiteral("ocular_count"), oculars.count());
+	settings->setValue(QStringLiteral("telescope_count"), telescopes.count());
+	settings->setValue(QStringLiteral("ccd_count"), ccds.count());
+	settings->setValue(QStringLiteral("lens_count"), lenses.count());
+	settings->setValue(QStringLiteral("ocular_index"), qMax(0, selectedOcularIndex));
+	settings->setValue(QStringLiteral("telescope_index"), qMax(0, selectedTelescopeIndex));
+	settings->setValue(QStringLiteral("ccd_index"), qMax(0, selectedCCDIndex));
+	settings->setValue(QStringLiteral("lens_index"), selectedLensIndex);
+	settings->sync();
 }
 
 bool Oculars::configureGui(bool show)

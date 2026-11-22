@@ -264,6 +264,8 @@ export default class QAbility extends UIAbility {
     if (commandName === 'setSatellitePanelGroup' || commandName === 'setSatellitePanelScroll' || commandName === 'setSatellitePanelSection') return true;
     if (commandName === 'setObjectDetailTab') return true;
     if (commandName === 'setObjectModelView') return true;
+    if (commandName === 'setOcularsTab' || commandName === 'setOcularsScroll' ||
+      commandName === 'openOcularEquipmentEditor' || commandName === 'closeOcularEquipmentEditor') return true;
     return commandName === 'openUiPanel' || commandName === 'openPluginFeature' || commandName === 'closeUiPanel' || commandName === 'backUiPanel' ||
       commandName === 'setLayerTab' || commandName === 'setSkyCultureMakerTab' || commandName === 'setGyroscopeEnabled' || commandName === 'setTelescopeLivePosition' || commandName === 'setLocationMapProvider' || commandName === 'setUiLayoutMode';
   }
@@ -603,6 +605,20 @@ export default class QAbility extends UIAbility {
         this.finishCliRequest(request, JSON.stringify({ ok: false, error: 'expected tab 0..9 or group 0..2' }));
         return;
       }
+      if (request.commandName === 'setOcularsTab' && !/^[0-5]$/.test(value)) {
+        this.finishCliRequest(request, JSON.stringify({ ok: false, error: 'expected oculars tab 0..5' }));
+        return;
+      }
+      if (request.commandName === 'setOcularsScroll' &&
+        (value.length === 0 || !Number.isFinite(Number(value)) || Number(value) < 0)) {
+        this.finishCliRequest(request, JSON.stringify({ ok: false, error: 'expected non-negative scroll offset' }));
+        return;
+      }
+      if (request.commandName === 'openOcularEquipmentEditor' &&
+        !/^(ocular|lens|ccd|telescope)(\|-?\d{1,4})?$/.test(value)) {
+        this.finishCliRequest(request, JSON.stringify({ ok: false, error: 'expected kind or kind|index' }));
+        return;
+      }
       if (request.commandName === 'setSatellitePanelSection' &&
         !['main', 'settings', 'sources', 'imports', 'display', 'countdown', 'diagnostics'].includes(value)) {
         this.finishCliRequest(request, JSON.stringify({ ok: false, error: 'unknown satellite section' }));
@@ -758,7 +774,11 @@ export default class QAbility extends UIAbility {
       request.commandName !== 'setNebulaTextureConflictAvoidance' &&
       request.commandName !== 'setDateFormat' && request.commandName !== 'setTimeFormat' && request.commandName !== 'playScript' &&
       request.commandName !== 'continueScript' && request.commandName !== 'stopScript' &&
-      request.commandName !== 'setScriptRate') {
+      request.commandName !== 'setScriptRate' &&
+      request.commandName !== 'addOcularEquipment' && request.commandName !== 'updateOcularEquipment' &&
+      request.commandName !== 'deleteOcularEquipment' && request.commandName !== 'moveOcularEquipment' &&
+      request.commandName !== 'importOcularEquipment' && request.commandName !== 'setTelradFov' &&
+      request.commandName !== 'setOcularSetting' && request.commandName !== 'selectOcularInstrument') {
       return;
     }
     try {

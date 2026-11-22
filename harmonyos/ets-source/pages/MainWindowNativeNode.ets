@@ -714,6 +714,14 @@ class HostMediaPort implements MediaPort {
     }
   }
 
+  readTextFile(path: string, maxBytes: number, label: string): string {
+    const buffer = this.readBinaryFile(path, maxBytes, label)
+    const decoder = util.TextDecoder.create('utf-8')
+    const text = decoder.decodeToString(new Uint8Array(buffer))
+    // Windows 编辑器可能写入 UTF-8 BOM；JSON.parse 不接受它。
+    return text.charCodeAt(0) === 0xFEFF ? text.substring(1) : text
+  }
+
   readBinaryFile(path: string, maxBytes: number, label: string): ArrayBuffer {
     let file: fileIo.File | undefined = undefined
     try {
@@ -1304,6 +1312,12 @@ export struct WindowNativeNode {
   private skyCultureMakerControllerImpl: SkyCultureMakerController | null = null
   // 目镜/拼接相机/均时差/古天文线写回控制器（惰性构造；状态在 telescope/mosaic/equationOfTime/archaeo store）。
   private ocularControllerImpl: OcularController | null = null
+  // 语义 CLI 打开的目镜器材编辑器请求（kind|index|seq；OcularsPanel 经 @Watch 消费）。
+  @State private ocularEditorRequest: string = ''
+  private ocularEditorRequestSeq: number = 0
+  // 目镜面板滚动请求（vp|seq；面板 @Watch 消费，供读屏验证长页底部控件）。
+  @State private ocularsScrollRequest: string = ''
+  private ocularsScrollRequestSeq: number = 0
   // LX200 望远镜编辑器/控制命令控制器（惰性构造；状态在 TelescopeStore，live-position 定时器自持）。
   private telescopeControllerImpl: TelescopeController | null = null
   // 极轴镜行为控制器（惰性构造；状态在 PolarScopeStore，polarScopeTimer 由控制器自持）。
@@ -2227,6 +2241,38 @@ export struct WindowNativeNode {
         return
       }
       const response = event['response'] as StellariumBridgeResponse
+      if (commandName === 'setOcularsTab') {
+        const tab = Number(String(event['payload'] ?? '').trim())
+        if (!this.panelVisible || this.activePanel !== 'oculars') this.openPanelFromCli('oculars')
+        this.telescopeStore.ocularPanelTab = tab
+        return
+      }
+      if (commandName === 'openOcularEquipmentEditor') {
+        const parts = String(event['payload'] ?? '').trim().split('|')
+        const kind = parts[0]
+        const index = parts.length > 1 ? Number(parts[1]) : -1
+        this.ocularEditorRequest = kind + '|' + index.toString() + '|' +
+          (++this.ocularEditorRequestSeq).toString()
+        if (!this.panelVisible || this.activePanel !== 'oculars') this.openPanelFromCli('oculars')
+        return
+      }
+      if (commandName === 'closeOcularEquipmentEditor') {
+        this.ocularEditorRequest = 'close|0|' + (++this.ocularEditorRequestSeq).toString()
+        return
+      }
+      if (commandName === 'setOcularsScroll') {
+        const value = Number(String(event['payload'] ?? '').trim())
+        if (!this.panelVisible || this.activePanel !== 'oculars') this.openPanelFromCli('oculars')
+        this.ocularsScrollRequest = value.toString() + '|' + (++this.ocularsScrollRequestSeq).toString()
+        return
+      }
+      if ((commandName === 'addOcularEquipment' || commandName === 'updateOcularEquipment' ||
+        commandName === 'deleteOcularEquipment' || commandName === 'moveOcularEquipment' ||
+        commandName === 'importOcularEquipment' || commandName === 'setTelradFov' ||
+        commandName === 'setOcularSetting' || commandName === 'selectOcularInstrument') && response.ok === true) {
+        this.telescopeStore.loadOculars(false)
+        return
+      }
       if (commandName === 'setUiLayoutMode') {
         const mode = String(event['payload'] ?? '').trim().toLowerCase()
         if (mode === 'auto' || mode === 'compact' || mode === 'expanded') {
@@ -3897,11 +3943,13 @@ export struct WindowNativeNode {
   }
 
   // 目镜/拼接相机/均时差/古天文线写回控制器惰性构造。桥经 HostCommandPort；
-  // 状态整体写 TelescopeStore / MosaicStore / EquationOfTimeStore / ArchaeoStore；无 UI hook。
+  // 状态整体写 TelescopeStore / MosaicStore / EquationOfTimeStore / ArchaeoStore；
+  // 器材 CRUD 的错误提示经 flashHint hook 回注。
   private ocularCtl(): OcularController {
     if (this.ocularControllerImpl === null) {
       this.ocularControllerImpl = new OcularController(
-        this.commandPort(), this.telescopeStore, this.mosaicStore, this.equationOfTimeStore, this.archaeoStore
+        this.commandPort(), this.telescopeStore, this.mosaicStore, this.equationOfTimeStore, this.archaeoStore,
+        { flashHint: (text: ResourceStr): void => { this.flashHint(text) } }
       )
     }
     return this.ocularControllerImpl
@@ -12055,6 +12103,8 @@ export struct WindowNativeNode {
     } else if (this.activePanel === 'oculars') {
       OcularsPanel({
         store: this.telescopeStore,
+        editorRequest: this.ocularEditorRequest,
+        scrollRequest: this.ocularsScrollRequest,
         onOpenSubPanel: (name: string) => { this.openSubPanel(name) },
         onSetOcularMode: (isOn: boolean) => { this.ocularCtl().setOcularMode(isOn) },
         onSetTelrad: (isOn: boolean) => { this.layerPresetStore.noteManualChange(); this.ocularCtl().setTelrad(isOn) },
@@ -12067,7 +12117,39 @@ export struct WindowNativeNode {
         onRotateReticle: (dir: string) => { this.ocularCtl().rotateOcularReticle(dir) },
         onSetOcularSetting: (setting: string, isOn: boolean) => { this.ocularCtl().setOcularSetting(setting, isOn) },
         onChangeMaskOpacity: (value: number, mode: SliderChangeMode) => { this.ocularCtl().changeOcularMaskOpacity(value, mode) },
-        onChangeCropSize: (setting: string, value: number, mode: SliderChangeMode) => { this.ocularCtl().changeOcularCropSize(setting, value, mode) }
+        onChangeCropSize: (setting: string, value: number, mode: SliderChangeMode) => { this.ocularCtl().changeOcularCropSize(setting, value, mode) },
+        onSetTelradFov: (values: number[]) => { this.ocularCtl().setTelradFov(values) },
+        onAddEquipment: (kind: string, payload: string) => { this.ocularCtl().addOcularEquipment(kind, payload) },
+        onUpdateEquipment: (kind: string, payload: string) => { this.ocularCtl().updateOcularEquipment(kind, payload) },
+        onDeleteEquipment: (kind: string, payload: string) => { this.ocularCtl().deleteOcularEquipment(kind, payload) },
+        onMoveEquipment: (kind: string, payload: string) => { this.ocularCtl().moveOcularEquipment(kind, payload) },
+        onExportEquipment: (done: (json: string, ok: boolean) => void) => { this.ocularCtl().exportEquipment(done) },
+        onImportEquipment: (json: string, append: boolean, done: (ok: boolean) => void) => {
+          this.ocularCtl().importEquipment(json, append, done)
+        },
+        onSaveEquipmentFile: (json: string, fileName: string, done: (result: MediaSaveResult) => void) => {
+          this.hostMediaPort.saveTextFileAs(json, fileName, 'JSON|.json', done)
+        },
+        onPickEquipmentFile: (done: (text: string, cancelled: boolean, failed: boolean) => void) => {
+          this.hostMediaPort.pickDocumentToDir('ocular-equipment-imports', ['JSON|.json'], 'ocular-equipment.json')
+            .then((result: MediaImportResult) => {
+              if (result.cancelled) {
+                done('', true, false)
+                return
+              }
+              try {
+                const text = this.hostMediaPort.readTextFile(result.path, 524288, 'ocular equipment')
+                this.hostMediaPort.deleteFile(result.path)
+                done(text, false, false)
+              } catch (error) {
+                this.hostMediaPort.deleteFile(result.path)
+                done('', false, true)
+              }
+            })
+            .catch(() => { done('', false, true) })
+        },
+        onFlashHint: (text: ResourceStr) => { this.flashHint(text) },
+        onEditorRequestHandled: () => { this.ocularEditorRequest = '' }
       })
     } else if (this.activePanel === 'mosaicCamera') {
       MosaicCameraPanel({

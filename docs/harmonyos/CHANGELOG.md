@@ -1,5 +1,23 @@
 > **身份图例**：本文件真机记录中出现的 `com.cnchensh.stellarium` 是**本机调试签名身份**（本机 DevEco 自动生成，非发布身份）；发布身份为 `com.joinother.skyinstrument`。构建脚本 `build-ohos-hap-windows.ps1 -Install` 从产物 `pack.info` 读取实际包名，仓库不写死任何签名身份（见 `docs/harmonyos/release/BUNDLE-IDENTITY-CLEANUP.md`）。
 
+## [2026-11-22] 目镜插件页签化与器材配置管理
+
+- **修改文件：** `harmonyos/ets-source/panels/panels/OcularsPanel.ets`、`harmonyos/ets-source/panels/telescope/OcularsTabs.ets`（新）、`OcularSummaryCard.ets`（新）、`OcularGeneralTab.ets`（新）、`OcularEquipmentTab.ets`（新）、`OcularEquipmentForm.ets`（新）、`harmonyos/ets-source/common/derive/ocularEquipment.ets`（新）、`harmonyos/ets-source/state/TelescopeStore.ets`、`harmonyos/ets-source/capability/OcularController.ets`、`harmonyos/ets-source/common/types/MainWindowModels.ets`、`harmonyos/ets-source/bridge/MediaPort.ets`、`harmonyos/ets-source/pages/MainWindowNativeNode.ets`、`harmonyos/ets-source/qability/QAbility.ets`、`harmonyos/ets-source/capability/I18n.ets`、`plugins/Oculars/src/Oculars.cpp`、`plugins/Oculars/src/Oculars.hpp`、`src/StelMainView.cpp`、`src/StelOhosCommandCatalog.hpp`、`scripts/test-ohos-oculars-equipment.mjs`（新）、`scripts/test-ohos-readable-typography.mjs`、`docs/harmonyos/CLI.md`、`docs/harmonyos/AGENTS.md`、`docs/harmonyos/specs/OCULARS-EQUIPMENT.md`（新）、`docs/harmonyos/json/ui-contract-baseline.json`、`docs/harmonyos/CHANGELOG.md`。
+- **用户要求：** 按 PC 版划分页签；每个器材页提供自定义器材弹窗；整体优化面板布局；支持器材配置导入导出；补充 Telrad 四圈 FOV 与 CCD 中心标记设置。
+- **核心改动：**
+  1. 面板改为「当前组合摘要 + 通用 / 目镜 / 增倍镜 / 传感器 / 望远镜 / 关于」六页签；通用页按模式、结果、视图、传感器、Telrad、行为、配置分组，器材页以列表即选择器。
+  2. 器材页支持新增/编辑/删除/上移/下移；表单为居中 `bindContentCover` 浮层，按类别裁剪字段并做与原生一致的范围校验；删除最后一件目镜/望远镜/传感器被拒绝。
+  3. C++ 新增 `applyOhosEquipmentAction`、`exportOhosEquipmentJson`、`importOhosEquipmentJson`、`persistEquipmentSettings`；导入先完整校验再原子替换/追加，导出为版本化 JSON；每次变更立即同步 `ocular.ini`。
+  4. 新增 `setTelradFov`（四圈直径 0–30°）与 `setOcularSetting ccdCenter`；`getOculars` 回读 `telradFov`、`ccdCenter` 及完整器材字段。
+  5. 新增语义 UI 命令 `setOcularsTab`、`setOcularsScroll`、`openOcularEquipmentEditor`、`closeOcularEquipmentEditor`，供读屏验证页签、长页底部控件与弹窗。
+- **构建结果：** 引擎交叉编译成功（`build/src/libstellarium.so`，含 `QJsonObject::fromVariantMap` 计数回包修正）；`-Release -SkipEngine -SkipResources -SkipDeploy -Install -Device 192.168.3.95:36717` BUILD SUCCESSFUL，signed HAP 803.3 MB（842,352,871 字节），安装并启动成功。
+- **验证结果：**
+  - 主机：`test-ohos-oculars-equipment.mjs` 10/10；受影响回归 46/46（设计系统、紧凑几何、图层预设、快捷红光、详情卡、插件面板、搜索浏览器）；`check-ohos-command-catalog.mjs` 443 命令一致；`check-ohos-i18n.mjs` 0 error；`check-ohos-ui-contract.mjs` intact（41 面板 / 73 静态 id / 35 动态前缀 / 111 anchor）。`test-ohos-readable-typography.mjs` 通过（58 个映射标签；同时修正了通知区早已失效的旧高度断言）。
+  - 真机读屏（`192.168.3.95:36717`）：通用页摘要 `oculars-summary`、六个页签、Telrad 四圈输入与“应用/恢复默认”、配置导入导出按钮均可见；目镜/增倍镜/传感器/望远镜列表行与新增/删除/上移/下移可见；`openOcularEquipmentEditor ocular|-1` 与 `ccd|0` 弹出表单，名称/保存/取消及传感器字段可见，关闭后消失；关于页可见。
+  - 真机语义 CLI：新增目镜 → `getOculars` 18→19 且末项命中；修改名称/永久十字丝成功；上移后顺序正确；强制停止并重启后第 17 项仍为测试器材；删除后恢复 18 项。导入导出：导出 9,783 字节 v1 文档（19/3/22/17）；追加导入后翻倍为 38/6/44/34；替换导入后恢复 19/3/22/17，选中项 `ocular=0,telescope=2,lens=-1,ccd=0` 保持。`setTelradFov [0.6,2.2,4.4,0]` 回读并按 0.001° 归一化显示，`ccdCenter|0` 回读 false；均已恢复默认 `[0.5,2,4,0]` 与 true。非法数值返回 `value_invalid`、错误格式返回 `bad_format`。
+  - 全量 `node --test scripts/test-ohos-*.mjs`：682 项，598 pass / 81 fail / 3 skipped；失败集中在 AstroPanel、天文日历/通知、位置面板与 `-pad`/性能等既有断言（例：AstroPanel `.onClick` 107≠103），未涉及目镜新增测试或受影响回归。
+  - 未覆盖：系统文件选择器的真实点选（导出/导入按钮仅做可见性读屏，文件链路经原生命令验证）；Telrad/CCD 中心标记的渲染像素未截图逐帧确认。
+
 ## [2026-11-22] 观测辅助预设关闭视场中心标记
 
 - **修改文件：** `harmonyos/ets-source/state/LayerPresetStore.ets`、`scripts/test-ohos-layer-presets.mjs`、`docs/harmonyos/CHANGELOG.md`。
