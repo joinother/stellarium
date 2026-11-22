@@ -60,6 +60,23 @@ struct CometQuadVertex
 	float x, y;
 };
 
+constexpr int COMET_FRAG_COUNT = 64;
+
+struct FragQuadVertex
+{
+	float x, y;
+	float lx, ly;
+	float r, g, b;
+	float sharp;
+};
+
+struct FragShaderVars
+{
+	int projectionMatrix = -1;
+};
+
+FragShaderVars s_fragShaderVars;
+
 struct CometShaderVars
 {
 	int projectionMatrix = -1;
@@ -87,6 +104,9 @@ struct CometShaderVars
 	int seed = -1;
 	int phase = -1;
 	int tipExtRatio = -1;
+	int fragStrength = -1;
+	int fragLenPx = -1;
+	int fragDrift = -1;
 };
 
 CometShaderVars s_cometShaderVars;
@@ -156,6 +176,9 @@ QVector<unsigned short> Comet::tailIndices; // computed only once for all Comets
 std::unique_ptr<QOpenGLShaderProgram> Comet::cometShaderProgram;
 std::unique_ptr<QOpenGLVertexArrayObject> Comet::cometVAO;
 std::unique_ptr<QOpenGLBuffer> Comet::cometVBO;
+std::unique_ptr<QOpenGLShaderProgram> Comet::fragShaderProgram;
+std::unique_ptr<QOpenGLVertexArrayObject> Comet::fragVAO;
+std::unique_ptr<QOpenGLBuffer> Comet::fragVBO;
 QOpenGLContext* Comet::shaderContext = nullptr;
 bool Comet::shaderInitFailed = false;
 
@@ -213,6 +236,8 @@ Comet::Comet(const QString& englishName,
 	  intensityMinFov(0.001f), // when zooming in further, Coma is no longer visible.
 	  intensityMaxFov(0.010f), // when zooming out further, Coma is fully visible (when enabled).
 	  renderSeed(hashCometNameSeed(englishName)),
+	  fragmentationStrength(0.0f),
+	  fragmentationEpochJD(0.0),
 	  lastSynchroneJDE(-1e12),
 	  lastSynchroneStriae(-1.0f)
 {
@@ -225,7 +250,19 @@ Comet::Comet(const QString& englishName,
 	gastailColorArr.clear();
 	dusttailColorArr.clear();
 
-	//TODO: Name processing?
+	// Automatic fallback recognition for known fragmenting/disintegrating comets imported via MPC/SolarSystemEditor
+	// (which do not include custom fragmentation_strength INI keys).
+	const QString upperName = englishName.toUpper();
+	if (upperName.startsWith("73P-") || upperName.startsWith("73P/") || upperName.contains("SCHWASSMANN-WACHMANN 3"))
+		fragmentationStrength = upperName.contains("73P-B") ? 1.0f : 0.72f;
+	else if (upperName.contains("C/2019 Y4"))
+		fragmentationStrength = 0.90f;
+	else if (upperName.contains("C/1999 S4"))
+		fragmentationStrength = 0.96f;
+	else if (upperName.contains("C/2012 S1"))
+		fragmentationStrength = 0.90f;
+	else if (upperName.startsWith("332P-") || upperName.startsWith("332P/"))
+		fragmentationStrength = 0.75f;
 }
 
 Comet::~Comet()
@@ -498,38 +535,52 @@ bool Comet::computeBestTailViewingWindow(double observerLatDeg, double observerL
 	double bestScore = -1.0;
 	double bestDistEarth = 1.0;
 
-	// Scan [-48d, +48d] around perihelion in 1.5-day steps to find peak visible tail window
-	// (automatically avoids daytime solar glare on sunskirters like McNaught/West, while landing
-	// right on closest-Earth passes like Hyakutake or perihelion peaks like Hale-Bopp!)
-	for (int i = -32; i <= 32; ++i)
+	// If a disintegrating comet has a documented peak cascade-breakup / close-approach epoch
+	// (e.g. 73P/SW3 May 2006 close pass, C/2019 Y4 ATLAS Apr 2020 breakup, C/1999 S4 LINEAR Jul 2000),
+	// lock directly onto that iconic day before refining the local dark-sky hour.
+	if (fragmentationStrength > 0.05f && fragmentationEpochJD > 0.0)
 	{
-		const double dt = static_cast<double>(i) * 1.5;
-		const double jd = tPeri + dt;
+		bestDayJD = fragmentationEpochJD;
 		Vec3d cometPos, cometVel;
-		kOrbit->stateAtTimeInVSOP87Coordinates(jd, cometPos, cometVel);
-		const double rHelio = cometPos.norm();
-		if (!std::isfinite(rHelio) || rHelio < 0.005)
-			continue;
-
-		const Vec3d earthPos = approxEarthEcl(jd);
-		const Vec3d obsToComet = cometPos - earthPos;
-		const Vec3d obsToSun = -earthPos;
-		const double distEarth = std::max(obsToComet.norm(), 0.01);
-		const double cosElong = qBound(-1.0, (obsToComet / distEarth).dot(obsToSun), 1.0);
-		const double elongDeg = std::acos(cosElong) * M_180_PI;
-
-		const double elongWeight = static_cast<double>(smoothStepF(14.0f, 30.0f, static_cast<float>(elongDeg)));
-		const double postPeriBoost = (periQ < 0.45 && dustTailBrightnessFactor >= 0.85f)
-			? (1.0 + 0.60 * static_cast<double>(smoothStepF(2.0f, 10.0f, static_cast<float>(dt))
-			                                  * (1.0f - smoothStepF(18.0f, 36.0f, static_cast<float>(dt)))))
-			: (1.0 + 0.15 * static_cast<double>(smoothStepF(-4.0f, 8.0f, static_cast<float>(dt))
-			                                  * (1.0f - smoothStepF(20.0f, 45.0f, static_cast<float>(dt)))));
-		const double score = (1.0 / (distEarth * distEarth * std::pow(rHelio, 3.0))) * elongWeight * postPeriBoost;
-		if (score > bestScore)
+		kOrbit->stateAtTimeInVSOP87Coordinates(bestDayJD, cometPos, cometVel);
+		const Vec3d earthPos = approxEarthEcl(bestDayJD);
+		bestDistEarth = std::max((cometPos - earthPos).norm(), 0.01);
+	}
+	else
+	{
+		// Scan [-48d, +48d] around perihelion in 1.5-day steps to find peak visible tail window
+		// (automatically avoids daytime solar glare on sunskirters like McNaught/West, while landing
+		// right on closest-Earth passes like Hyakutake or perihelion peaks like Hale-Bopp!)
+		for (int i = -32; i <= 32; ++i)
 		{
-			bestScore = score;
-			bestDayJD = jd;
-			bestDistEarth = distEarth;
+			const double dt = static_cast<double>(i) * 1.5;
+			const double jd = tPeri + dt;
+			Vec3d cometPos, cometVel;
+			kOrbit->stateAtTimeInVSOP87Coordinates(jd, cometPos, cometVel);
+			const double rHelio = cometPos.norm();
+			if (!std::isfinite(rHelio) || rHelio < 0.005)
+				continue;
+
+			const Vec3d earthPos = approxEarthEcl(jd);
+			const Vec3d obsToComet = cometPos - earthPos;
+			const Vec3d obsToSun = -earthPos;
+			const double distEarth = std::max(obsToComet.norm(), 0.01);
+			const double cosElong = qBound(-1.0, (obsToComet / distEarth).dot(obsToSun), 1.0);
+			const double elongDeg = std::acos(cosElong) * M_180_PI;
+
+			const double elongWeight = static_cast<double>(smoothStepF(14.0f, 30.0f, static_cast<float>(elongDeg)));
+			const double postPeriBoost = (periQ < 0.45 && dustTailBrightnessFactor >= 0.85f)
+				? (1.0 + 0.60 * static_cast<double>(smoothStepF(2.0f, 10.0f, static_cast<float>(dt))
+				                                  * (1.0f - smoothStepF(18.0f, 36.0f, static_cast<float>(dt)))))
+				: (1.0 + 0.15 * static_cast<double>(smoothStepF(-4.0f, 8.0f, static_cast<float>(dt))
+				                                  * (1.0f - smoothStepF(20.0f, 45.0f, static_cast<float>(dt)))));
+			const double score = (1.0 / (distEarth * distEarth * std::pow(rHelio, 3.0))) * elongWeight * postPeriBoost;
+			if (score > bestScore)
+			{
+				bestScore = score;
+				bestDayJD = jd;
+				bestDistEarth = distEarth;
+			}
 		}
 	}
 
@@ -582,7 +633,18 @@ bool Comet::computeBestTailViewingWindow(double observerLatDeg, double observerL
 	}
 
 	outJD = refinedJD;
-	if (periQ < 0.35 && dustTailBrightnessFactor >= 0.9f)
+	if (fragmentationStrength > 0.05f)
+	{
+		// Zoom straight to telescopic fragment-swarm resolution so the user immediately sees
+		// the Hubble-style cascading mini-nuclei and outburst cloud!
+		if (periQ < 0.10)
+			outFovDeg = 4.5; // Sungrazer breakup fan (C/2012 S1 ISON)
+		else if (fragmentationStrength >= 0.80f)
+			outFovDeg = 1.6; // Primary cascading breakup swarm (73P-B, 73P-G, C/2019 Y4, C/1999 S4)
+		else
+			outFovDeg = 2.0; // Companion fragment pearls (73P-C, 73P-R, 73P-N)
+	}
+	else if (periQ < 0.35 && dustTailBrightnessFactor >= 0.9f)
 		outFovDeg = 38.0;
 	else if (bestDistEarth < 0.25)
 		outFovDeg = 26.0;
@@ -918,10 +980,51 @@ void Comet::draw(StelCore* core, float maxMagLabels, const QFont& planetNameFont
 			// Post-perihelion Finson-Probstein synchrone striae curtain (McNaught, West, Ikeya-Seki, G3 ATLAS)
 			const float striaeStrength = qBound(0.0f,
 				sunskirterScore * (0.45f + 0.55f * std::max(postSurge, instantHeat)) * (1.0f - 0.35f * edgeOnFactor), 0.95f);
-			const float dustWarmth = qBound(0.0f,
+			const float dustWarmthBase = qBound(0.0f,
 				0.28f + 0.46f * sunskirterScore + 0.28f * smoothStepF(100.0f, 150.0f, phaseDeg), 1.0f);
-			const float greenComaWeight = qBound(0.10f,
+			const float greenComaWeightBase = qBound(0.10f,
 				0.82f - 0.56f * isIntrinsicBright - 0.38f * sunskirterScore + 0.16f * gasDominant, 0.94f);
+
+			// Disintegrating / cascading-breakup comet state (e.g. 73P/SW3, C/2019 Y4 ATLAS, C/1999 S4 LINEAR, C/2012 S1 ISON)
+			float fragActive = 0.0f;
+			float fragDrift = 1.0f;
+			float dustWarmth = dustWarmthBase;
+			float greenComaWeight = greenComaWeightBase;
+			if (fragmentationStrength > 0.01f)
+			{
+				fragActive = fragmentationStrength * (0.35f + 0.65f * activity);
+				double dtFrag = (fragmentationEpochJD > 0.0) ? (core->getJDE() - fragmentationEpochJD) : dtDays;
+				if (periodDays > 10.0)
+					dtFrag = std::remainder(dtFrag, periodDays);
+				// Fragments physically expand and drift downstream over weeks around the breakup epoch
+				fragDrift = 0.72f + 0.56f * smoothStepF(-38.0f, 28.0f, static_cast<float>(dtFrag));
+
+				// Archetype color palette for famous disintegrating comets:
+				if (ecc < 0.85)
+				{
+					// 73P/Schwassmann-Wachmann 3: pearly silver-white dusty cascade (Hubble ACS look)
+					greenComaWeight = 0.05f;
+					dustWarmth = 0.14f;
+				}
+				else if (periQ < 0.10)
+				{
+					// C/2012 S1 (ISON): golden-ivory solar-heated sungrazer debris fan
+					greenComaWeight = 0.06f;
+					dustWarmth = 0.72f;
+				}
+				else if (periQ < 0.45)
+				{
+					// C/2019 Y4 (ATLAS): luminous emerald-teal icy halo + crisp silver-white shards
+					greenComaWeight = 0.54f;
+					dustWarmth = 0.18f;
+				}
+				else
+				{
+					// C/1999 S4 (LINEAR): cool misty silver-blue disrupted flock of mini-comets
+					greenComaWeight = 0.18f;
+					dustWarmth = 0.16f;
+				}
+			}
 
 			// Twilight / daylight sky-luminance suppression (forward-scattered great comets remain visible deeper into twilight).
 			float twilightFade = 1.0f;
@@ -954,8 +1057,14 @@ void Comet::draw(StelCore* core, float maxMagLabels, const QFont& planetNameFont
 			const float wideHeadCalm = 0.54f + 0.46f * (1.0f - smoothStepF(18.0f, 75.0f, fov));
 			const float comaIntensity = (rawComaBright / (1.0f + 1.45f * rawComaBright)) * (0.48f + 0.24f * greenComaWeight) * wideHeadCalm * intensityFovScale;
 
-			const double comaRadAU = 0.5 * std::max(static_cast<double>(tailFactors[0]), 2.5e-5);
-			const bool showTail = (activity > 0.01f) && (tailVis * twilightFade > 0.004f) && (distObs > 1e-5);
+			double comaRadAU = 0.5 * std::max(static_cast<double>(tailFactors[0]), 2.5e-5);
+			if (fragActive > 0.05f)
+			{
+				// Compact the surviving sub-nucleus head so it stays crisp and star-like at the leading tip,
+				// matching Hubble 73P-B proportions relative to the downstream outburst cloud & mini-fragment spray.
+				comaRadAU *= (1.0 - 0.74 * static_cast<double>(fragActive));
+			}
+			const bool showTail = (activity > 0.01f) && ((tailVis * twilightFade > 0.004f) || (fragActive > 0.05f && twilightFade > 0.03f)) && (distObs > 1e-5);
 
 			double gasLenAU = 0.0;
 			float gasIntensity = 0.0f;
@@ -971,6 +1080,14 @@ void Comet::draw(StelCore* core, float maxMagLabels, const QFont& planetNameFont
 					tailVis * dustFactor * (0.76f + 0.52f * dustClassScale) * forwardScatter * planeBrightBoost);
 				gasIntensity = qMin(0.68f,
 					tailVis * 0.56f * gasClassScale);
+				if (fragActive > 0.05f)
+				{
+					// Telescopic long-exposure lift for disintegrating debris clouds; suppress blue CO+ ion beam
+					// on dust-dominated breakups (73P) so the silvery debris cone reads cleanly.
+					const float fragLift = 0.58f + 0.42f * (1.0f - smoothStepF(1.2f, 18.0f, fov));
+					dustIntensity = qBound(dustIntensity, qMin(0.86f, (0.34f + 0.52f * fragActive) * fragLift * activity * intensityFovScale), 0.90f);
+					gasIntensity *= (1.0f - 0.72f * fragActive);
+				}
 			}
 
 			drawAnalyticalComet(core, tailPrj, cometEcl, observerEcl, antiSun,
@@ -979,7 +1096,8 @@ void Comet::draw(StelCore* core, float maxMagLabels, const QFont& planetNameFont
 			                    comaIntensity, gasIntensity, dustIntensity,
 			                    twilightFade, dustWarmth, greenComaWeight,
 			                    ionRayStrength, dustRibbonStrength,
-			                    striaeStrength, isLongPeriod);
+			                    striaeStrength * (1.0f - fragActive), isLongPeriod,
+			                    fragActive, fragDrift);
 		}
 		return;
 	}
@@ -1003,10 +1121,17 @@ void Comet::deinitShader()
 			cometVAO->destroy();
 		if (cometVBO && cometVBO->isCreated())
 			cometVBO->destroy();
+		if (fragVAO && fragVAO->isCreated())
+			fragVAO->destroy();
+		if (fragVBO && fragVBO->isCreated())
+			fragVBO->destroy();
 	}
 	cometVAO.reset();
 	cometVBO.reset();
 	cometShaderProgram.reset();
+	fragVAO.reset();
+	fragVBO.reset();
+	fragShaderProgram.reset();
 	shaderContext = nullptr;
 	shaderInitFailed = false;
 }
@@ -1072,6 +1197,9 @@ uniform highp vec2 u_synNorm[22];
 uniform highp float u_seed;
 uniform highp float u_phase;
 uniform mediump float u_tipExtRatio;
+uniform mediump float u_fragStrength;
+uniform highp float u_fragLenPx;
+uniform highp float u_fragDrift;
 
 highp float hash12(highp vec2 p)
 {
@@ -1111,7 +1239,8 @@ void main(void)
 			highp vec2 dComa = d + (-u_gasDir) * (0.12 * R * exp(-r2 * 0.28));
 			highp float rs2 = dot(dComa, dComa) / (R * R);
 
-			highp float pseudoNucleus = (exp(-r2 * 22.0) * 0.72 + exp(-r2 * 5.2) * 0.30) * float(1.0 - u_nucleusSuppress);
+			highp float pseudoNucleus = (exp(-r2 * mix(22.0, 42.0, float(u_fragStrength))) * mix(0.72, 1.05, float(u_fragStrength))
+			                          + exp(-r2 * mix(5.2, 7.5, float(u_fragStrength))) * 0.30) * float(1.0 - u_nucleusSuppress);
 			highp float innerComa = exp(-rs2 * mix(1.35, 0.92, float(u_greenWeight)));
 			highp float outerHalo = exp(-rs2 * mix(0.40, 0.18, float(u_greenWeight))) * mix(0.24, 0.58, float(u_greenWeight));
 
@@ -1304,7 +1433,7 @@ void main(void)
 			highp float combinedDensity = mix(smoothDensity, striaeDensity, float(u_striaeStrength));
 			mediump vec3 combinedColor  = mix(smoothColor, striaeColor, u_striaeStrength);
 
-			highp float dustDensity = sheetMask * qFlux * extGrad * combinedDensity;
+			highp float dustDensity = sheetMask * qFlux * extGrad * combinedDensity * (1.0 - 0.96 * float(u_fragStrength));
 			highp float optDepth = dustDensity * float(u_dustIntensity) * mix(3.15, 2.55, float(u_striaeStrength));
 			highp float dustRadiance = (1.0 - exp(-optDepth)) * 0.96;
 			totalRgb += combinedColor * float(dustRadiance);
@@ -1378,6 +1507,67 @@ void main(void)
 		}
 	}
 
+	// 4. Disintegrating / Cascading-Breakup Debris Plume (73P/SW3-B, C/2019 Y4 ATLAS, C/1999 S4 LINEAR, C/2012 S1 ISON):
+	//    Reproduces the unmistakable Hubble morphology: compact bright primary head -> sleek collimated narrow
+	//    dust neck -> soft powdery clumpy secondary outburst surge -> long, silky diffuse pearly-silver debris fan!
+	//    Uses C-infinity smooth radial-parabolic sunward cap (ZERO flat-line diagonal seam behind the head!).
+	if (u_fragStrength > 0.005 && u_fragLenPx > 4.0)
+	{
+		highp vec2 fPerp = vec2(-u_gasDir.y, u_gasDir.x);
+		highp float xf = dot(d, u_gasDir);
+		highp float yf = dot(d, fPerp);
+		if (xf > -3.0 * R && xf < u_fragLenPx * 1.20)
+		{
+			highp float tfRaw = xf / u_fragLenPx;
+			highp float tf = clamp(0.5 * (tfRaw + sqrt(tfRaw * tfRaw + 0.0004)), 0.0, 1.20);
+			// Parabolic sunward bow envelope curves smoothly around the coma with ZERO straight-line cutoff!
+			highp float yR = yf / max(R, 1.0);
+			highp float xCurved = xf - 0.28 * R * yR * yR;
+			highp float tBack = smoothstep(-0.90 * R, 0.95 * R, xCurved);
+
+			// (a) Sleek tightly collimated dust neck emerging cleanly from the primary surviving sub-nucleus
+			highp float wNeck = sqrt(R * R * 0.42 + (0.052 * max(xf, 0.0)) * (0.052 * max(xf, 0.0)));
+			highp float neckEnv = tBack * exp(-pow(yf / max(wNeck, 1.0), 2.0))
+			                    * exp(-tf * 7.2) * 0.68;
+
+			// (b) Downstream powdery clumpy outburst cloud (soft snowy surge behind the neck — never clipped white!)
+			highp float surgeCenter = 0.175 * u_fragDrift;
+			highp float dSurge = (tf - surgeCenter) / (0.115 * u_fragDrift);
+			highp float wSurge = sqrt(R * R * 0.85 + (0.095 * max(xf, 0.0)) * (0.095 * max(xf, 0.0)));
+			highp float vyS = yf / max(wSurge, 1.0);
+			highp float clump1 = vnoise(vec2(tf * 28.0 + u_seed * 0.61, vyS * 4.5 + u_seed * 1.17));
+			highp float clump2 = vnoise(vec2(tf * 58.0 + u_seed * 1.93, vyS * 9.0 + u_seed * 2.41));
+			highp float clump3 = vnoise(vec2(tf * 116.0 + u_seed * 3.11, vyS * 16.0 + u_seed * 0.73));
+			highp float surgeClumps = 0.46 + 0.76 * pow(clamp(0.46 * clump1 + 0.36 * clump2 + 0.18 * clump3, 0.0, 1.0), 1.35);
+			highp float surgeEnv = smoothstep(0.05, 0.13, tf) * tBack
+			                     * exp(-dSurge * dSurge * 0.82)
+			                     * exp(-vyS * vyS * 1.60)
+			                     * surgeClumps * 0.56;
+
+			// (c) Broad, silky-smooth diffuse pearly debris cone extending far down-tail and melting gently into space
+			highp float wCone = sqrt(R * R * 1.15 + (0.140 * max(xf, 0.0)) * (0.140 * max(xf, 0.0)));
+			highp float vyC = yf / max(wCone, 1.0);
+			highp float softWisp = 0.88 + 0.24 * vnoise(vec2(vyC * 3.8 + u_seed * 0.47, tf * 5.2 + u_seed * 1.63));
+			highp float omF = max(0.0, 1.0 - tf / 1.16);
+			highp float coneEnv = tBack * pow(omF, 1.40) / (1.0 + 1.95 * tf)
+			                    * (0.66 * exp(-vyC * vyC * 1.30) + 0.34 * exp(-vyC * vyC * 0.48))
+			                    * softWisp * 0.48;
+
+			highp float extGradF = mix(1.0, float(u_tipExtRatio), min(tf, 1.0));
+			highp float fragCloud = (neckEnv + surgeEnv + coneEnv) * extGradF * float(u_fragStrength);
+			highp float fragOpt = fragCloud * max(float(u_dustIntensity), 0.38) * 2.15;
+			highp float fragRad = (1.0 - exp(-fragOpt)) * 0.88;
+
+			mediump vec3 fragBaseCol = mix(vec3(0.92, 0.95, 1.00), vec3(1.00, 0.92, 0.78), u_dustWarmth * 0.65);
+			fragBaseCol = mix(fragBaseCol, vec3(0.55, 0.94, 0.80), u_greenWeight * 0.45 * float(1.0 - smoothstep(0.08, 0.42, tf)));
+			mediump vec3 surgeTint = mix(fragBaseCol, vec3(0.98, 0.99, 1.00), 0.50);
+			mediump vec3 colF = mix(fragBaseCol, surgeTint, float(clamp(surgeEnv / max(neckEnv + surgeEnv + coneEnv, 1e-4), 0.0, 1.0)));
+
+			totalRgb += colF * float(fragRad);
+			totalSignal += fragRad;
+		}
+	}
+
 	if (totalSignal <= 0.0002)
 		discard;
 
@@ -1443,6 +1633,9 @@ void main(void)
 	s_cometShaderVars.seed              = cometShaderProgram->uniformLocation("u_seed");
 	s_cometShaderVars.phase             = cometShaderProgram->uniformLocation("u_phase");
 	s_cometShaderVars.tipExtRatio       = cometShaderProgram->uniformLocation("u_tipExtRatio");
+	s_cometShaderVars.fragStrength      = cometShaderProgram->uniformLocation("u_fragStrength");
+	s_cometShaderVars.fragLenPx         = cometShaderProgram->uniformLocation("u_fragLenPx");
+	s_cometShaderVars.fragDrift         = cometShaderProgram->uniformLocation("u_fragDrift");
 
 	cometVBO.reset(new QOpenGLBuffer(QOpenGLBuffer::VertexBuffer));
 	if (!cometVBO->create())
@@ -1465,6 +1658,94 @@ void main(void)
 		cometVAO->release();
 	}
 	cometVBO->release();
+
+	// Dedicated lightweight batched shader for cascading mini-fragments (pinpoint mini-nucleus + mini-coma + aligned micro-tail)
+	const QByteArray fragSwarmVertSrc =
+		StelOpenGL::globalShaderPrefix(StelOpenGL::VERTEX_SHADER) +
+		R"(
+ATTRIBUTE highp vec2 a_pos;
+ATTRIBUTE highp vec2 a_local;
+ATTRIBUTE mediump vec3 a_color;
+ATTRIBUTE mediump float a_sharp;
+uniform highp mat4 u_projectionMatrix;
+VARYING highp vec2 v_local;
+VARYING mediump vec3 v_color;
+VARYING mediump float v_sharp;
+void main(void)
+{
+	v_local = a_local;
+	v_color = a_color;
+	v_sharp = a_sharp;
+	gl_Position = u_projectionMatrix * vec4(a_pos, 0.0, 1.0);
+}
+)";
+	const QByteArray fragSwarmFragSrc =
+		StelOpenGL::globalShaderPrefix(StelOpenGL::FRAGMENT_SHADER) +
+		R"(
+VARYING highp vec2 v_local;
+VARYING mediump vec3 v_color;
+VARYING mediump float v_sharp;
+void main(void)
+{
+	highp float r2 = dot(v_local, v_local);
+	// Crisp pinpoint mini-nucleus core + soft round mini-coma halo
+	highp float core = exp(-r2 * mix(18.0, 44.0, float(v_sharp))) * 1.18;
+	highp float coma = exp(-r2 * 2.6) * 0.34;
+	// Asymmetric tear-drop micro-tail pointing strictly anti-sunward (+v_local.x)
+	highp float tPos = max(v_local.x, 0.0);
+	highp float tBack = smoothstep(-0.24, 0.14, v_local.x);
+	highp float wTail = 0.24 + 0.15 * tPos;
+	highp float microTail = tBack * exp(-tPos * 0.68)
+	                      * exp(-pow(v_local.y / wTail, 2.0))
+	                      * smoothstep(4.2, 1.6, tPos) * 0.56;
+	highp float intensity = core + coma + microTail;
+	if (intensity <= 0.001)
+		discard;
+	mediump vec3 rgb = v_color * float(intensity);
+	mediump float lum = dot(rgb, vec3(0.2126, 0.7152, 0.0722));
+	rgb *= 1.0 / (1.0 + 0.45 * lum);
+	FRAG_COLOR = vec4(rgb, 0.0);
+}
+)";
+
+	std::unique_ptr<QOpenGLShaderProgram> fProg(new QOpenGLShaderProgram);
+	if (fProg->addShaderFromSourceCode(QOpenGLShader::Vertex, fragSwarmVertSrc) &&
+	    fProg->addShaderFromSourceCode(QOpenGLShader::Fragment, fragSwarmFragSrc))
+	{
+		fProg->bindAttributeLocation("a_pos", 0);
+		fProg->bindAttributeLocation("a_local", 1);
+		fProg->bindAttributeLocation("a_color", 2);
+		fProg->bindAttributeLocation("a_sharp", 3);
+		if (StelPainter::linkProg(fProg.get(), "Comet fragment swarm shader"))
+		{
+			fragShaderProgram = std::move(fProg);
+			s_fragShaderVars.projectionMatrix = fragShaderProgram->uniformLocation("u_projectionMatrix");
+
+			fragVBO.reset(new QOpenGLBuffer(QOpenGLBuffer::VertexBuffer));
+			if (fragVBO->create())
+			{
+				fragVBO->setUsagePattern(QOpenGLBuffer::StreamDraw);
+				fragVBO->bind();
+				fragVBO->allocate(6 * COMET_FRAG_COUNT * static_cast<int>(sizeof(FragQuadVertex)));
+				fragVAO.reset(new QOpenGLVertexArrayObject);
+				if (fragVAO->create())
+				{
+					fragVAO->bind();
+					QOpenGLFunctions* gl = ctx->functions();
+					gl->glEnableVertexAttribArray(0);
+					gl->glVertexAttribPointer(0, 2, GL_FLOAT, GL_FALSE, sizeof(FragQuadVertex), reinterpret_cast<const void*>(offsetof(FragQuadVertex, x)));
+					gl->glEnableVertexAttribArray(1);
+					gl->glVertexAttribPointer(1, 2, GL_FLOAT, GL_FALSE, sizeof(FragQuadVertex), reinterpret_cast<const void*>(offsetof(FragQuadVertex, lx)));
+					gl->glEnableVertexAttribArray(2);
+					gl->glVertexAttribPointer(2, 3, GL_FLOAT, GL_FALSE, sizeof(FragQuadVertex), reinterpret_cast<const void*>(offsetof(FragQuadVertex, r)));
+					gl->glEnableVertexAttribArray(3);
+					gl->glVertexAttribPointer(3, 1, GL_FLOAT, GL_FALSE, sizeof(FragQuadVertex), reinterpret_cast<const void*>(offsetof(FragQuadVertex, sharp)));
+					fragVAO->release();
+				}
+				fragVBO->release();
+			}
+		}
+	}
 	return true;
 }
 
@@ -1549,7 +1830,8 @@ void Comet::drawAnalyticalComet(StelCore* core, const StelProjectorP& prj,
                                 float comaIntensity, float gasIntensity, float dustIntensity,
                                 float twilightFade, float warmth, float greenWeight,
                                 float ionRayStrength, float dustRibbonStrength,
-                                float striaeStrength, float isLongPeriod)
+                                float striaeStrength, float isLongPeriod,
+                                float fragActive, float fragDrift)
 {
 	Vec3d winHead;
 	if (!prj->project(Vec3d(0.0, 0.0, 0.0), winHead) || !std::isfinite(winHead[0]) || !std::isfinite(winHead[1]))
@@ -1769,6 +2051,37 @@ void Comet::drawAnalyticalComet(StelCore* core, const StelProjectorP& prj,
 		         winHead[1] + static_cast<double>(gasDir.y()) * gasLenPx, gasPad);
 	}
 
+	// Compute 3D & projected 2D extent of disintegrating comet debris cone (73P-B/C/G/R/N, C/2019 Y4, C/1999 S4, C/2012 S1)
+	double fragLenAU = 0.0;
+	double fragLenPx = 0.0;
+	if (fragActive > 0.01f && showTail && hasGasDir)
+	{
+		fragLenAU = qBound(comaRadAU * 18.0, std::max(gasLenAU * 0.88, comaRadAU * 26.0), distObs * 0.085)
+		          * static_cast<double>(fragDrift);
+		const Vec3d fragTip3D = antiSun * fragLenAU;
+		Vec3d winFragTip;
+		if (prj->project(fragTip3D, winFragTip) && std::isfinite(winFragTip[0]) && std::isfinite(winFragTip[1]) &&
+		    !prj->intersectViewportDiscontinuity(Vec3d(0.0, 0.0, 0.0), fragTip3D))
+		{
+			const double projLen = (winFragTip[0] - winHead[0]) * static_cast<double>(gasDir.x())
+			                     + (winFragTip[1] - winHead[1]) * static_cast<double>(gasDir.y());
+			if (projLen > 1.0)
+				fragLenPx = projLen;
+		}
+		if (fragLenPx < 1.0)
+		{
+			const double cosA = qBound(-1.0, antiSun.dot(viewDir), 1.0);
+			const double foreshorten = std::sqrt(std::max(0.0, 1.0 - cosA * cosA));
+			fragLenPx = std::atan((fragLenAU * foreshorten) / distObs) * pixelPerRad;
+		}
+		if (fragLenPx > 2.0)
+		{
+			const double fragPad = std::max(comaPx * 3.2, fragLenPx * 0.30);
+			expandPt(winHead[0] + static_cast<double>(gasDir.x()) * fragLenPx * 1.15,
+			         winHead[1] + static_cast<double>(gasDir.y()) * fragLenPx * 1.15, fragPad);
+		}
+	}
+
 	if (validSynCount > 0 && finalDustInt > 0.002f)
 	{
 		// Wide seamless Gaussian overlap (~1.55x neighbor spacing) guarantees a mathematically flat,
@@ -1952,6 +2265,9 @@ void Comet::drawAnalyticalComet(StelCore* core, const StelProjectorP& prj,
 	cometShaderProgram->setUniformValue(s_cometShaderVars.seed, renderSeed);
 	cometShaderProgram->setUniformValue(s_cometShaderVars.phase, solarWindPhase);
 	cometShaderProgram->setUniformValue(s_cometShaderVars.tipExtRatio, tipExtRatio);
+	cometShaderProgram->setUniformValue(s_cometShaderVars.fragStrength, (fragLenPx > 4.0) ? fragActive : 0.0f);
+	cometShaderProgram->setUniformValue(s_cometShaderVars.fragLenPx, static_cast<float>(fragLenPx));
+	cometShaderProgram->setUniformValue(s_cometShaderVars.fragDrift, fragDrift);
 
 	gl->glDrawArrays(GL_TRIANGLES, 0, 6);
 
@@ -1963,6 +2279,184 @@ void Comet::drawAnalyticalComet(StelCore* core, const StelProjectorP& prj,
 	cometVBO->release();
 	if (useVAO)
 		cometVAO->release();
+
+	// 5. Dedicated 3D-projected cascading mini-fragment swarm (73P-B/C/G/R/N, C/2019 Y4 ATLAS, C/1999 S4 LINEAR, C/2012 S1 ISON):
+	//    Draws 56 physically sorted mini-comets (crisp pinpoint sub-nuclei + soft mini-comae + aligned anti-solar micro-tails)
+	//    in a single ultra-fast batched additive draw call, resolving sharply from wide-field down to Hubble telescopic zoom!
+	if (fragActive > 0.02f && fragLenAU > 1e-8 && fragLenPx > 10.0 &&
+	    fragShaderProgram && fragVBO && fragVBO->isCreated())
+	{
+		// Build a 3D orthonormal frame around the anti-solar debris cone axis
+		Vec3d axis3D = antiSun;
+		const KeplerOrbit* kOrb = dynamic_cast<const KeplerOrbit*>(orbitPtr);
+		if (kOrb)
+		{
+			Vec3d vel = kOrb->getVelocity();
+			if (vel.normSquared() > 1e-12)
+			{
+				vel.normalize();
+				axis3D = antiSun - vel * 0.07; // subtle orbital drag curvature
+				axis3D.normalize();
+			}
+		}
+		Vec3d refUp = (std::fabs(axis3D[2]) < 0.85) ? Vec3d(0.0, 0.0, 1.0) : Vec3d(1.0, 0.0, 0.0);
+		Vec3d right3D = axis3D ^ refUp;
+		right3D.normalize();
+		Vec3d up3D = right3D ^ axis3D;
+		up3D.normalize();
+
+		auto fragHash = [&](int idx, int ch) -> float {
+			uint h = static_cast<uint>(renderSeed * 97.0f) ^ static_cast<uint>(idx * 374761393u + ch * 668265263u);
+			h = (h ^ (h >> 13)) * 1274126177u;
+			h ^= (h >> 16);
+			return static_cast<float>(h & 0x00FFFFFFu) / 16777216.0f;
+		};
+
+		// Telescopic resolution visibility: fades gently when very tiny at ultra-wide FOV, sparkles crisply at telescopic FOV
+		const float swarmVis = smoothStepF(10.0f, 95.0f, static_cast<float>(fragLenPx))
+		                     * fragActive * headScale * std::max(dustIntensity, 0.42f);
+		const Vec3f baseTint(
+			0.95f + 0.05f * warmth,
+			0.97f - 0.05f * warmth + 0.03f * greenWeight,
+			1.00f - 0.18f * warmth
+		);
+
+		std::vector<FragQuadVertex> fVerts;
+		fVerts.reserve(6 * COMET_FRAG_COUNT);
+
+		const int activeFrags = qBound(18, static_cast<int>(std::round(20.0f + 44.0f * fragActive)), COMET_FRAG_COUNT);
+		for (int i = 0; i < activeFrags; ++i)
+		{
+			const float u1 = fragHash(i, 1);
+			const float u2 = fragHash(i, 2);
+			const float u3 = fragHash(i, 3);
+			const float u4 = fragHash(i, 4);
+
+			double sFrac = 0.2;
+			double coneLat = 0.05;
+			float sizeWeight = 0.6f;
+			float lumWeight = 0.6f;
+			float sharp = 0.72f;
+
+			if (i < 22)
+			{
+				// Cluster 1: Powdery outburst spray right behind the primary neck — finely separated sparkling ice-dust shards!
+				sFrac = 0.095 + 0.185 * std::pow(static_cast<double>(u1), 0.82);
+				coneLat = (0.020 + 0.092 * sFrac) * (0.28 + 0.72 * std::sqrt(static_cast<double>(u2)));
+				const bool majorShard = (i < 5);
+				sizeWeight = majorShard ? (0.68f + 0.34f * u4) : (0.36f + 0.34f * u4);
+				lumWeight  = majorShard ? (0.54f + 0.26f * u4) : (0.26f + 0.30f * u4);
+				sharp      = majorShard ? 0.84f : 0.74f;
+			}
+			else if (i < 56)
+			{
+				// Cluster 2: Cascading mid-swarm fanning gently down-tail (delicate pinpoint mini-comets with micro-tails)
+				sFrac = 0.16 + 0.44 * std::pow(static_cast<double>(u1), 0.90);
+				coneLat = (0.018 + 0.135 * sFrac) * (0.22 + 0.78 * std::sqrt(static_cast<double>(u2)));
+				const float distFade = 1.0f - 0.50f * static_cast<float>((sFrac - 0.16) / 0.48);
+				sizeWeight = (0.30f + 0.46f * std::pow(u4, 1.4f)) * distFade;
+				lumWeight  = (0.22f + 0.50f * std::pow(u4, 1.3f)) * distFade;
+				sharp      = 0.68f + 0.26f * u4;
+			}
+			else
+			{
+				// Cluster 3: Far downstream stragglers (including 2 crisp isolated outliers like Hubble 73P-B lower-right!)
+				sFrac = 0.54 + 0.38 * static_cast<double>(u1);
+				const bool heroStraggler = (i == 56 || i == 57);
+				coneLat = heroStraggler
+					? (0.075 + 0.080 * sFrac)
+					: ((0.028 + 0.145 * sFrac) * (0.32 + 0.68 * std::sqrt(static_cast<double>(u2))));
+				sizeWeight = heroStraggler ? (0.50f + 0.16f * u4) : (0.26f + 0.24f * u4);
+				lumWeight  = heroStraggler ? (0.56f + 0.18f * u4) : (0.18f + 0.24f * u4);
+				sharp      = heroStraggler ? 0.92f : 0.76f;
+			}
+
+			const double az = static_cast<double>(u3) * 2.0 * M_PI;
+			const double alongAU = sFrac * fragLenAU;
+			const double radAU   = coneLat * fragLenAU;
+			const Vec3d fragPos3D = axis3D * alongAU
+			                      + right3D * (radAU * std::cos(az))
+			                      + up3D    * (radAU * std::sin(az));
+
+			Vec3d winFrag;
+			if (!prj->project(fragPos3D, winFrag) || !std::isfinite(winFrag[0]) || !std::isfinite(winFrag[1]) ||
+			    prj->intersectViewportDiscontinuity(Vec3d(0.0, 0.0, 0.0), fragPos3D))
+				continue;
+
+			// Fine, delicate screen-space shard radius so every mini-comet & micro-tail stays crisp and individually resolved
+			const float baseRadPx = qBound(static_cast<float>(1.25 * dpr),
+			                               static_cast<float>(fragLenPx * 0.0074) * sizeWeight,
+			                               static_cast<float>(7.2 * dpr));
+			if (winFrag[0] + baseRadPx * 4.5f < vpLeft || winFrag[0] - baseRadPx * 4.5f > vpRight ||
+			    winFrag[1] + baseRadPx * 4.5f < vpBottom || winFrag[1] - baseRadPx * 4.5f > vpTop)
+				continue;
+
+			// Align each fragment's micro-tail strictly to the anti-solar direction
+			const QVector2D tDir = gasDir;
+			const QVector2D pDir(-tDir.y(), tDir.x());
+
+			const float extF = extHead + (extTip - extHead) * static_cast<float>(qBound(0.0, sFrac, 1.0));
+			const float amp = qBound(0.04f, swarmVis * lumWeight * (extF / std::max(extHead, 0.01f)) * 0.76f, 0.78f);
+			const float cr = baseTint[0] * amp;
+			const float cg = baseTint[1] * amp;
+			const float cb = baseTint[2] * amp;
+
+			const float fx = static_cast<float>(winFrag[0]);
+			const float fy = static_cast<float>(winFrag[1]);
+			const float lxMin = -1.25f;
+			const float lxMax = 4.25f;
+			const float lyMax = 1.35f;
+
+			auto makeVert = [&](float lx, float ly) -> FragQuadVertex {
+				const float sx = fx + (tDir.x() * lx + pDir.x() * ly) * baseRadPx;
+				const float sy = fy + (tDir.y() * lx + pDir.y() * ly) * baseRadPx;
+				return FragQuadVertex{sx, sy, lx, ly, cr, cg, cb, sharp};
+			};
+
+			const FragQuadVertex v00 = makeVert(lxMin, -lyMax);
+			const FragQuadVertex v10 = makeVert(lxMax, -lyMax);
+			const FragQuadVertex v01 = makeVert(lxMin,  lyMax);
+			const FragQuadVertex v11 = makeVert(lxMax,  lyMax);
+			fVerts.push_back(v00); fVerts.push_back(v10); fVerts.push_back(v01);
+			fVerts.push_back(v01); fVerts.push_back(v10); fVerts.push_back(v11);
+		}
+
+		if (!fVerts.empty())
+		{
+			const bool useFragVAO = (fragVAO && fragVAO->isCreated());
+			if (useFragVAO)
+				fragVAO->bind();
+			fragVBO->bind();
+			fragVBO->write(0, fVerts.data(), static_cast<int>(fVerts.size() * sizeof(FragQuadVertex)));
+			if (!useFragVAO)
+			{
+				gl->glEnableVertexAttribArray(0);
+				gl->glVertexAttribPointer(0, 2, GL_FLOAT, GL_FALSE, sizeof(FragQuadVertex), reinterpret_cast<const void*>(offsetof(FragQuadVertex, x)));
+				gl->glEnableVertexAttribArray(1);
+				gl->glVertexAttribPointer(1, 2, GL_FLOAT, GL_FALSE, sizeof(FragQuadVertex), reinterpret_cast<const void*>(offsetof(FragQuadVertex, lx)));
+				gl->glEnableVertexAttribArray(2);
+				gl->glVertexAttribPointer(2, 3, GL_FLOAT, GL_FALSE, sizeof(FragQuadVertex), reinterpret_cast<const void*>(offsetof(FragQuadVertex, r)));
+				gl->glEnableVertexAttribArray(3);
+				gl->glVertexAttribPointer(3, 1, GL_FLOAT, GL_FALSE, sizeof(FragQuadVertex), reinterpret_cast<const void*>(offsetof(FragQuadVertex, sharp)));
+			}
+
+			fragShaderProgram->bind();
+			fragShaderProgram->setUniformValue(s_fragShaderVars.projectionMatrix, qMat);
+			gl->glDrawArrays(GL_TRIANGLES, 0, static_cast<GLsizei>(fVerts.size()));
+			fragShaderProgram->release();
+
+			if (!useFragVAO)
+			{
+				gl->glDisableVertexAttribArray(0);
+				gl->glDisableVertexAttribArray(1);
+				gl->glDisableVertexAttribArray(2);
+				gl->glDisableVertexAttribArray(3);
+			}
+			fragVBO->release();
+			if (useFragVAO)
+				fragVAO->release();
+		}
+	}
 
 	sPainter.setBlending(false);
 }

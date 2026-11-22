@@ -219,6 +219,12 @@ if [ "${OHOS_SYNC_RESOURCES:-auto}" != "0" ]; then
     RESOURCE_SYNC_REQUIRED=1
   fi
 
+  # Keep bundled minor-body catalog (e.g. newly added disintegrating comets) synced into rawfile without triggering a full rsync.
+  if [ -d "$RAWFILE_ROOT/data" ] && ! cmp -s "$REPO_ROOT/data/ssystem_minor.ini" "$RAWFILE_ROOT/data/ssystem_minor.ini"; then
+    cp "$REPO_ROOT/data/ssystem_minor.ini" "$RAWFILE_ROOT/data/ssystem_minor.ini"
+    echo "  data/ssystem_minor.ini -> rawfile/stellarium/data/ssystem_minor.ini"
+  fi
+
   MERCATOR_TRIGGER=0
   if [ "$MERCATOR_MISSING" -gt 0 ]; then
     case "$(uname -s)" in

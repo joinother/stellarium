@@ -107,6 +107,15 @@ public:
 	//! for this comet, accounting for heliocentric activity, Earth distance, solar elongation, and local twilight.
 	bool computeBestTailViewingWindow(double observerLatDeg, double observerLonDeg, double& outJD, double& outFovDeg) const;
 
+	//! Configure disintegration / nuclear fragmentation morphology (e.g. 73P-B, C/2019 Y4 ATLAS, C/1999 S4 LINEAR, C/2012 S1 ISON).
+	void setFragmentationParams(float strength, double epochJD = 0.0)
+	{
+		fragmentationStrength = qBound(0.0f, strength, 1.0f);
+		fragmentationEpochJD = epochJD;
+	}
+	float getFragmentationStrength() const { return fragmentationStrength; }
+	double getFragmentationEpochJD() const { return fragmentationEpochJD; }
+
 	//! set the discovery circumstances of comet
 	//! @param date of discovery
 	//! @param name of discoverer
@@ -175,7 +184,8 @@ private:
 				 float comaIntensity, float gasIntensity, float dustIntensity,
 				 float twilightFade, float warmth, float greenWeight,
 				 float ionRayStrength, float dustRibbonStrength,
-				 float striaeStrength, float isLongPeriod);
+				 float striaeStrength, float isLongPeriod,
+				 float fragActive, float fragDrift);
 	static bool ensureShaders();
 
 	//! compute a coma, faked as simple disk to be tilted towards the observer.
@@ -232,12 +242,17 @@ private:
 	static StelTextureSP tailTexture;      // it seems not really necessary to have different textures. gas tail is just painted blue.
 
 	float renderSeed; // deterministic per-comet seed
+	float fragmentationStrength; // 0 = intact comet, >0..1 = cascading disintegrating comet (73P-B, C/2019 Y4, C/1999 S4, C/2012 S1)
+	double fragmentationEpochJD; // peak cascade-breakup / close-approach epoch (0 = auto near perihelion)
 	std::array<DustSynchroneSample, COMET_SYNCHRONE_COUNT> dustSynchrones;
 	double lastSynchroneJDE;
 	float lastSynchroneStriae;
 	static std::unique_ptr<QOpenGLShaderProgram> cometShaderProgram;
 	static std::unique_ptr<QOpenGLVertexArrayObject> cometVAO;
 	static std::unique_ptr<QOpenGLBuffer> cometVBO;
+	static std::unique_ptr<QOpenGLShaderProgram> fragShaderProgram;
+	static std::unique_ptr<QOpenGLVertexArrayObject> fragVAO;
+	static std::unique_ptr<QOpenGLBuffer> fragVBO;
 	static QOpenGLContext* shaderContext;
 	static bool shaderInitFailed;
 };

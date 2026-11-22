@@ -1186,7 +1186,7 @@ private:
 	void loadPlanets();
 
 	//! Load planet data from the given file
-	bool loadPlanets(const QString& filePath);
+	bool loadPlanets(const QString& filePath, bool onlyMissingSpecialComets = false);
 
 	//! Load multi-epoch orbital element tables from the extended asteroid
 	//! ephemeris pack (asteroid_elements.json).  Called at the end of

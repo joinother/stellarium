@@ -678,11 +678,13 @@ void SolarSystem::loadPlanets()
 		return;
 	}
 
+	QString loadedMinorFile;
 	for (const auto& solarSystemFile : std::as_const(solarSystemFiles))
 	{
 		if (loadPlanets(solarSystemFile))
 		{
 			qInfo().noquote() << "File ssystem_minor.ini is loaded successfully...";
+			loadedMinorFile = solarSystemFile;
 			break;
 		}
 		else
@@ -726,6 +728,14 @@ void SolarSystem::loadPlanets()
 	for (const auto& planet : std::as_const(systemPlanets))
 		if(planet->parent != sun || !planet->satellites.isEmpty())
 			shadowPlanetCount++;
+
+	// If a user-customized ssystem_minor.ini shadowed the bundled catalog, merge any newly shipped
+	// special disintegrating comets (e.g. 73P/SW3 pearl chain, C/2019 Y4, C/1999 S4, C/2012 S1)
+	// that aren't already present in the user file.
+	if (!loadedMinorFile.isEmpty() && solarSystemFiles.size() > 1 && solarSystemFiles.last() != loadedMinorFile)
+	{
+		loadPlanets(solarSystemFiles.last(), true);
+	}
 
 	// Load extended multi-epoch asteroid ephemeris if available.
 	// findFileInAllPaths checks the user data directory first, then the
@@ -775,7 +785,7 @@ unsigned char SolarSystem::BvToColorIndex(double bV)
 	return static_cast<unsigned char>(std::floor(0.5+127.0*((500.0+dBV)/4000.0)));
 }
 
-bool SolarSystem::loadPlanets(const QString& filePath)
+bool SolarSystem::loadPlanets(const QString& filePath, bool onlyMissingSpecialComets)
 {
 	StelSkyDrawer* skyDrawer = StelApp::getInstance().getCore()->getSkyDrawer();
 	qInfo().noquote() << "Loading from:"  << QDir::toNativeSeparators(filePath);
@@ -903,6 +913,11 @@ bool SolarSystem::loadPlanets(const QString& filePath)
 		//totalPlanets++;
 		const QString secname = orderedSections.at(i);
 		const QString type = pd.value(secname+"/type").toString();
+		if (onlyMissingSpecialComets)
+		{
+			if (type != L1S("comet") || pd.value(secname+"/fragmentation_strength", 0.0f).toFloat() <= 0.0f)
+				continue;
+		}
 		QString englishName = pd.value(secname+"/name").toString().simplified();
 		// englishName alone may be a combination of several elements...
 		if (type==L1S("comet") || type == L1S("interstellar object"))
@@ -983,6 +998,20 @@ bool SolarSystem::loadPlanets(const QString& filePath)
 					englishName=name;
 				else
 					qWarning() << "Comet " << englishName << "has no proper name elements in section " << secname;
+			}
+			if (onlyMissingSpecialComets)
+			{
+				bool alreadyLoaded = false;
+				for (const auto& existing : std::as_const(systemMinorBodies))
+				{
+					if (existing && existing->getEnglishName().compare(englishName, Qt::CaseInsensitive) == 0)
+					{
+						alreadyLoaded = true;
+						break;
+					}
+				}
+				if (alreadyLoaded)
+					continue;
 			}
 		}
 		else if (QStringList({"asteroid", "dwarf planet", "cubewano", "sednoid", "plutino", "scattered disc object", "Oort cloud object"}).contains(type) && !englishName.contains("Pluto"))
@@ -1385,6 +1414,12 @@ bool SolarSystem::loadPlanets(const QString& filePath)
 			QString discoveryDate = pd.value(secname+"/discovery", "").toString();
 			if (!discoveryDate.isEmpty())
 				comet->setDiscoveryData(discoveryDate, discovererName);
+
+			// Disintegrating / fragmenting comet parameters (e.g. 73P/SW3, C/2019 Y4 ATLAS, C/1999 S4 LINEAR, C/2012 S1 ISON)
+			const float fragStrength = qBound(0.0f, pd.value(secname+"/fragmentation_strength", 0.0f).toFloat(), 1.0f);
+			const double fragEpochJD = pd.value(secname+"/fragmentation_epoch_jd", 0.0).toDouble();
+			if (fragStrength > 0.0f)
+				comet->setFragmentationParams(fragStrength, fragEpochJD);
 
 			systemMinorBodies.push_back(newP);
 		}
