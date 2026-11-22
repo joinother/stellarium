@@ -791,7 +791,7 @@ void Comet::draw(StelCore* core, float maxMagLabels, const QFont& planetNameFont
 			const float dustFactor = qBound(0.16f, dustTailBrightnessFactor / 1.25f, 1.55f);
 			const float dustClassScale = (0.58f + 0.52f * isIntrinsicBright + 0.72f * sunskirterScore)
 			                           * (preBuild + 0.48f * postSurge * (0.4f + 0.6f * closeSunStress))
-			                           * (1.0f - 0.58f * gasDominant)
+			                           * (1.0f - 0.76f * gasDominant)
 			                           * (0.55f + 0.45f * isLongPeriod);
 			const float gasClassScale  = (0.38f + 0.82f * isLongPeriod + 0.52f * gasDominant)
 			                           * (1.0f - 0.92f * sunskirterScore);
@@ -836,7 +836,7 @@ void Comet::draw(StelCore* core, float maxMagLabels, const QFont& planetNameFont
 				: 0.0f;
 			const float rawComaBright = std::pow(10.0f, -0.15f * ((vMagnitude - comaZoomBoost) - 1.2f));
 			const float wideHeadCalm = 0.54f + 0.46f * (1.0f - smoothStepF(18.0f, 75.0f, fov));
-			const float comaIntensity = (rawComaBright / (1.0f + 1.45f * rawComaBright)) * 0.48f * wideHeadCalm * intensityFovScale;
+			const float comaIntensity = (rawComaBright / (1.0f + 1.45f * rawComaBright)) * (0.48f + 0.24f * greenComaWeight) * wideHeadCalm * intensityFovScale;
 
 			const double comaRadAU = 0.5 * std::max(static_cast<double>(tailFactors[0]), 2.5e-5);
 			const bool showTail = (activity > 0.01f) && (tailVis * twilightFade > 0.004f) && (distObs > 1e-5);
@@ -1057,7 +1057,9 @@ void main(void)
 			highp vec2 diff = v_screenPos - Ps;
 			highp float dist2 = dot(diff, diff);
 
-			highp float wLoc = mix(meta.y, meta.z, s);
+			// C1 smoothstep parameter sW guarantees zero slope discontinuity (zero Mach-band seam!) across s = 0 at the head
+			highp float sW = s * s * (3.0 - 2.0 * s);
+			highp float wLoc = mix(meta.y, meta.z, sW);
 			highp float v2 = dist2 / max(wLoc * wLoc, 1.0);
 			if (v2 < 9.5)
 			{
@@ -1067,7 +1069,7 @@ void main(void)
 				// Suppress sub-coma-length synchrones from injecting a 0->1 vBeta step across the head (prevents flat mushroom/pen cap!)
 				highp float vW = g * smoothstep(0.45 * wLoc, 2.60 * wLoc, abLen);
 				gRawSum  += g;
-				gNormSum += g * mix(normPair.x, normPair.y, s);
+				gNormSum += g * mix(normPair.x, normPair.y, sW);
 				uSum     += meta.w * g;
 				vSum     += s * vW;
 				vDenom   += vW;
@@ -1083,92 +1085,102 @@ void main(void)
 			// Pure C-infinity Gaussian-envelope coverage (eliminates any circular halo/rim around the head!)
 			highp float sheetMask = 1.0 - exp(-1.65 * gNormSum);
 
-			// Continuous multi-octave Sekanina-Farrell wind-swept striae in (uAge, vBeta) sheet space:
-			// Forward shear uShear = uAge - 0.18 * vBeta tilts all rising striae coherently in ONE wind-swept direction!
-			highp float uShear = uAge - 0.18 * vBeta * float(u_striaeStrength);
-			highp float uWarp  = uShear + (vnoise(vec2(uShear * 7.5 + u_seed * 0.31, vBeta * 0.85)) - 0.5) * 0.015 * vBeta;
-			highp float fMacro = vnoise(vec2(uWarp * 14.0 + u_seed * 0.53, vBeta * 0.30));
-			highp float fMid   = vnoise(vec2(uWarp * 30.0 + u_seed * 1.37, vBeta * 0.52));
-			highp float fFine  = vnoise(vec2(uWarp * 64.0 + u_seed * 2.71, vBeta * 0.88));
-			highp float fMicro = vnoise(vec2(uWarp * 116.0 + u_seed * 4.19, vBeta * 1.35));
-			highp float threadRaw = 0.24 * fMacro + 0.40 * fMid + 0.24 * fFine + 0.12 * fMicro;
+			// Continuous multi-octave Sekanina-Farrell calligraphy-brush bristles in (uAge, vBeta) sheet space:
+			// Forward shear uShear = uAge - 0.20 * vBeta aligns all fragmentation striae in ONE wind-swept direction.
+			// Soft low/mid-frequency aurora bands (no harsh high-frequency scratchy needles) give an authentic
+			// dry-brush mist / aurora-curtain texture where bristles stretch seamlessly out of the main stroke.
+			highp float uShear = uAge - 0.20 * vBeta * float(u_striaeStrength);
+			highp float uWarp  = uShear + (vnoise(vec2(uShear * 6.5 + u_seed * 0.31, vBeta * 0.75)) - 0.5) * 0.018 * vBeta;
+			highp float fMacro = vnoise(vec2(uWarp * 10.5 + u_seed * 0.53, vBeta * 0.26));
+			highp float fMid   = vnoise(vec2(uWarp * 22.0 + u_seed * 1.37, vBeta * 0.44));
+			highp float fFine  = vnoise(vec2(uWarp * 46.0 + u_seed * 2.71, vBeta * 0.72));
+			highp float bristleTuft = 0.42 * fMacro + 0.38 * fMid + 0.20 * fFine;
 
 			// Organic low-frequency cloud turbulence warping vBeta so NO dust edge ever reads like a rigid mathematical curve
-			highp float cloudWarp = ((vnoise(vec2(uAge * 4.6 + u_seed * 0.61, vBeta * 2.1)) - 0.5) * 0.068
-			                       + (vnoise(vec2(uAge * 10.2 + u_seed * 1.73, vBeta * 3.8)) - 0.5) * 0.028)
+			highp float cloudWarp = ((vnoise(vec2(uAge * 4.4 + u_seed * 0.61, vBeta * 2.0)) - 0.5) * 0.064
+			                       + (vnoise(vec2(uAge * 9.5 + u_seed * 1.73, vBeta * 3.6)) - 0.5) * 0.026)
 			                       * smoothstep(0.10, 0.40, uAge);
 			highp float vOrg = clamp(vBeta + cloudWarp, 0.0, 1.0);
 
-			// Organic per-filament height variation so upper gossamer wisps reach uneven heights and melt into space
-			highp float tipReach = mix(1.0, 0.68 + 0.52 * (0.55 * fMacro + 0.45 * fMid), float(u_striaeStrength));
-			highp float vTip = vOrg / max(tipReach, 0.45);
-			highp float omTip = max(0.0, 1.0 - vTip);
-
-			highp float omV = max(0.0, 1.0 - vBeta);
 			highp float omU = max(0.0, 1.0 - uAge);
 
-			// Smooth dust comets (Hale-Bopp, Halley, Hyakutake): lush velvety curved fan with round head
-			highp float smoothAlong = pow(omV, 0.95) * smoothstep(1.0, 0.72, vBeta) / (1.0 + 0.65 * vBeta);
+			// Smooth dust comets (Hale-Bopp, Halley, Hyakutake): C1 zero-derivative at vBeta=0 eliminates head-to-tail seam!
+			highp float v2s = vBeta * vBeta;
+			highp float smoothAlong = pow(max(0.0, 1.0 - v2s), 1.15) * smoothstep(1.0, 0.66, vBeta) / (1.0 + 1.15 * v2s);
 			highp float smoothAge   = pow(omU, 0.78) * smoothstep(1.0, 0.76, uAge);
 			highp float silkMod     = mix(1.0, 0.86 + 0.28 * fMid, float(u_dustRibbonStrength) * smoothstep(0.08, 0.38, vBeta));
 			highp float smoothDensity = smoothAlong * smoothAge * silkMod;
 
 			mediump vec3 headTint  = mix(vec3(1.00, 0.98, 0.92), vec3(1.00, 0.94, 0.78), u_dustWarmth);
+			headTint = mix(headTint, vec3(0.68, 0.98, 0.84), u_greenWeight * 0.55);
 			mediump vec3 midWarm   = mix(vec3(0.99, 0.87, 0.73), vec3(1.00, 0.86, 0.68), u_dustWarmth);
+			midWarm = mix(midWarm, vec3(0.76, 0.86, 0.92), u_greenWeight * 0.55);
 			mediump vec3 outerWarm = mix(vec3(0.88, 0.74, 0.62), vec3(0.92, 0.76, 0.62), u_dustWarmth);
+			outerWarm = mix(outerWarm, vec3(0.64, 0.74, 0.86), u_greenWeight * 0.50);
 			highp float midBlend = smoothstep(0.06, 0.40, max(uAge * 0.78, vBeta * 0.44));
 			highp float outBlend = smoothstep(0.18, 0.72, max(vBeta * 0.92, uAge * 0.54));
 			mediump vec3 smoothColor = mix(headTint, midWarm, float(midBlend));
 			smoothColor = mix(smoothColor, outerWarm, float(outBlend));
 
-			// Striated great sunskirters (McNaught, West) — UNIFIED MULTIPLICATIVE TWIN-ARCH + WIND-SWEPT STRIAE FABRIC:
-			//  1) Rises cleanly from the head as ONE luminous curved stem, opening smoothly (uAge 0.20..0.50) into
-			//     two unmistakably distinct sweeping white arches of comparable grand arc radius:
-			//     - Brighter outer/upper white arch (vOrg ~ 0.62) woven directly from the wind-swept striae and blooming
-			//       seamlessly outward into tall feathery wind-swept aurora curtains (vOrg 0.56 -> 1.00)
-			//     - Softer companion inner/lower white arch (vOrg ~ 0.28, wide grand arc radius!) woven from the same
-			//       wind-swept filament field, with patchy organic translucent white mist partially bridging the valley
-			//       (vOrg ~ 0.45) so the twin-tail silhouette is unmistakable without an empty black gap!
-			highp float archFadeU    = pow(omU, 0.42) * smoothstep(1.0, 0.78, uAge);
-			highp float splitGrow    = smoothstep(0.20, 0.50, uAge);
-			highp float striaOn      = smoothstep(0.12, 0.36, uAge);
+			// Striated great sunskirters (McNaught, West) — CALLIGRAPHY DRY-BRUSH / FINSON-PROBSTEIN MODEL:
+			//  1) Starts as ONE cohesive blazing curved brush stroke from the head (uAge < 0.34), then naturally forks
+			//     (uAge 0.28..0.68) as silicate (high-beta) and heavier (low-beta) dust separate into two sweeping
+			//     sub-tails of comparable grand arc radius, bridged by soft translucent intermediate-beta mist.
+			//  2) ZERO separate pasted-on stripe layer and ZERO harsh zebra cuts inside the luminous core:
+			//     On the outer side of the brush spine (vOrg > vUpper), each bristle tuft has its own variable reach
+			//     wFeather(uShear) so long misty aurora plumes stretch continuously out of the stroke itself and
+			//     dissolve softly across BOTH the main arch and the outer right wing!
+			highp float archFadeU    = pow(omU, 0.38) * smoothstep(1.0, 0.78, uAge);
+			highp float forkGrow     = smoothstep(0.28, 0.66, uAge);
+			highp float featherOn    = smoothstep(0.10, 0.34, uAge);
 
-			// One unified wind-swept synchrone filament field shared continuously across twin arches & rising curtains
-			highp float filArch      = 0.48 + 1.04 * threadRaw;
-			highp float filCurtain   = 0.14 + 1.84 * pow(clamp(threadRaw, 0.0, 1.0), 1.80);
-			highp float outRise      = smoothstep(0.54, 0.78, vOrg);
-			highp float unifiedStria = mix(filArch, filCurtain, outRise);
+			// Physical bifurcation: ONE main stroke centered at 0.44 forks smoothly into upper (0.57) & lower (0.27) sub-tails
+			highp float vUpper       = mix(0.44, 0.57, forkGrow);
+			highp float vLower       = mix(0.44, 0.27, forkGrow);
 
-			// Brighter upper sweeping white arch + its own self-generated wind-swept rising curtains (multiplicative)
-			highp float upperCenter  = mix(0.42, 0.62, splitGrow);
-			highp float upperWidth   = mix(0.28, 0.115, splitGrow);
-			highp float upperEnv     = mix(1.20, 1.02, splitGrow)
-			                         * exp(-pow((vOrg - upperCenter) / upperWidth, 2.0));
-			highp float risingEnv    = 0.76 * smoothstep(0.50, 0.66, vOrg)
-			                         * pow(omTip, 1.20) * smoothstep(1.0, 0.68, vOrg);
-			highp float upperBody    = (upperEnv + risingEnv) * mix(1.0, unifiedStria, striaOn) * archFadeU;
+			// Variable-reach dry-brush bristle plume (long soft misty aurora wisps grow directly out of the upper crest!)
+			highp float tuftShape    = smoothstep(0.18, 0.88, bristleTuft);
+			highp float wInnerUpper  = mix(0.24, 0.115, forkGrow);
+			highp float wOuterFeather = mix(0.14, mix(0.11, 0.46, pow(tuftShape, 1.30)), featherOn);
+			highp float dvUpper      = vOrg - vUpper;
+			highp float wUpperSide   = (dvUpper >= 0.0) ? wOuterFeather : wInnerUpper;
+			highp float outerFade    = smoothstep(1.0, 0.72, vOrg);
+			// Silky subtle brush-hair sheen in the luminous spine; richer misty contrast as bristles splay outward
+			highp float bristleSheen = mix(0.84 + 0.32 * bristleTuft, 0.42 + 1.15 * tuftShape, smoothstep(0.02, 0.26, dvUpper) * featherOn);
+			highp float upperBranch  = mix(1.18, 0.96, forkGrow)
+			                         * exp(-pow(dvUpper / max(wUpperSide, 0.06), 2.0))
+			                         * bristleSheen * outerFade * archFadeU;
 
-			// Patchy organic translucent white mist partially bridging the twin-tail valley (vOrg ~ 0.45)
-			highp float valleyPatch  = vnoise(vec2(uWarp * 8.5 + u_seed * 2.13, vOrg * 3.2));
-			highp float valleyMist   = 0.24 * splitGrow
-			                         * exp(-pow((vOrg - 0.45) / 0.11, 2.0))
-			                         * (0.45 + 1.10 * valleyPatch) * (0.68 + 0.64 * threadRaw)
+			// Soft misty aurora veil extending delicately above the entire arch & right wing (soft dry-brush mist halo)
+			highp float mistyPlume   = 0.36 * featherOn * smoothstep(vUpper - 0.05, vUpper + 0.12, vOrg)
+			                         * pow(max(0.0, 1.0 - vOrg), 1.15) * outerFade
+			                         * (0.35 + 1.25 * pow(tuftShape, 1.45)) * archFadeU;
+
+			// Soft patchy mist bridging the fork between the upper and lower sub-tails (never an empty black hole)
+			highp float vMidFork     = 0.5 * (vUpper + vLower);
+			highp float valleyPatch  = vnoise(vec2(uWarp * 7.5 + u_seed * 2.13, vOrg * 2.8));
+			highp float valleyMist   = 0.24 * forkGrow
+			                         * exp(-pow((vOrg - vMidFork) / 0.12, 2.0))
+			                         * (0.50 + 0.95 * valleyPatch) * (0.78 + 0.44 * bristleTuft)
 			                         * archFadeU;
 
-			// Softer, fainter companion lower white arch at grand sweeping arc radius (vOrg ~ 0.28, unified striae!)
-			highp float lowerBody    = 0.62 * smoothstep(0.22, 0.52, uAge)
-			                         * exp(-pow((vOrg - 0.28) / 0.095, 2.0))
-			                         * mix(1.0, 0.58 + 0.84 * threadRaw, striaOn)
-			                         * pow(omU, 0.48) * smoothstep(1.0, 0.78, uAge);
+			// Companion lower sub-tail peeling smoothly off the main stroke, with soft misty trailing brush wisps along its outer edge
+			highp float dvLower      = vOrg - vLower;
+			highp float wLowerOut    = mix(0.095, 0.17, tuftShape * featherOn);
+			highp float wLowerSide   = (dvLower < 0.0) ? wLowerOut : 0.095;
+			highp float lowerBranch  = 0.58 * forkGrow
+			                         * exp(-pow(dvLower / max(wLowerSide, 0.06), 2.0))
+			                         * (0.78 + 0.44 * bristleTuft)
+			                         * pow(omU, 0.44) * smoothstep(1.0, 0.78, uAge);
 
-			highp float striaeDensity = upperBody + valleyMist + lowerBody;
-			mediump vec3 hornColor   = mix(vec3(1.00, 0.99, 0.95), vec3(1.00, 0.95, 0.82), u_dustWarmth * 0.45);
-			mediump vec3 archColor   = mix(hornColor, vec3(0.94, 0.96, 1.00), float(splitGrow));
-			mediump vec3 curtainCol  = vec3(0.72, 0.83, 1.00);
-			mediump vec3 upperColor  = mix(archColor, curtainCol, float(smoothstep(0.58, 0.86, vOrg)));
-			mediump vec3 lowerColor  = vec3(0.86, 0.90, 0.95);
-			mediump vec3 striaeColor = (upperColor * float(upperBody)
-			                          + lowerColor * float(valleyMist + lowerBody)) / max(float(striaeDensity), 1e-4);
+			highp float striaeDensity = upperBranch + mistyPlume + valleyMist + lowerBranch;
+			mediump vec3 hornColor   = mix(vec3(1.00, 0.99, 0.94), vec3(1.00, 0.94, 0.80), u_dustWarmth * 0.45);
+			mediump vec3 archColor   = mix(hornColor, vec3(0.95, 0.97, 1.00), float(forkGrow));
+			mediump vec3 curtainCol  = vec3(0.70, 0.82, 1.00);
+			mediump vec3 upperColor  = mix(archColor, curtainCol, float(smoothstep(vUpper + 0.04, 0.90, vOrg)));
+			mediump vec3 lowerColor  = vec3(0.87, 0.91, 0.96);
+			mediump vec3 striaeColor = (upperColor * float(upperBranch + mistyPlume)
+			                          + lowerColor * float(valleyMist + lowerBranch)) / max(float(striaeDensity), 1e-4);
 
 			highp float extGrad = mix(1.0, float(u_tipExtRatio), max(uAge * 0.55, vBeta * 0.45));
 			highp float combinedDensity = mix(smoothDensity, striaeDensity, float(u_striaeStrength));
@@ -1191,56 +1203,57 @@ void main(void)
 		if (xg > -2.4 * R && xg < u_gasLenPx)
 		{
 			highp float tg = xg / u_gasLenPx;
-			highp float tPos = clamp(tg, 0.0, 1.0);
-			highp float tFan = (tPos > 1e-6) ? pow(tPos, 1.15) : 0.0;
-			highp float wHead = 0.74 * R * sqrt(1.0 + 2.2 * tPos);
+			// C-infinity smooth ramp across xg = 0 eliminates any Mach-band kink/seam across the comet head!
+			highp float tPos = clamp(0.5 * (tg + sqrt(tg * tg + 0.0004)), 0.0, 1.0);
+			highp float tFan = pow(tPos, 1.15);
+			highp float wHead = 0.78 * R * sqrt(1.0 + 2.2 * tPos);
 			highp float wGas = sqrt(wHead * wHead + (u_gasWidthPx * tFan) * (u_gasWidthPx * tFan));
 			highp float vg = yg / max(wGas, 1.0);
 			highp float vg2 = vg * vg;
 			if (vg2 < 14.0)
 			{
 				// Turbulent domain-warped solar-wind braided plasma filaments (authentic C/2009 R1 / Lovejoy / Hyakutake eddies + Hale-Bopp CO+ streamers)
-				highp float rayGrow = smoothstep(0.02, 0.18, tPos);
-				highp float braidBoost = clamp(float(u_greenWeight) * 0.75 + float(u_ionRayStrength) * 0.45, 0.0, 1.0);
+				highp float rayGrow = smoothstep(0.025, 0.22, tPos);
+				highp float braidBoost = clamp(float(u_greenWeight) * 0.85 + float(u_ionRayStrength) * 0.40, 0.0, 1.0);
 				highp float wave = (0.045 * sin(tPos * 4.6 + u_seed * 1.7)
-				                  + 0.022 * sin(tPos * 8.5 + u_seed * 3.1)) * rayGrow;
-				highp float eddy1 = (vnoise(vec2(vg * 2.2 + u_seed * 0.71, tPos * 3.6 - u_phase * 0.8)) - 0.5) * 0.36 * rayGrow * braidBoost;
-				highp float eddy2 = (vnoise(vec2(vg * 4.8 + u_seed * 1.93, tPos * 6.4 - u_phase * 1.2)) - 0.5) * 0.18 * rayGrow * braidBoost;
+				                  + 0.024 * sin(tPos * 8.5 + u_seed * 3.1)) * rayGrow;
+				highp float eddy1 = (vnoise(vec2(vg * 2.0 + u_seed * 0.71, tPos * 3.4 - u_phase * 0.8)) - 0.5) * 0.52 * rayGrow * braidBoost;
+				highp float eddy2 = (vnoise(vec2(vg * 4.4 + u_seed * 1.93, tPos * 6.2 - u_phase * 1.2)) - 0.5) * 0.26 * rayGrow * braidBoost;
 
 				highp float vgw = vg + wave;
 				highp float vgw2 = vgw * vgw;
 				highp float vBraidA = vgw + eddy1 + eddy2;
-				highp float vBraidB = vgw - eddy1 * 0.82 + eddy2 * 1.1;
+				highp float vBraidB = vgw - eddy1 * 0.85 + eddy2 * 1.15;
 
-				highp float inA = vnoise(vec2(vBraidA * 6.5 + u_seed * 1.13, tPos * 1.55 - u_phase));
-				highp float inB = vnoise(vec2(vBraidB * 12.5 + u_seed * 2.37, tPos * 2.65 - u_phase * 1.3));
-				highp float inC = vnoise(vec2((vBraidA + vBraidB) * 9.5 + u_seed * 3.71, tPos * 3.80 - u_phase * 1.5));
-				highp float braidedStrands = pow(clamp(0.42 * inA + 0.36 * inB + 0.22 * inC, 0.0, 1.0), 1.45);
+				highp float inA = vnoise(vec2(vBraidA * 5.8 + u_seed * 1.13, tPos * 1.65 - u_phase));
+				highp float inB = vnoise(vec2(vBraidB * 11.2 + u_seed * 2.37, tPos * 2.85 - u_phase * 1.3));
+				highp float inC = vnoise(vec2((vBraidA + vBraidB) * 8.5 + u_seed * 3.71, tPos * 4.10 - u_phase * 1.5));
+				highp float braidedStrands = pow(clamp(0.42 * inA + 0.36 * inB + 0.22 * inC, 0.0, 1.0), 1.40);
 
 				highp float smoothAcross = 0.56 * exp(-vgw2 * 2.15) + 0.44 * exp(-vgw2 * 0.80);
-				highp float rayCore = 0.44 * exp(-vBraidA * vBraidA * 4.6);
-				highp float ray1 = 0.28 * exp(-(vBraidA - 0.32) * (vBraidA - 0.32) * 18.0) * rayGrow;
-				highp float ray2 = 0.24 * exp(-(vBraidB + 0.28) * (vBraidB + 0.28) * 19.0) * rayGrow;
-				highp float ray3 = 0.16 * exp(-(vBraidA - 0.62) * (vBraidA - 0.62) * 22.0) * rayGrow;
-				highp float ray4 = 0.14 * exp(-(vBraidB + 0.58) * (vBraidB + 0.58) * 22.0) * rayGrow;
-				highp float raySheath = 0.30 * exp(-vgw2 * 0.82);
+				highp float rayCore = 0.42 * exp(-vBraidA * vBraidA * 3.6);
+				highp float ray1 = 0.26 * exp(-(vBraidA - 0.30) * (vBraidA - 0.30) * 11.5) * rayGrow;
+				highp float ray2 = 0.24 * exp(-(vBraidB + 0.26) * (vBraidB + 0.26) * 12.0) * rayGrow;
+				highp float ray3 = 0.16 * exp(-(vBraidA - 0.62) * (vBraidA - 0.62) * 14.0) * rayGrow;
+				highp float ray4 = 0.14 * exp(-(vBraidB + 0.58) * (vBraidB + 0.58) * 14.0) * rayGrow;
+				highp float raySheath = 0.32 * exp(-vgw2 * 0.78);
 				highp float ionFilament = (rayCore + ray1 + ray2 + ray3 + ray4 + raySheath)
-				                        * mix(1.0, 0.38 + 1.45 * braidedStrands, rayGrow);
+				                        * mix(1.0, 0.36 + 1.50 * braidedStrands, rayGrow);
 				highp float across = mix(smoothAcross, ionFilament, float(u_ionRayStrength));
 
-				highp float sunwardCap = smoothstep(-0.85 * R, 0.55 * R, xg);
+				highp float sunwardCap = smoothstep(-0.95 * R, 0.75 * R, xg);
 				highp float om = max(0.0, 1.0 - tPos);
 				highp float along = (om > 1e-5) ? (pow(om, 1.22) / pow(1.0 + 1.45 * tPos, 1.10)) : 0.0;
 				highp float extGrad = mix(1.0, float(u_tipExtRatio), tPos);
 				highp float gasDensity = sunwardCap * along * across * extGrad;
 
 				// On green-C2 braided plasma comets (Hyakutake, C/2009 R1, Lovejoy), inner braided filaments gleam
-				// luminous icy silver-white-cyan before transitioning outward to deep sapphire-cobalt tendrils!
-				highp float silverCore = float(u_greenWeight) * float(u_ionRayStrength) * smoothstep(0.30, 0.82, braidedStrands)
-				                       * exp(-vgw2 * 1.4) * (1.0 - smoothstep(0.15, 0.68, tPos));
-				mediump vec3 headIonTint = mix(vec3(0.22, 0.52, 1.00), vec3(0.32, 0.82, 0.96), u_greenWeight * 0.60);
-				mediump vec3 gasTint = mix(headIonTint, vec3(0.08, 0.30, 1.00), float(smoothstep(0.04, 0.35, tPos)));
-				gasTint = mix(gasTint, vec3(0.84, 0.92, 1.00), float(clamp(silverCore * 0.90, 0.0, 0.85)));
+				// luminous emerald-mint-white inside the coma before transitioning outward to silver-blue & sapphire tendrils!
+				highp float silverCore = float(u_greenWeight) * float(u_ionRayStrength) * smoothstep(0.28, 0.80, braidedStrands)
+				                       * exp(-vgw2 * 1.25) * (1.0 - smoothstep(0.18, 0.72, tPos));
+				mediump vec3 headIonTint = mix(vec3(0.24, 0.54, 1.00), vec3(0.22, 0.92, 0.76), u_greenWeight * 0.72);
+				mediump vec3 gasTint = mix(headIonTint, vec3(0.08, 0.30, 1.00), float(smoothstep(0.03, 0.32, tPos)));
+				gasTint = mix(gasTint, vec3(0.86, 0.94, 1.00), float(clamp(silverCore * 0.92, 0.0, 0.88)));
 				totalRgb += gasTint * (u_gasIntensity * float(gasDensity));
 				totalSignal += gasDensity;
 			}
@@ -1642,8 +1655,9 @@ void Comet::drawAnalyticalComet(StelCore* core, const StelProjectorP& prj,
 		// 100% continuous 2D (uAge, vBeta) sheet atlas for ALL comets (zero visible discrete capsules or fork prongs!).
 		constexpr double overlapInner = 1.55;
 		constexpr double overlapOuter = 1.62;
-		const double minWInner = std::max(1.6 * dpr, 0.68 * comaPx);
-		const double minWOuter = std::max(2.6 * dpr, 1.15 * comaPx);
+		const double headScale = 1.12 - 0.44 * static_cast<double>(striaeStrength);
+		const double minWInner = std::max(1.6 * dpr, headScale * comaPx);
+		const double minWOuter = std::max(2.6 * dpr, 1.25 * comaPx);
 		const double maxWInner = 0.24 * maxVp;
 		const double maxWOuter = 0.42 * maxVp;
 
@@ -1688,10 +1702,10 @@ void Comet::drawAnalyticalComet(StelCore* core, const StelProjectorP& prj,
 			double wInnerPx = qBound(minWInner, overlapInner * dInner, maxWInner);
 			const double midNeededOuter = 2.0 * overlapInner * dMid - wInnerPx;
 			double wOuterPx = qBound(minWOuter, std::max(overlapOuter * dTip, midNeededOuter), maxWOuter);
-			if (k <= 2)
+			if (k <= 2 && striaeStrength > 0.1f)
 			{
 				const double leadInnerCap = std::max(1.6 * dpr, comaPx * (0.68 + 0.22 * static_cast<double>(k)));
-				wInnerPx = std::min(wInnerPx, leadInnerCap);
+				wInnerPx = std::min(wInnerPx, leadInnerCap + (wInnerPx - leadInnerCap) * (1.0 - static_cast<double>(striaeStrength)));
 			}
 
 			// Exact partition-of-unity normalization for exp(-1.05 * u^2) (integral = sqrt(pi/1.05) = 1.73):
