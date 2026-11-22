@@ -477,6 +477,120 @@ double Comet::getSiderealPeriod() const
 	return ((semiMajorAxis>0) ? KeplerOrbit::calculateSiderealPeriod(semiMajorAxis, 1.0) : 0.);
 }
 
+bool Comet::computeBestTailViewingWindow(double observerLatDeg, double observerLonDeg, double& outJD, double& outFovDeg) const
+{
+	const KeplerOrbit* kOrbit = dynamic_cast<const KeplerOrbit*>(orbitPtr);
+	if (!kOrbit)
+		return false;
+
+	const double tPeri = kOrbit->getTimeAtPericenter();
+	const double periQ = std::max(0.002, kOrbit->getPericenterDistance());
+	if (!std::isfinite(tPeri) || tPeri <= 0.0)
+		return false;
+
+	auto approxEarthEcl = [](double jd) -> Vec3d {
+		const double n = jd - 2451545.0;
+		const double L = std::fmod(100.46646 + 0.98564736 * n, 360.0) * M_PI_180;
+		return Vec3d(std::cos(L), std::sin(L), 0.0);
+	};
+
+	double bestDayJD = tPeri;
+	double bestScore = -1.0;
+	double bestDistEarth = 1.0;
+
+	// Scan [-48d, +48d] around perihelion in 1.5-day steps to find peak visible tail window
+	// (automatically avoids daytime solar glare on sunskirters like McNaught/West, while landing
+	// right on closest-Earth passes like Hyakutake or perihelion peaks like Hale-Bopp!)
+	for (int i = -32; i <= 32; ++i)
+	{
+		const double dt = static_cast<double>(i) * 1.5;
+		const double jd = tPeri + dt;
+		Vec3d cometPos, cometVel;
+		kOrbit->stateAtTimeInVSOP87Coordinates(jd, cometPos, cometVel);
+		const double rHelio = cometPos.norm();
+		if (!std::isfinite(rHelio) || rHelio < 0.005)
+			continue;
+
+		const Vec3d earthPos = approxEarthEcl(jd);
+		const Vec3d obsToComet = cometPos - earthPos;
+		const Vec3d obsToSun = -earthPos;
+		const double distEarth = std::max(obsToComet.norm(), 0.01);
+		const double cosElong = qBound(-1.0, (obsToComet / distEarth).dot(obsToSun), 1.0);
+		const double elongDeg = std::acos(cosElong) * M_180_PI;
+
+		const double elongWeight = static_cast<double>(smoothStepF(14.0f, 30.0f, static_cast<float>(elongDeg)));
+		const double postPeriBoost = (periQ < 0.45 && dustTailBrightnessFactor >= 0.85f)
+			? (1.0 + 0.60 * static_cast<double>(smoothStepF(2.0f, 10.0f, static_cast<float>(dt))
+			                                  * (1.0f - smoothStepF(18.0f, 36.0f, static_cast<float>(dt)))))
+			: (1.0 + 0.15 * static_cast<double>(smoothStepF(-4.0f, 8.0f, static_cast<float>(dt))
+			                                  * (1.0f - smoothStepF(20.0f, 45.0f, static_cast<float>(dt)))));
+		const double score = (1.0 / (distEarth * distEarth * std::pow(rHelio, 3.0))) * elongWeight * postPeriBoost;
+		if (score > bestScore)
+		{
+			bestScore = score;
+			bestDayJD = jd;
+			bestDistEarth = distEarth;
+		}
+	}
+
+	// Refine within +-12h around bestDayJD to pick the best dark-sky/twilight hour for the user's location
+	constexpr double kEps = 23.439291 * M_PI_180;
+	const double cosEps = std::cos(kEps);
+	const double sinEps = std::sin(kEps);
+	const double latRad = qBound(-89.9, observerLatDeg, 89.9) * M_PI_180;
+	const double sinLat = std::sin(latRad);
+	const double cosLat = std::cos(latRad);
+
+	auto altDegOfDir = [&](const Vec3d& eclDir, double jd) -> double {
+		const double xEq = eclDir[0];
+		const double yEq = eclDir[1] * cosEps - eclDir[2] * sinEps;
+		const double zEq = eclDir[1] * sinEps + eclDir[2] * cosEps;
+		const double ra = std::atan2(yEq, xEq);
+		const double dec = std::asin(qBound(-1.0, zEq, 1.0));
+		const double gmstDeg = std::fmod(280.46061837 + 360.98564736629 * (jd - 2451545.0), 360.0);
+		const double lstRad = (gmstDeg + observerLonDeg) * M_PI_180;
+		const double ha = lstRad - ra;
+		const double sinAlt = sinLat * std::sin(dec) + cosLat * std::cos(dec) * std::cos(ha);
+		return std::asin(qBound(-1.0, sinAlt, 1.0)) * M_180_PI;
+	};
+
+	double refinedJD = bestDayJD;
+	double bestHourScore = -1e9;
+	for (int h = -24; h <= 24; ++h)
+	{
+		const double jd = bestDayJD + static_cast<double>(h) / 48.0; // 0.5h steps
+		Vec3d cometPos, cometVel;
+		kOrbit->stateAtTimeInVSOP87Coordinates(jd, cometPos, cometVel);
+		const Vec3d earthPos = approxEarthEcl(jd);
+		Vec3d cDir = cometPos - earthPos;
+		if (cDir.normSquared() < 1e-10)
+			continue;
+		cDir.normalize();
+		const Vec3d sDir = -earthPos; // earthPos is unit circle
+		const double cometAlt = altDegOfDir(cDir, jd);
+		const double sunAlt = altDegOfDir(sDir, jd);
+		// Prefer astronomical/nautical darkness (sunAlt <= -7 deg) and highest comet altitude
+		const double darkBonus = (sunAlt <= -12.0) ? 120.0
+			: ((sunAlt <= -6.0) ? (90.0 + (-6.0 - sunAlt) * 5.0)
+			: ((sunAlt <= 0.0) ? (30.0 + (-sunAlt) * 10.0) : (-sunAlt * 4.0)));
+		const double hourScore = darkBonus + cometAlt;
+		if (hourScore > bestHourScore)
+		{
+			bestHourScore = hourScore;
+			refinedJD = jd;
+		}
+	}
+
+	outJD = refinedJD;
+	if (periQ < 0.35 && dustTailBrightnessFactor >= 0.9f)
+		outFovDeg = 38.0;
+	else if (bestDistEarth < 0.25)
+		outFovDeg = 26.0;
+	else
+		outFovDeg = 18.0;
+	return true;
+}
+
 
 float Comet::getVMagnitude(const StelCore* core) const
 {
@@ -1089,29 +1203,34 @@ void main(void)
 			// Pure C-infinity Gaussian-envelope coverage (eliminates any circular halo/rim around the head!)
 			highp float sheetMask = 1.0 - exp(-1.65 * gNormSum);
 
-			// Gentle natural solar-wind striation fan (~35 deg total spread from virtual push origin 1.45*span behind head):
-			// Neither a 110-deg radial peacock wheel nor rigid parallel window blinds — soft tapered feathery plumes
-			// that grow out of the curved arch and dissolve gracefully in mid-sky (never harsh straight bars at top!).
+			// Fine, dense, silky Sekanina-Farrell striation fan (~35 deg spread from virtual solar push origin):
+			// High-density multi-octave bands (42 / 84 / 155) produce ~20-40+ fine silky strands (never chunky sawtooth
+			// blobs!), strictly confined to the curved comet sheet with zero detached stray streaks on the left edge.
 			highp vec2 striaPerp   = vec2(-u_striaDir.y, u_striaDir.x);
 			highp float spanPx     = max(u_striaSpanPx, 40.0);
-			highp vec2 striaOrigin = u_headPos - u_striaDir * (1.45 * spanPx);
+			highp vec2 striaOrigin = u_headPos - u_striaDir * (1.55 * spanPx);
 			highp vec2 fromOrigin  = v_screenPos - striaOrigin;
 			highp float rayAlong   = max(dot(fromOrigin, u_striaDir) / spanPx, 0.25);
 			highp float rayAcross  = dot(fromOrigin, striaPerp) / spanPx;
 			highp float rayCoord   = atan(rayAcross, rayAlong) * 2.5;
 
-			// Slight gentle wind-curve warp so plumes feel organically curved and smoky rather than ruler-straight bars
-			highp float rWarp  = rayCoord + (vnoise(vec2(rayCoord * 4.2 + u_seed * 0.37, rayAlong * 0.85)) - 0.5) * 0.042;
-			highp float bBand1 = vnoise(vec2(rWarp * 15.0 + u_seed * 0.53, rayAlong * 0.26));
-			highp float bBand2 = vnoise(vec2(rWarp * 30.0 + u_seed * 1.37, rayAlong * 0.44));
-			highp float bBand3 = vnoise(vec2(rWarp * 56.0 + u_seed * 2.71, rayAlong * 0.72));
-			highp float bristleBand = clamp(0.54 * bBand1 + 0.36 * bBand2 + 0.10 * bBand3, 0.0, 1.0);
+			// Gentle organic curve warp + soft-to-silky strands with natural mist dispersion (some strands stay
+			// delicate & fine, others broaden and dissolve softly like cosmic mist — zero harsh pointy needles!)
+			highp float rWarp     = rayCoord + (vnoise(vec2(rayCoord * 4.6 + u_seed * 0.37, rayAlong * 0.70)) - 0.5) * 0.028;
+			highp float bSoft     = vnoise(vec2(rWarp * 22.0 + u_seed * 0.53, rayAlong * 0.26));
+			highp float bSilky    = vnoise(vec2(rWarp * 46.0 + u_seed * 1.37, rayAlong * 0.44));
+			highp float bDelicate = vnoise(vec2(rWarp * 82.0 + u_seed * 2.71, rayAlong * 0.68));
+			// Regional mist dispersion: parts of the tail disperse into soft smoky glow while neighbors show finer silk
+			highp float dispMix   = smoothstep(0.25, 0.78, vnoise(vec2(rWarp * 9.5 + u_seed * 1.91, rayAlong * 0.35)));
+			highp float fineCombo = 0.44 * bSoft + 0.38 * bSilky + 0.18 * bDelicate;
+			highp float mistyCombo = 0.78 * bSoft + 0.22 * bSilky;
+			highp float bristleBand = clamp(mix(fineCombo, mistyCombo, dispMix * 0.72), 0.0, 1.0);
 			highp float fMid = vnoise(vec2(uAge * 22.0 + u_seed * 1.37, vBeta * 0.44));
 
 			// Subtle organic cloud turbulence warping vBeta so no edge ever reads like a rigid mathematical curve
-			highp float cloudWarp = ((vnoise(vec2(uAge * 4.4 + u_seed * 0.61, vBeta * 2.0)) - 0.5) * 0.042
-			                       + (vnoise(vec2(uAge * 9.5 + u_seed * 1.73, vBeta * 3.6)) - 0.5) * 0.018)
-			                       * smoothstep(0.12, 0.42, uAge);
+			highp float cloudWarp = ((vnoise(vec2(uAge * 4.4 + u_seed * 0.61, vBeta * 2.0)) - 0.5) * 0.036
+			                       + (vnoise(vec2(uAge * 9.5 + u_seed * 1.73, vBeta * 3.6)) - 0.5) * 0.015)
+			                       * smoothstep(0.18, 0.48, uAge);
 			highp float vOrg = clamp(vBeta + cloudWarp, 0.0, 1.0);
 
 			highp float omU = max(0.0, 1.0 - uAge);
@@ -1134,57 +1253,64 @@ void main(void)
 			mediump vec3 smoothColor = mix(headTint, midWarm, float(midBlend));
 			smoothColor = mix(smoothColor, outerWarm, float(outBlend));
 
-			// Striated great sunskirters (McNaught, West) — TWIN SWEEPING TAILS WITH INTER-TAIL STRIAE & SOFT MIST:
-			//  1) Rises from the head as ONE blazing ivory stem, then forks cleanly (uAge 0.18..0.56) into TWO
-			//     unmistakable grand-radius sweeping white tails:
-			//     - Tail #1 (vTailA ~ 0.27): brighter, crisper main curved white arch
-			//     - Tail #2 (vTailB ~ 0.72): softer, fainter outer curved sweeping white tail
-			//  2) ALL wind-swept striae + delicate white mist live *BETWEEN* Tail #1 and Tail #2 (bounded cleanly by
-			//     betweenMask so striations bridge gracefully across the twin-tail fan and NEVER shoot off the top
-			//     of the viewport as weird straight bars!).
+			// Striated great sunskirters (McNaught, West) — ONE UNIFIED CONTINUOUS TWIN-TAIL + MISTY STRIAE FABRIC:
+			//  1) Brighter outer arch (vTailB ~ 0.62), softer inner arch (vTailA ~ 0.26), and soft misty inter-tail
+			//     bridge form ONE single smooth twin-tail envelope.
+			//  2) ONE single continuous striation + mist-dispersion field modulates the ENTIRE twin-tail envelope
+			//     from inner arch straight across the valley to the gently feathered outer rim — so both tails share
+			//     the exact same unbroken connected striae, with some strands softly dispersing into cosmic mist!
 			highp float archFadeU    = pow(omU, 0.36) * smoothstep(1.0, 0.78, uAge);
-			highp float forkGrow     = smoothstep(0.18, 0.56, uAge);
-			highp float striaOn      = smoothstep(0.12, 0.34, uAge);
+			highp float stemClean    = smoothstep(0.06, 0.26, uAge);
+			highp float forkGrow     = smoothstep(0.24, 0.60, uAge);
+			highp float striaOn      = smoothstep(0.22, 0.46, uAge);
+			highp float tuftShape    = smoothstep(0.16, 0.86, bristleBand);
 
-			// Physical bifurcation from ONE bright stem (v=0.36) into bright inner tail (0.27) & softer outer tail (0.72)
-			highp float vTailA       = mix(0.36, 0.27, forkGrow);
-			highp float vTailB       = mix(0.36, 0.72, forkGrow);
+			// Physical bifurcation from ONE slender bright stem (v=0.42) into BRIGHT outer arch (0.62) & SOFTER inner arch (0.26)
+			highp float vTailA       = mix(0.42, 0.26, forkGrow);
+			highp float vTailB       = mix(0.42, 0.62, forkGrow);
 
-			// Tail #1: brighter, crisper main curved white arch (clean sunward underside)
+			// Smooth, misty outer edge (gentle 0.038 organic modulation + wider misty fade where dispMix is high — zero sharp spikes!)
+			highp float vOuterEdge   = vTailB + (tuftShape - 0.48) * 0.038 * forkGrow * striaOn;
+			highp float dvB          = vOrg - vOuterEdge;
+			highp float wOuterFade   = mix(0.088, mix(0.11, 0.165, dispMix), striaOn);
+			highp float wTailB       = (dvB > 0.0) ? wOuterFade : mix(0.11, 0.105, forkGrow);
+			highp float topSkyFade   = smoothstep(0.95, 0.72, vOrg);
+
+			highp float outerEnv     = mix(1.22, 1.04, forkGrow)
+			                         * exp(-pow(dvB / max(wTailB, 0.055), 2.0))
+			                         * topSkyFade;
+
 			highp float dvA          = vOrg - vTailA;
-			highp float wTailA       = (dvA < 0.0) ? mix(0.16, 0.082, forkGrow) : mix(0.18, 0.095, forkGrow);
-			highp float tailABody    = mix(1.26, 1.05, forkGrow)
-			                         * exp(-pow(dvA / max(wTailA, 0.055), 2.0))
-			                         * (0.90 + 0.20 * bristleBand)
-			                         * archFadeU;
+			highp float wTailA       = (dvA < 0.0) ? 0.082 : 0.098;
+			highp float innerEnv     = 0.54 * forkGrow
+			                         * exp(-pow(dvA / max(wTailA, 0.055), 2.0));
 
-			// Tail #2: softer, fainter outer curved sweeping white tail (melts softly into dark sky above vTailB!)
-			highp float dvB          = vOrg - vTailB;
-			highp float wTailB       = (dvB > 0.0) ? 0.115 : 0.105;
-			highp float topSkyFade   = smoothstep(0.96, 0.72, vOrg);
-			highp float tailBBody    = 0.58 * forkGrow
-			                         * exp(-pow(dvB / max(wTailB, 0.06), 2.0))
-			                         * (0.82 + 0.36 * bristleBand)
-			                         * topSkyFade * pow(omU, 0.40) * smoothstep(1.0, 0.78, uAge);
+			// Continuous misty bridge connecting both tails across the entire interior
+			highp float betweenMask  = smoothstep(vTailA - 0.04, vTailA + 0.08, vOrg)
+			                         * smoothstep(vOuterEdge + 0.08, vOuterEdge - 0.08, vOrg);
+			highp float valleyPatch  = vnoise(vec2(rWarp * 8.0 + u_seed * 2.13, vOrg * 2.6));
+			highp float bridgeEnv    = (0.24 + 0.16 * valleyPatch) * forkGrow * betweenMask;
 
-			// Inter-tail zone strictly BETWEEN Tail #1 and Tail #2: coherent wind-swept striae + soft translucent white mist!
-			highp float betweenMask  = smoothstep(vTailA - 0.03, vTailA + 0.09, vOrg)
-			                         * smoothstep(vTailB + 0.08, vTailB - 0.07, vOrg);
-			highp float tuftShape    = smoothstep(0.18, 0.88, bristleBand);
-			highp float bridgeBias   = 1.0 - 0.42 * smoothstep(vTailA + 0.08, vTailB, vOrg); // brightest near Tail #1, softer toward Tail #2
-			highp float valleyPatch  = vnoise(vec2(rWarp * 7.5 + u_seed * 2.13, vOrg * 2.8));
-			highp float interMist    = (0.14 + 0.10 * valleyPatch) * forkGrow * betweenMask * archFadeU;
-			highp float interStriae  = 0.52 * striaOn * forkGrow * betweenMask * bridgeBias
-			                         * pow(tuftShape, 1.35) * archFadeU;
+			// ONE unified striae+mist field shared continuously across inner tail, bridge, and outer tail!
+			// Silky strands in structured regions (0.48..1.42) softening into dreamy cosmic mist in dispersed regions (0.74..1.20)
+			highp float silkyField   = 0.48 + 0.94 * pow(tuftShape, 1.15);
+			highp float mistyField   = 0.74 + 0.46 * tuftShape;
+			// Slightly stronger strand contrast in the bridge & outer edge, smoother at the clean sunward underside
+			highp float strandDepth  = mix(0.35, 1.0, smoothstep(vTailA - 0.04, vTailA + 0.14, vOrg)) * striaOn * stemClean;
+			highp float unifiedField = mix(1.0, mix(silkyField, mistyField, dispMix * 0.65), strandDepth);
 
-			highp float striaeDensity = tailABody + tailBBody + interMist + interStriae;
+			highp float outerContrib = outerEnv * unifiedField * archFadeU;
+			highp float bridgeContrib = bridgeEnv * unifiedField * archFadeU;
+			highp float innerContrib = innerEnv * unifiedField * pow(omU, 0.42) * smoothstep(1.0, 0.78, uAge);
+
+			highp float striaeDensity = outerContrib + bridgeContrib + innerContrib;
 			mediump vec3 hornColor   = mix(vec3(1.00, 0.99, 0.92), vec3(1.00, 0.92, 0.76), u_dustWarmth * 0.45);
-			mediump vec3 tailAColor  = mix(hornColor, vec3(0.95, 0.97, 1.00), float(forkGrow));
-			mediump vec3 striaCol    = vec3(0.76, 0.85, 1.00);
-			mediump vec3 tailBColor  = vec3(0.84, 0.90, 0.98);
-			mediump vec3 striaeColor = (tailAColor * float(tailABody)
-			                          + striaCol * float(interMist + interStriae)
-			                          + tailBColor * float(tailBBody)) / max(float(striaeDensity), 1e-4);
+			mediump vec3 tailBColor  = mix(hornColor, vec3(0.95, 0.97, 1.00), float(forkGrow));
+			mediump vec3 striaCol    = vec3(0.78, 0.87, 1.00);
+			mediump vec3 tailAColor  = vec3(0.84, 0.90, 0.97);
+			mediump vec3 striaeColor = (tailBColor * float(outerContrib)
+			                          + striaCol * float(bridgeContrib)
+			                          + tailAColor * float(innerContrib)) / max(float(striaeDensity), 1e-4);
 
 			highp float extGrad = mix(1.0, float(u_tipExtRatio), max(uAge * 0.55, vBeta * 0.45));
 			highp float combinedDensity = mix(smoothDensity, striaeDensity, float(u_striaeStrength));

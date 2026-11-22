@@ -60,6 +60,9 @@ export class ObjectDetailStore {
   selectedDistanceCompact: string = ''
   selectedDistanceStatus: string = ''
   selectedTleOutdated: boolean = false
+  selectedCometTailBestJD: number = 0
+  selectedCometTailBestDate: string = ''
+  selectedCometTailBestFov: number = 24
   selectedSize: string = ''
   selectedRise: string = ''
   selectedSet: string = ''

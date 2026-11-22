@@ -58,6 +58,7 @@ export struct ObjectPanel {
   onModelTouch: (event: TouchEvent) => void = () => {}
   onLoadSatPasses: () => void = () => {}
   onJumpToPass: (pass: SatellitePass) => void = () => {}
+  onJumpToCometTail: () => void = () => {}
   onSelectComplexMember: (member: StationComplexMember) => void = () => {}
   onGoto: () => void = () => {}
   onSync: () => void = () => {}
@@ -87,6 +88,31 @@ export struct ObjectPanel {
           Text(this.objectDetailStore.selectedStatus === 'Selected' && this.viewLock ? I18n.t('view_lock_status_on') : this.statusOf(this.objectDetailStore.selectedStatus))
             .fontSize(11).fontColor(this.c.sub)
         }.width('100%').padding({ left: 4, right: 4 }).height(20).margin({ bottom: 8 })
+
+        if (this.objectDetailStore.selectedCometTailBestJD > 0 && this.objectDetailStore.selectedCometTailBestDate.length > 0) {
+          Row({ space: 8 }) {
+            Column({ space: 2 }) {
+              Text('最佳彗尾时机 · ' + this.objectDetailStore.selectedCometTailBestDate)
+                .fontSize(12).fontWeight(FontWeight.Medium).fontColor(this.c.textStrong)
+                .maxLines(1).textOverflow({ overflow: TextOverflow.Ellipsis })
+              Text('一键跳转至近日点附近高亮度彗尾窗口')
+                .fontSize(11).fontColor(this.c.sub)
+                .maxLines(1).textOverflow({ overflow: TextOverflow.Ellipsis })
+            }.alignItems(HorizontalAlign.Start).layoutWeight(1)
+            Button('前往观赏')
+              .fontSize(12).fontWeight(FontWeight.Medium).fontColor(this.c.textStrong)
+              .backgroundColor(this.c.chipActiveBg).borderRadius(UI_RADIUS_CONTROL)
+              .height(30).padding({ left: 10, right: 10 })
+              .clickEffect({ level: ClickEffectLevel.LIGHT, scale: 0.96 })
+              .onClick(() => { this.onJumpToCometTail() })
+          }
+            .width('100%')
+            .padding({ left: 10, right: 10, top: 8, bottom: 8 })
+            .backgroundColor(this.c.soft)
+            .borderRadius(UI_RADIUS_CONTROL)
+            .margin({ bottom: 8 })
+            .alignItems(VerticalAlign.Center)
+        }
 
         // 直接绑定 store 字段：经 @Builder 参数传递会按值捕获，导致不刷新
         if (this.objectDetailStore.selectedMagnitude.length > 0) {

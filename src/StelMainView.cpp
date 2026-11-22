@@ -84,6 +84,7 @@
 #include "StelScriptMgr.hpp"
 #include "StelToneReproducer.hpp"
 #include "SolarSystem.hpp"
+#include "Comet.hpp"
 #include "NomenclatureMgr.hpp"
 #include "NomenclatureItem.hpp"
 #include "ConstellationMgr.hpp"
@@ -4683,6 +4684,23 @@ QJsonObject selectedObjectJson(StelCore* core = nullptr, bool includeDetails = f
 			if (includeDetails)
 				result[QStringLiteral("detailFields")] = QJsonArray();
 			result[QStringLiteral("liveDetailFields")] = QJsonArray();
+		}
+
+		// Optimal comet tail viewing window (one-tap time-jump shortcut on the comet detail card)
+		if (const Comet* cometObj = dynamic_cast<const Comet*>(object.data()))
+		{
+			const StelLocation& loc = core->getCurrentLocation();
+			double bestJD = 0.0;
+			double bestFov = 24.0;
+			if (cometObj->computeBestTailViewingWindow(static_cast<double>(loc.getLatitude()),
+			                                           static_cast<double>(loc.getLongitude()),
+			                                           bestJD, bestFov)
+			    && std::isfinite(bestJD) && bestJD > 0.0)
+			{
+				result[QStringLiteral("cometTailBestJD")] = bestJD;
+				result[QStringLiteral("cometTailBestDate")] = StelUtils::julianDayToISO8601String(bestJD).left(10);
+				result[QStringLiteral("cometTailBestFov")] = bestFov;
+			}
 		}
 
 		// Normalized magnitude (visual, no extinction)

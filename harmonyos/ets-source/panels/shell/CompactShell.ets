@@ -113,6 +113,7 @@ export struct CompactShell {
   onSelectTab: (index: number) => void = () => {}
   onLoadPasses: () => void = () => {}
   onJumpToPass: (pass: SatellitePass) => void = () => {}
+  onJumpToCometTail: () => void = () => {}
   onSelectComplexMember: (member: StationComplexMember) => void = () => {}
   onMediaOpen: () => void = () => {}
   onMediaRetry: () => void = () => {}
@@ -273,6 +274,7 @@ export struct CompactShell {
             onSelectTab: (index: number) => { this.onSelectTab(index) },
             onLoadPasses: () => { this.onLoadPasses() },
             onJumpToPass: (pass: SatellitePass) => { this.onJumpToPass(pass) },
+            onJumpToCometTail: () => { this.onJumpToCometTail() },
             onSelectComplexMember: (member: StationComplexMember) => { this.onSelectComplexMember(member) },
             onMediaOpen: () => { this.onMediaOpen() },
             onMediaRetry: () => { this.onMediaRetry() },

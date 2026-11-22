@@ -16,6 +16,7 @@ export struct ObjectDetailActionsTab {
   @Prop viewLock: boolean
   @Prop speechStatus: string
   @Prop inObservingList: boolean
+  @Prop cometTailBestDate: string = ''
   @State private c: ThemeSlots = DEFAULT_SLOTS
   onCenter: () => void = () => {}
   onToggleLock: () => void = () => {}
@@ -23,6 +24,7 @@ export struct ObjectDetailActionsTab {
   onRefresh: () => void = () => {}
   onReselect: () => void = () => {}
   onSpeak: () => void = () => {}
+  onJumpToCometTail: () => void = () => {}
 
   onWillApplyTheme(theme: Theme) { this.c = slotsFromTheme(theme) }
 
@@ -41,6 +43,13 @@ export struct ObjectDetailActionsTab {
           .clickEffect({ level: ClickEffectLevel.LIGHT, scale: 0.96 })
           .onClick(() => { this.onToggleLock() })
       }.width('100%')
+      if (this.cometTailBestDate.length > 0) {
+        Button('前往最佳彗尾时机（' + this.cometTailBestDate + '）')
+          .fontSize(12).fontWeight(FontWeight.Medium).fontColor(this.c.textStrong).backgroundColor(this.c.chipActiveBg)
+          .borderRadius(UI_RADIUS_CONTROL).height(36).width('100%')
+          .clickEffect({ level: ClickEffectLevel.LIGHT, scale: 0.97 })
+          .onClick(() => { this.onJumpToCometTail() })
+      }
       Button(this.inObservingList ? I18n.t('s0739') : I18n.t('s0738'))
         .fontSize(12).fontColor(this.c.textStrong).backgroundColor(this.c.softStrong).borderRadius(UI_RADIUS_CONTROL).height(34).width('100%')
         .clickEffect({ level: ClickEffectLevel.LIGHT, scale: 0.97 })

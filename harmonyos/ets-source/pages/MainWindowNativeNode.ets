@@ -8374,6 +8374,9 @@ export struct WindowNativeNode {
       this.objectDetailStore.selectedDistanceCompact = result.distanceCompact ?? result.distance ?? ''
       this.objectDetailStore.selectedDistanceStatus = result.distanceStatus ?? 'unavailable'
       this.objectDetailStore.selectedTleOutdated = result.tleOutdated === true
+      this.objectDetailStore.selectedCometTailBestJD = typeof result.cometTailBestJD === 'number' && Number.isFinite(result.cometTailBestJD) ? result.cometTailBestJD : 0
+      this.objectDetailStore.selectedCometTailBestDate = typeof result.cometTailBestDate === 'string' ? result.cometTailBestDate : ''
+      this.objectDetailStore.selectedCometTailBestFov = typeof result.cometTailBestFov === 'number' && Number.isFinite(result.cometTailBestFov) && result.cometTailBestFov > 0 ? result.cometTailBestFov : 24
       // 过滤接近0的角直径（小行星等天体角直径极小，显示0无意义）
       const rawSize = result.size && result.size.length > 0 ? result.size : ''
       if (showObservedInfo && rawSize.length > 0) {
@@ -8501,6 +8504,9 @@ export struct WindowNativeNode {
       this.objectDetailStore.selectedDistanceCompact = ''
       this.objectDetailStore.selectedDistanceStatus = ''
       this.objectDetailStore.selectedTleOutdated = false
+      this.objectDetailStore.selectedCometTailBestJD = 0
+      this.objectDetailStore.selectedCometTailBestDate = ''
+      this.objectDetailStore.selectedCometTailBestFov = 24
       this.gyroCtl().clearGuideTarget()
       this.gyroStore.gyroGuideVisible = false
       this.objectDetailStore.selectedSize = ''
@@ -9119,6 +9125,18 @@ export struct WindowNativeNode {
     this.callNativeWhenReady('setJD', targetJD.toString(), () => {
       this.refreshDockClock()
       this.moveToSelectedObject()
+    })
+  }
+
+  private jumpToCometBestTail(): void {
+    const targetJD = this.objectDetailStore.selectedCometTailBestJD
+    if (!Number.isFinite(targetJD) || targetJD <= 0) return
+    const targetFov = this.objectDetailStore.selectedCometTailBestFov > 0 ? this.objectDetailStore.selectedCometTailBestFov : 24
+    this.callNativeWhenReady('setJD', targetJD.toString(), () => {
+      this.callNativeWhenReady('setFOV', targetFov.toFixed(1), () => {
+        this.refreshDockClock()
+        this.moveToSelectedObject()
+      })
     })
   }
 
@@ -10293,6 +10311,7 @@ export struct WindowNativeNode {
                 onSelectTab: (index: number) => { this.selectObjectDetailTab(index) },
                 onLoadPasses: () => { this.objectDetailStore.loadSelectedSatellitePasses() },
                 onJumpToPass: (pass: SatellitePass) => { this.jumpToSatellitePass(pass) },
+                onJumpToCometTail: () => { this.jumpToCometBestTail() },
                 onSelectComplexMember: (member: StationComplexMember) => { this.searchObject(member.name, '', 'object|Satellite|' + member.id) },
                 onMediaOpen: () => { this.objectInspectorMediaCtl().openObjectInspectorMediaPreview() },
                 onMediaRetry: () => { this.objectInspectorMediaCtl().retryObjectInspectorMedia() },
@@ -10406,6 +10425,7 @@ export struct WindowNativeNode {
                 onSelectTab: (index: number) => { this.selectObjectDetailTab(index) },
                 onLoadPasses: () => { this.objectDetailStore.loadSelectedSatellitePasses() },
                 onJumpToPass: (pass: SatellitePass) => { this.jumpToSatellitePass(pass) },
+                onJumpToCometTail: () => { this.jumpToCometBestTail() },
                 onSelectComplexMember: (member: StationComplexMember) => { this.searchObject(member.name, '', 'object|Satellite|' + member.id) },
                 onMediaOpen: () => { this.objectInspectorMediaCtl().openObjectInspectorMediaPreview() },
                 onMediaRetry: () => { this.objectInspectorMediaCtl().retryObjectInspectorMedia() },
@@ -10537,6 +10557,7 @@ export struct WindowNativeNode {
                 onSelectTab: (index: number) => { this.selectObjectDetailTab(index) },
                 onLoadPasses: () => { this.objectDetailStore.loadSelectedSatellitePasses() },
                 onJumpToPass: (pass: SatellitePass) => { this.jumpToSatellitePass(pass) },
+                onJumpToCometTail: () => { this.jumpToCometBestTail() },
                 onSelectComplexMember: (member: StationComplexMember) => { this.searchObject(member.name, '', 'object|Satellite|' + member.id) },
                 onMediaOpen: () => { this.objectInspectorMediaCtl().openObjectInspectorMediaPreview() },
                 onMediaRetry: () => { this.objectInspectorMediaCtl().retryObjectInspectorMedia() },
@@ -11450,6 +11471,7 @@ export struct WindowNativeNode {
         onModelTouch: (event: TouchEvent) => { this.objectModelRendererCtl().handleObjectInspectorModelTouch(event) },
         onLoadSatPasses: () => { this.objectDetailStore.loadSelectedSatellitePasses() },
         onJumpToPass: (pass: SatellitePass) => { this.jumpToSatellitePass(pass) },
+        onJumpToCometTail: () => { this.jumpToCometBestTail() },
         onSelectComplexMember: (member: StationComplexMember) => { this.searchObject(member.name, '', 'object|Satellite|' + member.id) },
         onGoto: () => { this.telescopeCtl().lx200GotoSelected() },
         onSync: () => { this.telescopeCtl().lx200SyncSelected() },

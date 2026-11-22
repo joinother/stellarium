@@ -103,6 +103,10 @@ public:
 	//! set date, discovery and perihelion codes of the comet.
 	void setExtraDesignations(QStringList codes);
 
+	//! Compute the optimal historical/perihelion tail-viewing epoch (JD) and recommended FOV (degrees)
+	//! for this comet, accounting for heliocentric activity, Earth distance, solar elongation, and local twilight.
+	bool computeBestTailViewingWindow(double observerLatDeg, double observerLonDeg, double& outJD, double& outFovDeg) const;
+
 	//! set the discovery circumstances of comet
 	//! @param date of discovery
 	//! @param name of discoverer

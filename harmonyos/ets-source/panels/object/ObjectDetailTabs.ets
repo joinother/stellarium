@@ -1,4 +1,5 @@
 import { I18n } from '../../pages/I18n'
+import { UI_RADIUS_CONTROL } from '../../common/ui/UiTokens'
 import { objectDetailFontSize } from '../../common/ui/UiTypography'
 import { zhNameOf } from '../../common/derive/labels'
 import { ObjectDetailStore } from '../../state/ObjectDetailStore'
@@ -27,12 +28,45 @@ export struct ObjectDetailObserveTab {
   @Prop distanceText: string
   @State private c: ThemeSlots = DEFAULT_SLOTS
   resolve: (key: string) => string = () => ''
+  onJumpToCometTail: () => void = () => {}
 
   onWillApplyTheme(theme: Theme) { this.c = slotsFromTheme(theme) }
 
   // 所有动态指标必须直接读 `@ObjectLink store` 属性，ArkUI 才会记录细粒度依赖并在时间轴拖动/推进时实时刷新。
   build() {
     Column({ space: 8 }) {
+      if (this.store.selectedCometTailBestJD > 0 && this.store.selectedCometTailBestDate.length > 0) {
+        Row({ space: 8 }) {
+          Column({ space: 2 }) {
+            Text('最佳彗尾时机 · ' + this.store.selectedCometTailBestDate)
+              .fontSize(objectDetailFontSize(12, this.readableUi))
+              .fontWeight(FontWeight.Medium)
+              .fontColor(this.c.textStrong)
+              .maxLines(1)
+              .textOverflow({ overflow: TextOverflow.Ellipsis })
+            Text('一键跳转至近日点附近高亮度彗尾窗口')
+              .fontSize(objectDetailFontSize(11, this.readableUi))
+              .fontColor(this.c.sub)
+              .maxLines(1)
+              .textOverflow({ overflow: TextOverflow.Ellipsis })
+          }.alignItems(HorizontalAlign.Start).layoutWeight(1)
+          Button('前往观赏')
+            .fontSize(12)
+            .fontWeight(FontWeight.Medium)
+            .fontColor(this.c.textStrong)
+            .backgroundColor(this.c.chipActiveBg)
+            .borderRadius(UI_RADIUS_CONTROL)
+            .height(32)
+            .padding({ left: 12, right: 12 })
+            .clickEffect({ level: ClickEffectLevel.LIGHT, scale: 0.96 })
+            .onClick(() => { this.onJumpToCometTail() })
+        }
+          .width('100%')
+          .padding({ left: 10, right: 10, top: 8, bottom: 8 })
+          .backgroundColor(this.c.soft)
+          .borderRadius(UI_RADIUS_CONTROL)
+          .alignItems(VerticalAlign.Center)
+      }
       Text(this.simDateLabel.length > 0 ? ('当日观测窗口 · ' + this.simDateLabel) : '今晚观测窗口')
         .fontSize(objectDetailFontSize(12, this.readableUi)).fontWeight(FontWeight.Medium).fontColor(this.c.fourth).width('100%')
       Row({ space: 6 }) {
@@ -110,6 +144,7 @@ export struct ObjectDetailDataTab {
   resolve: (key: string) => string = () => ''
   onLoadPasses: () => void = () => {}
   onJumpToPass: (pass: SatellitePass) => void = () => {}
+  onJumpToCometTail: () => void = () => {}
   onSelectComplexMember: (member: StationComplexMember) => void = () => {}
   onMediaOpen: () => void = () => {}
   onMediaRetry: () => void = () => {}
@@ -120,6 +155,38 @@ export struct ObjectDetailDataTab {
 
   build() {
     Column({ space: 8 }) {
+            if (this.store.selectedCometTailBestJD > 0 && this.store.selectedCometTailBestDate.length > 0) {
+              Row({ space: 8 }) {
+                Column({ space: 2 }) {
+                  Text('最佳彗尾时机 · ' + this.store.selectedCometTailBestDate)
+                    .fontSize(objectDetailFontSize(12, this.readableUi))
+                    .fontWeight(FontWeight.Medium)
+                    .fontColor(this.c.textStrong)
+                    .maxLines(1)
+                    .textOverflow({ overflow: TextOverflow.Ellipsis })
+                  Text('一键跳转至近日点附近高亮度彗尾窗口')
+                    .fontSize(objectDetailFontSize(11, this.readableUi))
+                    .fontColor(this.c.sub)
+                    .maxLines(1)
+                    .textOverflow({ overflow: TextOverflow.Ellipsis })
+                }.alignItems(HorizontalAlign.Start).layoutWeight(1)
+                Button('前往观赏')
+                  .fontSize(12)
+                  .fontWeight(FontWeight.Medium)
+                  .fontColor(this.c.textStrong)
+                  .backgroundColor(this.c.chipActiveBg)
+                  .borderRadius(UI_RADIUS_CONTROL)
+                  .height(32)
+                  .padding({ left: 12, right: 12 })
+                  .clickEffect({ level: ClickEffectLevel.LIGHT, scale: 0.96 })
+                  .onClick(() => { this.onJumpToCometTail() })
+              }
+                .width('100%')
+                .padding({ left: 10, right: 10, top: 8, bottom: 8 })
+                .backgroundColor(this.c.soft)
+                .borderRadius(UI_RADIUS_CONTROL)
+                .alignItems(VerticalAlign.Center)
+            }
             Text('完整资料').fontSize(objectDetailFontSize(12, this.readableUi)).fontWeight(FontWeight.Medium).fontColor(this.c.fourth).width('100%')
             ObjectDistanceNotice({ text: this.distanceText })
             TabletInspectorMediaGroup({

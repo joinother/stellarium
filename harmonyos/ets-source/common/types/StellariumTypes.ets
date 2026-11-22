@@ -704,6 +704,9 @@ export interface StellariumBridgeResponse {
   tleAgeDays?: number
   tleOutdated?: boolean
   sgp4Error?: number
+  cometTailBestJD?: number
+  cometTailBestDate?: string
+  cometTailBestFov?: number
   // 富化后的天体详情字段（selectedObjectJson 扩展）
   size?: string
   rise?: string

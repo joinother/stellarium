@@ -67,6 +67,7 @@ export struct UnifiedObjectDetailCard {
   onSelectTab: (index: number) => void = () => {}
   onLoadPasses: () => void = () => {}
   onJumpToPass: (pass: SatellitePass) => void = () => {}
+  onJumpToCometTail: () => void = () => {}
   onSelectComplexMember: (member: StationComplexMember) => void = () => {}
   onMediaOpen: () => void = () => {}
   onMediaRetry: () => void = () => {}
@@ -150,7 +151,10 @@ export struct UnifiedObjectDetailCard {
           Scroll(this.scroller) {
             Column({ space: 8 }) {
               if (this.activeIndex === 0) {
-                ObjectDetailObserveTab({ store: this.store, distanceText: this.distanceText, resolve: this.resolve })
+                ObjectDetailObserveTab({
+                  store: this.store, distanceText: this.distanceText, resolve: this.resolve,
+                  onJumpToCometTail: () => { this.onJumpToCometTail() }
+                })
               } else if (this.activeIndex === 1) {
                 ObjectDetailCoordinateTab({ store: this.store, distanceText: this.distanceText, resolve: this.resolve })
               } else if (this.activeIndex === 2) {
@@ -164,6 +168,7 @@ export struct UnifiedObjectDetailCard {
                   resolve: this.resolve,
                   onLoadPasses: () => { this.onLoadPasses() },
                   onJumpToPass: (pass: SatellitePass) => { this.onJumpToPass(pass) },
+                  onJumpToCometTail: () => { this.onJumpToCometTail() },
                   onSelectComplexMember: (member: StationComplexMember) => { this.onSelectComplexMember(member) },
                   onMediaOpen: () => { this.onMediaOpen() },
                   onMediaRetry: () => { this.onMediaRetry() }, onModelExpand: () => { this.onModelExpand() },
@@ -174,12 +179,14 @@ export struct UnifiedObjectDetailCard {
                   viewLock: this.viewLock,
                   speechStatus: this.speechStatus,
                   inObservingList: this.inObservingList,
+                  cometTailBestDate: this.store.selectedCometTailBestJD > 0 ? this.store.selectedCometTailBestDate : '',
                   onCenter: () => { this.onCenter() },
                   onToggleLock: () => { this.onToggleLock() },
                   onToggleObserving: () => { this.onToggleObserving() },
                   onRefresh: () => { this.onRefresh() },
                   onReselect: () => { this.onReselect() },
-                  onSpeak: () => { this.onSpeak() }
+                  onSpeak: () => { this.onSpeak() },
+                  onJumpToCometTail: () => { this.onJumpToCometTail() }
                 })
               }
             }
