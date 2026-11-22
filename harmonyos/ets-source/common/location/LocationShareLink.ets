@@ -1,10 +1,12 @@
 // 地点分享解析：把外部地图应用分享的文本 / 深链解析成观测点。
 //
-// 支持四类输入（都按 WGS84 处理）：
+// 支持以下输入（内部统一 WGS84，花瓣/高德的 GCJ02 分享在本地纠偏）：
 //   1. 自定义深链 `skyinstrument://location?lat=..&lon=..&name=..`；
 //   2. 标准 `geo:LAT,LON?q=LAT,LON(NAME)`（Android / 花瓣地图等分享的通用格式）；
 //   3. 地图网页链接中的 `?ll=` / `?q=` / `@lat,lon` / `!3d..!4d..` 坐标；
-//   4. 纯文本里的“纬度 39.9 经度 116.4”、`N39.9 E116.4` 或 `39.9042,116.4074`。
+//   4. 高德扩展链接 `wb.amap.com/?p=poiid,lat,lon,name,address,city`
+//      与 `wb.amap.com/?q=lat,lon,name,city`（短链 302 跳转后的目标）；
+//   5. 纯文本里的“纬度 39.9 经度 116.4”、`N39.9 E116.4` 或 `39.9042,116.4074`。
 //
 // 纯函数，不依赖 UI / NAPI / 网络，宿主与单测共用；名称解析不出来时返回空串，
 // 由调用方回退到本地化“分享位置”。坐标范围非法或没有坐标时返回 null。
@@ -83,6 +85,34 @@ function parsePair(raw: string): number[] | null {
   const lon = parseCoordinate(match[2])
   if (!Number.isFinite(lat) || !Number.isFinite(lon)) return null
   return [lat, lon]
+}
+
+interface AmapPairValue {
+  latitude: number
+  longitude: number
+  name: string
+}
+
+// wb.amap.com/?p=poiid,lat,lon,name,address,city（短链 302 的目标格式）。
+function parseAmapPValue(raw: string): AmapPairValue | null {
+  const parts = raw.split(',')
+  if (parts.length < 4) return null
+  const latitude = parseCoordinate(parts[1])
+  const longitude = parseCoordinate(parts[2])
+  if (!Number.isFinite(latitude) || !Number.isFinite(longitude)) return null
+  let name = parts[3].trim()
+  if (name.length === 0 && parts.length >= 5) name = parts[4].trim()
+  return { latitude, longitude, name }
+}
+
+// wb.amap.com/?q=lat,lon,name,city（纬度在前，城市码可省略）。
+function parseAmapQValue(raw: string): AmapPairValue | null {
+  const parts = raw.split(',')
+  if (parts.length < 3) return null
+  const latitude = parseCoordinate(parts[0])
+  const longitude = parseCoordinate(parts[1])
+  if (!Number.isFinite(latitude) || !Number.isFinite(longitude)) return null
+  return { latitude, longitude, name: parts[2].trim() }
 }
 
 function cleanName(raw: string): string {
@@ -207,6 +237,11 @@ function wgs84ToGcj02(latitude: number, longitude: number): number[] {
   return [latitude + dLat, longitude + dLon]
 }
 
+// startAbilityByType('navigation') 要求 GCJ-02；星象仪内部统一 WGS84。
+export function wgs84ToGcj02Point(latitude: number, longitude: number): number[] {
+  return wgs84ToGcj02(latitude, longitude)
+}
+
 function gcj02ToWgs84(latitude: number, longitude: number): number[] {
   if (outOfChinaGcj(latitude, longitude)) return [latitude, longitude]
   let wgsLat = latitude
@@ -230,12 +265,87 @@ function petalUsesGcj(rawLower: string, query: string): boolean {
   return queryValue(query, ['coordinatetype']) !== '0'
 }
 
+// —— 高德坐标系 ——
+// uri.amap.com 默认 coordinate=gaode（GCJ02），只有 coordinate=wgs84 是 WGS84；
+// m.amap.com / wb.amap.com / amapuri 用 dev 区分：dev=1 为 WGS84，其余按 GCJ02。
+function hostFromBase(base: string): string {
+  const match = /^[a-z][a-z0-9+.-]*:\/\/([^\/?#]+)/i.exec(base.trim())
+  if (match === null) return ''
+  let authority = match[1]
+  const at = authority.lastIndexOf('@')
+  if (at >= 0) authority = authority.substring(at + 1)
+  const colon = authority.indexOf(':')
+  if (colon >= 0) authority = authority.substring(0, colon)
+  return authority.toLowerCase()
+}
+
+function isAmapHost(host: string): boolean {
+  return host === 'amap.com' || host.endsWith('.amap.com')
+}
+
+function isAmapUri(rawLower: string, base: string): boolean {
+  return rawLower.startsWith('amapuri://') || isAmapHost(hostFromBase(base))
+}
+
+function amapUsesGcj(rawLower: string, base: string, query: string): boolean {
+  if (!isAmapUri(rawLower, base)) return false
+  if (hostFromBase(base) === 'uri.amap.com') {
+    return queryValue(query, ['coordinate']).toLowerCase() !== 'wgs84'
+  }
+  return queryValue(query, ['dev']) !== '1'
+}
+
+const AMAP_SHORT_LINK_MAX_CHARS: number = 512
+
+// 从分享文本中取出唯一允许联网解析的高德短链；只接受 surl.amap.com。
+export function findAmapShortLink(raw: string): string | null {
+  // 分享文案常在短链后紧跟中文标点/说明；短码本身不含这些字符，直接截断。
+  const match = /https?:\/\/surl\.amap\.com\/[^\s"'<>()\[\]{}，。；：！？、）】》]+/i.exec(raw)
+  if (match === null) return null
+  let link = match[0].replace(/[,.;:!?]+$/, '')
+  if (link.length > AMAP_SHORT_LINK_MAX_CHARS) return null
+  if (link.substring(0, 7).toLowerCase() === 'http://') link = 'https://' + link.substring(7)
+  return link
+}
+
+// 短链 302 只允许跳到高德自己的域名，避免把分享内容变成任意请求。
+export function isAllowedAmapRedirect(location: string): boolean {
+  const host = hostFromBase(location)
+  return host === 'wb.amap.com' || host === 'uri.amap.com' || host === 'm.amap.com' ||
+    host === 'wap.amap.com' || host === 'www.amap.com' || host === 'amap.com'
+}
+
 function parseHttpUri(raw: string): SharedLocationPoint | null {
   const parts = splitUri(raw)
   const query = parts[1]
+  const host = hostFromBase(parts[0])
   let name = queryValue(query, NAME_KEYS)
   let latitude = parseCoordinate(queryValue(query, LAT_KEYS))
   let longitude = parseCoordinate(queryValue(query, LON_KEYS))
+  if (!Number.isFinite(latitude) || !Number.isFinite(longitude)) {
+    if (host === 'wb.amap.com') {
+      const p = queryValue(query, ['p'])
+      if (p.length > 0) {
+        const parsedP = parseAmapPValue(p)
+        if (parsedP !== null) {
+          latitude = parsedP.latitude
+          longitude = parsedP.longitude
+          if (name.length === 0) name = parsedP.name
+        }
+      }
+      if (!Number.isFinite(latitude) || !Number.isFinite(longitude)) {
+        const q = queryValue(query, ['q'])
+        if (q.length > 0) {
+          const parsedQ = parseAmapQValue(q)
+          if (parsedQ !== null) {
+            latitude = parsedQ.latitude
+            longitude = parsedQ.longitude
+            if (name.length === 0) name = parsedQ.name
+          }
+        }
+      }
+    }
+  }
   if (!Number.isFinite(latitude) || !Number.isFinite(longitude)) {
     for (let i = 0; i < PAIR_KEYS.length; i++) {
       const value = queryValue(query, [PAIR_KEYS[i]])
@@ -256,7 +366,9 @@ function parseHttpUri(raw: string): SharedLocationPoint | null {
   }
   if (name.length === 0) {
     const qText = queryValue(query, ['q'])
-    if (qText.length > 0 && parsePair(qText) === null && qText.indexOf('(') < 0) name = qText
+    // 多段 q（如 wb.amap.com 的 lat,lon,name,city）不是地点名称。
+    if (qText.length > 0 && parsePair(qText) === null && qText.indexOf('(') < 0 &&
+      !/^[-+]?\d{1,3}(?:\.\d+)?\s*[,，]/.test(qText)) name = qText
   }
   if (!Number.isFinite(latitude) || !Number.isFinite(longitude)) {
     // Google Maps: /@39.9042,116.4074,15z
@@ -275,7 +387,8 @@ function parseHttpUri(raw: string): SharedLocationPoint | null {
     }
   }
   if (!Number.isFinite(latitude) || !Number.isFinite(longitude)) return null
-  if (petalUsesGcj(raw.toLowerCase(), query)) {
+  const rawLower = raw.toLowerCase()
+  if (petalUsesGcj(rawLower, query) || amapUsesGcj(rawLower, parts[0], query)) {
     const wgs = gcj02ToWgs84(latitude, longitude)
     latitude = wgs[0]
     longitude = wgs[1]

@@ -1,5 +1,23 @@
 # HarmonyOS 联网功能台账
 
+## 2026-11-22 地点出站：分享标 + 系统路线 / geo 查看
+
+- **统一入口：** 位置面板当前观测点、已保存地点管理行和全屏选点卡片不再有一级下拉；点击分享标/按钮直接打开宿主级大弹窗（全屏遮罩 + 底部面板、两个能力卡片和取消）。所有动作均由用户点按触发。
+- **规划路线（系统统一接口）：** 点击“规划路线”卡片直接调用 `startAbilityByType('navigation', { sceneType: 1, destinationName, destinationLatitude, destinationLongitude, vehicleType: 0 })`，坐标 WGS84→GCJ-02；系统“选择导航方式”面板负责列出已安装应用和最终跳转。星象仪不保存路线应用列表、不调用各应用路线深链。
+- **查看地点（应用适配 + geo 系统出口）：** 只保留花瓣 `petalMaps.openMapPoiDetail`（WGS84）、百度 `baidumap://map/marker`（GCJ-02），以及“其他支持的应用”行：标准 `geo:` URI（RFC 5870，WGS84）调用 `startAbility`，由系统“选择打开方式”面板继续选择具体应用。花瓣地图不会解码标签中的百分号编码，`geo:` 标签使用未编码文本（仅折叠换行/制表符），避免标题栏显示 `%E5...`。高德不提供专用查看地点入口。
+- **安装状态与图标：** 普通第三方应用无法读取其他应用的 BundleInfo/图标（`GET_BUNDLE_INFO` 即使已授予，`getBundleInfoSync` 仍返回 201）。查看地点列表用 `bundleManager.canOpenLink` + `querySchemes`（`petalmaps`、`baidumap`、`geo`）过滤未安装应用；图标使用应用内品牌色 + 系统符号绘制。
+- **无直接导航：** 大弹窗不提供“直接导航”，星象仪不会从该入口直接开始导航。
+- **网络边界：** 本轮只增加系统接口调用、外部应用跳转和本地 scheme 可达性查询，不新增星象仪自身的网络请求、镜像源、第三方 SDK/AppKey 或内置 WebView；`querySchemes` 仅用于本机 `canOpenLink`。不提交 SN/UDID/账号/观测历史，也不经过本应用服务器。外部地图应用自身的联网与坐标处理受其隐私政策约束。
+- **验证：** 位置测试 17 项通过，UI contract（57 静态 id / 91 anchor / 352 文件）/ i18n / 命令目录通过；release HAP 803.2 MB（842,246,082 字节）已安装并启动。真机确认：路线卡片打开系统“选择导航方式”（高德/百度/花瓣），花瓣/百度查看地点落点正确，“其他支持的应用”经系统“选择打开方式”后花瓣标题栏显示“当前位置”而无百分号乱码。
+
+## 2026-11-21 高德地点分享入站（GCJ02 纠偏 + 短链解析）
+
+- **高德链接本地解析：** `uri.amap.com/marker`、`m.amap.com`、`wb.amap.com` 和 `amapuri://viewMap` 的坐标按高德规则在本地完成 GCJ02→WGS84 纠偏。`uri.amap.com` 默认 `coordinate=gaode`，只有 `coordinate=wgs84` 不纠偏；`m.amap.com` / `wb.amap.com` / `amapuri` 使用 `dev=1` 表示 WGS84，其余按 GCJ02。支持短链 302 目标 `wb.amap.com/?p=poiid,lat,lon,name,address,city` 与 `?q=lat,lon,name,city`。
+- **`surl.amap.com` 短链解析：** 只有当分享文本里没有可离线解析的坐标、且包含 `surl.amap.com` 短链时，客户端才发起一次用户主动触发的 HTTPS GET。请求关闭自动重定向（`maxRedirects: 0`），连接/读取超时各 5 秒，响应体上限 64 KiB；只读取 3xx 的 `Location` 头，目标 host 必须是 `wb.amap.com`、`uri.amap.com`、`m.amap.com`、`wap.amap.com`、`www.amap.com` 或 `amap.com`，否则丢弃。客户端不下载 `wb.amap.com` 页面、不跟随其他跳转、不携带 Cookie/账号/SN/UDID/设备标识/观测位置；短链本身来自用户分享的高德链接，高德服务端可见请求 IP 与标准请求头。
+- **失败与回退：** 离线、超时、短链过期、重定向 host 不在白名单或解析失败时，沿用现有“未找到可用坐标”提示；不改变观测点。常规文本/链接仍完全在本机解析，不产生网络请求。
+- **星象仪 → 系统导航应用面板（用户主动出站）：** “在地图中打开”调用 `startAbilityByType('navigation', ...)`，由系统展示带应用图标的导航应用选择面板；本机实测列出“地图”“百度地图”“高德地图”。星象仪只向系统提交终点名称、WGS84→GCJ-02 转换后的经纬度和 `vehicleType: 0`（`sceneType: 1`，路线规划），不提交 SN/UDID/账号/观测历史，也不经过本应用服务器；系统把请求交给用户选择的地图应用，由该应用自行处理起点（设备当前位置）、路线计算、地图瓦片和隐私政策。星象仪不自动开始导航，路线方案页停留在“开始导航”前，用户需自行确认；未引入高德/百度/花瓣 SDK、AppKey 或 `querySchemes`，不使用内置 WebView，signed HAP 仍为 799.4 MB。
+- **验证：** `node --test scripts/test-ohos-location-share.mjs scripts/test-ohos-location-share-resolver.mjs scripts/test-ohos-location-map-outbound.mjs` 14 项通过；UI contract（76 anchor / 337 文件）、i18n、命令目录（435）通过；release HAP 构建、安装并启动成功。主机侧与真机均验证真实短链 `surl.amap.com/1rXM9G4cgrQ`：302 目标经本地解析为 `31.957155, 120.939651`，与独立 GCJ02 参考实现一致；`maxRedirects: 0` 的 2300047 异常由 `headersReceive` 回调截获 `Location` 处理，未跟随重定向。高德扩展链接、`wb` p/q、`m.amap.com dev=0` 及无效短链失败回退均已真机验证。真机通过高德分享面板实际分享两个地点，应用日志确认 `setObserverPlanet` 青水（21.529646,110.136306）与横山镇（21.531456,110.132896,16 m）；hilog 的 `[location-share]` 行已被后续日志挤出缓冲区，但原生命中日志证明两次分享均进入观测点管线。出站侧真机验证系统“选择导航方式”面板显示“地图”“百度地图”“高德地图”及图标；选择高德打开原生路线规划（“我的位置”→桃源街道，地图居中，停留在“开始导航”前），选择花瓣/百度同样进入各自路线规划；星象仪不自动导航。
+
 ## 2026-11-13 PR #9 全屏地图联网门禁
 
 - 全屏地图的用户主动 POI 搜索与选点反向地理编码沿用 Map Kit，不新增服务器端点。搜索发送查询词和语言；反向地理编码发送所选坐标、半径和语言，不添加 SN/UDID。

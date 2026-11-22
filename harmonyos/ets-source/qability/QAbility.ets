@@ -27,7 +27,8 @@ import { readAstronomyCard, publishAstronomyCard } from './AstronomyCardService'
 import { CardTonightData } from '../form/AstronomyCardData';
 import { CollaborationSessionOptions, collaborationNativeState, collaborationPreview, createCollaborationSession } from './CollaborationSessionService';
 import { NIGHT_MODE_STORE } from '../common/types/MainWindowModels';
-import { parseSharedLocationText, SharedLocationPoint } from '../common/location/LocationShareLink';
+import { findAmapShortLink, parseSharedLocationText, SharedLocationPoint } from '../common/location/LocationShareLink';
+import { resolveSharedLocationText } from '../common/location/LocationShareResolver';
 
 interface AstronomyReminderResponse {
   ok: boolean;
@@ -1074,11 +1075,31 @@ export default class QAbility extends UIAbility {
     hilog.info(LOG_DOMAIN, LOG_TAG, '[location-share] shared content has no usable coordinates');
   }
 
+  private locationShareResolveSeq: number = 0;
+
+  private resolveLocationShare(raw: string): void {
+    const seq = ++this.locationShareResolveSeq;
+    resolveSharedLocationText(raw).then((point: SharedLocationPoint | null) => {
+      if (seq !== this.locationShareResolveSeq) return;
+      this.publishSharedLocation(point);
+    }).catch((error: Error) => {
+      if (seq !== this.locationShareResolveSeq) return;
+      hilog.warn(LOG_DOMAIN, LOG_TAG, `[location-share] resolve failed: ${error.message}`);
+      this.publishSharedLocation(null);
+    });
+  }
+
   private queueLocationShareWant(want: Want): void {
     const uri = want.uri ?? '';
     const direct = parseSharedLocationText(uri);
     if (direct !== null) {
+      this.locationShareResolveSeq += 1;
       this.publishSharedLocation(direct);
+      return;
+    }
+    // 高德短链本身不含坐标；先做受限解析，不进入系统分享记录分支。
+    if (findAmapShortLink(uri) !== null) {
+      this.resolveLocationShare(uri);
       return;
     }
     const action = want.action ?? '';
@@ -1087,9 +1108,12 @@ export default class QAbility extends UIAbility {
       if (lower.startsWith('skyinstrument://') || lower.startsWith('geo:')) this.publishSharedLocation(null);
       return;
     }
+    const seq = ++this.locationShareResolveSeq;
     systemShare.getSharedData(want).then((data: systemShare.SharedData) => {
+      if (seq !== this.locationShareResolveSeq) return;
       const records = data.getRecords();
       let sawText = false;
+      let shortLinkCandidate = '';
       for (let i = 0; i < records.length; i++) {
         const record = records[i];
         const utd = record.utd.toLowerCase();
@@ -1106,6 +1130,14 @@ export default class QAbility extends UIAbility {
           this.publishSharedLocation(parsedUri);
           return;
         }
+        if (shortLinkCandidate.length === 0) {
+          if (findAmapShortLink(content) !== null) shortLinkCandidate = content;
+          else if (findAmapShortLink(recordUri) !== null) shortLinkCandidate = recordUri;
+        }
+      }
+      if (shortLinkCandidate.length > 0) {
+        this.resolveLocationShare(shortLinkCandidate);
+        return;
       }
       // Image/file shares are registered for other flows; only text/links get
       // the "no coordinates" feedback, so unrelated shares stay silent.

@@ -11,7 +11,8 @@ async function sourceModule(relativePath) {
   return import('data:text/javascript,' + encodeURIComponent(stripTypeScriptTypes(source)));
 }
 
-const { parseSharedLocationText } = await sourceModule('common/location/LocationShareLink.ets');
+const { parseSharedLocationText, findAmapShortLink, isAllowedAmapRedirect } =
+  await sourceModule('common/location/LocationShareLink.ets');
 
 test('standard geo URIs become an observer point with a display name', () => {
   const point = parseSharedLocationText('geo:39.9042,116.4074?q=39.9042,116.4074(天安门)');
@@ -75,8 +76,8 @@ test('map web links and their common coordinate fields are parsed', () => {
   assert.ok(Math.abs(petalGcj.latitude - 31.2304) < 0.00001, String(petalGcj.latitude));
   assert.ok(Math.abs(petalGcj.longitude - 121.4737) < 0.00001, String(petalGcj.longitude));
 
-  // Amap URI API uses position=lon,lat.
-  const amapWeb = parseSharedLocationText('https://uri.amap.com/marker?position=121.4737,31.2304&name=外滩&coordinate=gaode');
+  // Amap URI API uses position=lon,lat; coordinate=wgs84 keeps WGS84.
+  const amapWeb = parseSharedLocationText('https://uri.amap.com/marker?position=121.4737,31.2304&name=外滩&coordinate=wgs84');
   assert.ok(amapWeb);
   assert.equal(amapWeb.name, '外滩');
   assert.equal(amapWeb.latitude, 31.2304);
@@ -94,7 +95,7 @@ test('native map-app deep links from Petal, Amap and Baidu are parsed', () => {
   assert.ok(Math.abs(petalNative.latitude - 31.2304) < 0.00001, String(petalNative.latitude));
   assert.ok(Math.abs(petalNative.longitude - 121.4737) < 0.00001, String(petalNative.longitude));
 
-  const amap = parseSharedLocationText('amapuri://viewMap?sourceApplication=x&poiname=外滩&lat=31.2304&lon=121.4737&dev=0');
+  const amap = parseSharedLocationText('amapuri://viewMap?sourceApplication=x&poiname=外滩&lat=31.2304&lon=121.4737&dev=1');
   assert.ok(amap);
   assert.equal(amap.name, '外滩');
   assert.equal(amap.latitude, 31.2304);
@@ -105,6 +106,56 @@ test('native map-app deep links from Petal, Amap and Baidu are parsed', () => {
   assert.equal(baidu.name, '外滩');
   assert.equal(baidu.latitude, 31.2304);
   assert.equal(baidu.longitude, 121.4737);
+});
+
+test('Amap share links convert GCJ02 to WGS84 and parse wb redirect formats', () => {
+  // 外滩 WGS84 31.2304,121.4737 is shared by Amap as GCJ02
+  // 31.22845773757727,121.47822305927693.
+  const gcj = '31.22845773757727,121.47822305927693';
+  const near = (point, latitude, longitude) => {
+    assert.ok(point);
+    assert.ok(Math.abs(point.latitude - latitude) < 0.00001, String(point.latitude));
+    assert.ok(Math.abs(point.longitude - longitude) < 0.00001, String(point.longitude));
+  };
+
+  const markerGcj = parseSharedLocationText(
+    'https://uri.amap.com/marker?position=121.47822305927693,31.22845773757727&name=外滩&coordinate=gaode');
+  near(markerGcj, 31.2304, 121.4737);
+  assert.equal(markerGcj.name, '外滩');
+
+  const markerWgs = parseSharedLocationText(
+    'https://uri.amap.com/marker?position=121.4737,31.2304&name=外滩&coordinate=wgs84');
+  near(markerWgs, 31.2304, 121.4737);
+
+  const mobileGcj = parseSharedLocationText(`http://m.amap.com/?q=${gcj}&name=外滩&dev=0`);
+  near(mobileGcj, 31.2304, 121.4737);
+
+  const mobileWgs = parseSharedLocationText('http://m.amap.com/?q=31.2304,121.4737&name=外滩&dev=1');
+  near(mobileWgs, 31.2304, 121.4737);
+
+  // surl.amap.com 302 target: p=poiid,lat,lon,name,address,city.
+  const wbP = parseSharedLocationText(
+    `http://wb.amap.com/?p=B000A83V1B,${gcj},外滩,中山东一路,310000&src=pc_sms_poi`);
+  near(wbP, 31.2304, 121.4737);
+  assert.equal(wbP.name, '外滩');
+
+  // surl.amap.com 302 target: q=lat,lon,name,city.
+  const wbQ = parseSharedLocationText(`http://wb.amap.com/?q=${gcj},外滩,310000&src=pc_sms_poi`);
+  near(wbQ, 31.2304, 121.4737);
+  assert.equal(wbQ.name, '外滩');
+
+  const deepGcj = parseSharedLocationText(
+    'amapuri://viewMap?sourceApplication=x&poiname=外滩&lat=31.22845773757727&lon=121.47822305927693&dev=0');
+  near(deepGcj, 31.2304, 121.4737);
+
+  // Amap short links carry no coordinates; they are resolved by the network helper.
+  assert.equal(parseSharedLocationText('https://surl.amap.com/69Uh1Un1r9Df'), null);
+  assert.equal(findAmapShortLink('看这里 https://surl.amap.com/abc123，谢谢'), 'https://surl.amap.com/abc123');
+  assert.equal(findAmapShortLink('http://surl.amap.com/abc123'), 'https://surl.amap.com/abc123');
+  assert.equal(findAmapShortLink('https://evil.com/surl.amap.com/abc123'), null);
+  assert.equal(isAllowedAmapRedirect('http://wb.amap.com/?q=1,2,x'), true);
+  assert.equal(isAllowedAmapRedirect('https://evil.com/?q=1,2'), false);
+  assert.equal(isAllowedAmapRedirect('https://wb.amap.com.evil.com/?q=1,2'), false);
 });
 
 test('plain shared text recognizes labelled, directional and bare coordinate pairs', () => {
@@ -151,6 +202,21 @@ test('share intent is registered and routed into the observer pipeline', () => {
   assert.match(qability, /AppStorage\.setOrCreate\('stellariumLocationShare'/);
   assert.match(qability, /parseSharedLocationText/);
   assert.equal((qability.match(/this\.queueLocationShareWant\(want\)/g) ?? []).length, 2);
+  assert.match(qability, /findAmapShortLink\(uri\)/);
+  assert.match(qability, /resolveSharedLocationText/);
+  assert.match(qability, /this\.resolveLocationShare\(/);
+
+  const resolver = read('common/location/LocationShareResolver.ets');
+  assert.match(resolver, /maxRedirects: 0/);
+  assert.match(resolver, /AMAP_SHORT_LINK_TIMEOUT_MS: number = 5000/);
+  assert.match(resolver, /findAmapShortLink/);
+  assert.match(resolver, /isAllowedAmapRedirect/);
+  assert.match(resolver, /locationHeaderValue/);
+
+  const parser = read('common/location/LocationShareLink.ets');
+  assert.match(parser, /parseAmapPValue/);
+  assert.match(parser, /parseAmapQValue/);
+  assert.match(parser, /amapUsesGcj/);
 
   const moduleJson = readFileSync(new URL('harmonyos/module.json5', root), 'utf8');
   assert.match(moduleJson, /"utd": "general\.text"/);
@@ -169,35 +235,44 @@ test('share intent is registered and routed into the observer pipeline', () => {
   assert.match(host, /loc_share_unrecognized/);
 });
 
-test('Stellarium opens Petal Maps at the precise place without navigation', () => {
+test('Stellarium opens the in-app share sheet for route planning and place details', () => {
   const host = read('pages/MainWindowNativeNode.ets');
-  assert.match(host, /petalMaps\.openMapPoiDetail\(context/);
-  assert.match(host, /coordinateType: mapCommon\.CoordinateType\.WGS84/);
+  assert.match(host, /mapActionPickerOpen: boolean/);
+  assert.match(host, /ForEach\(this\.mapViewApps\(\)/);
+  // Route planning is fully delegated to the system navigation panel.
+  assert.match(host, /startAbilityByType\('navigation'/);
+  assert.match(host, /'sceneType': 1/);
+  assert.doesNotMatch(host, /openMapRoutePlan|amapuri:\/\/route|baidumap:\/\/map\/direction/);
+  // View place keeps Petal/Baidu adapters and the generic geo outlet.
+  assert.match(host, /petalMaps\.openMapPoiDetail\(context, \{/);
+  assert.match(host, /'baidumap:\/\/map\/marker\?location='/);
+  assert.match(host, /'geo:' \+ point \+ '\?q=' \+ point/);
   assert.match(host, /loc_map_unavailable/);
-  // Only Petal is integrated for now; no chooser, no Amap/Baidu schemes, and
-  // no route planning / turn-by-turn navigation initiated by Stellarium.
-  assert.doesNotMatch(host, /showActionMenu|amapuri|baidumap|openMapNavi|openMapRoutePlan|sceneType/);
-  assert.doesNotMatch(host, /vehicleType|bundleManager/);
+  // No direct-guidance option.
+  assert.doesNotMatch(host, /'sceneType': 2/);
+  assert.doesNotMatch(host, /showActionMenu|openMapNavi|locationMapChooser|locationAmapWeb/);
+  assert.doesNotMatch(host, /bundleManager/);
 
   const moduleJson = readFileSync(new URL('harmonyos/module.json5', root), 'utf8');
-  assert.doesNotMatch(moduleJson, /"querySchemes"/);
+  assert.match(moduleJson, /"querySchemes": \[/);
+  assert.doesNotMatch(moduleJson, /ohos\.permission\.GET_BUNDLE_INFO/);
 
   const place = read('panels/panels/PlacePanel.ets');
-  assert.match(place, /onNavigateCurrent/);
+  assert.match(place, /onShareCurrent/);
   assert.match(place, /id\('loc-open-map-current'\)/);
-  assert.match(place, /loc_open_current_in_map/);
-  assert.match(place, /onNavigateLocation/);
+  assert.match(place, /loc_map_actions/);
+  assert.match(place, /onShareLocation/);
 
   const fullScreen = read('panels/location/LocationFullScreenMap.ets');
-  assert.match(fullScreen, /onNavigate: \(latitude: number, longitude: number, name: string\)/);
+  assert.match(fullScreen, /onShare: \(latitude: number, longitude: number, name: string\)/);
   assert.match(fullScreen, /id\('loc-open-map-selected'\)/);
-  assert.match(fullScreen, /loc_open_in_map/);
+  assert.match(fullScreen, /loc_map_actions/);
 
   const chips = read('panels/location/CityChipsRow.ets');
-  assert.match(chips, /onNavigateLocation/);
+  assert.match(chips, /onShareLocation/);
   assert.match(chips, /id\('loc-open-map-saved'\)/);
-  assert.match(chips, /loc_open_in_map/);
+  assert.match(chips, /loc_map_actions/);
 
   const i18n = read('capability/I18n.ets');
-  assert.match(i18n, /'loc_open_in_map': \{[^}]*'zh_CN': '在地图中打开'/);
+  assert.match(i18n, /'loc_map_actions': \{[^}]*'zh_CN': '地图与导航'/);
 });

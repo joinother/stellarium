@@ -39,6 +39,7 @@ import hilog from '@ohos.hilog'
 import display from '@ohos.display'
 import preferences from '@ohos.data.preferences'
 import { LOCATION_HIERARCHY } from '../common/location/hierarchy'
+import { wgs84ToGcj02Point } from '../common/location/LocationShareLink'
 import { smallestAdminDivision } from '../common/location/ReverseGeocodeName'
 import { LOCATION_COUNTRY_NAMES } from '../common/location/countries'
 import { LOCATION_ZH_NAMES } from '../common/location/names_zh'
@@ -51,6 +52,7 @@ import { I18n, LANGUAGE_DISPLAY, PROJECTION_KEYS } from './I18n'
 import { DeepSkyWarmupStatus, getDeepSkyResourceWarmupStatus, isStellariumDetailMediaPreparationFailed, resolveStellariumDetailMediaAsset } from '../qability/StellariumResourceBootstrap'
 import { UI_RADIUS_CONTROL, UI_RADIUS_PANEL, UI_RADIUS_SHEET, UI_RADIUS_PILL, UI_OPTION_ANIMATION_MS } from '../common/ui/UiTokens'
 import { getIcon } from '../common/ui/ShellIcons'
+import { MapAppEntry, loadMapApps } from '../common/location/MapAppCatalog'
 import { dockItemIndex } from '../common/ui/DockGeometry'
 import {
   CHROME_ROW_OFFSET,
@@ -1353,6 +1355,12 @@ export struct WindowNativeNode {
   @State private panelTouching: boolean = false
   // 全屏地图是页面级覆盖层；放在宿主根 Stack 才能盖住浮动面板和 Dock。
   @State private locationMapFullscreen: boolean = false
+  // 「地图与导航」选择地图应用的大弹窗（仿系统选择导航方式面板）。
+  @State private mapActionPickerOpen: boolean = false
+  @State private mapActionName: string = ''
+  @State private mapActionLatitude: number = 0
+  @State private mapActionLongitude: number = 0
+  @State private mapActionPickerApps: MapAppEntry[] = []
   // 时空变更轻量星空文化推荐胶囊（仅在手动改地点或跨越历史年代时短暂展示，绝不强行自动切换）。
   @State private skyCultureSuggestId: string = ''
   @State private skyCultureSuggestName: string = ''
@@ -5414,12 +5422,115 @@ export struct WindowNativeNode {
     }
   }
 
-  // 星象仪 → 花瓣地图：精确打开该坐标，不规划路线、不进入导航。
-  // 高德/百度暂不接入；花瓣使用 Map Kit 的地点详情接口（WGS84，真机已验证精确标靶）。
-  private openLocationInExternalMap(name: string, latitude: number, longitude: number): void {
+  // 分享大弹窗入口：路线规划统一交给系统，查看地点保留花瓣/百度适配和 geo 系统出口。
+  private openLocationSharePanel(name: string, latitude: number, longitude: number): void {
     if (!Number.isFinite(latitude) || !Number.isFinite(longitude) ||
       latitude < -90 || latitude > 90 || longitude < -180 || longitude > 180) return
-    this.launchPetalPlace(this.locationMapLabel(name), latitude, longitude)
+    this.mapActionPickerApps = loadMapApps()
+    this.mapActionName = this.locationMapLabel(name)
+    this.mapActionLatitude = latitude
+    this.mapActionLongitude = longitude
+    this.mapActionPickerOpen = true
+  }
+
+  private mapViewApps(): MapAppEntry[] {
+    return this.mapActionPickerApps.filter((app: MapAppEntry) => app.installed)
+  }
+
+  // 规划路线：系统 startAbilityByType('navigation', sceneType: 1) 统一应用选择。
+  private launchRoutePlanningSystemPanel(): void {
+    const name = this.mapActionName
+    const latitude = this.mapActionLatitude
+    const longitude = this.mapActionLongitude
+    this.mapActionPickerOpen = false
+    if (!Number.isFinite(latitude) || !Number.isFinite(longitude) ||
+      latitude < -90 || latitude > 90 || longitude < -180 || longitude > 180) return
+    const gcj = wgs84ToGcj02Point(latitude, longitude)
+    const wantParam: Record<string, Object> = {
+      'sceneType': 1,
+      'destinationName': name,
+      'destinationLatitude': gcj[0],
+      'destinationLongitude': gcj[1],
+      'vehicleType': 0
+    }
+    const context = this.getUIContext().getHostContext() as common.UIAbilityContext
+    const abilityStartCallback: common.AbilityStartCallback = {
+      onError: (code: number, callbackName: string, message: string): void => {
+        hilog.warn(0x0000, 'StellariumArkUI',
+          `[location-map] navigation panel failed: ${code} ${callbackName} ${message}`)
+        this.flashHint(I18n.t('loc_map_unavailable'))
+      }
+    }
+    context.startAbilityByType('navigation', wantParam, abilityStartCallback).then((): void => {
+      hilog.info(0x0000, 'StellariumArkUI', '[location-map] opened system route-planning app panel')
+    }).catch((error: Error): void => {
+      hilog.warn(0x0000, 'StellariumArkUI', `[location-map] navigation panel unavailable: ${error.message}`)
+      this.flashHint(I18n.t('loc_map_unavailable'))
+    })
+  }
+
+  private launchPlaceAction(vendor: string): void {
+    const name = this.mapActionName
+    const latitude = this.mapActionLatitude
+    const longitude = this.mapActionLongitude
+    this.mapActionPickerOpen = false
+    if (vendor === 'petal') this.openPlaceInPetalMaps(name, latitude, longitude)
+    else if (vendor === 'baidu') this.openPlaceInBaiduMaps(name, latitude, longitude)
+    else if (vendor === 'other') this.openPlaceInOtherMaps(name, latitude, longitude)
+  }
+
+  private petalCoordinateAllowed(latitude: number, longitude: number): boolean {
+    if (Number.isFinite(latitude) && Number.isFinite(longitude) &&
+      latitude >= -85.2 && latitude <= 85.2 && longitude >= -180 && longitude <= 180) return true
+    this.flashHint(I18n.t('loc_map_unavailable'))
+    return false
+  }
+
+  private openPlaceInPetalMaps(name: string, latitude: number, longitude: number): void {
+    if (!this.petalCoordinateAllowed(latitude, longitude)) return
+    const context = this.getUIContext().getHostContext() as common.UIAbilityContext
+    petalMaps.openMapPoiDetail(context, {
+      destinationPosition: { latitude: latitude, longitude: longitude },
+      destinationName: name,
+      coordinateType: mapCommon.CoordinateType.WGS84
+    }).then((): void => {
+      hilog.info(0x0000, 'StellariumArkUI', '[location-map] opened Petal Maps place details')
+    }).catch((error: Error): void => {
+      hilog.warn(0x0000, 'StellariumArkUI', `[location-map] Petal Maps place details unavailable: ${error.message}`)
+      this.flashHint(I18n.t('loc_map_unavailable'))
+    })
+  }
+
+  // 百度：GCJ-02 + coord_type=gcj02。
+  private openPlaceInBaiduMaps(name: string, latitude: number, longitude: number): void {
+    const gcj = wgs84ToGcj02Point(latitude, longitude)
+    const uri = 'baidumap://map/marker?location=' + gcj[0] + ',' + gcj[1] +
+      '&title=' + encodeURIComponent(name) + '&content=' + encodeURIComponent(name) +
+      '&coord_type=gcj02&src=skyinstrument'
+    this.openMapDeepLink(uri, 'Baidu Maps place details')
+  }
+
+  // 其他支持 geo: 的应用：标准 geo URI（RFC 5870，WGS84），由系统选择打开方式。
+  // 花瓣地图不会解码 q 参数标签中的百分号编码，编码后的中文会原样显示成
+  // “%E5%BD%93...”，因此标签直接使用未编码文本，只折叠换行/制表符。
+  private openPlaceInOtherMaps(name: string, latitude: number, longitude: number): void {
+    const point = latitude + ',' + longitude
+    const label = name.replace(/[\r\n\t]+/g, ' ').trim()
+    const uri = 'geo:' + point + '?q=' + point + (label.length > 0 ? '(' + label + ')' : '')
+    this.openMapDeepLink(uri, 'system place chooser')
+  }
+
+  private openMapDeepLink(uri: string, tag: string): void {
+    const context = this.getUIContext().getHostContext() as common.UIAbilityContext
+    context.startAbility({
+      action: 'ohos.want.action.viewData',
+      uri: uri
+    }).then((): void => {
+      hilog.info(0x0000, 'StellariumArkUI', `[location-map] opened ${tag}`)
+    }).catch((error: Error): void => {
+      hilog.warn(0x0000, 'StellariumArkUI', `[location-map] ${tag} unavailable: ${error.message}`)
+      this.flashHint(I18n.t('loc_map_unavailable'))
+    })
   }
 
   private locationMapLabel(name: string): string {
@@ -5427,20 +5538,6 @@ export struct WindowNativeNode {
     if (trimmed.length > 0 && trimmed !== I18n.t('loc_shared_point') &&
       trimmed !== I18n.t('custom_location')) return trimmed
     return I18n.t('loc_shared_point')
-  }
-
-  private launchPetalPlace(name: string, latitude: number, longitude: number): void {
-    const context = this.getUIContext().getHostContext() as common.UIAbilityContext
-    petalMaps.openMapPoiDetail(context, {
-      destinationPosition: { latitude: latitude, longitude: longitude },
-      destinationName: name,
-      coordinateType: mapCommon.CoordinateType.WGS84
-    }).then((): void => {
-      hilog.info(0x0000, 'StellariumArkUI', '[location-map] opened Petal Maps place')
-    }).catch((error: Error): void => {
-      hilog.warn(0x0000, 'StellariumArkUI', `[location-map] Petal Maps unavailable: ${error.message}`)
-      this.flashHint(I18n.t('loc_map_unavailable'))
-    })
   }
 
   // 红光手电：纯红全屏叠层 + 可调窗口亮度 + 屏幕常亮；关闭时恢复系统亮度。
@@ -6072,6 +6169,8 @@ export struct WindowNativeNode {
   // 顺序 = 叠层由上到下：全屏叠层 → 信息窗 → 极轴镜 → 面板 → 主界面两次确认退出。
   private onRequestBack(): void {
     if (this.requestBackToken === 0) return
+    // 分享大弹窗是宿主级叠层：返回手势先关弹窗，再处理它下面的位置面板。
+    if (this.mapActionPickerOpen) { this.mapActionPickerOpen = false; return }
     if (this.redLightOn) { this.setRedLight(false); return }
     if (this.objectMediaStore.objectInspectorMediaFullscreen) {
       this.objectInspectorMediaCtl().closeObjectInspectorMediaPreview()
@@ -10927,12 +11026,16 @@ export struct WindowNativeNode {
             this.locationCtl().applyPickerLocation()
             setTimeout(() => { this.scheduleSpacetimeCultureSuggest('location') }, 450)
           },
-          onNavigate: (latitude: number, longitude: number, name: string) => {
-            this.openLocationInExternalMap(name, latitude, longitude)
+          onShare: (latitude: number, longitude: number, name: string) => {
+            this.openLocationSharePanel(name, latitude, longitude)
           },
           onClose: () => { this.locationMapFullscreen = false }
         })
           .width('100%').height('100%').zIndex(200)
+      }
+
+      if (this.mapActionPickerOpen) {
+        this.mapActionPicker()
       }
 
       if (this.skyCultureSuggestId.length > 0 && !this.locationMapFullscreen) {
@@ -11021,6 +11124,7 @@ export struct WindowNativeNode {
           .accessibilityText(I18n.t('quick_red_light_hint'))
       }
 
+
     }
       .width('100%')
       .height('100%')
@@ -11057,6 +11161,124 @@ export struct WindowNativeNode {
   // 音乐开关按钮（左侧栏底部）：开着时音符亮起，静音时变暗
 
   // 陀螺仪按钮（平板左侧栏，与手机端 compactQuickButton 共用 ic_gyro.svg）
+
+  // 「地图与导航」大弹窗：仿系统“选择导航方式”面板。
+  // 顶部两个能力卡片（规划路线/查看地点），下方按安装状态与支持矩阵列出地图应用。
+  @Builder
+  mapActionPicker() {
+    Stack({ alignContent: Alignment.Bottom }) {
+      Column()
+        .width('100%').height('100%')
+        .backgroundColor(this.hostSlots().isNight ? 'rgba(0,0,0,0.46)' : 'rgba(0,0,0,0.30)')
+        .onClick(() => { this.mapActionPickerOpen = false })
+      Column({ space: 10 }) {
+        Row({ space: 8 }) {
+          Column({ space: 2 }) {
+            Text(I18n.t('loc_map_share_title'))
+              .fontSize(19).fontWeight(FontWeight.Medium).fontColor(this.hostSlots().textStrong)
+            Text(this.mapActionName)
+              .fontSize(11).fontColor(this.hostSlots().sub).maxLines(1)
+              .textOverflow({ overflow: TextOverflow.Ellipsis }).width('100%')
+          }.layoutWeight(1).alignItems(HorizontalAlign.Start)
+          Button('×').fontSize(20).fontColor(this.hostSlots().sub)
+            .width(34).height(34).padding(0).backgroundColor(this.hostSlots().soft)
+            .borderRadius(UI_RADIUS_PILL)
+            .id('map-app-close')
+            .onClick(() => { this.mapActionPickerOpen = false })
+        }.width('100%').padding({ left: 4, right: 2, bottom: 2 })
+        Row({ space: 8 }) {
+          this.mapPickerCapability('route', $r('sys.symbol.map'), I18n.t('loc_map_route_plan'), false,
+            () => { this.launchRoutePlanningSystemPanel() })
+          this.mapPickerCapability('view', $r('sys.symbol.pin_fill'), I18n.t('loc_map_view_place'), true,
+            () => {})
+        }.width('100%')
+        Row().width('100%').height(0.5).backgroundColor(this.hostSlots().border)
+        if (this.mapViewApps().length === 0) {
+          Text(I18n.t('loc_map_unavailable'))
+            .fontSize(12).fontColor(this.hostSlots().sub).width('100%')
+            .textAlign(TextAlign.Center).padding({ top: 18, bottom: 18 })
+        } else {
+          ForEach(this.mapViewApps(), (app: MapAppEntry) => {
+            this.mapPickerAppRow(app)
+          }, (app: MapAppEntry) => app.id)
+        }
+        Button(I18n.t('loc_cancel'))
+          .fontSize(14).fontColor(this.hostSlots().text)
+          .width('100%').height(44)
+          .backgroundColor(this.hostSlots().softStrong)
+          .borderRadius(UI_RADIUS_CONTROL)
+          .margin({ top: 2 })
+          .id('map-app-cancel')
+          .onClick(() => { this.mapActionPickerOpen = false })
+      }
+        .width(this.isExpandedLayout ? 440 : '100%')
+        .padding({ left: 16, right: 16, top: 18, bottom: 18 })
+        // 磨砂玻璃：强玻璃底色保证可读性，背景模糊只做质感，不大量透出底层内容。
+        .backgroundColor(this.hostSlots().panelGlassStrong)
+        .backdropBlur(36)
+        .border({ width: 1, color: this.hostSlots().border })
+        .borderRadius({
+          topLeft: 28, topRight: 28,
+          bottomLeft: this.isExpandedLayout ? 28 : 0,
+          bottomRight: this.isExpandedLayout ? 28 : 0
+        })
+        .shadow({ radius: 26, color: 'rgba(0,0,0,0.34)', offsetY: -6 })
+        .transition(TransitionEffect.OPACITY.animation({ duration: UI_OPTION_ANIMATION_MS, curve: Curve.EaseOut })
+          .combine(TransitionEffect.translate({ y: 24 }).animation({ duration: UI_OPTION_ANIMATION_MS, curve: Curve.EaseOut })))
+    }
+      .width('100%').height('100%')
+      .zIndex(320)
+  }
+
+  @Builder
+  mapPickerCapability(id: string, icon: Resource, label: string, selected: boolean, action: () => void) {
+    Column({ space: 4 }) {
+      SymbolGlyph(icon)
+        .fontSize(22)
+        // 600 字重让系统线形图标与 Dock/面板里的实心 SVG 图标粗细一致。
+        .fontWeight(600)
+        .fontColor([selected ? this.hostSlots().accent : this.hostSlots().sub])
+      Text(label)
+        .fontSize(12)
+        .fontColor(selected ? this.hostSlots().textStrong : this.hostSlots().sub)
+    }
+      .layoutWeight(1).height(66)
+      .justifyContent(FlexAlign.Center)
+      .backgroundColor(selected ? this.hostSlots().chipActiveBg : this.hostSlots().chipInactiveBg)
+      .border({
+        width: 1,
+        color: selected ? this.hostSlots().chipActiveBorder : this.hostSlots().chipInactiveBorder
+      })
+      .borderRadius(UI_RADIUS_CONTROL)
+      .clickEffect({ level: ClickEffectLevel.LIGHT })
+      .id('map-app-mode-' + id)
+      .accessibilityText(label)
+      .onClick(() => { action() })
+  }
+
+  @Builder
+  mapPickerAppRow(app: MapAppEntry) {
+    Row({ space: 14 }) {
+      Stack() {
+        SymbolGlyph(app.iconSymbol)
+          .fontSize(22)
+          .fontWeight(600)
+          .fontColor([Color.White])
+      }
+        .width(40).height(40)
+        .backgroundColor(app.iconColor)
+        .borderRadius(10)
+      Text(I18n.t(app.labelKey)).fontSize(15).fontColor(this.hostSlots().text).layoutWeight(1)
+      Text('›').fontSize(18).fontColor(this.hostSlots().tertiary)
+    }
+      .width('100%').height(60).padding({ left: 10, right: 12 })
+      .borderRadius(UI_RADIUS_CONTROL)
+      .backgroundColor(this.hostSlots().soft)
+      .clickEffect({ level: ClickEffectLevel.LIGHT })
+      .id('map-app-' + app.id)
+      .accessibilityText(I18n.t(app.labelKey))
+      .onClick(() => { this.launchPlaceAction(app.id) })
+  }
 
   // 平板/桌面浮动面板与手机底部面板：体内调用 this.panelContent()。
   // ArkUI 不能在子组件里调用宿主 @Builder（会整应用退出，，
@@ -11454,11 +11676,13 @@ export struct WindowNativeNode {
         onSaveCurrent: () => { this.locationStore.saveCurrentLocation() },
         onApplyLocation: (name: string, lat: number, lon: number, alt: number, planet: string) => { this.locationCtl().setLocation(name, lat, lon, alt, planet) },
         onDeleteLocation: (key: string) => { this.locationStore.deleteSavedLocation(key) },
-        onNavigateCurrent: () => {
-          this.openLocationInExternalMap(this.locationPickerStore.locationPickerName,
-            this.locationPickerStore.locationPickerLatitude, this.locationPickerStore.locationPickerLongitude)
+        onShareCurrent: () => {
+          // 当前观测点以引擎回读的观测者坐标为准；pickerStore 可能仍是未应用的
+          // 搜索/地图草稿，不能拿来当“当前位置”。
+          this.openLocationSharePanel(I18n.t('m_current_location'),
+            this.observerLatLive, this.observerLonLive)
         },
-        onNavigateLocation: (name: string, lat: number, lon: number) => { this.openLocationInExternalMap(name, lat, lon) },
+        onShareLocation: (name: string, lat: number, lon: number) => { this.openLocationSharePanel(name, lat, lon) },
         onSelectPlanet: (name: string) => { this.locationCtl().setObserverPlanet(name) },
         onApplyEnvironment: (pressure: number, temperature: number) => {
           this.astroCalcCtl().applyAtmosphere(pressure, temperature, this.atmosphereStore.atmoExtinction)

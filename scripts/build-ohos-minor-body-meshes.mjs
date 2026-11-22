@@ -17,7 +17,7 @@
  */
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { dirname, join, resolve } from 'node:path'
-import { fileURLToPath } from 'node:url'
+import { fileURLToPath, pathToFileURL } from 'node:url'
 import { gunzipSync } from 'node:zlib'
 
 const SCRIPT_DIR = dirname(fileURLToPath(import.meta.url))
@@ -280,6 +280,8 @@ function main() {
   console.log(`Baked ${manifestEntries.length} minor-body SBM1 3D meshes (${(totalBytes / 1024 / 1024).toFixed(2)} MB) -> ${outDir}`)
 }
 
-if (import.meta.url === `file://${process.argv[1]}`) {
+// `file://${process.argv[1]}` never matches on Windows (drive-letter paths and
+// backslashes); pathToFileURL keeps the direct-invocation guard portable.
+if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
   main()
 }

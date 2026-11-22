@@ -1,5 +1,29 @@
 > **身份图例**：本文件真机记录中出现的 `com.cnchensh.stellarium` 是**本机调试签名身份**（本机 DevEco 自动生成，非发布身份）；发布身份为 `com.joinother.skyinstrument`。构建脚本 `build-ohos-hap-windows.ps1 -Install` 从产物 `pack.info` 读取实际包名，仓库不写死任何签名身份（见 `docs/harmonyos/release/BUNDLE-IDENTITY-CLEANUP.md`）。
 
+## [2026-11-22] 地点出站：分享标 + 仿系统大弹窗（规划路线 / 查看地点）
+
+- **修改文件：** `harmonyos/ets-source/pages/MainWindowNativeNode.ets`、`harmonyos/ets-source/panels/panels/PlacePanel.ets`、`harmonyos/ets-source/panels/location/CityChipsRow.ets`、`harmonyos/ets-source/panels/location/LocationFullScreenMap.ets`、`harmonyos/ets-source/common/location/MapAppCatalog.ets`（新增）、`harmonyos/ets-source/capability/I18n.ets`、`harmonyos/module.json5`、`scripts/test-ohos-location-map-outbound.mjs`、`scripts/test-ohos-location-share.mjs`、`scripts/build-ohos-minor-body-meshes.mjs`、`docs/harmonyos/json/ui-contract-baseline.json`、`docs/harmonyos/NETWORK-INVENTORY.md`、`docs/harmonyos/CHANGELOG.md`。
+- **基线：** 完成 P1/P2 后在 `31ba1ab2a9` 上实现，随后 rebase 到 `864d3a8c5b`（`joinother/ohos-master`）；唯一代码冲突是 `StartupBridge.refreshRuntimeState`，已合并上游日历预览/触控拾取半径与本地地点分享消费。
+- **核心改动：**
+  1. **分享标直开大弹窗：** 位置面板当前观测点的三角导航标替换为系统 `sys.symbol.share` 分享标；三处入口（当前观测点、已保存地点管理行、全屏选点卡片）删除一级 `bindPopup` 小下拉，点击后直接打开宿主级仿系统“选择导航方式”大弹窗。
+  2. **大弹窗布局：** 全屏遮罩 + 底部大面板，标题“分享位置”、当前地点名；顶部两个能力卡片：规划路线是**直接动作**，点击即调用系统导航面板；查看地点为选中态，下方列出可用应用。新增 `.id('map-app-mode-route' / 'map-app-mode-view' / 'map-app-<vendor>' / 'map-app-close' / 'map-app-cancel')`。系统线形符号（`sys.symbol.share`、`sys.symbol.map`）统一加 `.fontWeight(600)`，与 Dock/面板里的实心 SVG 图标保持同一粗细。
+  3. **唯一保留的地图应用列表（查看地点）：** 新增 `MapAppCatalog.ets`，只包含花瓣、百度、以及“其他支持的应用”（`geo:` 系统出口）。HarmonyOS 普通第三方应用无法读取其他应用的 BundleInfo/图标（`GET_BUNDLE_INFO` 即使已授予，`getBundleInfoSync` 仍返回 201），因此用 `bundleManager.canOpenLink` + `module.json5` 的 `querySchemes`（`petalmaps` / `baidumap` / `geo`）判断安装状态；图标为应用内品牌色圆角块 + 系统符号，非官方图标。未安装的应用不显示对应行。
+  4. **规划路线（系统统一接口）：** `startAbilityByType('navigation', { sceneType: 1, destinationName, destinationLatitude, destinationLongitude, vehicleType: 0 })`，坐标 WGS84→GCJ-02；由系统“选择导航方式”面板列出已安装的导航应用。删除花瓣/高德/百度的路线专用分支与路线应用行。
+  5. **查看地点（应用适配 + geo 系统出口）：** 花瓣 `petalMaps.openMapPoiDetail`（WGS84）；百度 `baidumap://map/marker?...&coord_type=gcj02`（GCJ-02）；“其他支持的应用”使用标准 `geo:` URI（RFC 5870，WGS84）调用 `startAbility`，由系统“选择打开方式”面板继续选择具体应用。高德不提供专用查看地点入口。花瓣地图不会解码 `q` 标签中的百分号编码（真机标题栏显示 `%E5%BD%93...`），因此标签改用未编码文本，仅折叠换行/制表符；真机确认中文标题正常显示。
+  6. **大弹窗磨砂玻璃：** 背景改为 `panelGlassStrong`（夜间 `rgba(25,6,4,0.85)` / 日间 `rgba(15,20,30,0.82)`）+ `backdropBlur(36)`，全屏遮罩降为夜间 0.46 / 日间 0.30；提高面板不透明度，背景模糊只做磨砂质感，不大量透出底层内容。
+  7. **返回手势：** `onRequestBack` 最前面检查 `mapActionPickerOpen`，返回手势 / 返回键先关闭分享大弹窗，再处理它下面的位置面板，避免弹窗悬空或误关底层面板。
+  8. **坐标约定：** 花瓣 MapKit WGS84；百度深链 WGS84→GCJ-02；`geo:` WGS84。
+  9. **当前观测点坐标来源修正：** 当前观测点动作改用上游实时观测者字段 `observerLatLive` / `observerLonLive` 和“当前位置”名称，避免未应用的 `locationPickerStore` 草稿把目的地带错。
+  10. **Windows 资源同步修复：** `scripts/build-ohos-minor-body-meshes.mjs` 的直接调用判断由 `file://${process.argv[1]}` 改为 `pathToFileURL`，修复 Windows 下脚本空跑；重新生成 15 个 SBM1 网格与 `models/ohos/manifest.json`。
+- **验证：**
+  - 主机：`node --test scripts/test-ohos-location-map-outbound.mjs scripts/test-ohos-location-share.mjs scripts/test-ohos-location-share-resolver.mjs` 17 项通过；UI contract（41 面板 / 57 静态 id / 31 动态前缀 / 91 anchor / 352 文件）、i18n、命令目录（438）通过。
+  - 构建/安装：BUILD SUCCESSFUL，signed HAP 803.2 MB（842,246,082 字节），安装并启动成功（`192.168.3.95:36717`，2026-11-22 19:33）。
+  - 真机（面板经 `openUiPanel place`，按钮经 `devecocli ui click --id`）：路线卡片直接打开系统“选择导航方式”，列出高德地图/百度地图/地图（花瓣）；花瓣查看地点显示“当前位置”定位标记与详情卡；百度查看地点显示“当前位置”与清溪镇标记；“其他支持的应用”经系统“选择打开方式”列出地图（花瓣）/奥维互动地图，选择花瓣后标题栏正确显示“当前位置”（修复前显示 `%E5%BD%93...`）。
+  - 图标与返回：截图确认位置面板分享标、弹窗规划路线/其他应用的地图符号均为 600 字重，与 Dock 实心图标粗细一致；返回键与屏幕左边缘返回手势都只关闭分享大弹窗，位置面板保持打开（`getUiPanelState` 仍为 `place`）。
+  - 磨砂玻璃：截图确认大弹窗为深色高不透明度玻璃（`panelGlassStrong` + `backdropBlur(36)`），底层位置面板仅隐约可见。
+  - 背景：`sceneType: 4` 地点详情导航面板在本机为空（“暂无可用导航方式”），因此查看地点仍保留花瓣/百度适配 + `geo:` 系统出口；路线规划使用系统 `sceneType: 1`。
+  - 命令缺口：命令目录暂无“打开位置分享大弹窗 / 点按 `map-app-*` 行”的语义命令，本次用 `openUiPanel place` + `devecocli ui click --id` 命中既有 id 锚点验证；建议后续补一条 ArkUI 命令，避免回归只能靠 UI 注入。
+
 ## [2026-11-21] 新增「天文月历」桌面小组件（4×4 全月历 + 2×4 周历、每日真实月相盘、翻月交互与天象直达）
 
 - **修改文件：** `harmonyos/ets-source/form/AstronomyCalendarCard.ets`（新增）、`harmonyos/ets-source/form/AstronomyCardData.ts`、`harmonyos/ets-source/form/FormStoreHelper.ets`、`harmonyos/ets-source/form/SkyInstrumentFormAbility.ets`、`harmonyos/ets-source/form/SkyFormEditPage.ets`、`harmonyos/ets-source/form/SkyLiveFormPage.ets`、`harmonyos/resources/base/profile/form_config.json`、`harmonyos/resources/base/element/string.json`、`harmonyos/resources/zh_CN/element/string.json`、`harmonyos/resources/zh_TW/element/string.json`、`harmonyos/resources/zh_HK/element/string.json`、`harmonyos/resources/en_US/element/string.json`、`scripts/test-ohos-form-cards.mjs`、`docs/harmonyos/CHANGELOG.md`。
@@ -28,6 +52,45 @@
 - **验证与真机实测（MatePad Mini `192.168.31.234:42713`，`com.joinother.skyinstrument`）：**
   - 主机验证：新增 `scripts/test-ohos-nomenclature-and-3d-models.mjs`，连同 `check-ohos-resource-dirs.mjs`（10/10 目录）、`check-ohos-command-catalog.mjs`（438 命令）、`check-ohos-ui-contract.mjs`（40 面板）、`check-ohos-network-sources.mjs`、`fetch-mirror.test.mjs`、`test-ohos-plugin-panels-phase23.mjs`、`test-ohos-media-cultures-landscapes.mjs` 全部通过。
   - 真机实拍验收：实测「行星地貌图集」完整加载 16,079 处 IAU 地貌（月球 9,081 / 火星 2,052），点击第谷与奥林波斯山均精准望远镜缩放飞抵并清晰绘制中文标注与绿色环形山轮廓；实测灶神星（黎明号实测 3D 地形模型 + OpenGL 实景戴瓦利亚槽沟群）、火卫一（火星快车 3D 形态模型）、哈雷彗星（乔托号 3D 花生形彗核）、67P/Churyumov-Gerasimenko（罗塞塔号 3D 双瓣彗核）均秒级加载、流畅手势旋转、文案与排版零截断。
+
+## [2026-11-21] 高德地点出站：系统导航应用选择面板 + 路线规划
+
+- **修改文件：** `harmonyos/ets-source/pages/MainWindowNativeNode.ets`、`harmonyos/ets-source/capability/I18n.ets`、`harmonyos/ets-source/common/location/LocationShareLink.ets`、`scripts/test-ohos-location-share.mjs`、`scripts/test-ohos-location-map-outbound.mjs`、`docs/harmonyos/NETWORK-INVENTORY.md`、`docs/harmonyos/json/ui-contract-baseline.json`、`docs/harmonyos/CHANGELOG.md`。
+- **核心改动：**
+  1. **系统级地图选择：** “在地图中打开”改为调用 `startAbilityByType('navigation', ...)`，由系统展示带应用图标的导航应用选择面板（本机实测显示“地图”“百度地图”“高德地图”及各自图标），用户选择具体地图应用；不再使用自绘选择面板或内置 WebView。
+  2. **路线规划意图：** `sceneType: 1`（路线规划），只传终点名称、WGS84 转换后的 GCJ-02 经纬度和 `vehicleType: 0`；不传起点，由地图应用使用设备当前位置。系统面板把请求交给用户选择的地图应用。
+  3. **坐标纠偏：** `startAbilityByType` 要求 GCJ-02；`LocationShareLink.ets` 导出 `wgs84ToGcj02Point`，宿主在调用前完成 WGS84→GCJ-02 转换，避免偏移。
+  4. **不自动导航：** 星象仪只打开路线规划；地图应用停留在路线方案页，用户需自行点“开始导航”。宿主不调用 `openMapNavi`/`openMapRoutePlan`，也不直接启动高德/百度/花瓣。
+  5. **移除旧方案：** 删除自绘地图选择面板、高德系统 WebView 页面、`MapOutboundLink.ets` 及 ArkWeb 相关接线；不打包浏览器内核，signed HAP 仍为 799.4 MB。
+- **验证结果：**
+  - `node --test scripts/test-ohos-location-share.mjs scripts/test-ohos-location-share-resolver.mjs scripts/test-ohos-location-map-outbound.mjs` 14 项通过（含 WGS84→GCJ02 参考、系统面板接线、无导航调用、无自绘面板/WebView 断言）；
+  - UI contract 39 面板 / 50 静态 id / 23 动态前缀 / 76 anchor / 337 文件；i18n、命令目录（435）通过；
+  - `build-ohos-hap-windows.ps1 -Release -SkipEngine -SkipResources -Install -Device 192.168.3.95:36717` BUILD SUCCESSFUL，安装并启动成功；
+  - 真机（MatePad Mini）：位置面板 → 地图图标，系统“选择导航方式”面板显示“地图”“百度地图”“高德地图”及图标；选择“高德地图”打开高德原生路线规划，从“我的位置”到目标“桃源街道”，地图居中显示路线方案并停留在“开始导航”前；选择“地图”/百度同样进入各自路线规划；星象仪不自动开始导航。
+  - 说明：该方案统一使用“路线规划”，因此选择花瓣时也进入路线规划，而不是此前的地点点详情；如需要“仅看地点详情”，需另设入口。
+
+## [2026-11-21] 高德地点分享入站（GCJ02 纠偏 + 短链解析）
+
+- **修改文件：** `harmonyos/ets-source/common/location/LocationShareLink.ets`、`harmonyos/ets-source/common/location/LocationShareResolver.ets`（新增）、`harmonyos/ets-source/qability/QAbility.ets`、`scripts/test-ohos-location-share.mjs`、`scripts/test-ohos-location-share-resolver.mjs`（新增）、`docs/harmonyos/NETWORK-INVENTORY.md`、`docs/harmonyos/json/ui-contract-baseline.json`、`docs/harmonyos/CHANGELOG.md`。
+- **核心改动：**
+  1. **高德 GCJ02→WGS84 纠偏：** `uri.amap.com/marker` 默认 `coordinate=gaode`（GCJ02），仅 `coordinate=wgs84` 不纠偏；`m.amap.com`、`wb.amap.com` 与 `amapuri://viewMap` 以 `dev=1` 表示 WGS84，其余按 GCJ02。解析器在写观测点前统一转换为 WGS84，避免此前约 300–600 m 的系统性偏移。
+  2. **补齐 `wb.amap.com` 短链目标格式：** 支持 `?p=poiid,lat,lon,name,address,city` 与 `?q=lat,lon,name,city`（纬度在前），并从中提取地点名称；修复多段 `q` 被误当成名称的问题。
+  3. **`surl.amap.com` 短链解析：** 新增 `LocationShareResolver.ets`。仅当分享文本中没有可离线解析的坐标且包含 `surl.amap.com` 时，发起一次用户主动触发的 HTTPS GET；`maxRedirects: 0`，连接/读取超时各 5 秒，响应体上限 64 KiB；只读取 3xx 的 `Location`，目标 host 必须属于高德白名单（`wb.amap.com`、`uri.amap.com`、`m.amap.com`、`wap.amap.com`、`www.amap.com`、`amap.com`），不下载 `wb` 页面、不携带 Cookie/账号/SN/UDID/观测位置。
+  4. **`QAbility` 接入：** 系统分享记录、`want.uri` 和深链统一走“本地解析 → 高德短链受限解析”流程；增加解析序列号，新的分享或直接坐标会丢弃过期的异步短链结果；失败沿用“未找到可用坐标”提示。
+  5. **出站边界不变：** 本轮只做高德→星象仪入站，不接入高德出站、不声明 `querySchemes`、不引入高德 SDK/AppKey，不触发路线规划或导航。
+- **验证结果：**
+  - `node --test scripts/test-ohos-location-share.mjs scripts/test-ohos-location-share-resolver.mjs` 11 项通过（含高德 GCJ02 基准、`wb` p/q、短链提取/重定向白名单、`Location` 头大小写）；
+  - `check-ohos-ui-contract.mjs`（39 面板 / 50 静态 id / 23 动态前缀 / 76 anchor / 337 文件）、`check-ohos-i18n.mjs`、`check-ohos-command-catalog.mjs`（435 命令）通过；
+  - `build-ohos-hap-windows.ps1 -Release -SkipEngine -SkipResources -Install -Device 192.168.3.95:36717` BUILD SUCCESSFUL（signed HAP 799.4 MB，bundle `com.joinother.skyinstrument`），安装并启动成功；
+  - 主机侧用真实短链 `https://surl.amap.com/1rXM9G4cgrQ` 验证 302 → `wb.amap.com/?q=...`，解析结果为 `31.957156, 120.939653`（与独立 GCJ02 参考实现一致）；
+  - 真机注入验证（`aa start ... -A ohos.want.action.sendData -U ...` + `getObserverInfo`）：
+    - `surl.amap.com/1rXM9G4cgrQ` 冷启动/热启动均解析为 `31.957155, 120.939651`，名称“南通市崇川区源兴路”；
+    - `uri.amap.com/marker?position=121.47822305927693,31.22845773757727&coordinate=gaode` → `31.2304, 121.4737`；`coordinate=wgs84` 保持 `31.2304, 121.4737` 不纠偏；
+    - `wb.amap.com/?q=31.22845773757727,121.47822305927693,AmapWB,310000` 与 `m.amap.com/?q=...&dev=0` → `31.2304, 121.4737`；
+    - 无效短链 `surl.amap.com/zzzzzzzzzzzz` 返回 404，提示“未找到可用坐标”，观测点保持不变。
+  - 实现备注：`maxRedirects: 0` 时 HarmonyOS HTTP 客户端在收到 3xx 后抛出 2300047（“redirections reaches the maximum”），不会返回响应；改用 `headersReceive` 一次性回调读取 302 的 `Location`，在异常分支使用该地址，从而既不跟随重定向，也能完成解析。
+  - 高德分享面板 → 星象仪的**系统分享记录**路径尚未做真机实测；本轮真机验证覆盖 `want.uri`、本地解析和短链网络解析。
+
 
 ## [2026-11-21] 双向地点分享（花瓣地图精确打开 + 地图分享注入观测点）
 
