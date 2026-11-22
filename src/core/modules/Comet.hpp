@@ -22,6 +22,7 @@
 #define COMET_HPP
 
 #include "Planet.hpp"
+#include <array>
 #include <memory>
 
 class QOpenGLBuffer;
@@ -146,21 +147,31 @@ protected:
 	QString getNarrationExtra(const StelCore *core, const InfoStringGroup& flags) const override;
 
 private:
+	static constexpr int COMET_SYNCHRONE_COUNT = 22;
+	struct DustSynchroneSample
+	{
+		Vec3d relA;           // heliocentric offset from comet at beta_inner (~0.035)
+		Vec3d relM;           // heliocentric offset from comet at beta_mid   (~0.34)
+		Vec3d relB;           // heliocentric offset from comet at beta_outer (~1.25..1.60)
+		float weight = 0.0f;  // physical emission weight Q(t_e) * ageFade * ventBurst
+		float ageFrac = 0.0f; // 0 near head -> 1 at oldest synchrone
+	};
+
 	//! @returns estimates for (Coma diameter [AU], gas tail length [AU]).
 	//! Using the formula from Guide found by the GSoC2012 initiative at http://www.projectpluto.com/update7b.htm#comet_tail_formula
 	Vec2f getComaDiameterAndTailLengthAU() const;
 	void drawTail(StelCore* core, StelProjector::ModelViewTranformP transfo, bool gas);
 	void drawComa(StelCore* core, StelProjector::ModelViewTranformP transfo);
+	void updateDustSynchrones(double dateJDE, float striaeStrength, float isLongPeriod);
 	void drawAnalyticalComet(StelCore* core, const StelProjectorP& prj,
 				 const Vec3d& cometEcl, const Vec3d& observerEcl,
-				 const Vec3d& antiSun, const Vec3d& trailDir, double velNorm,
-				 double comaRadAU, double gasLenAU, double dustLenAU,
+				 const Vec3d& antiSun,
+				 double comaRadAU, double gasLenAU,
 				 bool showTail, float vMagnitude, float screenRd,
 				 float comaIntensity, float gasIntensity, float dustIntensity,
-				 float twilightFade, float fanWidthScale, float curvatureScale,
-				 float warmth, float greenWeight,
+				 float twilightFade, float warmth, float greenWeight,
 				 float ionRayStrength, float dustRibbonStrength,
-				 float striaeStrength);
+				 float striaeStrength, float isLongPeriod);
 	static bool ensureShaders();
 
 	//! compute a coma, faked as simple disk to be tilted towards the observer.
@@ -217,6 +228,9 @@ private:
 	static StelTextureSP tailTexture;      // it seems not really necessary to have different textures. gas tail is just painted blue.
 
 	float renderSeed; // deterministic per-comet seed
+	std::array<DustSynchroneSample, COMET_SYNCHRONE_COUNT> dustSynchrones;
+	double lastSynchroneJDE;
+	float lastSynchroneStriae;
 	static std::unique_ptr<QOpenGLShaderProgram> cometShaderProgram;
 	static std::unique_ptr<QOpenGLVertexArrayObject> cometVAO;
 	static std::unique_ptr<QOpenGLBuffer> cometVBO;

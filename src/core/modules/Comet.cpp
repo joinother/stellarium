@@ -44,6 +44,7 @@
 #include <QOpenGLShaderProgram>
 #include <QOpenGLVertexArrayObject>
 #include <QVector2D>
+#include <QVector4D>
 #include <algorithm>
 #include <cmath>
 #include <vector>
@@ -72,15 +73,15 @@ struct CometShaderVars
 	int gasWidthPx = -1;
 	int gasIntensity = -1;
 	int ionRayStrength = -1;
-	int dustDir = -1;
-	int dustPerp = -1;
-	int dustLenPx = -1;
-	int dustWidthPx = -1;
-	int dustBend = -1;
 	int dustIntensity = -1;
 	int dustWarmth = -1;
 	int dustRibbonStrength = -1;
 	int striaeStrength = -1;
+	int synA = -1;
+	int synM = -1;
+	int synB = -1;
+	int synMeta = -1;
+	int synNorm = -1;
 	int seed = -1;
 	int phase = -1;
 	int tipExtRatio = -1;
@@ -105,6 +106,47 @@ inline float hashCometNameSeed(const QString& name)
 		h *= 16777619u;
 	}
 	return 1.0f + static_cast<float>(h % 10000u) * 0.01f;
+}
+
+inline float hashSynchrone01(float seed, int k)
+{
+	const float x = std::sin(seed * 12.9898f + static_cast<float>(k) * 78.233f) * 43758.5453f;
+	return x - std::floor(x);
+}
+
+// Symplectic Velocity Verlet integration of a cometary dust grain under reduced solar gravity mu_eff = mu_sun * (1 - beta).
+Vec3d integrateDustVerlet(const Vec3d& p0, const Vec3d& v0, double tauDays, double beta, int steps)
+{
+	constexpr double kMuSun = 0.01720209895 * 0.01720209895; // AU^3 / day^2
+	const double muEff = kMuSun * (1.0 - beta);
+	const double dt = tauDays / static_cast<double>(steps);
+	const double halfDt = 0.5 * dt;
+	const double halfDt2 = 0.5 * dt * dt;
+
+	double x = p0[0], y = p0[1], z = p0[2];
+	double vx = v0[0], vy = v0[1], vz = v0[2];
+	double r2 = std::max(x * x + y * y + z * z, 1e-8);
+	double c = -muEff / (r2 * std::sqrt(r2));
+	double ax = x * c, ay = y * c, az = z * c;
+
+	for (int s = 0; s < steps; ++s)
+	{
+		x += vx * dt + ax * halfDt2;
+		y += vy * dt + ay * halfDt2;
+		z += vz * dt + az * halfDt2;
+		r2 = std::max(x * x + y * y + z * z, 1e-8);
+		c = -muEff / (r2 * std::sqrt(r2));
+		const double ax2 = x * c;
+		const double ay2 = y * c;
+		const double az2 = z * c;
+		vx += (ax + ax2) * halfDt;
+		vy += (ay + ay2) * halfDt;
+		vz += (az + az2) * halfDt;
+		ax = ax2;
+		ay = ay2;
+		az = az2;
+	}
+	return Vec3d(x, y, z);
 }
 }
 
@@ -174,7 +216,9 @@ Comet::Comet(const QString& englishName,
 	  intensityFovScale(1.0f),
 	  intensityMinFov(0.001f), // when zooming in further, Coma is no longer visible.
 	  intensityMaxFov(0.010f), // when zooming out further, Coma is fully visible (when enabled).
-	  renderSeed(hashCometNameSeed(englishName))
+	  renderSeed(hashCometNameSeed(englishName)),
+	  lastSynchroneJDE(-1e12),
+	  lastSynchroneStriae(-1.0f)
 {
 	this->outgas_intensity =outgas_intensity;
 	this->outgas_falloff   =outgas_falloff;
@@ -726,7 +770,6 @@ void Comet::draw(StelCore* core, float maxMagLabels, const QFont& planetNameFont
 			const float forwardScatter = 1.0f + 0.80f * smoothStepF(98.0f, 152.0f, phaseDeg);
 
 			const Vec3d vel = kOrbit->getVelocity();
-			const double velNorm = vel.norm();
 			Vec3d orbitNormal = cometEcl ^ vel;
 			float faceOn = 0.65f;
 			if (orbitNormal.normSquared() > 1e-14)
@@ -734,9 +777,8 @@ void Comet::draw(StelCore* core, float maxMagLabels, const QFont& planetNameFont
 				orbitNormal.normalize();
 				faceOn = static_cast<float>(std::fabs(orbitNormal.dot(viewDir)));
 			}
-			// Edge-on plane crossings compress dust fan into a crisp, bright blade; broadside views open the fan wide.
+			// Edge-on plane crossings concentrate dust column density along the line of sight.
 			const float edgeOnFactor = 1.0f - smoothStepF(0.06f, 0.36f, faceOn);
-			const float planeWidthScale = qBound(0.38f, 0.38f + 0.85f * smoothStepF(0.05f, 0.72f, faceOn), 1.25f);
 			const float planeBrightBoost = 1.0f + 0.42f * edgeOnFactor;
 
 			// 4. Comet taxonomy archetype from (q, e, H, dust_brightnessfactor, slope):
@@ -758,7 +800,7 @@ void Comet::draw(StelCore* core, float maxMagLabels, const QFont& planetNameFont
 			                           * (1.0f - 0.58f * gasDominant)
 			                           * (0.55f + 0.45f * isLongPeriod);
 			const float gasClassScale  = (0.38f + 0.82f * isLongPeriod + 0.52f * gasDominant)
-			                           * (1.0f - 0.22f * sunskirterScore);
+			                           * (1.0f - 0.56f * sunskirterScore);
 			const float ionRayStrength = qBound(0.38f,
 				0.48f + 0.28f * isLongPeriod + 0.24f * gasDominant, 0.92f);
 			const float dustRibbonStrength = qBound(0.24f,
@@ -805,24 +847,9 @@ void Comet::draw(StelCore* core, float maxMagLabels, const QFont& planetNameFont
 			const double comaRadAU = 0.5 * std::max(static_cast<double>(tailFactors[0]), 2.5e-5);
 			const bool showTail = (activity > 0.01f) && (tailVis * twilightFade > 0.004f) && (distObs > 1e-5);
 
-			Vec3d trailDir = -vel - antiSun * ((-vel).dot(antiSun));
-			if (trailDir.normSquared() > 1e-12)
-			{
-				trailDir.normalize();
-			}
-			else
-			{
-				const Vec3d fallbackUp = (std::fabs(antiSun[2]) < 0.9) ? Vec3d(0.0, 0.0, 1.0) : Vec3d(1.0, 0.0, 0.0);
-				trailDir = (antiSun ^ fallbackUp);
-				trailDir.normalize();
-			}
-
 			double gasLenAU = 0.0;
-			double dustLenAU = 0.0;
 			float gasIntensity = 0.0f;
 			float dustIntensity = 0.0f;
-			float fanWidthScale = 1.0f;
-			float curvatureScale = 1.0f;
 
 			if (showTail)
 			{
@@ -830,31 +857,19 @@ void Comet::draw(StelCore* core, float maxMagLabels, const QFont& planetNameFont
 				const double baseGasLen = std::max(static_cast<double>(tailFactors[1]) * 1.28, comaRadAU * 12.0 * static_cast<double>(activity));
 				gasLenAU = std::min(maxSpanAU, baseGasLen * static_cast<double>(gasClassScale));
 
-				const float sunskirterSpanBoost = 1.0f + 1.45f * sunskirterScore * (0.45f + 0.55f * std::max(postSurge, instantHeat));
-				const double dustLenRatio = std::max(static_cast<double>(dustTailLengthFactor), 0.48)
-				                          * static_cast<double>(dustClassScale * sunskirterSpanBoost);
-				const double baseDustLen = std::max(static_cast<double>(tailFactors[1]) * dustLenRatio,
-				                                    comaRadAU * 6.5 * static_cast<double>(activity * dustClassScale * sunskirterSpanBoost));
-				dustLenAU = std::min(maxSpanAU, baseDustLen);
-
-				dustIntensity = qMin(0.82f,
-					tailVis * dustFactor * (0.76f + 0.48f * dustClassScale) * forwardScatter * planeBrightBoost);
+				dustIntensity = qMin(0.88f,
+					tailVis * dustFactor * (0.76f + 0.52f * dustClassScale) * forwardScatter * planeBrightBoost);
 				gasIntensity = qMin(0.68f,
 					tailVis * 0.56f * gasClassScale);
-
-				const float effectivePlaneWidth = planeWidthScale + (std::max(planeWidthScale, 0.92f) - planeWidthScale) * sunskirterScore;
-				fanWidthScale = effectivePlaneWidth * (0.82f + 1.05f * sunskirterScore + 0.25f * postSurge) * (1.0f - 0.30f * gasDominant);
-				curvatureScale = (0.85f + 0.95f * sunskirterScore + 0.30f * postSurge) * (0.50f + 0.50f * std::max(faceOn, 0.55f * sunskirterScore));
 			}
 
-			drawAnalyticalComet(core, tailPrj, cometEcl, observerEcl, antiSun, trailDir, velNorm,
-			                    comaRadAU, gasLenAU, dustLenAU, showTail,
+			drawAnalyticalComet(core, tailPrj, cometEcl, observerEcl, antiSun,
+			                    comaRadAU, gasLenAU, showTail,
 			                    vMagnitude, static_cast<float>(screenRd),
 			                    comaIntensity, gasIntensity, dustIntensity,
-			                    twilightFade, fanWidthScale, curvatureScale,
-			                    dustWarmth, greenComaWeight,
+			                    twilightFade, dustWarmth, greenComaWeight,
 			                    ionRayStrength, dustRibbonStrength,
-			                    striaeStrength);
+			                    striaeStrength, isLongPeriod);
 		}
 		return;
 	}
@@ -933,15 +948,15 @@ uniform highp float u_gasWidthPx;
 uniform mediump float u_gasIntensity;
 uniform mediump float u_ionRayStrength;
 
-uniform highp vec2 u_dustDir;
-uniform highp vec2 u_dustPerp;
-uniform highp float u_dustLenPx;
-uniform highp float u_dustWidthPx;
-uniform highp float u_dustBend;
 uniform mediump float u_dustIntensity;
 uniform mediump float u_dustWarmth;
 uniform mediump float u_dustRibbonStrength;
 uniform mediump float u_striaeStrength;
+uniform highp vec2 u_synA[22];
+uniform highp vec2 u_synM[22];
+uniform highp vec2 u_synB[22];
+uniform highp vec4 u_synMeta[22];
+uniform highp vec2 u_synNorm[22];
 uniform highp float u_seed;
 uniform highp float u_phase;
 uniform mediump float u_tipExtRatio;
@@ -999,61 +1014,126 @@ void main(void)
 		}
 	}
 
-	// 2. Unified C-infinity analytical curved Finson-Probstein Dust Fan (rounded U-shaped paraboloid head, zero V-pinch)
-	if (u_dustIntensity > 0.0005 && u_dustLenPx > 1.0)
+	// 2. Real 3D Finson-Probstein Synchrone Dust Sheet (22 Newtonian radiation-pressure synchrones)
+	//    Produces exact 110-130 deg sweeping rainbow arches + radiating aurora-like plumes on sunskirters
+	//    (McNaught, West, Ikeya-Seki) AND velvety seamless curved fans on smooth comets (Hale-Bopp).
+	if (u_dustIntensity > 0.0005)
 	{
-		highp float xd = dot(d, u_dustDir);
-		highp float yd = dot(d, u_dustPerp);
-		if (xd > -2.8 * R && xd < u_dustLenPx)
+		mediump vec3 headTint  = mix(vec3(1.00, 0.98, 0.92), vec3(1.00, 0.94, 0.78), u_dustWarmth);
+		mediump vec3 midWarm   = mix(vec3(0.99, 0.87, 0.73), vec3(1.00, 0.86, 0.68), u_dustWarmth);
+		mediump vec3 midArch   = mix(midWarm, vec3(0.91, 0.93, 1.00), 0.74 * u_striaeStrength);
+		mediump vec3 outerWarm = mix(vec3(0.88, 0.74, 0.62), vec3(0.92, 0.76, 0.62), u_dustWarmth);
+		mediump vec3 outerCurt = mix(outerWarm, vec3(0.62, 0.77, 1.00), 0.90 * u_striaeStrength);
+
+		mediump vec3 dustRgb = vec3(0.0);
+		highp float dustSum = 0.0;
+
+		for (int k = 0; k < 22; ++k)
 		{
-			highp float td = xd / u_dustLenPx;
-			highp float tPos = clamp(td, 0.0, 1.0);
-			highp float yCurve = u_dustBend * u_dustLenPx * tPos * tPos;
-			highp float slope = 2.0 * u_dustBend * tPos;
-			// True Euclidean perpendicular distance to the curved parabolic spine
-			highp float dyPerp = (yd - yCurve) * inversesqrt(1.0 + slope * slope);
+			highp vec4 meta = u_synMeta[k]; // x=weight, y=wInnerPx, z=wOuterPx, w=ageFrac (<0 invalid)
+			if (meta.w < 0.0)
+				continue;
 
-			// True fountain-model paraboloid opening near the head (smooth rounded U-nose, never a sharp V-tip)
-			highp float tFan = (tPos > 1e-6) ? pow(tPos, 1.24) : 0.0;
-			highp float wHead = 0.98 * R * sqrt(1.0 + 3.0 * tPos);
-			highp float wDust = sqrt(wHead * wHead + (u_dustWidthPx * tFan) * (u_dustWidthPx * tFan));
-			highp float vNorm = dyPerp / max(wDust, 1.0);
-			// Sharper sunward/leading edge, softer broader trailing syndyne fan (opens wide for striated sunskirters like McNaught)
-			highp float trailBroaden = mix(0.72, 0.44, float(u_striaeStrength));
-			highp float vAsym = (vNorm < 0.0) ? (vNorm * 1.42) : (vNorm * trailBroaden);
-			highp float v2 = vAsym * vAsym;
-			if (v2 < 14.0)
+			highp vec2 A = u_synA[k];
+			highp vec2 M = u_synM[k];
+			highp vec2 B = u_synB[k];
+			highp float wPad = max(meta.y, meta.z) * 3.4;
+			highp vec2 bMin = min(A, min(M, B)) - vec2(wPad);
+			highp vec2 bMax = max(A, max(M, B)) + vec2(wPad);
+			if (v_screenPos.x < bMin.x || v_screenPos.x > bMax.x ||
+			    v_screenPos.y < bMin.y || v_screenPos.y > bMax.y)
+				continue;
+
+			// Quadratic Bezier passing exactly through A (s=0), M (s=0.5), B (s=1)
+			highp vec2 C  = 2.0 * M - 0.5 * (A + B);
+			highp vec2 c1 = 2.0 * (C - A);
+			highp vec2 c2 = A - 2.0 * C + B;
+			highp vec2 AB = B - A;
+			highp float abLen2 = max(dot(AB, AB), 1.0);
+			highp float s = clamp(dot(v_screenPos - A, AB) / abLen2, 0.0, 1.0);
+
+			// Two Gauss-Newton steps for exact closest point along the curved synchrone
+			highp vec2 Ps = A + s * (c1 + s * c2);
+			highp vec2 dP = c1 + 2.0 * s * c2;
+			s = clamp(s - dot(Ps - v_screenPos, dP) / max(dot(dP, dP), 1.0), 0.0, 1.0);
+			Ps = A + s * (c1 + s * c2);
+			dP = c1 + 2.0 * s * c2;
+			s = clamp(s - dot(Ps - v_screenPos, dP) / max(dot(dP, dP), 1.0), 0.0, 1.0);
+
+			Ps = A + s * (c1 + s * c2);
+			highp vec2 diff = v_screenPos - Ps;
+			highp float dist2 = dot(diff, diff);
+
+			// Smooth transition from overlapping continuous inner arch (wInner) to radiating outer plumes (wOuter)
+			highp float sOuter = smoothstep(0.12, 0.48, s);
+			highp float wLoc = mix(meta.y, meta.z, sOuter);
+			highp float v2 = dist2 / max(wLoc * wLoc, 1.0);
+			if (v2 < 11.0)
 			{
-				highp float across = 0.72 * exp(-v2 * 2.30) + 0.28 * exp(-v2 * 0.80);
-				// Organic domain-warped curved dust ribbons radiating naturally with the fan
-				// (gets softer & broader outward, never parallel Venetian-blind bars, never dark trenches)
-				highp float ribbonGrow = smoothstep(0.04, 0.28, tPos);
-				highp float ribbonTotal = clamp(float(u_dustRibbonStrength) + 0.28 * float(u_striaeStrength), 0.0, 0.92);
-				highp float vFan = vAsym + (0.22 + 0.34 * float(u_striaeStrength)) * tPos * tPos;
-				highp float warp = (vnoise(vec2(vFan * 1.6 + u_seed * 0.51, tPos * 1.35)) - 0.5) * 0.55;
-				highp float dn1 = vnoise(vec2((vFan + warp) * 2.8 + u_seed * 0.73, tPos * 0.75));
-				highp float dn2 = vnoise(vec2((vFan + warp * 0.7) * 5.8 + u_seed * 1.91, tPos * 1.35));
-				highp float dustRibbon = 0.65 * dn1 + 0.35 * dn2;
-				highp float contrast = mix(0.22, 0.38, float(u_striaeStrength));
-				across *= mix(1.0, (1.0 - contrast) + (2.0 * contrast) * dustRibbon, ribbonTotal * ribbonGrow);
+				// On smooth comets: broad velvety Gaussian; on striated sunskirters: crisp-yet-feathery aurora pillar core + subtle ethereal veil
+				highp float striaeOuter = float(u_striaeStrength) * sOuter;
+				highp float coreWeight = mix(0.58, 0.88, striaeOuter);
+				highp float across = coreWeight * exp(-v2 * mix(1.25, 1.85, striaeOuter))
+				                   + (1.0 - coreWeight) * exp(-v2 * 0.36);
 
-				highp float sunwardCap = (xd < 0.0) ? exp(-(xd * xd) / (0.88 * R * R)) : 1.0;
-				highp float om = max(0.0, 1.0 - tPos);
-				highp float along = (om > 1e-5) ? (pow(om, mix(1.55, 1.18, float(u_striaeStrength))) / pow(1.0 + mix(3.1, 1.85, float(u_striaeStrength)) * tPos, 1.28)) : 0.0;
-				highp float extGrad = mix(1.0, float(u_tipExtRatio), tPos);
-				highp float dustDensity = sunwardCap * along * across * extGrad;
+				highp float age = meta.w;
+				highp float headFill = 1.0 - smoothstep(0.03, 0.22, age);
 
-				mediump vec3 innerTint = mix(vec3(1.00, 0.98, 0.92), vec3(1.00, 0.92, 0.76), u_dustWarmth);
-				mediump vec3 midTint   = mix(vec3(0.98, 0.87, 0.74), vec3(1.00, 0.82, 0.60), u_dustWarmth);
-				mediump vec3 outerBase = mix(vec3(0.86, 0.73, 0.63), vec3(0.90, 0.74, 0.60), u_dustWarmth);
-				// Outer synchrone curtains on great sunskirters shimmer pearlescent silver-white-blue
-				mediump vec3 outerTint = mix(outerBase, vec3(0.76, 0.84, 0.96), 0.45 * u_striaeStrength);
-				mediump vec3 dustTint = mix(innerTint, midTint, float(smoothstep(0.05, 0.42, tPos)));
-				dustTint = mix(dustTint, outerTint, float(smoothstep(0.42, 0.88, tPos)));
+				// Carve a crisp, clean, hollow concave underside below the inner arch on striated sunskirters
+				// (no dust exists with beta < betaInner; prevents fog from bleeding into the dark hollow cavity!)
+				if (u_striaeStrength > 0.10 && s < 0.02 && headFill < 0.99)
+				{
+					highp vec2 tA = normalize(c1 + vec2(1e-4, 0.0));
+					highp float backDist = max(0.0, -dot(v_screenPos - A, tA));
+					highp float backNorm = backDist / max(0.28 * wLoc, 1.5);
+					across *= mix(1.0, exp(-backNorm * backNorm), float(u_striaeStrength) * (1.0 - headFill));
+				}
 
-				totalRgb += dustTint * (u_dustIntensity * float(dustDensity));
-				totalSignal += dustDensity;
+				// Delicate wispy aurora/silk sub-structure along the outer synchrone plumes
+				if (s > 0.08 && (u_striaeStrength > 0.05 || u_dustRibbonStrength > 0.20))
+				{
+					dP = c1 + 2.0 * s * c2;
+					highp float dPLen = max(length(dP), 1.0);
+					highp vec2 tDir = dP / dPLen;
+					highp float signedV = (diff.x * (-tDir.y) + diff.y * tDir.x) / max(wLoc, 1.0);
+					highp float wisp = vnoise(vec2(signedV * 2.4 + float(k) * 3.17 + u_seed * 0.41, s * 1.15));
+					highp float wispAmt = smoothstep(0.10, 0.44, s)
+					                    * clamp(float(u_striaeStrength) * 0.52 + float(u_dustRibbonStrength) * 0.14, 0.0, 0.58);
+					across *= mix(1.0, 0.62 + 0.76 * wisp, wispAmt);
+				}
+
+				highp float innerCut = mix(1.0, smoothstep(0.0, 0.11, s), float(u_striaeStrength) * (1.0 - headFill));
+				highp float archRidge = exp(-pow((s - 0.16) / 0.20, 2.0));
+				highp float outerPlume = pow(max(0.0, 1.0 - s), mix(1.02, 0.76, float(u_striaeStrength)))
+				                       * mix(1.0, smoothstep(0.02, 0.18, s), float(u_striaeStrength));
+				highp float alongS = (mix(0.40, 0.78, float(u_striaeStrength)) * archRidge
+				                    + mix(0.90, 0.74, float(u_striaeStrength)) * outerPlume) * innerCut;
+				alongS = mix(alongS, pow(max(0.0, 1.0 - s), 1.08), headFill * 0.56);
+
+				highp float extGrad = mix(1.0, float(u_tipExtRatio), max(age * 0.60, s * 0.50));
+				highp vec2 normPair = u_synNorm[k];
+				highp float localWeight = mix(normPair.x, normPair.y, sOuter);
+				highp float contrib = localWeight * alongS * across * extGrad;
+
+				highp float midBlend = smoothstep(0.06, 0.40, max(age * 0.85, s * 0.42));
+				highp float outBlend = smoothstep(0.20, 0.76, max(s * 0.98, age * 0.52));
+				mediump vec3 synColor = mix(headTint, midArch, float(midBlend));
+				synColor = mix(synColor, outerCurt, float(outBlend));
+
+				dustRgb += synColor * float(contrib);
+				dustSum += contrib;
 			}
+		}
+
+		if (dustSum > 1e-5)
+		{
+			// Physical optical-depth saturation (1 - exp(-tau)): keeps aurora pillar peak-to-valley
+			// contrast crisp (~4:1) while preventing overexposed white blobs near the head.
+			highp float optDepth = dustSum * float(u_dustIntensity) * mix(2.90, 1.75, float(u_striaeStrength));
+			highp float dustRadiance = (1.0 - exp(-optDepth)) * 0.94;
+			mediump vec3 dustAvgColor = dustRgb / float(dustSum);
+			totalRgb += dustAvgColor * float(dustRadiance);
+			totalSignal += dustRadiance;
 		}
 	}
 
@@ -1156,15 +1236,19 @@ void main(void)
 	s_cometShaderVars.gasWidthPx        = cometShaderProgram->uniformLocation("u_gasWidthPx");
 	s_cometShaderVars.gasIntensity      = cometShaderProgram->uniformLocation("u_gasIntensity");
 	s_cometShaderVars.ionRayStrength    = cometShaderProgram->uniformLocation("u_ionRayStrength");
-	s_cometShaderVars.dustDir           = cometShaderProgram->uniformLocation("u_dustDir");
-	s_cometShaderVars.dustPerp          = cometShaderProgram->uniformLocation("u_dustPerp");
-	s_cometShaderVars.dustLenPx         = cometShaderProgram->uniformLocation("u_dustLenPx");
-	s_cometShaderVars.dustWidthPx       = cometShaderProgram->uniformLocation("u_dustWidthPx");
-	s_cometShaderVars.dustBend          = cometShaderProgram->uniformLocation("u_dustBend");
 	s_cometShaderVars.dustIntensity     = cometShaderProgram->uniformLocation("u_dustIntensity");
 	s_cometShaderVars.dustWarmth        = cometShaderProgram->uniformLocation("u_dustWarmth");
 	s_cometShaderVars.dustRibbonStrength = cometShaderProgram->uniformLocation("u_dustRibbonStrength");
 	s_cometShaderVars.striaeStrength    = cometShaderProgram->uniformLocation("u_striaeStrength");
+	auto findArrayUniform = [&](const char* name, const char* elem0) -> int {
+		int loc = cometShaderProgram->uniformLocation(name);
+		return (loc >= 0) ? loc : cometShaderProgram->uniformLocation(elem0);
+	};
+	s_cometShaderVars.synA              = findArrayUniform("u_synA", "u_synA[0]");
+	s_cometShaderVars.synM              = findArrayUniform("u_synM", "u_synM[0]");
+	s_cometShaderVars.synB              = findArrayUniform("u_synB", "u_synB[0]");
+	s_cometShaderVars.synMeta           = findArrayUniform("u_synMeta", "u_synMeta[0]");
+	s_cometShaderVars.synNorm           = findArrayUniform("u_synNorm", "u_synNorm[0]");
 	s_cometShaderVars.seed              = cometShaderProgram->uniformLocation("u_seed");
 	s_cometShaderVars.phase             = cometShaderProgram->uniformLocation("u_phase");
 	s_cometShaderVars.tipExtRatio       = cometShaderProgram->uniformLocation("u_tipExtRatio");
@@ -1193,16 +1277,104 @@ void main(void)
 	return true;
 }
 
+void Comet::updateDustSynchrones(double dateJDE, float striaeStrength, float isLongPeriod)
+{
+	if (std::fabs(dateJDE - lastSynchroneJDE) <= 0.04 &&
+	    std::fabs(striaeStrength - lastSynchroneStriae) <= 0.04f)
+		return;
+
+	const KeplerOrbit* kOrbit = static_cast<KeplerOrbit*>(orbitPtr);
+	if (!kOrbit)
+		return;
+
+	Vec3d cometNowPos, cometNowVel;
+	kOrbit->stateAtTimeInVSOP87Coordinates(dateJDE, cometNowPos, cometNowVel);
+	const double rNow = std::max(cometNowPos.norm(), 0.01);
+	const double periQ = std::max(0.002, kOrbit->getPericenterDistance());
+	const double tPeri = kOrbit->getTimeAtPericenter();
+	double dtDays = dateJDE - tPeri;
+	const double periodDays = getSiderealPeriod();
+	if (periodDays > 10.0)
+		dtDays = std::remainder(dtDays, periodDays);
+
+	// Adaptive Finson-Probstein dust age window:
+	// - Post-perihelion sunskirters (McNaught, West, Ikeya-Seki): capture post-perihelion + perihelion surge
+	//   sweeping 110-130 deg cleanly without wrapping ancient pre-perihelion grains into crossing loops.
+	// - Moderate-q great comets (Hale-Bopp): ~44-50 days produces the classic lush ~12 deg curved dust fan.
+	double maxTau = qBound(22.0, 34.0 * std::sqrt(rNow * periQ) + 12.0, 54.0);
+	if (periQ < 0.35 && dtDays > 0.5 && dtDays < 48.0)
+	{
+		maxTau = std::min(dtDays + 6.0, 16.5);
+	}
+	maxTau *= (0.58 + 0.42 * static_cast<double>(isLongPeriod));
+
+	// Physical silicate dust radiation-pressure range beta in [0.04, 0.98] (< 1.0 => strictly bound/no loops!).
+	// On striated sunskirters, daughter striae fragment along the curving inner syndyne (betaInner ~ 0.22),
+	// carving McNaught's iconic hollow concave underside, and individual aurora plumes reach varying heights
+	// (betaOuter_k in 0.70..0.98) like real cathedral-spire aurora curtains; betaMid = 0.5*(betaInner+betaOuter_k)
+	// guarantees |M-A| ~ |B-M| so the quadratic Bezier never loops backward.
+	const double betaInner = 0.04 + 0.20 * static_cast<double>(striaeStrength);
+
+	double qRaw[COMET_SYNCHRONE_COUNT];
+	double qMax = 1e-6;
+
+	for (int k = 0; k < COMET_SYNCHRONE_COUNT; ++k)
+	{
+		const double u = (static_cast<double>(k) + 0.35) / static_cast<double>(COMET_SYNCHRONE_COUNT);
+		const float ageFrac = static_cast<float>(k) / static_cast<float>(COMET_SYNCHRONE_COUNT - 1);
+		const double tau = std::max(0.08, maxTau * std::pow(u, 1.24));
+
+		const float hLen = hashSynchrone01(renderSeed + 17.3f, k);
+		const double betaOuter = 0.95 + static_cast<double>(striaeStrength) * (-0.24 + 0.27 * static_cast<double>(hLen));
+		const double betaMid   = 0.5 * (betaInner + betaOuter);
+
+		Vec3d pEmit, vEmit;
+		kOrbit->stateAtTimeInVSOP87Coordinates(dateJDE - tau, pEmit, vEmit);
+		const double rEmit = std::max(pEmit.norm(), 0.01);
+
+		const int steps = qBound(18, static_cast<int>(std::ceil(tau / std::max(0.14, 0.60 * std::min(rEmit, periQ)))), 48);
+
+		DustSynchroneSample& syn = dustSynchrones[k];
+		syn.relA = (k == 0) ? Vec3d(0.0, 0.0, 0.0) : (integrateDustVerlet(pEmit, vEmit, tau, betaInner, steps) - cometNowPos);
+		syn.relM = integrateDustVerlet(pEmit, vEmit, tau, betaMid, steps) - cometNowPos;
+		syn.relB = integrateDustVerlet(pEmit, vEmit, tau, betaOuter, steps) - cometNowPos;
+
+		qRaw[k] = std::pow(1.0 / rEmit, 1.85);
+		if (qRaw[k] > qMax)
+			qMax = qRaw[k];
+		syn.ageFrac = ageFrac;
+	}
+
+	for (int k = 0; k < COMET_SYNCHRONE_COUNT; ++k)
+	{
+		DustSynchroneSample& syn = dustSynchrones[k];
+		const float ageFrac = syn.ageFrac;
+		// Normalize outgassing rate Q(t_e) across the synchrones so peak flux is always 1.0
+		const float qNorm = qBound(0.28f, static_cast<float>(qRaw[k] / qMax), 1.0f);
+		const float ageFadeSmooth = std::pow(std::max(0.12f, 1.0f - 0.72f * ageFrac), 0.90f);
+		const float ageFadeStriae = std::pow(std::max(0.22f, 1.0f - 0.58f * ageFrac), 0.65f);
+		const float ageFade = ageFadeSmooth + (ageFadeStriae - ageFadeSmooth) * striaeStrength;
+
+		// Deterministic intermittent active-vent bursts along the arch (authentic irregular aurora pillars on sunskirters)
+		const float h = hashSynchrone01(renderSeed, k);
+		const float burst = 1.0f + (h * 1.15f - 0.50f) * striaeStrength * smoothStepF(0.08f, 0.26f, ageFrac);
+
+		syn.weight = qNorm * ageFade * burst;
+	}
+
+	lastSynchroneJDE = dateJDE;
+	lastSynchroneStriae = striaeStrength;
+}
+
 void Comet::drawAnalyticalComet(StelCore* core, const StelProjectorP& prj,
                                 const Vec3d& cometEcl, const Vec3d& observerEcl,
-                                const Vec3d& antiSun, const Vec3d& trailDir, double velNorm,
-                                double comaRadAU, double gasLenAU, double dustLenAU,
+                                const Vec3d& antiSun,
+                                double comaRadAU, double gasLenAU,
                                 bool showTail, float vMagnitude, float screenRd,
                                 float comaIntensity, float gasIntensity, float dustIntensity,
-                                float twilightFade, float fanWidthScale, float curvatureScale,
-                                float warmth, float greenWeight,
+                                float twilightFade, float warmth, float greenWeight,
                                 float ionRayStrength, float dustRibbonStrength,
-                                float striaeStrength)
+                                float striaeStrength, float isLongPeriod)
 {
 	Vec3d winHead;
 	if (!prj->project(Vec3d(0.0, 0.0, 0.0), winHead) || !std::isfinite(winHead[0]) || !std::isfinite(winHead[1]))
@@ -1217,14 +1389,20 @@ void Comet::drawAnalyticalComet(StelCore* core, const StelProjectorP& prj,
 	const double vpH      = static_cast<double>(prj->getViewportHeight());
 	const double vpRight  = vpLeft + vpW;
 	const double vpTop    = vpBottom + vpH;
+	const double maxVp    = std::max(vpW, vpH);
 
 	static StelMovementMgr* mMgrComa = GETSTELMODULE(StelMovementMgr);
 	const float curFov = std::max(0.05f, static_cast<float>(mMgrComa->getCurrentFov()));
 	const double wideFovScale = 0.42 + 0.58 * static_cast<double>(1.0f - smoothStepF(15.0f, 70.0f, curFov));
 	const double physComaPx = std::atan(comaRadAU / distObs) * pixelPerRad;
 	const double minComaPx  = qBound(1.5, 3.8 - 0.24 * static_cast<double>(vMagnitude), 4.8) * wideFovScale * dpr;
-	const double maxComaPx  = 0.20 * std::max(vpW, vpH);
+	const double maxComaPx  = 0.20 * maxVp;
 	const double comaPx     = qBound(minComaPx, physComaPx, maxComaPx);
+
+	if (showTail && dustIntensity > 0.002f)
+	{
+		updateDustSynchrones(core->getJDE(), striaeStrength, isLongPeriod);
+	}
 
 	// Atmospheric extinction at head and down-tail midpoint
 	const bool withAtmosphere = core->getSkyDrawer()->getFlagHasAtmosphere();
@@ -1241,10 +1419,12 @@ void Comet::drawAnalyticalComet(StelCore* core, const StelProjectorP& prj,
 			extinction.forward(altAzHead, &oneMag);
 			extHead = std::pow(0.4f, oneMag);
 		}
-		if (showTail && std::max(gasLenAU, dustLenAU) > 1e-6)
+		if (showTail)
 		{
-			Vec3d altAzTip = core->heliocentricEclipticToAltAz(
-				cometEcl + antiSun * (0.60 * std::max(gasLenAU, dustLenAU)), StelCore::RefractionOn);
+			Vec3d midOffset = (dustIntensity > 0.002f)
+				? dustSynchrones[COMET_SYNCHRONE_COUNT / 2].relM
+				: (antiSun * (0.60 * gasLenAU));
+			Vec3d altAzTip = core->heliocentricEclipticToAltAz(cometEcl + midOffset, StelCore::RefractionOn);
 			if (altAzTip.normSquared() > 1e-12)
 			{
 				altAzTip.normalize();
@@ -1268,9 +1448,9 @@ void Comet::drawAnalyticalComet(StelCore* core, const StelProjectorP& prj,
 	if (finalComaInt <= 0.002f && finalGasInt <= 0.002f && finalDustInt <= 0.002f)
 		return;
 
-	// Compute projected 2D screen-space geometry for gas & curved dust tails
+	// Compute projected 2D screen-space geometry for gas tail
 	const Vec3d viewDir = (cometEcl - observerEcl) / distObs;
-	const double probeAU = qBound(comaRadAU * 0.5, std::max(gasLenAU, dustLenAU) * 0.12, distObs * 0.06);
+	const double probeAU = qBound(comaRadAU * 0.5, std::max(gasLenAU, 0.05) * 0.12, distObs * 0.06);
 
 	auto projectDir2D = [&](const Vec3d& dir3D, double stepAU, QVector2D& outDir) -> bool
 	{
@@ -1292,151 +1472,107 @@ void Comet::drawAnalyticalComet(StelCore* core, const StelProjectorP& prj,
 	const bool hasGasDir = projectDir2D(antiSun, probeAU, gasDir);
 	double gasLenPx = 0.0;
 	double gasWidthPx = 0.0;
+	const double minGasWidthPx = 1.8 * dpr;
 
-	QVector2D dustDir = gasDir;
-	QVector2D dustPerp(-gasDir.y(), gasDir.x());
-	double dustLenPx = 0.0;
-	double dustWidthPx = 0.0;
-	double dustBend = 0.0;
-
-	const double minGasWidthPx  = 1.8 * dpr;
-	const double minDustWidthPx = 2.4 * dpr;
-
-	if (showTail)
+	if (showTail && gasLenAU > 1e-7 && finalGasInt > 0.002f && hasGasDir)
 	{
-		// --- Gas tail (straight along antiSun) ---
-		if (gasLenAU > 1e-7 && finalGasInt > 0.002f && hasGasDir)
+		const Vec3d gasTip3D = antiSun * gasLenAU;
+		Vec3d winGasTip;
+		bool gotGasTip = false;
+		if (prj->project(gasTip3D, winGasTip) && std::isfinite(winGasTip[0]) && std::isfinite(winGasTip[1]) &&
+		    !prj->intersectViewportDiscontinuity(Vec3d(0.0, 0.0, 0.0), gasTip3D))
 		{
-			const Vec3d gasTip3D = antiSun * gasLenAU;
-			Vec3d winGasTip;
-			bool gotGasTip = false;
-			if (prj->project(gasTip3D, winGasTip) && std::isfinite(winGasTip[0]) && std::isfinite(winGasTip[1]) &&
-			    !prj->intersectViewportDiscontinuity(Vec3d(0.0, 0.0, 0.0), gasTip3D))
+			const double projLen = (winGasTip[0] - winHead[0]) * static_cast<double>(gasDir.x())
+			                     + (winGasTip[1] - winHead[1]) * static_cast<double>(gasDir.y());
+			if (projLen > 1.0)
 			{
-				const double projLen = (winGasTip[0] - winHead[0]) * static_cast<double>(gasDir.x())
-				                     + (winGasTip[1] - winHead[1]) * static_cast<double>(gasDir.y());
-				if (projLen > 1.0)
-				{
-					gasLenPx = projLen;
-					gotGasTip = true;
-				}
+				gasLenPx = projLen;
+				gotGasTip = true;
 			}
-			if (!gotGasTip)
-			{
-				const double cosA = qBound(-1.0, antiSun.dot(viewDir), 1.0);
-				const double foreshorten = std::sqrt(std::max(0.0, 1.0 - cosA * cosA));
-				gasLenPx = std::atan((gasLenAU * foreshorten) / distObs) * pixelPerRad;
-			}
-			const double gasHalfWidthAU = comaRadAU * 1.45 + gasLenAU * 0.068;
-			gasWidthPx = std::atan(gasHalfWidthAU / distObs) * pixelPerRad;
-			gasWidthPx = std::min(gasWidthPx, std::max(comaPx * 1.35, gasLenPx * 0.14));
-			if (gasWidthPx < minGasWidthPx)
-			{
-				finalGasInt *= static_cast<float>(qBound(0.22, gasWidthPx / minGasWidthPx, 1.0));
-				gasWidthPx = minGasWidthPx;
-			}
-			if (gasLenPx < 2.0)
-				finalGasInt = 0.0f;
 		}
-		else
+		if (!gotGasTip)
 		{
+			const double cosA = qBound(-1.0, antiSun.dot(viewDir), 1.0);
+			const double foreshorten = std::sqrt(std::max(0.0, 1.0 - cosA * cosA));
+			gasLenPx = std::atan((gasLenAU * foreshorten) / distObs) * pixelPerRad;
+		}
+		const double gasHalfWidthAU = comaRadAU * 1.45 + gasLenAU * 0.068;
+		gasWidthPx = std::atan(gasHalfWidthAU / distObs) * pixelPerRad;
+		gasWidthPx = std::min(gasWidthPx, std::max(comaPx * 1.35, gasLenPx * 0.14));
+		if (gasWidthPx < minGasWidthPx)
+		{
+			finalGasInt *= static_cast<float>(qBound(0.22, gasWidthPx / minGasWidthPx, 1.0));
+			gasWidthPx = minGasWidthPx;
+		}
+		if (gasLenPx < 2.0)
 			finalGasInt = 0.0f;
-		}
+	}
+	else
+	{
+		finalGasInt = 0.0f;
+	}
 
-		// --- Dust tail (curved Finson-Probstein parabolic fan) ---
-		if (dustLenAU > 1e-7 && finalDustInt > 0.002f)
+	// Project real 3D Finson-Probstein synchrones to 2D screen space
+	QVector2D synA[COMET_SYNCHRONE_COUNT];
+	QVector2D synM[COMET_SYNCHRONE_COUNT];
+	QVector2D synB[COMET_SYNCHRONE_COUNT];
+	QVector4D synMeta[COMET_SYNCHRONE_COUNT];
+	QVector2D synNorm[COMET_SYNCHRONE_COUNT];
+	bool synValid[COMET_SYNCHRONE_COUNT] = {};
+	int validSynCount = 0;
+
+	const double vpCx = vpLeft + 0.5 * vpW;
+	const double vpCy = vpBottom + 0.5 * vpH;
+	const double vpBound = 3.5 * maxVp;
+	const double maxRelAU = distObs * 1.60;
+
+	auto projectRelPt = [&](const Vec3d& rel, QVector2D& outPt) -> bool
+	{
+		if (rel.norm() > maxRelAU)
+			return false;
+		Vec3d w;
+		if (!prj->project(rel, w) || !std::isfinite(w[0]) || !std::isfinite(w[1]) ||
+		    prj->intersectViewportDiscontinuity(Vec3d(0.0, 0.0, 0.0), rel))
+			return false;
+		if (std::fabs(w[0] - vpCx) > vpBound || std::fabs(w[1] - vpCy) > vpBound)
+			return false;
+		outPt = QVector2D(static_cast<float>(w[0]), static_cast<float>(w[1]));
+		return true;
+	};
+
+	for (int k = 0; k < COMET_SYNCHRONE_COUNT; ++k)
+	{
+		synMeta[k] = QVector4D(0.0f, 1.0f, 1.0f, -1.0f);
+		if (finalDustInt <= 0.002f)
+			continue;
+
+		const DustSynchroneSample& s = dustSynchrones[k];
+		QVector2D pA, pM, pB;
+		const bool okA = (k == 0)
+			? (pA = QVector2D(static_cast<float>(winHead[0]), static_cast<float>(winHead[1])), true)
+			: projectRelPt(s.relA, pA);
+		const bool okM = projectRelPt(s.relM, pM);
+		const bool okB = projectRelPt(s.relB, pB);
+
+		if (okA && okM && okB)
 		{
-			const double bend3D = qBound(0.14, (0.16 + 7.2 * velNorm) * static_cast<double>(curvatureScale), 1.25);
-			const double widthFact = static_cast<double>(qBound(0.55f, dustTailWidthFactor, 2.2f))
-			                       * static_cast<double>(qBound(0.35f, fanWidthScale, 2.65f));
-
-			Vec3d dustInit3D = antiSun + trailDir * (0.28 * bend3D);
-			dustInit3D.normalize();
-
-			const bool hasDustDir = projectDir2D(dustInit3D, probeAU, dustDir);
-			if (!hasDustDir)
-				dustDir = gasDir;
-
-			// Orient +dustPerp strictly toward the projected orbital trailing direction
-			dustPerp = QVector2D(-dustDir.y(), dustDir.x());
-			QVector2D trail2D;
-			if (projectDir2D(trailDir, probeAU, trail2D))
-			{
-				const float projP = QVector2D::dotProduct(trail2D, dustPerp);
-				if (projP < 0.0f)
-					dustPerp = -dustPerp;
-			}
-
-			auto dustPoint3D = [&](double u) -> Vec3d
-			{
-				const double arcX = u - 0.14 * bend3D * bend3D * u * u * u;
-				const double arcY = (0.28 * u + 0.72 * u * u) * bend3D;
-				return antiSun * (dustLenAU * arcX) + trailDir * (dustLenAU * arcY);
-			};
-
-			const Vec3d dustMid3D = dustPoint3D(0.5);
-			const Vec3d dustTip3D = dustPoint3D(1.0);
-			Vec3d winMid, winTip;
-			bool gotDustGeom = false;
-
-			if (prj->project(dustTip3D, winTip) && std::isfinite(winTip[0]) && std::isfinite(winTip[1]) &&
-			    !prj->intersectViewportDiscontinuity(Vec3d(0.0, 0.0, 0.0), dustTip3D))
-			{
-				const double dx = winTip[0] - winHead[0];
-				const double dy = winTip[1] - winHead[1];
-				const double xTip = dx * static_cast<double>(dustDir.x()) + dy * static_cast<double>(dustDir.y());
-				const double yTip = dx * static_cast<double>(dustPerp.x()) + dy * static_cast<double>(dustPerp.y());
-				if (xTip > 1.0)
-				{
-					dustLenPx = xTip;
-					dustBend  = qBound(-1.35, yTip / std::max(dustLenPx, 1.0), 1.35);
-					gotDustGeom = true;
-				}
-			}
-			if (!gotDustGeom && prj->project(dustMid3D, winMid) && std::isfinite(winMid[0]) && std::isfinite(winMid[1]) &&
-			    !prj->intersectViewportDiscontinuity(Vec3d(0.0, 0.0, 0.0), dustMid3D))
-			{
-				const double dx = winMid[0] - winHead[0];
-				const double dy = winMid[1] - winHead[1];
-				const double xMid = dx * static_cast<double>(dustDir.x()) + dy * static_cast<double>(dustDir.y());
-				const double yMid = dx * static_cast<double>(dustPerp.x()) + dy * static_cast<double>(dustPerp.y());
-				if (xMid > 0.5)
-				{
-					dustLenPx = xMid * 2.0;
-					dustBend  = qBound(-1.35, (yMid * 4.0) / std::max(dustLenPx, 1.0), 1.35);
-					gotDustGeom = true;
-				}
-			}
-			if (!gotDustGeom)
-			{
-				const double cosA = qBound(-1.0, dustInit3D.dot(viewDir), 1.0);
-				const double foreshorten = std::sqrt(std::max(0.0, 1.0 - cosA * cosA));
-				dustLenPx = std::atan((dustLenAU * foreshorten) / distObs) * pixelPerRad;
-				dustBend  = qBound(0.0, 0.58 * bend3D, 0.95);
-			}
-
-			const double minSunskirterBend = 0.36 * static_cast<double>(striaeStrength);
-			if (std::fabs(dustBend) < minSunskirterBend)
-				dustBend = (dustBend < 0.0) ? -minSunskirterBend : minSunskirterBend;
-
-			const double dustHalfWidthAU = comaRadAU * 2.1 + dustLenAU * 0.165 * widthFact;
-			dustWidthPx = std::atan(dustHalfWidthAU / distObs) * pixelPerRad;
-			dustWidthPx = std::min(dustWidthPx, std::max(comaPx * 1.85, dustLenPx * 0.44 * widthFact));
-			if (dustWidthPx < minDustWidthPx)
-			{
-				finalDustInt *= static_cast<float>(qBound(0.22, dustWidthPx / minDustWidthPx, 1.0));
-				dustWidthPx = minDustWidthPx;
-			}
-			if (dustLenPx < 2.0)
-				finalDustInt = 0.0f;
+			synA[k] = pA;
+			synM[k] = pM;
+			synB[k] = pB;
+			synValid[k] = true;
+			++validSynCount;
 		}
-		else
+		else if (okA && okM)
 		{
-			finalDustInt = 0.0f;
+			synA[k] = pA;
+			synM[k] = 0.5f * (pA + pM);
+			synB[k] = pM;
+			synValid[k] = true;
+			++validSynCount;
 		}
 	}
 
-	// Build tight screen-space bounding quad enclosing coma + gas tail + curved dust fan, clamped to viewport
+	// Build tight screen-space bounding quad enclosing coma + gas tail + all valid synchrones, clamped to viewport
 	const double comaPad = comaPx * 4.9;
 	double minX = winHead[0] - comaPad;
 	double maxX = winHead[0] + comaPad;
@@ -1458,19 +1594,73 @@ void Comet::drawAnalyticalComet(StelCore* core, const StelProjectorP& prj,
 		         winHead[1] + static_cast<double>(gasDir.y()) * gasLenPx, gasPad);
 	}
 
-	if (finalDustInt > 0.0005f && dustLenPx > 1.0)
+	if (validSynCount > 0 && finalDustInt > 0.002f)
 	{
-		// Trailing side broadens further on striated sunskirters (vAsym = 0.44 * vNorm), pad generously
-		const double dustPad = std::max(comaPx * 3.5, dustWidthPx * (4.8 + 2.6 * static_cast<double>(striaeStrength)));
-		for (int k = 1; k <= 4; ++k)
+		const double overlapInner = 1.24 - 0.32 * static_cast<double>(striaeStrength);
+		// Smooth comets: 1.24 (velvety seamless fan); striated sunskirters: ~0.20 (crisp radiating aurora curtains!)
+		const double overlapOuter = std::max(0.18, 1.24 - 1.22 * static_cast<double>(striaeStrength));
+		const double minWInner = std::max(2.0 * dpr, 0.92 * comaPx);
+		const double minWOuter = std::max((2.4 - 0.7 * static_cast<double>(striaeStrength)) * dpr,
+		                                  (1.05 - 0.42 * static_cast<double>(striaeStrength)) * comaPx);
+		const double maxWInner = 0.28 * maxVp;
+		const double maxWOuter = 0.32 * maxVp;
+
+		for (int k = 0; k < COMET_SYNCHRONE_COUNT; ++k)
 		{
-			const double t = 0.25 * static_cast<double>(k);
-			const double x = t * dustLenPx;
-			const double y = dustBend * dustLenPx * t * t;
-			expandPt(winHead[0] + static_cast<double>(dustDir.x()) * x + static_cast<double>(dustPerp.x()) * y,
-			         winHead[1] + static_cast<double>(dustDir.y()) * x + static_cast<double>(dustPerp.y()) * y,
-			         dustPad);
+			if (!synValid[k])
+				continue;
+
+			int prevIdx = -1;
+			for (int j = k - 1; j >= 0; --j) { if (synValid[j]) { prevIdx = j; break; } }
+			int nextIdx = -1;
+			for (int j = k + 1; j < COMET_SYNCHRONE_COUNT; ++j) { if (synValid[j]) { nextIdx = j; break; } }
+
+			double dInner = comaPx * 0.6;
+			double dMid = comaPx;
+			double dTip = comaPx * 1.4;
+			if (prevIdx >= 0 && nextIdx >= 0)
+			{
+				dInner = 0.5 * (static_cast<double>((synA[k] - synA[prevIdx]).length())
+				              + static_cast<double>((synA[nextIdx] - synA[k]).length()));
+				dMid   = 0.5 * (static_cast<double>((synM[k] - synM[prevIdx]).length())
+				              + static_cast<double>((synM[nextIdx] - synM[k]).length()));
+				dTip   = 0.5 * (static_cast<double>((synB[k] - synB[prevIdx]).length())
+				              + static_cast<double>((synB[nextIdx] - synB[k]).length()));
+			}
+			else if (prevIdx >= 0)
+			{
+				dInner = static_cast<double>((synA[k] - synA[prevIdx]).length());
+				dMid   = static_cast<double>((synM[k] - synM[prevIdx]).length());
+				dTip   = static_cast<double>((synB[k] - synB[prevIdx]).length());
+			}
+			else if (nextIdx >= 0)
+			{
+				dInner = static_cast<double>((synA[nextIdx] - synA[k]).length());
+				dMid   = static_cast<double>((synM[nextIdx] - synM[k]).length());
+				dTip   = static_cast<double>((synB[nextIdx] - synB[k]).length());
+			}
+
+			const double wInnerPx = qBound(minWInner, overlapInner * std::max(dInner, 0.58 * dMid), maxWInner);
+			const double wOuterPx = qBound(minWOuter, overlapOuter * dTip, maxWOuter);
+
+			// Exact local surface-brightness conservation at both inner arch (A/M) and outer plume tips (B):
+			const double overlapA = std::max(1.0, 2.05 * (wInnerPx / std::max(0.5 * (dInner + dMid), 0.5)));
+			const double overlapB = std::max(1.0, 1.85 * (wOuterPx / std::max(dTip, 0.5)));
+			const float wBase = dustSynchrones[k].weight;
+
+			synMeta[k] = QVector4D(wBase, static_cast<float>(wInnerPx), static_cast<float>(wOuterPx), dustSynchrones[k].ageFrac);
+			synNorm[k] = QVector2D(static_cast<float>(static_cast<double>(wBase) / overlapA),
+			                       static_cast<float>(static_cast<double>(wBase) / overlapB));
+
+			const double synPad = std::max(wInnerPx, wOuterPx) * 3.4;
+			expandPt(static_cast<double>(synA[k].x()), static_cast<double>(synA[k].y()), synPad);
+			expandPt(static_cast<double>(synM[k].x()), static_cast<double>(synM[k].y()), synPad);
+			expandPt(static_cast<double>(synB[k].x()), static_cast<double>(synB[k].y()), synPad);
 		}
+	}
+	else
+	{
+		finalDustInt = 0.0f;
 	}
 
 	minX = std::max(minX, vpLeft);
@@ -1528,16 +1718,19 @@ void Comet::drawAnalyticalComet(StelCore* core, const StelProjectorP& prj,
 	cometShaderProgram->setUniformValue(s_cometShaderVars.gasWidthPx, static_cast<float>(gasWidthPx));
 	cometShaderProgram->setUniformValue(s_cometShaderVars.gasIntensity, finalGasInt);
 	cometShaderProgram->setUniformValue(s_cometShaderVars.ionRayStrength, ionRayStrength);
-	cometShaderProgram->setUniformValue(s_cometShaderVars.dustDir, dustDir);
-	cometShaderProgram->setUniformValue(s_cometShaderVars.dustPerp, dustPerp);
-	cometShaderProgram->setUniformValue(s_cometShaderVars.dustLenPx, static_cast<float>(dustLenPx));
-	cometShaderProgram->setUniformValue(s_cometShaderVars.dustWidthPx, static_cast<float>(dustWidthPx));
-	cometShaderProgram->setUniformValue(s_cometShaderVars.dustBend, static_cast<float>(dustBend));
 	const float solarWindPhase = static_cast<float>(std::fmod(core->getJDE() * 0.16, 100.0));
 	cometShaderProgram->setUniformValue(s_cometShaderVars.dustIntensity, finalDustInt);
 	cometShaderProgram->setUniformValue(s_cometShaderVars.dustWarmth, warmth);
 	cometShaderProgram->setUniformValue(s_cometShaderVars.dustRibbonStrength, dustRibbonStrength);
 	cometShaderProgram->setUniformValue(s_cometShaderVars.striaeStrength, striaeStrength);
+	if (finalDustInt > 0.0005f)
+	{
+		cometShaderProgram->setUniformValueArray(s_cometShaderVars.synA, synA, COMET_SYNCHRONE_COUNT);
+		cometShaderProgram->setUniformValueArray(s_cometShaderVars.synM, synM, COMET_SYNCHRONE_COUNT);
+		cometShaderProgram->setUniformValueArray(s_cometShaderVars.synB, synB, COMET_SYNCHRONE_COUNT);
+		cometShaderProgram->setUniformValueArray(s_cometShaderVars.synMeta, synMeta, COMET_SYNCHRONE_COUNT);
+		cometShaderProgram->setUniformValueArray(s_cometShaderVars.synNorm, synNorm, COMET_SYNCHRONE_COUNT);
+	}
 	cometShaderProgram->setUniformValue(s_cometShaderVars.seed, renderSeed);
 	cometShaderProgram->setUniformValue(s_cometShaderVars.phase, solarWindPhase);
 	cometShaderProgram->setUniformValue(s_cometShaderVars.tipExtRatio, tipExtRatio);

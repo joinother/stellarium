@@ -100,6 +100,8 @@ public:
 	//! @param JDE Julian Ephemeris Day
 	//! @param v double vector of at least 3 elements. The first three will receive X/Y/Z values in AU.
 	void positionAtTimevInVSOP87Coordinates(double JDE, double* v) override;
+	//! Side-effect-free query of VSOP87 heliocentric position [AU] and velocity [AU/day] at JDE.
+	void stateAtTimeInVSOP87Coordinates(double JDE, Vec3d& outPos, Vec3d& outVel) const;
 	//! Compute the object position for a specified mean anomaly.
 	//! @param meanAnomaly [radians]
 	//! @param v double vector of at least 3 elements. The first three will receive X/Y/Z values in AU.
@@ -163,20 +165,20 @@ private:
 	//! @param M mean anomaly (meanMotion*daysFromPerihel) [radians]
 	//! @param rCosNu: r*cos(nu)
 	//! @param rSinNu: r*sin(nu)
-	void InitEll(const double M, double &rCosNu, double &rSinNu);
+	void InitEll(const double M, double &rCosNu, double &rSinNu) const;
 	//! Initialize position computations for parabolic orbits
 	//! @param W equivalent of mean anomaly (meanMotion*daysFromPerihel) [radians]
 	//! @param rCosNu: r*cos(nu)
 	//! @param rSinNu: r*sin(nu)
-	void InitPar(const double W, double &rCosNu, double &rSinNu);
+	void InitPar(const double W, double &rCosNu, double &rSinNu) const;
 	//! Solve true anomaly nu for hyperbolic "orbit" (better: trajectory) around the sun.
 	//! @param M mean anomaly (meanMotion*daysFromPerihel) [radians]
 	//! @param rCosNu: r*cos(nu)
 	//! @param rSinNu: r*sin(nu)
-	void InitHyp(const double M, double &rCosNu, double &rSinNu);
+	void InitHyp(const double M, double &rCosNu, double &rSinNu) const;
 	//! Inner part of positional computation.
 	//! Needed for position and orbit computations
-	void positionInVSOP87Coordinates(const double rCosNu, const double rSinNu, double *v, Vec3d &rdot);
+	void positionInVSOP87Coordinates(const double rCosNu, const double rSinNu, double *v, Vec3d &rdot) const;
 };
 
 //! A pseudo-orbit for "observers" linked to a planet's sphere. It allows setting distance and longitude/latitude in the VSOP87 frame.

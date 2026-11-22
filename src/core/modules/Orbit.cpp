@@ -44,7 +44,7 @@
 //! @param M mean anomaly (meanMotion*daysFromPerihel) [radians]
 //! @param rCosNu: r*cos(nu)
 //! @param rSinNu: r*sin(nu)
-void KeplerOrbit::InitHyp(const double M, double &rCosNu, double &rSinNu)
+void KeplerOrbit::InitHyp(const double M, double &rCosNu, double &rSinNu) const
 {
 //	qDebug() << "InitHyp";
 	Q_ASSERT(e>1.0);
@@ -70,7 +70,7 @@ void KeplerOrbit::InitHyp(const double M, double &rCosNu, double &rSinNu)
 //! @param W equivalent of mean anomaly (meanMotion*daysFromPerihel) [radians]
 //! @param rCosNu: r*cos(nu)
 //! @param rSinNu: r*sin(nu)
-void KeplerOrbit::InitPar(const double W, double &rCosNu, double &rSinNu)
+void KeplerOrbit::InitPar(const double W, double &rCosNu, double &rSinNu) const
 {
 //	qDebug() << "InitPar";
 	Q_ASSERT(e==1.0);
@@ -87,7 +87,7 @@ void KeplerOrbit::InitPar(const double W, double &rCosNu, double &rSinNu)
 //! @param M mean anomaly (meanMotion*daysFromPerihel) [radians]
 //! @param rCosNu: r*cos(nu)
 //! @param rSinNu: r*sin(nu)
-void KeplerOrbit::InitEll(double M, double &rCosNu, double &rSinNu)
+void KeplerOrbit::InitEll(double M, double &rCosNu, double &rSinNu) const
 {
 //	qDebug() << "InitEll";
 	Q_ASSERT(e<1.0);
@@ -199,6 +199,21 @@ void KeplerOrbit::positionAtTimevInVSOP87Coordinates(double JDE, double *v)
 	updateTails=true;
 }
 
+void KeplerOrbit::stateAtTimeInVSOP87Coordinates(double JDE, Vec3d& outPos, Vec3d& outVel) const
+{
+	double rCosNu = 0.0, rSinNu = 0.0;
+	const double M = n * (JDE - t0);
+	if (e < 1.0)
+		InitEll(M, rCosNu, rSinNu);
+	else if (e > 1.0)
+		InitHyp(M, rCosNu, rSinNu);
+	else
+		InitPar(M, rCosNu, rSinNu);
+	double v[3];
+	positionInVSOP87Coordinates(rCosNu, rSinNu, v, outVel);
+	outPos.set(v[0], v[1], v[2]);
+}
+
 // Extracted from longer computation
 double KeplerOrbit::eccentricAnomaly(double M)
 {
@@ -306,7 +321,7 @@ void KeplerOrbit::positionAtMeanAnomalyInVSOP87Coordinates(const double meanAnom
 	positionInVSOP87Coordinates(rCosNu, rSinNu, v, rdot);
 }
 // Common part of position computation after doing the preliminary position computations.
-void KeplerOrbit::positionInVSOP87Coordinates(const double rCosNu, const double rSinNu, double *v, Vec3d &rdot)
+void KeplerOrbit::positionInVSOP87Coordinates(const double rCosNu, const double rSinNu, double *v, Vec3d &rdot) const
 {
 	// Compute position vector and speed vector from orbital elements and true anomaly components. See e.g. Heafner, Fund.Eph.Comp.1999
 #ifdef _GNU_SOURCE
