@@ -46,8 +46,7 @@ export interface TimeHostHooks extends BehaviorHostHooks {
   isTimeWheelInteracting?(): boolean
   // 点击速度按钮前立即停止时间轮惯性自转，避免飞轮与引擎速率打架。
   stopTimeWheel?(): void
-  // 调时间前取消延迟布局重定位，并在用户未主动开启跟踪/锁定时释放选中天体带来的静默视角锁，确保地平线稳住、天体正常东升西落。
-  releaseSilentViewLockForTime?(): void
+  // 拖动时间轮前取消尚未触发的延迟布局重定位，避免 moveToSelectedAt 打断选中天体时间锚点。
   cancelSelectedObjectUiChange?(): void
 }
 
@@ -112,9 +111,9 @@ export class TimeController {
     this.port.fire('setTimeRate', rate.toString())
   }
 
-  // 时间轮按下即暂停（跨域写收在宿主），同时解除未主动锁定/跟踪时的静默视角锁，确保地平线稳住、星空自然东升西落。
+  // 时间轮按下即暂停（跨域写收在宿主），并取消尚未执行的延迟布局重定位，保留选中天体的屏幕锚点。
   stopTimeWheelSpeed(): void {
-    this.hooks.releaseSilentViewLockForTime?.()
+    this.hooks.cancelSelectedObjectUiChange?.()
     this.timeStore.timeSpeedIndex = TIME_SPEED_IDX_STOP
     this.timeStore.beginRateChange(0, 500)
     this.timeStore.timeRateText = formatRate(0)
@@ -126,7 +125,7 @@ export class TimeController {
     const idx: number = Math.max(0, Math.min(TIME_SPEED_STEPS.length - 1, index))
     const rate: number = TIME_SPEED_STEPS[idx]
     if (idx !== TIME_SPEED_IDX_STOP && idx !== TIME_SPEED_IDX_REALTIME) {
-      this.hooks.releaseSilentViewLockForTime?.()
+      this.hooks.cancelSelectedObjectUiChange?.()
     }
     this.timeStore.timeSpeedIndex = idx
     this.timeStore.beginRateChange(rate, 500)
@@ -184,7 +183,7 @@ export class TimeController {
   }
 
   advanceTime(hours: number): void {
-    this.hooks.releaseSilentViewLockForTime?.()
+    this.hooks.cancelSelectedObjectUiChange?.()
     this.port.requestInteractive('advanceTime', hours.toString(), () => { this.refreshTimeNow() })
     this.hooks.flashHint((hours > 0 ? I18n.t('i0044') : '') + hours.toString() + ' h')
   }
@@ -201,7 +200,7 @@ export class TimeController {
         this.hooks.flashHint('当前日期和地点没有可用的' + label + '时刻。')
         return
       }
-      this.hooks.releaseSilentViewLockForTime?.()
+      this.hooks.cancelSelectedObjectUiChange?.()
       this.applySpeedStep(TIME_SPEED_IDX_STOP)
       this.port.requestInteractive('setJD', targetJD.toFixed(6), () => {
         this.timeMarkLoading = false
@@ -219,7 +218,7 @@ export class TimeController {
   }
 
   applyManualTime(): void {
-    this.hooks.releaseSilentViewLockForTime?.()
+    this.hooks.cancelSelectedObjectUiChange?.()
     // The picker shows observation-local wall time; dateToJD works in UTC.
     const jd = dateToJD(this.timeStore.manualYear, this.timeStore.manualMonth, this.timeStore.manualDay, this.timeStore.manualHour, this.timeStore.manualMinute)
       - this.hooks.utcOffsetHours() / 24.0
@@ -329,7 +328,7 @@ export class TimeController {
       this.hooks.setViewLockState(false)
     } else if (id === 'now') {
       // 现在：回到当前时刻 + 重置为1x
-      this.hooks.releaseSilentViewLockForTime?.()
+      this.hooks.cancelSelectedObjectUiChange?.()
       this.hooks.triggerAction('actionReturn_To_Current_Time')
       this.applySpeedStep(TIME_SPEED_IDX_REALTIME)
       this.timeStore.timeRateText = '1x'
@@ -345,7 +344,7 @@ export class TimeController {
       this.refreshTimeNow()
     } else if (id === 'realtime') {
       // 实时：回到当前时刻 + 恢复 1x 正常速度
-      this.hooks.releaseSilentViewLockForTime?.()
+      this.hooks.cancelSelectedObjectUiChange?.()
       this.hooks.triggerAction('actionReturn_To_Current_Time')
       this.applySpeedStep(TIME_SPEED_IDX_REALTIME)
       this.timeStore.timeRateText = '1x'

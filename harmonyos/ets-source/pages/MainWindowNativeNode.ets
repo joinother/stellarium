@@ -4305,23 +4305,7 @@ export struct WindowNativeNode {
         isTimeWheelInteracting: (): boolean => this.timeWheelStore.timeWheelDragging ||
           (this.timeWheelController !== undefined && this.timeWheelController.isInteracting()),
         stopTimeWheel: (): void => { this.wheel().stop() },
-        cancelSelectedObjectUiChange: (): void => { this.cancelSelectedObjectUiChange() },
-        releaseSilentViewLockForTime: (): void => {
-          this.cancelSelectedObjectUiChange()
-          const selectedKey = this.objectDetailStore.selectedEnglishName.length > 0
-            ? this.objectDetailStore.selectedEnglishName
-            : this.objectDetailStore.selectedName
-          const explicitlyLocked = selectedKey.length > 0 &&
-            this.viewSettingsStore.explicitViewLockObject === selectedKey &&
-            this.viewSettingsStore.viewLock
-          if (this.trackingText !== 'On' && !explicitlyLocked) {
-            this.viewSettingsStore.explicitViewLockObject = ''
-            if (this.viewSettingsStore.viewLock) {
-              this.viewSettingsStore.viewLock = false
-            }
-            this.callNativeFire('setViewLock', '0')
-          }
-        }
+        cancelSelectedObjectUiChange: (): void => { this.cancelSelectedObjectUiChange() }
       }
       this.timeControllerImpl = new TimeController(
         this.timeStore, this.timeSettingsStore, this.deltaTStore, this.commandPort(), hooks)
@@ -9006,7 +8990,6 @@ export struct WindowNativeNode {
       // fixed-screen-position mode. The native response is authoritative and
       // refreshState() will confirm the final toggle state.
       this.viewSettingsStore.viewLock = false
-      this.viewSettingsStore.explicitViewLockObject = ''
     }
     this.callInteractive('setTracking', enabled ? '1' : '0', (result: StellariumBridgeResponse) => {
       if (requestSerial !== this.trackingRequestSerial) { return }

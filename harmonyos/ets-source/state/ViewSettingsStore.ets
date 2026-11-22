@@ -25,8 +25,6 @@ export class ViewSettingsStore {
   autoZoomResets: boolean = false
   useMetricUnits: boolean = true
   viewLock: boolean = false
-  // 仅当用户主动点击「固定目标」时记录当前目标键；普通点选天体带来的静默视角锁在拖动时间轴/调时时自动释放，确保地平线稳住、天体正常东升西落。
-  explicitViewLockObject: string = ''
   verticalClamp: boolean = true
   flatHorizon: boolean = true
   configDitheringMode: string = 'Color888'
