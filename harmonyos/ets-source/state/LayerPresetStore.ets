@@ -47,6 +47,7 @@ const CLEAN_ACTIONS: string[] = [
   'actionShow_Atmosphere', 'actionShow_Ground'
 ]
 
+// 观测辅助：保留定位/构图辅助线，但不启用视场中心标记（用户要求；避免中心准星干扰读星）。
 const OBSERVE_ACTIONS: string[] = [
   'actionShow_Stars', 'actionShow_Stars_Labels',
   'actionShow_Planets', 'actionShow_Planets_Labels', 'actionShow_Planets_Hints', 'actionShow_Planets_Orbits',
@@ -54,8 +55,7 @@ const OBSERVE_ACTIONS: string[] = [
   'actionShow_Constellation_Lines', 'actionShow_Constellation_Labels',
   'actionShow_Atmosphere', 'actionShow_Ground',
   'actionShow_Cardinal_Points', 'actionShow_Gridlines', 'actionShow_Equatorial_Grid',
-  'actionShow_Ecliptic_Line', 'actionShow_Meridian_Line', 'actionShow_Horizon_Line',
-  'actionShow_FOV_Center_Marker'
+  'actionShow_Ecliptic_Line', 'actionShow_Meridian_Line', 'actionShow_Horizon_Line'
 ]
 
 const PHOTO_ACTIONS: string[] = [

@@ -98,6 +98,7 @@ test('five built-in presets keep vivid last and carry the requested scene settin
   assert.equal(observe.equatorialMount, true)
   assert.equal(observe.telrad, true)
   assert.equal(observe.starMagLimit, 21)
+  assert.equal(observe.actions.actionShow_FOV_Center_Marker, false, 'observation-aid preset must not enable the FOV centre marker')
 
   const photo = byId('photo').snapshot
   assert.equal(photo.actions.actionShow_Atmosphere, true)

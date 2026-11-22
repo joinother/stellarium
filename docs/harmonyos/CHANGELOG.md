@@ -1,5 +1,12 @@
 > **身份图例**：本文件真机记录中出现的 `com.cnchensh.stellarium` 是**本机调试签名身份**（本机 DevEco 自动生成，非发布身份）；发布身份为 `com.joinother.skyinstrument`。构建脚本 `build-ohos-hap-windows.ps1 -Install` 从产物 `pack.info` 读取实际包名，仓库不写死任何签名身份（见 `docs/harmonyos/release/BUNDLE-IDENTITY-CLEANUP.md`）。
 
+## [2026-11-22] 观测辅助预设关闭视场中心标记
+
+- **修改文件：** `harmonyos/ets-source/state/LayerPresetStore.ets`、`scripts/test-ohos-layer-presets.mjs`、`docs/harmonyos/CHANGELOG.md`。
+- **修改内容：** 从 `OBSERVE_ACTIONS` 移除 `actionShow_FOV_Center_Marker`，观测辅助预设不再开启视场中心标记；预设测试断言该项为 `false`。
+- **验证：** `test-ohos-layer-presets.mjs` 8/8 通过。
+- **备注：** 内置预设快照会持久化；已保存过旧“观测辅助”快照的设备，可在预设详情点“还原”应用新出厂值，或在「图层 → 标记 → 辅助标记」手动关闭 FOV标记。
+
 ## [2026-11-22] 详情卡固定极简大卡 + 时间面板轻量卡形变；移除连接线与天文馆入口
 
 - **修改文件：** `harmonyos/ets-source/pages/MainWindowNativeNode.ets`、`harmonyos/ets-source/state/InfoWindowStore.ets`、`harmonyos/ets-source/state/OverlayStore.ets`、`harmonyos/ets-source/state/SettingsRepository.ets`、`harmonyos/ets-source/state/LayerPresetStore.ets`、`harmonyos/ets-source/common/types/MainWindowModels.ets`、`harmonyos/ets-source/common/derive/quickActions.ets`、`harmonyos/ets-source/common/ui/ShellIcons.ets`、`harmonyos/ets-source/capability/DetailRefreshController.ets`（由 `DetailConnectorController.ets` 更名）、`harmonyos/ets-source/capability/ControllerHooks.ets`、`harmonyos/ets-source/capability/StartupBridge.ets`、`harmonyos/ets-source/panels/object/UnifiedObjectDetailCard.ets`、`harmonyos/ets-source/panels/object/ObjectSelectionPill.ets`、`harmonyos/ets-source/panels/object/ObjectDetailCardChrome.ets`、`harmonyos/ets-source/panels/shell/CompactShell.ets`、`harmonyos/ets-source/panels/shell/ExpandedShell.ets`、`harmonyos/ets-source/panels/shell/HoverObservatoryShell.ets`、`harmonyos/ets-source/panels/panels/SettingsPanel.ets`、`harmonyos/ets-source/qability/QAbility.ets`、`harmonyos/ets-source/panels/overlay/ObjectDetailConnectorLayer.ets`（删除）、`src/StelMainView.cpp`、`src/StelOhosCommandCatalog.hpp`、`scripts/test-ohos-selection-reticle-and-pill.mjs`、`scripts/test-ohos-detail-live-values.mjs`、`scripts/test-ohos-layer-presets.mjs`、`scripts/test-ohos-quick-red-light.mjs`、`docs/harmonyos/CLI.md`、`docs/harmonyos/json/ui-contract-baseline.json`、`docs/harmonyos/specs/OBJECT-DETAIL-OBSERVE-MODE.md`、`docs/harmonyos/specs/SETTINGS-PERSISTENCE.md`、`docs/harmonyos/CHANGELOG.md`。
