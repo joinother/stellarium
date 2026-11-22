@@ -154,11 +154,12 @@ private:
 	void drawProceduralTail(StelCore* core, const StelProjectorP& prj, bool gas,
 				const Vec3d& cometEcl, const Vec3d& observerEcl,
 				const Vec3d& antiSun, const Vec3d& trailDir, double velNorm,
-				double comaRadAU, double tailLenAU, float baseIntensity, float twilightFade);
+				double comaRadAU, double tailLenAU, float baseIntensity, float twilightFade,
+				float fanWidthScale, float curvatureScale, float striaeStrength, float warmth);
 	void drawProceduralComa(StelCore* core, const StelProjectorP& prj,
 				const Vec3d& cometEcl, const Vec3d& observerEcl,
 				const Vec3d& antiSun, double comaRadAU,
-				float vMagnitude, float screenRd, float twilightFade);
+				float vMagnitude, float screenRd, float twilightFade, float greenWeight);
 	static bool ensureShaders();
 
 	//! compute a coma, faked as simple disk to be tilted towards the observer.

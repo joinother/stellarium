@@ -120,6 +120,8 @@ public:
 	//! Returns semimajor axis [AU] for elliptic orbit, 0 for a parabolic orbit, and a negative value [AU] for hyperbolic orbit.
 	double getSemimajorAxis() const override { return (e==1. ? 0. : q / (1.-e)); }
 	double getEccentricity() const override { return e; }
+	double getPericenterDistance() const { return q; }
+	double getTimeAtPericenter() const { return t0; }
 	//! Return mean anomaly M for JDE (or W, in case of parabolae)
 	inline double meanAnomaly(const double JDE) const {return (JDE-t0)*n;};
 	//! return whether a position returned for JDE can be regarded accurate enough for telescope use.
