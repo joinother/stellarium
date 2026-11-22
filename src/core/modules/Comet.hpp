@@ -158,7 +158,9 @@ private:
 				 bool showTail, float vMagnitude, float screenRd,
 				 float comaIntensity, float gasIntensity, float dustIntensity,
 				 float twilightFade, float fanWidthScale, float curvatureScale,
-				 float warmth, float greenWeight);
+				 float warmth, float greenWeight,
+				 float ionRayStrength, float dustRibbonStrength,
+				 float striaeStrength);
 	static bool ensureShaders();
 
 	//! compute a coma, faked as simple disk to be tilted towards the observer.
