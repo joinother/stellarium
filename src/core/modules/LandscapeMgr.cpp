@@ -893,6 +893,7 @@ void LandscapeMgr::init()
 
 	// SET SIMPLE PROPERTIES FIRST, before loading the landscape (Loading may already make use of them! GH#1237)
 	flagVividAtmosphere = conf->value("landscape/flag_vivid_atmosphere", false).toBool();
+	StelApp::getInstance().setFlagVividRendering(flagVividAtmosphere);
 	flagZoomFadeEnvironment = conf->value("landscape/flag_zoom_fade_environment", false).toBool();
 	flagAurora = conf->value("landscape/flag_aurora", false).toBool();
 	auroraStyle = qBound(0, conf->value("landscape/aurora_style", 0).toInt(), AuroraRenderer::kStyleCount - 1);
@@ -1824,6 +1825,7 @@ void LandscapeMgr::setFlagVividAtmosphere(bool enabled)
 	if (flagVividAtmosphere == enabled)
 		return;
 	flagVividAtmosphere = enabled;
+	StelApp::getInstance().setFlagVividRendering(enabled);
 	if (atmosphere)
 		atmosphere->setFlagVividAtmosphere(enabled);
 	if (loadingAtmosphere)

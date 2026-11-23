@@ -403,6 +403,8 @@ StelApp::StelApp(StelMainView *parent)
 	, overwriteInfoColor(Vec3f(1.f))
 	, daylightInfoColor(Vec3f(0.f))
 	, flagImmediateSave(false)
+	, flagVividRendering(false)
+	, vividRenderingGeneration(0)
 	#ifdef ENABLE_SPOUT
 	, spoutSender(nullptr)
 	#endif
@@ -1570,6 +1572,13 @@ void StelApp::setFlagImmediateSave(bool b)
 			StelApp::immediateSave("gui/immediate_save_details", false);
 		emit flagImmediateSaveChanged(b);
 	}
+}
+
+void StelApp::setFlagVividRendering(bool enabled)
+{
+	const bool previous = flagVividRendering.exchange(enabled, std::memory_order_acq_rel);
+	if (previous != enabled)
+		vividRenderingGeneration.fetch_add(1, std::memory_order_release);
 }
 
 void StelApp::immediateSave(const QString &key, const QVariant &value)

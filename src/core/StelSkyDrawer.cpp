@@ -39,6 +39,7 @@
 #include "SolarSystem.hpp"
 #include "Planet.hpp"
 
+#include <algorithm>
 #include <QOpenGLContext>
 #include <QOpenGLVertexArrayObject>
 #include <QOpenGLShaderProgram>
@@ -81,6 +82,7 @@ StelSkyDrawer::StelSkyDrawer(StelCore* acore) :
 	inScale(1.f),
 	starShaderProgram(Q_NULLPTR),
 	starShaderVars(StarShaderVars()),
+	lastVividGeneration(0),
 	nbPointSources(0),
 	maxLum(0.f),
 	oldLum(-1.f),
@@ -93,7 +95,11 @@ StelSkyDrawer::StelSkyDrawer(StelCore* acore) :
 {
 	setObjectName("StelSkyDrawer");
 	QSettings* conf = StelApp::getInstance().getSettings();
+	// StelSkyDrawer is constructed before LandscapeMgr initializes; seed the shared
+	// vivid-rendering flag directly from the configuration so the first frame is correct.
+	StelApp::getInstance().setFlagVividRendering(conf->value("landscape/flag_vivid_atmosphere", false).toBool());
 	initColorTableFromConfigFile(conf);
+	lastVividGeneration = StelApp::getInstance().getVividRenderingGeneration();
 
 	setFlagHasAtmosphere(conf->value("landscape/flag_atmosphere", true).toBool());
 	setTwinkleAmount(conf->value("stars/star_twinkle_amount",0.3).toDouble());
@@ -208,8 +214,14 @@ void StelSkyDrawer::init()
 		"VARYING mediump vec2 texc;\n"
 		"VARYING mediump vec3 outColor;\n"
 		"uniform sampler2D tex;\n"
+		"uniform mediump float vivid;\n"
 		"void main(void)\n"
 		"{\n"
+		"    if (vivid < 0.5)\n"
+		"    {\n"
+		"        FRAG_COLOR = texture2D(tex, texc) * vec4(outColor, 1.0);\n"
+		"        return;\n"
+		"    }\n"
 		"    mediump vec4 t = texture2D(tex, texc);\n"
 		"    mediump float g = t.r;\n"
 		"    mediump float lum = max(outColor.r, max(outColor.g, outColor.b));\n"
@@ -230,6 +242,7 @@ void StelSkyDrawer::init()
 	starShaderVars.pos = starShaderProgram->attributeLocation("pos");
 	starShaderVars.color = starShaderProgram->attributeLocation("color");
 	starShaderVars.texture = starShaderProgram->uniformLocation("tex");
+	starShaderVars.vivid = starShaderProgram->uniformLocation("vivid");
 
 	vbo->create();
 	vbo->bind();
@@ -284,6 +297,13 @@ void StelSkyDrawer::releaseVAO()
 
 void StelSkyDrawer::update(double)
 {
+	const unsigned int vividGeneration = StelApp::getInstance().getVividRenderingGeneration();
+	if (vividGeneration != lastVividGeneration)
+	{
+		lastVividGeneration = vividGeneration;
+		initColorTableFromConfigFile(StelApp::getInstance().getSettings());
+	}
+
 	const auto landscape = GETSTELMODULE(LandscapeMgr);
 	const auto solarSystem = GETSTELMODULE(SolarSystem);
 	atmosphereVisualStrength = 1.f;
@@ -554,7 +574,8 @@ void StelSkyDrawer::postDrawPointSource(StelPainter* sPainter, bool drawInCorona
 
 	starShaderProgram->bind();
 	starShaderProgram->setUniformValue(starShaderVars.projectionMatrix, qMat);
-	
+	starShaderProgram->setUniformValue(starShaderVars.vivid, StelApp::getInstance().getFlagVividRendering() ? 1.f : 0.f);
+
 	bindVAO();
 	glDrawArrays(GL_TRIANGLES, 0, static_cast<GLsizei>(nbPointSources)*6);
 	releaseVAO();
@@ -1040,6 +1061,10 @@ static Vec3f Gamma(float gamma,const Vec3f &x)
 	return Vec3f(Gamma(gamma,x[0]),Gamma(gamma,x[1]),Gamma(gamma,x[2]));
 }
 
+// Upstream/classic B-V table captured before any vivid spectral overlay.
+static Vec3f s_legacyColorTable[128];
+static bool s_legacyColorTableValid = false;
+
 // Load B-V conversion parameters from config file
 void StelSkyDrawer::initColorTableFromConfigFile(QSettings* conf)
 {
@@ -1059,7 +1084,15 @@ void StelSkyDrawer::initColorTableFromConfigFile(QSettings* conf)
 		}
 	}
 
-	if (color_map.size() <= 1)
+	if (!s_legacyColorTableValid)
+	{
+		std::copy(std::begin(colorTable), std::end(colorTable), std::begin(s_legacyColorTable));
+		s_legacyColorTableValid = true;
+	}
+
+	const bool vividRendering = StelApp::getInstance().getFlagVividRendering();
+	const bool customColorTable = color_map.size() > 1;
+	if (vividRendering && !customColorTable)
 	{
 		// Rich, physically monotonic blackbody O-B-A-F-G-K-M spectral color stops.
 		// Replaces legacy washed-out pastel entries (including the non-monotonic blue
@@ -1107,6 +1140,10 @@ void StelSkyDrawer::initColorTableFromConfigFile(QSettings* conf)
 				}
 			}
 		}
+	}
+	else if (!vividRendering && s_legacyColorTableValid)
+	{
+		std::copy(std::begin(s_legacyColorTable), std::end(s_legacyColorTable), std::begin(colorTable));
 	}
 
 // 	QString res;

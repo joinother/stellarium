@@ -21,6 +21,7 @@
 #define STELAPP_HPP
 
 #include <memory>
+#include <atomic>
 #include <qopengl.h>
 #include <qguiapplication.h>
 #include <QString>
@@ -375,6 +376,13 @@ public slots:
 	//! Get flag about storing some settings immediately
 	bool getFlagImmediateSave() const {return flagImmediateSave;}
 
+	//! Cached vivid-rendering mode sourced from LandscapeMgr's vivid atmosphere switch.
+	//! Rendering code polls this instead of reading the configuration each frame.
+	bool getFlagVividRendering() const { return flagVividRendering.load(std::memory_order_relaxed); }
+	void setFlagVividRendering(bool enabled);
+	//! Incremented whenever the vivid-rendering flag changes, so renderers can invalidate caches.
+	unsigned int getVividRenderingGeneration() const { return vividRenderingGeneration.load(std::memory_order_relaxed); }
+
 	//! Get the current number of frame per second.
 	//! @return the FPS averaged on the last second
 	float getFps() const {return fps;}
@@ -602,6 +610,8 @@ private:
 	Vec3f overwriteInfoColor;
 	Vec3f daylightInfoColor;
 	bool flagImmediateSave;         //!< set true to allow more immediate-mode settings. By default this is limited to detail settings, e.g. orbit or nomenclature details, DSO filter types, ...
+	std::atomic<bool> flagVividRendering;           //!< Cached LandscapeMgr vivid-atmosphere switch.
+	std::atomic<unsigned int> vividRenderingGeneration; //!< Increments on vivid-rendering changes.
 #ifdef 	ENABLE_SPOUT
 	SpoutSender* spoutSender;
 #endif

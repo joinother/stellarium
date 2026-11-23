@@ -15344,6 +15344,16 @@ extern "C" __attribute__((visibility("default"))) const char* StellariumOhos_com
 			return result;
 		}
 
+		if (commandName == "getVividRenderingState")
+		{
+			result["vivid"] = StelApp::getInstance().getFlagVividRendering();
+			result["vividGeneration"] = static_cast<qint64>(StelApp::getInstance().getVividRenderingGeneration());
+			StarMgr* starMgr = GETSTELMODULE(StarMgr);
+			result["starTrails"] = starMgr && starMgr->getFlagMotionTrails();
+			result["ok"] = true;
+			return result;
+		}
+
 		// getMeteors / setMeteors — sporadic meteor display (SporadicMeteorMgr)
 		if (commandName == "getMeteors")
 		{

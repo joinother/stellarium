@@ -1,5 +1,17 @@
 > **身份图例**：本文件真机记录中出现的 `com.cnchensh.stellarium` 是**本机调试签名身份**（本机 DevEco 自动生成，非发布身份）；发布身份为 `com.joinother.skyinstrument`。构建脚本 `build-ohos-hap-windows.ps1 -Install` 从产物 `pack.info` 读取实际包名，仓库不写死任何签名身份（见 `docs/harmonyos/release/BUNDLE-IDENTITY-CLEANUP.md`）。
 
+## [2026-11-23] 绚丽模式门控恒星光谱与星点 shader
+
+- **修改文件：** `src/core/StelApp.hpp/.cpp`、`src/core/StelSkyDrawer.cpp/.hpp`、`src/core/modules/LandscapeMgr.cpp`、`src/StelMainView.cpp`、`src/StelOhosCommandCatalog.hpp`、`scripts/test-ohos-vivid-rendering-gate.mjs`（新）、`docs/harmonyos/CHANGELOG.md`。
+- **用户要求：** 把改变上游经典科学性渲染逻辑的改动限定在绚丽模式；恒星调时拖尾保持独立开关，绚丽模式之外也可用。
+- **核心改动：**
+  1. `StelApp` 新增缓存的 `flagVividRendering` 与 generation，`LandscapeMgr` 在读取/切换 `landscape/flag_vivid_atmosphere` 时同步。
+  2. `StelSkyDrawer` star shader 增加 `vivid` uniform；关闭绚丽模式时执行上游 `texture2D(tex,texc)*vec4(outColor,1.0)`，不应用 `coreHot`/`haloBoost`。
+  3. 当前 `kSpectralStops` B-V 表只在绚丽模式安装；缓存上游/自定义颜色表并在关闭时恢复。
+  4. 恒星/卫星调时拖尾不纳入绚丽门控，保持原独立开关；关闭绚丽仅改变拖尾使用的 B-V 颜色。
+  5. 新增 `getVividRenderingState` 诊断命令，返回 `vivid`、`vividGeneration`、`starTrails`。
+- **验证（待后续 Slice 补全）：** 引擎交叉编译成功；`test-ohos-vivid-rendering-gate.mjs` 6/6；`check-ohos-command-catalog.mjs` 444 命令一致。
+
 ## [2026-11-22] 目镜插件页签化与器材配置管理
 
 - **修改文件：** `harmonyos/ets-source/panels/panels/OcularsPanel.ets`、`harmonyos/ets-source/panels/telescope/OcularsTabs.ets`（新）、`OcularSummaryCard.ets`（新）、`OcularGeneralTab.ets`（新）、`OcularEquipmentTab.ets`（新）、`OcularEquipmentForm.ets`（新）、`harmonyos/ets-source/common/derive/ocularEquipment.ets`（新）、`harmonyos/ets-source/state/TelescopeStore.ets`、`harmonyos/ets-source/capability/OcularController.ets`、`harmonyos/ets-source/common/types/MainWindowModels.ets`、`harmonyos/ets-source/bridge/MediaPort.ets`、`harmonyos/ets-source/pages/MainWindowNativeNode.ets`、`harmonyos/ets-source/qability/QAbility.ets`、`harmonyos/ets-source/capability/I18n.ets`、`plugins/Oculars/src/Oculars.cpp`、`plugins/Oculars/src/Oculars.hpp`、`src/StelMainView.cpp`、`src/StelOhosCommandCatalog.hpp`、`scripts/test-ohos-oculars-equipment.mjs`（新）、`scripts/test-ohos-readable-typography.mjs`、`docs/harmonyos/CLI.md`、`docs/harmonyos/AGENTS.md`、`docs/harmonyos/specs/OCULARS-EQUIPMENT.md`（新）、`docs/harmonyos/json/ui-contract-baseline.json`、`docs/harmonyos/CHANGELOG.md`。

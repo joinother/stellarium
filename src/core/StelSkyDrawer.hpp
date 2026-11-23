@@ -543,9 +543,11 @@ private:
 		int pos;
 		int color;
 		int texture;
+		int vivid;
 	};
 	StarShaderVars starShaderVars;
-	
+	unsigned int lastVividGeneration;
+
 	//! Current number of sources stored in the buffers (still to display)
 	unsigned int nbPointSources;
 	//! Maximum number of sources which can be stored in the buffers
