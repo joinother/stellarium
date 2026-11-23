@@ -866,7 +866,7 @@ PickResult TouchPicker::pickAt(const StelCore* core, int xVp, int yVp, int skyW,
 					continue;
 
 				double rVp = 0.0;
-				if (state.iconDrawn)
+				if (state.iconDrawn || state.markerDrawn)
 					rVp = qMax(14.0 / ctx.dpr, 8.5);
 				else if (state.pointDrawn && state.hasMagnitude)
 				{
@@ -905,12 +905,12 @@ PickResult TouchPicker::pickAt(const StelCore* core, int xVp, int yVp, int skyW,
 				diagnostics.limitMag = core->getSkyDrawer()->getLimitMagnitude();
 				diagnostics.visibility = QStringLiteral("UNKNOWN");
 
-				// When a satellite renders an explicit visual micro-marker/icon on screen,
+				// When a satellite renders an explicit marker without a photometric point,
 				// do not penalize its touch-pick score with an eclipsed mag=17 value so faint
 				// background stars cannot steal taps directly on the satellite marker.
-				const double pickMag = (state.iconDrawn && state.hasMagnitude && state.magnitude > 3.5)
-					? 3.5
-					: state.magnitude;
+				// This is a local scoring clamp only; getPickState().magnitude stays photometric.
+				const double pickMag = (state.markerDrawn && !state.pointDrawn && !state.iconDrawn
+					&& state.hasMagnitude && state.magnitude > 3.5) ? 3.5 : state.magnitude;
 
 				addCandidate(candidates, ctx, core, object, screenVp, rVp, pickMag,
 					state.hasMagnitude, typePriorForObject(object, false), label, true, diagnostics);

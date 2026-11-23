@@ -1096,8 +1096,8 @@ QList<StelObjectP> Satellites::searchAround(const Vec3d& av, double limitFov, co
 
 	Vec3d v(av);
 	v.normalize();
-	// Slightly widen touch/click capture cone for moving satellites so fast LEO targets are easier to tap.
-	const double effectiveFov = qMin(limitFov * 1.45, 12.0);
+	// Slightly widen touch/click capture cone only when the OHOS marker layer is active.
+	const double effectiveFov = Satellite::markerLayerEnabled ? qMin(limitFov * 1.45, 12.0) : limitFov;
 	const double cosLimFov = cos(effectiveFov * M_PI/180.);
 	Vec3d equPos;
 
@@ -1532,11 +1532,15 @@ void Satellites::restoreDefaultSettings()
 	conf->setValue("orbit_line_segments", 180);
 	conf->setValue("orbit_fade_segments", 6);
 	conf->setValue("orbit_segment_duration", 6);
+	conf->setValue("marker_layer", true);
+	conf->setValue("station_complexes", true);
 #else
 	conf->setValue("orbit_line_flag", false);
 	conf->setValue("orbit_line_segments", 90);
 	conf->setValue("orbit_fade_segments", 5);
 	conf->setValue("orbit_segment_duration", 20);
+	conf->setValue("marker_layer", false);
+	conf->setValue("station_complexes", false);
 #endif
 	conf->setValue("valid_epoch_age", 30);
 	conf->setValue("iconic_mode_enabled", false);
@@ -1793,6 +1797,13 @@ void Satellites::loadSettings()
 	Satellite::orbitLineFadeSegments = conf->value("orbit_fade_segments", 5).toInt();
 	Satellite::orbitLineSegmentDuration = conf->value("orbit_segment_duration", 5).toInt();
 #endif
+#ifdef Q_OS_OHOS
+	Satellite::markerLayerEnabled = conf->value("marker_layer", true).toBool();
+	Satellite::stationComplexesEnabled = conf->value("station_complexes", true).toBool();
+#else
+	Satellite::markerLayerEnabled = conf->value("marker_layer", false).toBool();
+	Satellite::stationComplexesEnabled = conf->value("station_complexes", false).toBool();
+#endif
 	Satellite::orbitLineThickness = conf->value("orbit_line_thickness", 1).toInt();
 	setInvisibleSatelliteColor(Vec3f(conf->value("invisible_satellite_color", "0.2,0.2,0.2").toString()));
 	setTransitSatelliteColor(Vec3f(conf->value("transit_satellite_color", "0.0,0.0,0.0").toString()));
@@ -1891,6 +1902,8 @@ void Satellites::saveSettingsToConfig()
 	conf->setValue("orbit_fade_segments", Satellite::orbitLineFadeSegments);
 	conf->setValue("orbit_segment_duration", Satellite::orbitLineSegmentDuration);
 	conf->setValue("orbit_line_thickness", Satellite::orbitLineThickness);
+	conf->setValue("marker_layer", Satellite::markerLayerEnabled);
+	conf->setValue("station_complexes", Satellite::stationComplexesEnabled);
 
 	conf->setValue("valid_epoch_age", Satellite::tleEpochAge);
 
@@ -4005,6 +4018,23 @@ bool Satellites::getFlagOrbitLines()
 	return Satellite::orbitLinesFlag;
 }
 
+void Satellites::setFlagMarkerLayer(bool b)
+{
+	if (Satellite::markerLayerEnabled == b)
+		return;
+	Satellite::markerLayerEnabled = b;
+	emit flagMarkerLayerChanged(b);
+}
+
+void Satellites::setFlagStationComplexes(bool b)
+{
+	if (Satellite::stationComplexesEnabled == b)
+		return;
+	Satellite::stationComplexesEnabled = b;
+	refreshStationComplexes();
+	emit flagStationComplexesChanged(b);
+}
+
 void Satellites::recalculateOrbitLines(void)
 {
 	for (const auto& sat : std::as_const(satellites))
@@ -4967,6 +4997,8 @@ void Satellites::draw(StelCore* core)
 	frameCtx.currentJD = core->getJD();
 	frameCtx.fovDeg = currentFovDeg;
 	frameCtx.selectedId = selectedId;
+	frameCtx.markerLayer = Satellite::markerLayerEnabled;
+	frameCtx.stationComplexes = Satellite::stationComplexesEnabled;
 	frameCtx.timeRateOk = true;
 	frameCtx.checkLandscape = false;
 	const PlanetP moonObj = GETSTELMODULE(SolarSystem)->getMoon();
@@ -5142,15 +5174,13 @@ void Satellites::draw(StelCore* core)
 						float labelOpacity = Satellite::hintBrightness * MarkerVisibility::magnitudeOpacity(st.txtMag, st.limitMag);
 						if (isSelected)
 							labelOpacity = qMax(labelOpacity, 0.96f * Satellite::hintBrightness);
-						else if (st.markerDrawn)
-							labelOpacity = qMax(labelOpacity, st.markerOpacity * 0.85f * Satellite::hintBrightness);
 						if (labelOpacity > 0.01f)
 						{
 							Vec3f lblCol = legacyDarkInvisible ? Vec3f(0.64f, 0.78f, 0.96f) : Satellite::invisibleSatelliteColor;
 							if (sat->visibility == gSatWrapper::VISIBLE)
 								lblCol = (sat->hintColor.normSquared() > 0.05f) ? sat->hintColor : markerSunlitColor;
 							else if (sat->visibility == gSatWrapper::PENUMBRAL)
-								lblCol = markerPenumbraColor;
+								lblCol = 0.5f * sat->hintColor;
 							labelCandidates.append({sat.data(), sat.toWeakRef(), st.magSat, st.txtMag, lblCol, labelOpacity, rank});
 						}
 					}

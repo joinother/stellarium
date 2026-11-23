@@ -11,8 +11,11 @@
   4. 恒星/卫星调时拖尾不纳入绚丽门控，保持原独立开关；关闭绚丽仅改变拖尾使用的 B-V 颜色。
   5. 恢复 `SporadicMeteorMgr` 的“仅大气层开启时绘制”门控与 `atmosphere-disabled` 诊断；预览 salvo 仅在绚丽模式且大气层开启（或强制流星活动）时生成。
   6. `Meteor` 拆分经典/绚丽双路径：经典路径恢复上游星等分布、距离衰减、线性熄灭、10 段、原始颜色和 `drawTrain`/`drawBolide`；绚丽路径保留当前形态。模式切换时清空活跃流星，`setZHR` 即时提升仅绚丽模式启用。
-  7. 新增 `getVividRenderingState` 诊断命令，返回 `vivid`、`vividGeneration`、`starTrails`、`meteorAtmosphereGate`。
-- **验证（待后续 Slice 补全）：** 引擎交叉编译成功；`test-ohos-vivid-rendering-gate.mjs` 9/9；`check-ohos-command-catalog.mjs` 444 命令一致。
+  7. 卫星光度层恢复上游：`pointDrawn = magSat <= limitMag`；标签恢复半影/地影星等 `magSat-3/-10` 与 `txtMag <= limitMag`；`getPickState` 不再把 marker 写入 `iconDrawn`/`magnitude`，新增独立 `markerDrawn`。
+  8. 卫星微标记层改为独立开关 `Satellites/flag_marker_layer`（OHOS 默认开、桌面默认关），`markerLimit = limitMag + 3.2*zoomReveal` 只供 marker；`getSelectPriority`/`searchAround` 扩大仅在标记层开启时生效；TouchPicker 用 `markerDrawn` 命中半径，局部评分夹取不再改写 PickState 星等。
+  9. 空间站编组增加 `Satellites/flag_station_complexes`（OHOS 默认开、桌面默认关），不改变光度语义。
+  10. 新增 `getVividRenderingState` 诊断命令，返回 `vivid`、`vividGeneration`、`starTrails`、`meteorAtmosphereGate`。
+- **验证（待后续 Slice 补全）：** 引擎交叉编译成功；`test-ohos-vivid-rendering-gate.mjs` 13/13；`test-ohos-satellite-orbit-and-streaks.mjs` 8/8；`check-ohos-command-catalog.mjs` 444 命令一致。
 
 ## [2026-11-22] 目镜插件页签化与器材配置管理
 

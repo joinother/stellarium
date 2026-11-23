@@ -78,3 +78,39 @@ test('sporadic meteor palette retains the upstream classic colors', () => {
   assert.match(sporadic, /ColorPair\("orangeYellow", 20\)/);
   assert.match(sporadic, /getFlagVividRendering\(\)/);
 });
+
+test('satellite photometric point gate stays upstream and marker limit is separate', () => {
+  const satellite = read('plugins/Satellites/src/Satellite.cpp');
+  assert.match(satellite, /st\.pointDrawn = st\.magSat <= st\.limitMag;/);
+  assert.match(satellite, /const float markerLimit = st\.limitMag \+ 3\.2f \* zoomReveal;/);
+  assert.doesNotMatch(satellite, /st\.pointDrawn = \(sunlit \|\| penumbra\) && \(st\.magSat <= markerLimit\)/);
+});
+
+test('satellite pick state keeps upstream magnitude and exposes markerDrawn', () => {
+  const satellite = read('plugins/Satellites/src/Satellite.cpp');
+  const pick = read('src/core/StelObject.hpp');
+  assert.match(satellite, /state\.iconDrawn = render\.iconDrawn;/);
+  assert.match(satellite, /state\.markerDrawn = render\.markerDrawn;/);
+  assert.match(satellite, /state\.magnitude = \(render\.pointDrawn \|\| render\.iconDrawn\) \? render\.magSat : render\.txtMag;/);
+  assert.match(pick, /bool markerDrawn = false;/);
+});
+
+test('satellite marker layer has an independent platform switch', () => {
+  const plugin = read('plugins/Satellites/src/Satellites.cpp');
+  const header = read('plugins/Satellites/src/Satellites.hpp');
+  const store = read('harmonyos/ets-source/state/SatelliteStore.ets');
+  const controller = read('harmonyos/ets-source/capability/SatelliteController.ets');
+  const panel = read('harmonyos/ets-source/panels/panels/SatellitesPanel.ets');
+  assert.match(header, /flagMarkerLayer/);
+  assert.match(plugin, /marker_layer", true/);
+  assert.match(plugin, /marker_layer", false/);
+  assert.match(store, /satMarkerLayer: boolean = true/);
+  assert.match(controller, /name === 'markerLayer'/);
+  assert.match(panel, /c_show_markers/);
+});
+
+test('satellite touch picking uses markerDrawn instead of faking icon magnitude', () => {
+  const picker = read('src/core/TouchPicker.cpp');
+  assert.match(picker, /state\.markerDrawn/);
+  assert.match(picker, /state\.markerDrawn && !state\.pointDrawn && !state\.iconDrawn/);
+});

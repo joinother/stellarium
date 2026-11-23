@@ -433,6 +433,8 @@ export struct SatellitesPanel {
         .fontSize(15).fontWeight(FontWeight.Medium).fontColor(this.c.text).width('100%').padding({ left: 2 })
       this.displayToggleRow(I18n.t('c_show_labels'), this.satelliteStore.satLabels, (v: boolean) => { this.onSetFlag('labels', v) })
       this.displayToggleRow(I18n.t('c_show_orbits'), this.satelliteStore.satOrbitLines, (v: boolean) => { this.onSetFlag('orbitLines', v) })
+      this.displayToggleRow(I18n.t('c_show_markers'), this.satelliteStore.satMarkerLayer, (v: boolean) => { this.onSetFlag('markerLayer', v) })
+      this.displayToggleRow(I18n.t('c_station_complexes'), this.satelliteStore.satStationComplexes, (v: boolean) => { this.onSetFlag('stationComplexes', v) })
       Text(I18n.t('sat_orbit_preview_hint')).fontSize(11).fontColor(this.c.sub).width('100%').padding({ left: 4, right: 4 })
       this.displayToggleRow(I18n.t('c_show_hints'), this.satelliteStore.satHints, (v: boolean) => { this.onSetFlag('hints', v) })
       this.displayToggleRow(I18n.t('c_icon_mode'), this.satelliteStore.satIconicMode, (v: boolean) => { this.onSetFlag('iconicMode', v) })

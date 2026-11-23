@@ -96,10 +96,11 @@ test('satellites render subtle zoom-adaptive micro-markers, readable shadow labe
   assert.match(satHpp, /bool markerDrawn = false;/);
   assert.match(satHpp, /return pointDrawn \|\| labelDrawn \|\| iconDrawn \|\| markerDrawn;/);
   assert.match(satCpp, /shadowZoomReveal/);
-  assert.match(satCpp, /state\.iconDrawn = render\.iconDrawn \|\| render\.markerDrawn;/);
+  assert.match(satCpp, /state\.iconDrawn = render\.iconDrawn;/);
+  assert.match(satCpp, /state\.markerDrawn = render\.markerDrawn;/);
   // Batched micro-marker draw (diamond + station solar wings + center core dot) & wider moving-target capture cone
   assert.match(satsCpp, /struct SatMarkerCandidate/);
-  assert.match(satsCpp, /const double effectiveFov = qMin\(limitFov \* 1\.45, 12\.0\);/);
+  assert.match(satsCpp, /const double effectiveFov = Satellite::markerLayerEnabled \? qMin\(limitFov \* 1\.45, 12\.0\) : limitFov;/);
   // Moving to a selected satellite keeps a comfortable framing FOV instead of blind 1.3 deg auto-zoom
   assert.match(mainViewCpp, /selectedObj->getType\(\) == QLatin1String\("Satellite"\)/);
   assert.match(satCtlEts, /const target = 44/);

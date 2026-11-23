@@ -265,6 +265,8 @@ export class SatelliteController {
   setSatelliteFlag(name: string, v: boolean): void {
     if ((name === 'labels' && this.satelliteStore.satLabels === v) ||
       (name === 'orbitLines' && this.satelliteStore.satOrbitLines === v) ||
+      (name === 'markerLayer' && this.satelliteStore.satMarkerLayer === v) ||
+      (name === 'stationComplexes' && this.satelliteStore.satStationComplexes === v) ||
       (name === 'hints' && this.satelliteStore.satHints === v) ||
       (name === 'iconicMode' && this.satelliteStore.satIconicMode === v) ||
       (name === 'hideInvisible' && this.satelliteStore.satHideInvisible === v)) return
@@ -272,6 +274,8 @@ export class SatelliteController {
     let previous: boolean | undefined
     if (name == 'labels') { previous = this.satelliteStore.satLabels; this.satelliteStore.satLabels = v }
     else if (name == 'orbitLines') { previous = this.satelliteStore.satOrbitLines; this.satelliteStore.satOrbitLines = v }
+    else if (name == 'markerLayer') { previous = this.satelliteStore.satMarkerLayer; this.satelliteStore.satMarkerLayer = v }
+    else if (name == 'stationComplexes') { previous = this.satelliteStore.satStationComplexes; this.satelliteStore.satStationComplexes = v }
     else if (name == 'hints') { previous = this.satelliteStore.satHints; this.satelliteStore.satHints = v }
     else if (name == 'iconicMode') { previous = this.satelliteStore.satIconicMode; this.satelliteStore.satIconicMode = v }
     else if (name == 'hideInvisible') { previous = this.satelliteStore.satHideInvisible; this.satelliteStore.satHideInvisible = v }
@@ -279,6 +283,8 @@ export class SatelliteController {
       if (mutationId !== this.satelliteStore.satelliteFlagMutationId || previous === undefined) return
       if (name == 'labels') this.satelliteStore.satLabels = previous
       else if (name == 'orbitLines') this.satelliteStore.satOrbitLines = previous
+      else if (name == 'markerLayer') this.satelliteStore.satMarkerLayer = previous
+      else if (name == 'stationComplexes') this.satelliteStore.satStationComplexes = previous
       else if (name == 'hints') this.satelliteStore.satHints = previous
       else if (name == 'iconicMode') this.satelliteStore.satIconicMode = previous
       else if (name == 'hideInvisible') this.satelliteStore.satHideInvisible = previous

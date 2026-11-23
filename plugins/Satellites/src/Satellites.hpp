@@ -160,6 +160,8 @@ class Satellites : public StelObjectModule
 	Q_PROPERTY(bool flagHideInvisible		READ getFlagHideInvisible		WRITE setFlagHideInvisible		NOTIFY flagHideInvisibleChanged)
 	Q_PROPERTY(bool flagColoredInvisible		READ getFlagColoredInvisible		WRITE setFlagColoredInvisible		NOTIFY flagColoredInvisibleChanged)
 	Q_PROPERTY(bool flagOrbitLines			READ getFlagOrbitLines			WRITE setFlagOrbitLines			NOTIFY flagOrbitLinesChanged)
+	Q_PROPERTY(bool flagMarkerLayer			READ getFlagMarkerLayer			WRITE setFlagMarkerLayer			NOTIFY flagMarkerLayerChanged)
+	Q_PROPERTY(bool flagStationComplexes		READ getFlagStationComplexes		WRITE setFlagStationComplexes		NOTIFY flagStationComplexesChanged)
 	Q_PROPERTY(bool updatesEnabled			READ getUpdatesEnabled			WRITE setUpdatesEnabled			NOTIFY updatesEnabledChanged)
 	Q_PROPERTY(int  updateFrequencyHours		READ getUpdateFrequencyHours		WRITE setUpdateFrequencyHours		NOTIFY updateFrequencyHoursChanged)
 	Q_PROPERTY(int  orbitLineSegments		READ getOrbitLineSegments		WRITE setOrbitLineSegments		NOTIFY orbitLineSegmentsChanged)
@@ -439,6 +441,8 @@ signals:
 	void flagLabelsVisibleChanged(bool b);
 	void labelFontSizeChanged(int s);
 	void flagOrbitLinesChanged(bool b);
+	void flagMarkerLayerChanged(bool b);
+	void flagStationComplexesChanged(bool b);
 	void flagIconicModeChanged(bool b);
 	void flagHideInvisibleChanged(bool b);
 	void flagColoredInvisibleChanged(bool b);
@@ -603,6 +607,14 @@ public slots:
 	void setFlagOrbitLines(bool b);
 	//! Get the current status of the orbit line rendering flag.
 	bool getFlagOrbitLines();
+
+	//! Independent OHOS UX layer: non-photometric satellite micro-markers.
+	void setFlagMarkerLayer(bool b);
+	bool getFlagMarkerLayer() const { return Satellite::markerLayerEnabled; }
+
+	//! Independent OHOS UX layer: merge docked station modules into complexes.
+	void setFlagStationComplexes(bool b);
+	bool getFlagStationComplexes() const { return Satellite::stationComplexesEnabled; }
 
 	//! return number of segments for orbit lines
 	int getOrbitLineSegments() {return Satellite::orbitLineSegments;}

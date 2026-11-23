@@ -19028,6 +19028,8 @@ extern "C" __attribute__((visibility("default"))) const char* StellariumOhos_com
 			s["groups"] = groups;
 			s["labels"] = sats->getFlagLabelsVisible();
 			s["orbitLines"] = sats->getFlagOrbitLines();
+			s["markerLayer"] = sats->getFlagMarkerLayer();
+			s["stationComplexes"] = sats->getFlagStationComplexes();
 			s["hints"] = sats->getFlagHintsVisible();
 			s["iconicMode"] = sats->getFlagIconicMode();
 			s["hideInvisible"] = sats->getFlagHideInvisible();
@@ -19241,6 +19243,8 @@ extern "C" __attribute__((visibility("default"))) const char* StellariumOhos_com
 			bool ok = true;
 			if (name == "labels") sats->setFlagLabelsVisible(val);
 			else if (name == "orbitLines") sats->setFlagOrbitLines(val);
+			else if (name == "markerLayer") sats->setFlagMarkerLayer(val);
+			else if (name == "stationComplexes") sats->setFlagStationComplexes(val);
 			else if (name == "hints") sats->setFlagHintsVisible(val);
 			else if (name == "iconicMode") sats->setFlagIconicMode(val);
 			else if (name == "hideInvisible") sats->setFlagHideInvisible(val);

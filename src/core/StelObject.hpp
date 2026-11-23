@@ -41,6 +41,7 @@ struct StelObjectPickState
 	bool labelDrawn = false;
 	bool outlineDrawn = false;
 	bool iconDrawn = false;
+	bool markerDrawn = false;
 	bool landscapeVisible = true;
 	bool hasMagnitude = false;
 	float magnitude = 99.f;

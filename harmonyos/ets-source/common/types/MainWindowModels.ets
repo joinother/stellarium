@@ -643,6 +643,8 @@ export interface SatellitesData {
   groups: string[]
   labels: boolean
   orbitLines: boolean
+  markerLayer?: boolean
+  stationComplexes?: boolean
   hints: boolean
   iconicMode: boolean
   hideInvisible: boolean

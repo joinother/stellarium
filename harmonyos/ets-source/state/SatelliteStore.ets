@@ -23,6 +23,8 @@ export class SatelliteStore {
   activeSatGroup: string = ''
   satLabels: boolean = true
   satOrbitLines: boolean = true
+  satMarkerLayer: boolean = true
+  satStationComplexes: boolean = true
   satHints: boolean = false
   satIconicMode: boolean = false
   satHideInvisible: boolean = false
@@ -245,6 +247,8 @@ export class SatelliteStore {
         if (flagMutationId === this.satelliteFlagMutationId) {
           this.satLabels = s.labels
           this.satOrbitLines = s.orbitLines
+          this.satMarkerLayer = s.markerLayer !== false
+          this.satStationComplexes = s.stationComplexes !== false
           this.satHints = s.hints
           this.satIconicMode = s.iconicMode
           this.satHideInvisible = s.hideInvisible

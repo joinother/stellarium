@@ -306,6 +306,8 @@ public:
 
 	double getDoppler(double freq) const;
 	static bool showLabels;
+	static bool markerLayerEnabled;
+	static bool stationComplexesEnabled;
 	static double roundToDp(float n, int dp);
 
 	// when the observer location changes we need to
@@ -368,6 +370,8 @@ public:
 		QString selectedId;
 		bool timeRateOk = true;
 		bool checkLandscape = false;
+		bool markerLayer = false;
+		bool stationComplexes = false;
 	};
 
 	//! Compute the current draw/pick state. draw() and the touch picker both
