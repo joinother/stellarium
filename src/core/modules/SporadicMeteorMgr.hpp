@@ -95,6 +95,7 @@ private:
 	double m_lastExpectedPerSecond;
 	double m_lastSpawnProbability;
 	int m_lastMaxMeteorsPerFrame;
+	unsigned int m_lastVividGeneration;
 	QString m_lastGenerationSuppression;
 	double m_spawnAccumulator;
 	QHash<QString, quint64> m_diagnosticRejectionReasons;

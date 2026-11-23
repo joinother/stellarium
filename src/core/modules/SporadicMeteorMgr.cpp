@@ -47,6 +47,7 @@ SporadicMeteorMgr::SporadicMeteorMgr(int zhr, int maxv)
 	, m_lastExpectedPerSecond(0.)
 	, m_lastSpawnProbability(0.)
 	, m_lastMaxMeteorsPerFrame(0)
+	, m_lastVividGeneration(0)
 	, m_lastGenerationSuppression(QStringLiteral("not-started"))
 	, m_spawnAccumulator(0.)
 {
@@ -89,6 +90,15 @@ void SporadicMeteorMgr::update(double deltaTime)
 	m_lastExpectedPerSecond = static_cast<double>(m_zhr) / 3600.0;
 	m_lastSpawnProbability = 0.;
 	m_lastMaxMeteorsPerFrame = 0;
+
+	const unsigned int vividGeneration = StelApp::getInstance().getVividRenderingGeneration();
+	if (vividGeneration != m_lastVividGeneration)
+	{
+		m_lastVividGeneration = vividGeneration;
+		qDeleteAll(activeMeteors);
+		activeMeteors.clear();
+		m_spawnAccumulator = 0.;
+	}
 
 	if (!m_flagShow)
 	{
@@ -186,6 +196,8 @@ QJsonObject SporadicMeteorMgr::getDiagnostics() const
 		drawSuppression = QStringLiteral("display-disabled");
 	else if (!core)
 		drawSuppression = QStringLiteral("core-unavailable");
+	else if (!core->getSkyDrawer()->getFlagHasAtmosphere() && !m_flagForcedShow)
+		drawSuppression = QStringLiteral("atmosphere-disabled");
 	else
 	{
 		LandscapeMgr* landmgr = GETSTELMODULE(LandscapeMgr);
@@ -198,20 +210,21 @@ QJsonObject SporadicMeteorMgr::getDiagnostics() const
 
 void SporadicMeteorMgr::draw(StelCore* core)
 {
-	if (!m_flagShow || activeMeteors.isEmpty())
+	if (!m_flagShow || (!core->getSkyDrawer()->getFlagHasAtmosphere() && !getFlagForcedMeteorsActivity()))
 	{
 		return;
 	}
 
 	static LandscapeMgr* landmgr = GETSTELMODULE(LandscapeMgr);
-	const bool daylightHidden = landmgr && landmgr->getFlagAtmosphere() && landmgr->getLuminance() > 5.f;
+	if (landmgr && landmgr->getFlagAtmosphere() && landmgr->getLuminance() > 5.f)
+	{
+		return;
+	}
 
 	// step through and draw all active meteors
 	StelPainter sPainter(core->getProjection(StelCore::FrameAltAz));
 	for (auto* m: std::as_const(activeMeteors))
 	{
-		if (daylightHidden && !m->isPreviewBypassDaylight())
-			continue;
 		m->draw(core, sPainter);
 	}
 }
@@ -220,6 +233,10 @@ void SporadicMeteorMgr::triggerPreviewSalvo()
 {
 	StelCore* core = StelApp::getInstance().getCore();
 	if (!core)
+		return;
+	if (!StelApp::getInstance().getFlagVividRendering())
+		return;
+	if (!core->getSkyDrawer()->getFlagHasAtmosphere() && !getFlagForcedMeteorsActivity())
 		return;
 
 	// Ensure meteors display is enabled when user explicitly triggers a preview
@@ -292,7 +309,7 @@ void SporadicMeteorMgr::setZHR(int zhr)
 
 		// Give immediate responsive sky-dome feedback when the user actively raises ZHR
 		// in dark real-time skies instead of waiting minutes for the accumulator to tick.
-		if (m_flagShow && zhr > prevZhr && zhr >= 60)
+		if (StelApp::getInstance().getFlagVividRendering() && m_flagShow && zhr > prevZhr && zhr >= 60)
 		{
 			StelCore* core = StelApp::getInstance().getCore();
 			LandscapeMgr* landmgr = GETSTELMODULE(LandscapeMgr);

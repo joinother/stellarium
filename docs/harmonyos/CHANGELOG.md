@@ -9,8 +9,10 @@
   2. `StelSkyDrawer` star shader 增加 `vivid` uniform；关闭绚丽模式时执行上游 `texture2D(tex,texc)*vec4(outColor,1.0)`，不应用 `coreHot`/`haloBoost`。
   3. 当前 `kSpectralStops` B-V 表只在绚丽模式安装；缓存上游/自定义颜色表并在关闭时恢复。
   4. 恒星/卫星调时拖尾不纳入绚丽门控，保持原独立开关；关闭绚丽仅改变拖尾使用的 B-V 颜色。
-  5. 新增 `getVividRenderingState` 诊断命令，返回 `vivid`、`vividGeneration`、`starTrails`。
-- **验证（待后续 Slice 补全）：** 引擎交叉编译成功；`test-ohos-vivid-rendering-gate.mjs` 6/6；`check-ohos-command-catalog.mjs` 444 命令一致。
+  5. 恢复 `SporadicMeteorMgr` 的“仅大气层开启时绘制”门控与 `atmosphere-disabled` 诊断；预览 salvo 仅在绚丽模式且大气层开启（或强制流星活动）时生成。
+  6. `Meteor` 拆分经典/绚丽双路径：经典路径恢复上游星等分布、距离衰减、线性熄灭、10 段、原始颜色和 `drawTrain`/`drawBolide`；绚丽路径保留当前形态。模式切换时清空活跃流星，`setZHR` 即时提升仅绚丽模式启用。
+  7. 新增 `getVividRenderingState` 诊断命令，返回 `vivid`、`vividGeneration`、`starTrails`、`meteorAtmosphereGate`。
+- **验证（待后续 Slice 补全）：** 引擎交叉编译成功；`test-ohos-vivid-rendering-gate.mjs` 9/9；`check-ohos-command-catalog.mjs` 444 命令一致。
 
 ## [2026-11-22] 目镜插件页签化与器材配置管理
 

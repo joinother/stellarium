@@ -71,6 +71,16 @@ public:
 	float absMag() const { return m_absMag; }
 
 private:
+	void initLegacy(const float& radiantAlpha, const float& radiantDelta,
+			const float& speed, const QList<ColorPair> colors);
+	bool updateLegacy(double deltaTime);
+	void drawLegacy(const StelCore* core, StelPainter& sPainter);
+	void buildColorVectorsLegacy(const QList<ColorPair> colors);
+	static Vec4f getColorFromNameLegacy(QString colorName);
+	static void calculateThicknessLegacy(const StelCore* core, double& thickness, double& bolideSize);
+	void drawBolideLegacy(StelPainter& sPainter, const double& bolideSize);
+	void drawTrainLegacy(StelPainter& sPainter, const double& thickness);
+
 	//! Determine color vectors of outer halo, spectral sheath and incandescent core.
 	void buildColorVectors(const QList<ColorPair> colors);
 
@@ -131,7 +141,7 @@ private:
 	Vec3f m_afterglowColor;         //! Spectral tint for persistent ionization train
 
 	StelTextureSP m_bolideTexture;  //! Meteor bolide texture
-	const int m_segments;           //! Number of segments along the train (useful to curve along projection distortions)
+	int m_segments;                 //! Number of segments along the train (10 classic / 24 vivid)
 	QVector<Vec4f> m_outerColorVector;  //! Smooth saturated spectral halo color per segment
 	QVector<Vec4f> m_coreColorVector;   //! Smooth hot incandescent core color per segment
 	QVector<Vec4f> m_trainColorVector;  //! Scratch buffer (2 * m_segments) for ribbon vertices

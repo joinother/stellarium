@@ -61,6 +61,32 @@ QList<Meteor::ColorPair> SporadicMeteor::getRandColor(float speedKmS)
 {
 	QList<ColorPair> colors;
 	const float prob = StelApp::getInstance().getRandF();
+	if (!StelApp::getInstance().getFlagVividRendering())
+	{
+		if (prob > 0.9f)
+		{
+			colors.push_back(Meteor::ColorPair("white", 70));
+			colors.push_back(Meteor::ColorPair("orangeYellow", 10));
+			colors.push_back(Meteor::ColorPair("yellow", 10));
+			colors.push_back(Meteor::ColorPair("blueGreen", 10));
+		}
+		else if (prob > 0.85f)
+		{
+			colors.push_back(Meteor::ColorPair("white", 80));
+			colors.push_back(Meteor::ColorPair("violet", 20));
+		}
+		else if (prob > 0.80f)
+		{
+			colors.push_back(Meteor::ColorPair("white", 80));
+			colors.push_back(Meteor::ColorPair("orangeYellow", 20));
+		}
+		else
+		{
+			colors.push_back(Meteor::ColorPair("white", 100));
+		}
+		return colors;
+	}
+
 	const bool fast = speedKmS >= 46.f;
 
 	// Velocity-correlated multi-spectral emission palettes:

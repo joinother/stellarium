@@ -141,6 +141,14 @@ void Meteor::init(const float& radiantAlpha, const float& radiantDelta,
 	m_startDelay = 0.f;
 	m_headExtinguished = false;
 	m_headFade = 1.f;
+	m_rejectionReason.clear();
+
+	if (!StelApp::getInstance().getFlagVividRendering())
+	{
+		initLegacy(radiantAlpha, radiantDelta, speed, colors);
+		return;
+	}
+	m_segments = 24;
 
 	// meteor speed in km/s
 	m_speed = static_cast<double>(speed);
@@ -260,6 +268,13 @@ void Meteor::initInViewport(const Vec3d& centerAltAz, float offsetRightRad, floa
 			    float slopeAngleRad, float speed, const QList<ColorPair>& colors,
 			    bool isFireball, float startDelaySec)
 {
+	if (!StelApp::getInstance().getFlagVividRendering())
+	{
+		m_alive = false;
+		m_rejectionReason = QStringLiteral("vivid-required");
+		return;
+	}
+	m_segments = 24;
 	m_bypassDaylight = true;
 	m_startDelay = qMax(0.f, startDelaySec);
 	m_headExtinguished = false;
@@ -344,6 +359,8 @@ bool Meteor::update(double deltaTime)
 	{
 		return false;
 	}
+	if (!StelApp::getInstance().getFlagVividRendering())
+		return updateLegacy(deltaTime);
 
 	const double dt = qBound(0.0, deltaTime, 0.15);
 	if (m_startDelay > 0.f)
@@ -413,6 +430,11 @@ void Meteor::draw(const StelCore* core, StelPainter& sPainter)
 {
 	if (!m_alive || m_startDelay > 0.f)
 	{
+		return;
+	}
+	if (!StelApp::getInstance().getFlagVividRendering())
+	{
+		drawLegacy(core, sPainter);
 		return;
 	}
 
@@ -534,6 +556,333 @@ void Meteor::buildColorVectors(const QList<ColorPair> colors)
 
 	const Vec4f headOuter = m_outerColorVector.last();
 	m_headTintColor = Vec3f(headOuter[0], headOuter[1], headOuter[2]);
+}
+
+void Meteor::initLegacy(const float& radiantAlpha, const float& radiantDelta,
+			const float& speed, const QList<ColorPair> colors)
+{
+	m_segments = 10;
+	m_bypassDaylight = false;
+	m_startDelay = 0.f;
+	m_headExtinguished = false;
+	m_headFade = 1.f;
+
+	// meteor speed in km/s
+	m_speed = static_cast<double>(speed);
+
+	// find the radiant in horizontal coordinates
+	Vec3d radiantAltAz;
+	StelUtils::spheToRect(radiantAlpha, radiantDelta, radiantAltAz);
+	radiantAltAz = m_core->j2000ToAltAz(radiantAltAz);
+	float radiantAlt, radiantAz;
+	StelUtils::rectToSphe(&radiantAz, &radiantAlt, radiantAltAz);
+
+	if (radiantAlt < 0.f)
+	{
+		m_rejectionReason = QStringLiteral("radiant-below-horizon");
+		return;
+	}
+
+	m_matAltAzToRadiant = Mat4d::zrotation(static_cast<double>(radiantAz)) * Mat4d::yrotation(M_PI_2 - static_cast<double>(radiantAlt));
+
+	float initialAlt = MIN_ALTITUDE + (MAX_ALTITUDE - MIN_ALTITUDE) * StelApp::getInstance().getRandF();
+	float maxZ = meteorZ(M_PI_2f - radiantAlt, initialAlt);
+
+	const float xyDist = maxZ * StelApp::getInstance().getRandF();
+	const float theta = 2 * M_PIf * StelApp::getInstance().getRandF();
+
+	m_position[0] = static_cast<double>(xyDist * std::cos(theta));
+	m_position[1] = static_cast<double>(xyDist * std::sin(theta));
+	m_position[2] = static_cast<double>(maxZ);
+	m_posTrain = m_position;
+	m_initialZ = static_cast<float>(m_position[2]);
+
+	Vec3d positionAltAz = m_position;
+	positionAltAz.transfo4d(m_matAltAzToRadiant);
+	float meteorAlt = static_cast<float>(std::asin(positionAltAz[2] / positionAltAz.norm()));
+
+	if (positionAltAz[2] > static_cast<double>(MAX_ALTITUDE) || meteorAlt <= 0.f)
+	{
+		m_rejectionReason = positionAltAz[2] > static_cast<double>(MAX_ALTITUDE)
+			? QStringLiteral("above-max-altitude")
+			: QStringLiteral("below-horizon");
+		return;
+	}
+
+	if (radiantAlt < 0.0262f)
+	{
+		float prob = StelApp::getInstance().getRandF();
+		if (prob > 0.3f)
+		{
+			m_rejectionReason = QStringLiteral("earth-grazer-probability");
+			return;
+		}
+		m_finalZ = -static_cast<float>(m_position[2]);
+		m_finalZ = qMax(static_cast<float>(m_position[2]) - static_cast<float>(m_speed) * 12.f, m_finalZ);
+		m_minDist = xyDist;
+	}
+	else
+	{
+		m_finalZ = meteorZ(M_PI_2f - meteorAlt, MIN_ALTITUDE);
+		m_finalZ = qMax(static_cast<float>(m_position[2]) - static_cast<float>(m_speed) * 12.0f, m_finalZ);
+		m_minDist = sqrt(m_finalZ * m_finalZ + xyDist * xyDist);
+	}
+
+	if (m_minDist < MIN_ALTITUDE)
+	{
+		m_rejectionReason = QStringLiteral("observer-distance");
+		return;
+	}
+
+	float Mag = StelApp::getInstance().getRandF() * 9.0f - 4.5f;
+	RCMag rcMag;
+	if (m_core->getSkyDrawer()->computeRCMag(Mag, &rcMag) && rcMag.luminance > 0.f)
+		m_absMag = rcMag.luminance;
+	else
+		m_absMag = qBound(0.05f, std::pow(10.f, -0.4f * (Mag + 4.5f)), 1.f);
+
+	float scale = std::pow(184.0f / m_minDist, 2);
+	m_absMag *= qMin(scale, 1.0f);
+	m_peakAbsMag = m_absMag;
+	m_aptMag = m_absMag;
+
+	buildColorVectorsLegacy(colors);
+	m_alive = true;
+}
+
+bool Meteor::updateLegacy(double deltaTime)
+{
+	if (!m_alive)
+		return false;
+
+	if (!m_core->getRealTimeSpeed() || static_cast<float>(m_position[2]) < m_finalZ)
+		m_absMag -= static_cast<float>(deltaTime) * 2.f;
+
+	if (m_absMag <= 0.f)
+	{
+		m_alive = false;
+		return false;
+	}
+
+	m_position[2] -= m_speed * deltaTime;
+
+	if (m_position[2] + m_speed * 0.5 > static_cast<double>(m_initialZ))
+		m_posTrain[2] = static_cast<double>(m_initialZ);
+	else
+		m_posTrain[2] -= m_speed * deltaTime;
+
+	float scale = std::pow(m_minDist / static_cast<float>(m_position.norm()), 2);
+	m_aptMag = m_absMag * qMin(scale, 1.f);
+	m_aptMag = qMax(m_aptMag, 0.f);
+	return true;
+}
+
+void Meteor::drawLegacy(const StelCore* core, StelPainter& sPainter)
+{
+	if (!m_alive)
+		return;
+
+	double thickness;
+	double bolideSize;
+	calculateThicknessLegacy(core, thickness, bolideSize);
+	drawTrainLegacy(sPainter, thickness);
+	drawBolideLegacy(sPainter, bolideSize);
+}
+
+Vec4f Meteor::getColorFromNameLegacy(QString colorName)
+{
+	static const QMap<QString, Vec3f> colorMap = {
+		{ "violet",       { 176.f,  67.f, 172.f}},
+		{ "blueGreen",    {   0.f, 255.f, 152.f}},
+		{ "yellow",       { 255.f, 255.f,   0.f}},
+		{ "orangeYellow", { 255.f, 160.f,   0.f}},
+		{ "red",          { 255.f,  30.f,   0.f}}
+	};
+	const Vec3f rgb = colorMap.value(colorName, Vec3f(255.f));
+	return Vec4f(rgb / 255.f, 1.0f);
+}
+
+void Meteor::buildColorVectorsLegacy(const QList<ColorPair> colors)
+{
+	if (colors.isEmpty())
+		return;
+
+	QVector<Vec4f> lineColor;
+	QVector<Vec4f> trainColor;
+	for (const auto& color : colors)
+	{
+		const int segs = qRound(m_segments * (color.second / 100.f));
+		for (int s = 0; s < segs; ++s)
+		{
+			const Vec4f rgba = getColorFromNameLegacy(color.first);
+			lineColor.append(rgba);
+			trainColor.append(rgba);
+			trainColor.append(rgba);
+		}
+	}
+
+	const int segs = lineColor.size();
+	if (segs < m_segments)
+	{
+		const Vec4f rgba = getColorFromNameLegacy(colors.last().first);
+		for (int s = segs; s < m_segments; ++s)
+		{
+			lineColor.append(rgba);
+			trainColor.append(rgba);
+			trainColor.append(rgba);
+		}
+	}
+	else if (segs > m_segments)
+	{
+		for (int s = segs; s > m_segments; --s)
+		{
+			lineColor.removeLast();
+			trainColor.removeLast();
+			trainColor.removeLast();
+		}
+	}
+
+	if (colors.size() > 1)
+	{
+		const int firstSegment = StelApp::getInstance().getRandBounded(0, qMax(1, segs));
+		const QVector<Vec4f> lineColor2 = lineColor.mid(0, firstSegment);
+		const QVector<Vec4f> lineColor1 = lineColor.mid(firstSegment);
+		lineColor.clear();
+		lineColor.append(lineColor1);
+		lineColor.append(lineColor2);
+
+		const int trainSplit = firstSegment * 2;
+		const QVector<Vec4f> trainColor2 = trainColor.mid(0, trainSplit);
+		const QVector<Vec4f> trainColor1 = trainColor.mid(trainSplit);
+		trainColor.clear();
+		trainColor.append(trainColor1);
+		trainColor.append(trainColor2);
+	}
+
+	m_lineColorVector = lineColor;
+	m_trainColorVector = trainColor;
+}
+
+void Meteor::calculateThicknessLegacy(const StelCore* core, double& thickness, double& bolideSize)
+{
+	const double maxFOV = core->getMovementMgr()->getMaxFov();
+	const double FOV = core->getMovementMgr()->getCurrentFov();
+	thickness = 2 * log(FOV + 0.25) / (1.2 * maxFOV - (FOV + 0.25)) + 0.01;
+	if (FOV <= 0.5)
+		thickness = 0.013 * FOV;
+	else if (FOV > 100.0)
+		thickness = 0;
+
+	bolideSize = thickness * 3;
+}
+
+void Meteor::drawBolideLegacy(StelPainter& sPainter, const double& bolideSize)
+{
+	if (bolideSize == 0.0 || !m_bolideTexture)
+		return;
+
+	QVector<Vec3d> vertexArrayBolide;
+	QVector<Vec4f> colorArrayBolide;
+	const Vec4f bolideColor(1, 1, 1, m_aptMag);
+
+	Vec3d topLeft = m_position;
+	topLeft[1] -= bolideSize;
+	vertexArrayBolide.push_back(radiantToAltAz(topLeft));
+	colorArrayBolide.push_back(bolideColor);
+
+	Vec3d topRight = m_position;
+	topRight[0] -= bolideSize;
+	vertexArrayBolide.push_back(radiantToAltAz(topRight));
+	colorArrayBolide.push_back(bolideColor);
+
+	Vec3d bottomRight = m_position;
+	bottomRight[1] += bolideSize;
+	vertexArrayBolide.push_back(radiantToAltAz(bottomRight));
+	colorArrayBolide.push_back(bolideColor);
+
+	Vec3d bottomLeft = m_position;
+	bottomLeft[0] += bolideSize;
+	vertexArrayBolide.push_back(radiantToAltAz(bottomLeft));
+	colorArrayBolide.push_back(bolideColor);
+
+	sPainter.setBlending(true, GL_ONE, GL_ONE);
+	sPainter.enableClientStates(true, true, true);
+	m_bolideTexture->bind();
+	static const float texCoordData[] = {1., 0., 0., 0., 0., 1., 1., 1.};
+	sPainter.setTexCoordPointer(2, GL_FLOAT, texCoordData);
+	sPainter.setColorPointer(4, GL_FLOAT, colorArrayBolide.constData());
+	sPainter.setVertexPointer(3, GL_DOUBLE, vertexArrayBolide.constData());
+	sPainter.drawFromArray(StelPainter::TriangleFan, vertexArrayBolide.size(), 0, true);
+	sPainter.setBlending(false);
+	sPainter.enableClientStates(false);
+}
+
+void Meteor::drawTrainLegacy(StelPainter& sPainter, const double& thickness)
+{
+	if (m_segments != m_lineColorVector.size() || 2 * m_segments != m_trainColorVector.size())
+	{
+		qWarning() << "Meteor: color arrays have an inconsistent size!";
+		return;
+	}
+
+	QVector<Vec3d> vertexArrayLine;
+	QVector<Vec3d> vertexArrayL;
+	QVector<Vec3d> vertexArrayR;
+	QVector<Vec3d> vertexArrayTop;
+
+	Vec3d posTrainB = m_posTrain;
+	posTrainB[0] += static_cast<double>(thickness) * 0.7;
+	posTrainB[1] += static_cast<double>(thickness) * 0.7;
+	Vec3d posTrainL = m_posTrain;
+	posTrainL[1] -= static_cast<double>(thickness);
+	Vec3d posTrainR = m_posTrain;
+	posTrainR[0] -= static_cast<double>(thickness);
+
+	for (int i = 0; i < m_segments; ++i)
+	{
+		const double height = m_posTrain[2] + i * (m_position[2] - m_posTrain[2]) / (m_segments - 1);
+		Vec3d posi = m_posTrain;
+		posi[2] = height;
+		vertexArrayLine.push_back(radiantToAltAz(posi));
+
+		posi = posTrainB;
+		posi[2] = height;
+		vertexArrayL.push_back(radiantToAltAz(posi));
+		vertexArrayR.push_back(radiantToAltAz(posi));
+
+		posi = posTrainL;
+		posi[2] = height;
+		vertexArrayL.push_back(radiantToAltAz(posi));
+		vertexArrayTop.push_back(radiantToAltAz(posi));
+
+		posi = posTrainR;
+		posi[2] = height;
+		vertexArrayR.push_back(radiantToAltAz(posi));
+		vertexArrayTop.push_back(radiantToAltAz(posi));
+
+		const float mag = m_aptMag * (static_cast<float>(i) / static_cast<float>(m_segments - 1));
+		m_lineColorVector[i][3] = mag;
+		m_trainColorVector[i * 2][3] = mag;
+		m_trainColorVector[i * 2 + 1][3] = mag;
+	}
+
+	sPainter.setBlending(true);
+	sPainter.enableClientStates(true, false, true);
+	if (thickness != 0.0)
+	{
+		sPainter.setColorPointer(4, GL_FLOAT, m_trainColorVector.constData());
+		sPainter.setVertexPointer(3, GL_DOUBLE, vertexArrayL.constData());
+		sPainter.drawFromArray(StelPainter::TriangleStrip, vertexArrayL.size(), 0, true);
+		sPainter.setVertexPointer(3, GL_DOUBLE, vertexArrayR.constData());
+		sPainter.drawFromArray(StelPainter::TriangleStrip, vertexArrayR.size(), 0, true);
+		sPainter.setVertexPointer(3, GL_DOUBLE, vertexArrayTop.constData());
+		sPainter.drawFromArray(StelPainter::TriangleStrip, vertexArrayTop.size(), 0, true);
+	}
+	sPainter.setColorPointer(4, GL_FLOAT, m_lineColorVector.constData());
+	sPainter.setVertexPointer(3, GL_DOUBLE, vertexArrayLine.constData());
+	sPainter.drawFromArray(StelPainter::LineStrip, vertexArrayLine.size(), 0, true);
+	sPainter.setBlending(false);
+	sPainter.enableClientStates(false);
 }
 
 float Meteor::meteorZ(float zenithAngle, float altitude)

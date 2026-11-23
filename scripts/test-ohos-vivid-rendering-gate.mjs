@@ -48,5 +48,33 @@ test('vivid diagnostics command is present in the bridge and catalog', () => {
   const catalog = read('src/StelOhosCommandCatalog.hpp');
   assert.match(bridge, /commandName == "getVividRenderingState"/);
   assert.match(bridge, /result\["starTrails"\]/);
+  assert.match(bridge, /result\["meteorAtmosphereGate"\]/);
   assert.match(catalog, /getVividRenderingState/);
+});
+
+test('sporadic meteors require atmosphere and expose the suppression reason', () => {
+  const manager = read('src/core/modules/SporadicMeteorMgr.cpp');
+  assert.match(manager, /getFlagHasAtmosphere\(\) && !getFlagForcedMeteorsActivity\(\)/);
+  assert.match(manager, /atmosphere-disabled/);
+  assert.match(manager, /getFlagVividRendering\(\).*triggerPreviewSalvo|triggerPreviewSalvo[\s\S]*getFlagVividRendering/);
+});
+
+test('meteor rendering has separate classic and vivid paths', () => {
+  const meteor = read('src/core/modules/Meteor.cpp');
+  const header = read('src/core/modules/Meteor.hpp');
+  assert.match(header, /int m_segments;/);
+  assert.match(meteor, /void Meteor::initLegacy/);
+  assert.match(meteor, /bool Meteor::updateLegacy/);
+  assert.match(meteor, /void Meteor::drawLegacy/);
+  assert.match(meteor, /void Meteor::buildColorVectorsLegacy/);
+  assert.match(meteor, /void Meteor::drawTrainLegacy/);
+  assert.match(meteor, /void Meteor::drawBolideLegacy/);
+  assert.match(meteor, /getFlagVividRendering\(\)/);
+});
+
+test('sporadic meteor palette retains the upstream classic colors', () => {
+  const sporadic = read('src/core/modules/SporadicMeteor.cpp');
+  assert.match(sporadic, /ColorPair\("white", 100\)/);
+  assert.match(sporadic, /ColorPair\("orangeYellow", 20\)/);
+  assert.match(sporadic, /getFlagVividRendering\(\)/);
 });

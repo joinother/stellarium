@@ -15350,6 +15350,7 @@ extern "C" __attribute__((visibility("default"))) const char* StellariumOhos_com
 			result["vividGeneration"] = static_cast<qint64>(StelApp::getInstance().getVividRenderingGeneration());
 			StarMgr* starMgr = GETSTELMODULE(StarMgr);
 			result["starTrails"] = starMgr && starMgr->getFlagMotionTrails();
+			result["meteorAtmosphereGate"] = true;
 			result["ok"] = true;
 			return result;
 		}
