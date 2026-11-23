@@ -1,5 +1,16 @@
 > **身份图例**：本文件真机记录中出现的 `com.cnchensh.stellarium` 是**本机调试签名身份**（本机 DevEco 自动生成，非发布身份）；发布身份为 `com.joinother.skyinstrument`。构建脚本 `build-ohos-hap-windows.ps1 -Install` 从产物 `pack.info` 读取实际包名，仓库不写死任何签名身份（见 `docs/harmonyos/release/BUNDLE-IDENTITY-CLEANUP.md`）。
 
+## [2026-11-24] 修复应用图层预设后 FOV 跳到最大放大
+
+- **修改文件：** `plugins/Oculars/src/Oculars.cpp`、`scripts/test-ohos-oculars-equipment.mjs`、`docs/harmonyos/CHANGELOG.md`。
+- **现象：** 点击“图层 → 纯净星空”等预设后，FOV 立即变为 0.0°，星图跳到最大放大。
+- **根因：** `LayerPresetStore.applyPreset → applyLayerPresetSnapshot` 无条件下发 `setCCD 0`；`Oculars::toggleCCD(false)` 在 CCD 本已关闭时仍执行恢复视场分支，`zoomTo(initialFOV)` 使用构造初始化的 `initialFOV=0.`，`StelMovementMgr::setFov()` 将 0 夹到 `minFov=0.001389°`，于是直接最大放大。
+- **修复：** `Oculars::toggleCCD()` 增加双向幂等守卫（`show == wasShowing` 直接返回）；恢复视场前要求 `getInitFov()` / `initialFOV` 大于 0；重复开启 CCD 不再覆盖 `initialFOV`。
+- **验证：**
+  - 主机：`test-ohos-oculars-equipment.mjs` 11/11。
+  - 构建/安装：`-Release -SkipResources -Install` BUILD SUCCESSFUL；signed HAP 803.5 MB（842,517,005 字节）；安装并启动成功（`192.168.1.4:36717`）。
+  - 真机：CCD 关闭时点击“纯净星空”，FOV 连续 8 秒保持 60.0°；CCD 开启时 FOV 3.18°，关闭后恢复 45.0°；设备随后恢复 FOV 60°、`viewLock=false`、CCD/Telrad 关闭。
+
 ## [2026-11-24] 恒星光晕与星图渲染回溯审计（1a2ad277f8 起）
 
 - **修改文件：** `docs/harmonyos/specs/VIVID-RENDERING.md`、`scripts/test-ohos-vivid-rendering-gate.mjs`、`docs/harmonyos/CHANGELOG.md`。

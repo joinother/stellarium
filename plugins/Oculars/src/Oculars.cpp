@@ -2215,6 +2215,7 @@ void Oculars::selectLensAtIndex(int index)
 
 void Oculars::toggleCCD(bool show)
 {
+	const bool wasShowing = flagShowCCD;
 	//If there are no sensors...
 	if (ccds.isEmpty() || telescopes.isEmpty())
 	{
@@ -2229,6 +2230,14 @@ void Oculars::toggleCCD(bool show)
 		selectedCCDIndex = -1;
 		show = false;
 	}
+
+	// toggleCCD must be idempotent in both directions. Layer presets call
+	// setCCD 0 unconditionally; without this guard the else branch below would
+	// restore the uninitialised (0°) session FOV and clamp the view to the
+	// minimum FOV / maximum zoom. Re-showing an already visible frame must not
+	// overwrite initialFOV with the current CCD zoom either.
+	if (show == wasShowing)
+		return;
 
 	StelCore *core = StelApp::getInstance().getCore();
 	StelMovementMgr *movementManager = core->getMovementMgr();
@@ -2278,10 +2287,11 @@ void Oculars::toggleCCD(bool show)
 		absoluteStarScaleCCD=skyDrawer->getAbsoluteStarScale();
 		skyDrawer->setRelativeStarScale(relativeStarScaleMain);
 		skyDrawer->setAbsoluteStarScale(absoluteStarScaleMain);
-		//Zoom out
-		if (getFlagInitFovUsage())
+		//Zoom out. Never pass 0 here: setFov() clamps it to minFov, which
+		// would jump the sky to maximum zoom.
+		if (getFlagInitFovUsage() && movementManager->getInitFov() > 0.)
 			movementManager->zoomTo(movementManager->getInitFov());
-		else if (!flagShowTelrad)
+		else if (!flagShowTelrad && initialFOV > 0.)
 			movementManager->zoomTo(initialFOV);
 
 		if (getFlagInitDirectionUsage())

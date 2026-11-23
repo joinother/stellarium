@@ -188,3 +188,10 @@ test('native equipment backend validates atomically and persists to ocular.ini',
   assert.ok(plugin.includes('last_item'))
   assert.ok(plugin.includes('selectedLensIndex >= 0'))
 })
+
+test('CCD close is idempotent and never crops the FOV to zero', () => {
+  assert.ok(plugin.includes('const bool wasShowing = flagShowCCD;'))
+  assert.ok(plugin.includes('if (show == wasShowing)'))
+  assert.ok(plugin.includes('initialFOV > 0.'))
+  assert.ok(plugin.includes('movementManager->getInitFov() > 0.'))
+})
