@@ -708,6 +708,12 @@ export struct LayerSsoTab {
       LayerSwitchRow({ label: I18n.t('s0314'), isOn: this.layerStore.planetHints, onToggle: (value: boolean) => { this.onToggleLayer('actionShow_Planets_Hints', '', value) } })
       Text('高级标记').fontSize(11).fontColor(this.c.sub).width('100%').margin({ top: 8, bottom: 6 }).padding({ left: 2 })
       LayerSwitchRow({ label: I18n.t('s0313'), isOn: this.layerStore.planetTrails, onToggle: (value: boolean) => { this.onToggleLayer('actionShow_Planets_Trails', '', value) } })
+      LayerSwitchRow({
+        label: '程序化彗尾',
+        infoTip: '使用轨道力学与辐射压同步线的解析式彗尾；关闭后使用经典纹理彗尾。打开绚丽模式时自动开启。',
+        isOn: this.layerStore.cometAnalyticalTail,
+        onToggle: (value: boolean) => { this.onToggleLayer('cometAnalyticalTail', 'setCometAnalyticalTail', value) }
+      })
       if (this.layerStore.planetTrails) {
         Row() {
           Column({ space: 1 }) {

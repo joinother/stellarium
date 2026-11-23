@@ -4941,6 +4941,7 @@ QJsonObject currentStateJson()
 		result["grsLongitude"] = ssystem->getGrsLongitude();
 		result["grsDrift"] = ssystem->getGrsDrift();
 		result["grsJd"] = ssystem->getGrsJD();
+		result["cometAnalyticalTail"] = ssystem->getFlagAnalyticalCometTail();
 	}
 	if (StarMgr* starMgr = GETSTELMODULE(StarMgr))
 	{
@@ -15351,7 +15352,27 @@ extern "C" __attribute__((visibility("default"))) const char* StellariumOhos_com
 			StarMgr* starMgr = GETSTELMODULE(StarMgr);
 			result["starTrails"] = starMgr && starMgr->getFlagMotionTrails();
 			result["meteorAtmosphereGate"] = true;
+			if (SolarSystem* ss = GETSTELMODULE(SolarSystem))
+				result["cometAnalytical"] = ss->getFlagAnalyticalCometTail();
 			result["ok"] = true;
+			return result;
+		}
+		if (commandName == "getCometAnalyticalTail")
+		{
+			SolarSystem* ss = GETSTELMODULE(SolarSystem);
+			result["ok"] = ss != nullptr;
+			result["cometAnalyticalTail"] = ss && ss->getFlagAnalyticalCometTail();
+			if (!ss) result["error"] = "solar system module unavailable";
+			return result;
+		}
+		if (commandName == "setCometAnalyticalTail")
+		{
+			SolarSystem* ss = GETSTELMODULE(SolarSystem);
+			if (!ss) { result["ok"] = false; result["error"] = "solar system module unavailable"; return result; }
+			ss->setFlagAnalyticalCometTail(arg == "1" || arg == "true");
+			markOhosInteraction();
+			result["ok"] = true;
+			result["cometAnalyticalTail"] = ss->getFlagAnalyticalCometTail();
 			return result;
 		}
 

@@ -14,8 +14,9 @@
   7. 卫星光度层恢复上游：`pointDrawn = magSat <= limitMag`；标签恢复半影/地影星等 `magSat-3/-10` 与 `txtMag <= limitMag`；`getPickState` 不再把 marker 写入 `iconDrawn`/`magnitude`，新增独立 `markerDrawn`。
   8. 卫星微标记层改为独立开关 `Satellites/flag_marker_layer`（OHOS 默认开、桌面默认关），`markerLimit = limitMag + 3.2*zoomReveal` 只供 marker；`getSelectPriority`/`searchAround` 扩大仅在标记层开启时生效；TouchPicker 用 `markerDrawn` 命中半径，局部评分夹取不再改写 PickState 星等。
   9. 空间站编组增加 `Satellites/flag_station_complexes`（OHOS 默认开、桌面默认关），不改变光度语义。
-  10. 新增 `getVividRenderingState` 诊断命令，返回 `vivid`、`vividGeneration`、`starTrails`、`meteorAtmosphereGate`。
-- **验证（待后续 Slice 补全）：** 引擎交叉编译成功；`test-ohos-vivid-rendering-gate.mjs` 13/13；`test-ohos-satellite-orbit-and-streaks.mjs` 8/8；`check-ohos-command-catalog.mjs` 444 命令一致。
+  10. 彗星解析式彗尾增加独立开关 `astro/flag_analytical_comet_tail`：`SolarSystem` 暴露 `flagAnalyticalCometTail`，图层 → 太阳系天体增加“程序化彗尾”开关；打开绚丽模式时联动开启，关闭绚丽不强制关闭；`Comet` 关闭时跳过解析 shader，重建并走 `drawTail()`/`drawComa()` 经典纹理尾。
+  11. 新增 `getVividRenderingState` 诊断命令，返回 `vivid`、`vividGeneration`、`starTrails`、`meteorAtmosphereGate`、`cometAnalytical`；新增 `getCometAnalyticalTail`/`setCometAnalyticalTail`。
+- **验证（待后续 Slice 补全）：** 引擎交叉编译成功；`test-ohos-vivid-rendering-gate.mjs` 14/14；`test-ohos-satellite-orbit-and-streaks.mjs` 8/8；`check-ohos-command-catalog.mjs` 446 命令一致。
 
 ## [2026-11-22] 目镜插件页签化与器材配置管理
 

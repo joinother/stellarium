@@ -282,7 +282,11 @@ export class LayerController {
         this.layerViewStore.starBrightnessScale = 1.0
       }
     }
-    else if (setting === 'vividAtmosphere') this.layerStore.vividAtmosphere = value as boolean
+    else if (setting === 'vividAtmosphere') {
+      const vivid = value as boolean
+      this.layerStore.vividAtmosphere = vivid
+      if (vivid) this.layerStore.cometAnalyticalTail = true
+    }
     else if (setting === 'zoomFadeEnvironment') this.layerStore.zoomFadeEnvironment = value as boolean
     else if (setting === 'auroraEnabled') this.layerStore.auroraEnabled = value as boolean
     else if (setting === 'auroraStyle') this.layerStore.auroraStyle = Math.max(0, Math.min(3, Math.round(value as number)))
@@ -370,6 +374,7 @@ export class LayerController {
     else if (cmd === 'setFlatHorizon') { this.viewSettingsStore.flatHorizon = enabled }
     else if (cmd === 'setMeteors') { this.layerStore.meteors = enabled }
     else if (cmd === 'setDsoLabels') { this.layerStore.dsoLabels = enabled }
+    else if (cmd === 'setCometAnalyticalTail') { this.layerStore.cometAnalyticalTail = enabled }
     else if (cmd === 'setAutoZoomResets') { this.viewSettingsStore.autoZoomResets = enabled }
   }
 

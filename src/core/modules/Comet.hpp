@@ -116,6 +116,10 @@ public:
 	float getFragmentationStrength() const { return fragmentationStrength; }
 	double getFragmentationEpochJD() const { return fragmentationEpochJD; }
 
+	//! Independent switch for the analytical (Finson-Probstein) comet-tail renderer.
+	static bool isAnalyticalTailEnabled();
+	static void setAnalyticalTailEnabled(bool enabled);
+
 	//! set the discovery circumstances of comet
 	//! @param date of discovery
 	//! @param name of discoverer
@@ -214,6 +218,7 @@ private:
 	Vec2f tailFactors; // result of latest call to getComaDiameterAndTailLengthAU(); Results cached here for infostring. [0]=Coma diameter, [1] gas tail length.
 	bool tailActive;		//! true if there is a tail long enough to be worth drawing. Drawing tails is quite costly.
 	bool tailBright;		//! true if tail is bright enough to draw.
+	bool lastAnalyticalTail;	//! previous analytical-tail switch state, used to invalidate legacy meshes.
 	double deltaJDEtail;            //! like deltaJDE, but time difference between tail geometry updates.
 	double lastJDEtail;             //! like lastJDE, but time of last tail geometry update.
 	Mat4d gasTailRot;		//! rotation matrix for gas tail parabola

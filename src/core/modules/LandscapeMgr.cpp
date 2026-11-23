@@ -1826,6 +1826,11 @@ void LandscapeMgr::setFlagVividAtmosphere(bool enabled)
 		return;
 	flagVividAtmosphere = enabled;
 	StelApp::getInstance().setFlagVividRendering(enabled);
+	if (enabled)
+	{
+		if (SolarSystem* ss = GETSTELMODULE(SolarSystem))
+			ss->setFlagAnalyticalCometTail(true);
+	}
 	if (atmosphere)
 		atmosphere->setFlagVividAtmosphere(enabled);
 	if (loadingAtmosphere)

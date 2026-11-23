@@ -114,3 +114,19 @@ test('satellite touch picking uses markerDrawn instead of faking icon magnitude'
   assert.match(picker, /state\.markerDrawn/);
   assert.match(picker, /state\.markerDrawn && !state\.pointDrawn && !state\.iconDrawn/);
 });
+
+test('comet analytical tail has an independent switch linked to vivid mode', () => {
+  const solar = read('src/core/modules/SolarSystem.cpp');
+  const comet = read('src/core/modules/Comet.cpp');
+  const landscape = read('src/core/modules/LandscapeMgr.cpp');
+  const bridge = read('src/StelMainView.cpp');
+  const tabs = read('harmonyos/ets-source/panels/layers/LayerViewTabs.ets');
+  assert.match(solar, /flag_analytical_comet_tail/);
+  assert.match(solar, /setFlagAnalyticalCometTail/);
+  assert.match(comet, /isAnalyticalTailEnabled\(\) && ensureShaders\(\)/);
+  assert.match(comet, /!analyticalTail \|\| shaderInitFailed/);
+  assert.match(comet, /!Comet::isAnalyticalTailEnabled\(\) \|\| screenRd > 1\.0 \|\| shaderInitFailed/);
+  assert.match(landscape, /setFlagAnalyticalCometTail\(true\)/);
+  assert.match(bridge, /setCometAnalyticalTail/);
+  assert.match(tabs, /setCometAnalyticalTail/);
+});

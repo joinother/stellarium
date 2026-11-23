@@ -203,6 +203,8 @@ void SolarSystem::init()
 	setFlagPlanets(conf->value("astro/flag_planets").toBool());
 	setFlagHints(conf->value("astro/flag_planets_hints").toBool());
 	setFlagMarkers(conf->value("astro/flag_planets_markers", false).toBool());
+	setFlagAnalyticalCometTail(conf->value("astro/flag_analytical_comet_tail",
+		conf->value("landscape/flag_vivid_atmosphere", false).toBool()).toBool());
 	setMarkerMagThreshold(conf->value("astro/planet_markers_mag_threshold", 15.).toDouble());
 	setFlagLabels(conf->value("astro/flag_planets_labels", true).toBool());
 	setLabelsAmount(conf->value("astro/labels_amount", 3.).toDouble());
@@ -2917,6 +2919,20 @@ void SolarSystem::setFlagMarkers(bool b)
 bool SolarSystem::getFlagMarkers() const
 {
 	return markerFader;
+}
+
+void SolarSystem::setFlagAnalyticalCometTail(bool b)
+{
+	if (Comet::isAnalyticalTailEnabled() == b)
+		return;
+	Comet::setAnalyticalTailEnabled(b);
+	StelApp::immediateSave("astro/flag_analytical_comet_tail", b);
+	emit flagAnalyticalCometTailChanged(b);
+}
+
+bool SolarSystem::getFlagAnalyticalCometTail() const
+{
+	return Comet::isAnalyticalTailEnabled();
 }
 
 void SolarSystem::setFlagLightTravelTime(bool b)

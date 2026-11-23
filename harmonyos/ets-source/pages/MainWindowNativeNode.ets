@@ -9577,6 +9577,7 @@ export struct WindowNativeNode {
     this.layerStore.planets = result.actionShow_Planets === true
     this.layerStore.planetOrbits = result.actionShow_Planets_Orbits === true
     this.layerStore.planetHints = result.actionShow_Planets_Hints === true
+    if (result.cometAnalyticalTail !== undefined) this.layerStore.cometAnalyticalTail = result.cometAnalyticalTail === true
     if (result.actionShow_Planets_Trails !== undefined) this.layerStore.planetTrails = result.actionShow_Planets_Trails === true
     if (result.actionShow_Planets_EnlargeMoon !== undefined) this.layerStore.enlargeMoon = result.actionShow_Planets_EnlargeMoon === true
     this.layerStore.nebulae = result.actionShow_Nebulas === true

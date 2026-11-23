@@ -33,6 +33,7 @@ export class LayerStore {
   planetTrails: boolean = false
   minorBodyMarkers: boolean = false
   planetNomenclature: boolean = false
+  cometAnalyticalTail: boolean = false
   enlargeMoon: boolean = false
   enlargePlanets: boolean = false
   enlargeSun: boolean = false

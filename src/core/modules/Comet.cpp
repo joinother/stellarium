@@ -182,6 +182,17 @@ std::unique_ptr<QOpenGLVertexArrayObject> Comet::fragVAO;
 std::unique_ptr<QOpenGLBuffer> Comet::fragVBO;
 QOpenGLContext* Comet::shaderContext = nullptr;
 bool Comet::shaderInitFailed = false;
+static bool s_analyticalTailEnabled = false;
+
+bool Comet::isAnalyticalTailEnabled()
+{
+	return s_analyticalTailEnabled;
+}
+
+void Comet::setAnalyticalTailEnabled(bool enabled)
+{
+	s_analyticalTailEnabled = enabled;
+}
 
 Comet::Comet(const QString& englishName,
 	     double radius,
@@ -228,6 +239,7 @@ Comet::Comet(const QString& englishName,
 	  tailFactors(-1., -1.), // mark "invalid"
 	  tailActive(false),
 	  tailBright(false),
+	  lastAnalyticalTail(true),
 	  deltaJDEtail(15.0*StelCore::JD_MINUTE), // update tail geometry every 15 minutes only
 	  lastJDEtail(0.0),
 	  dustTailWidthFactor(dustTailWidthFact),
@@ -724,6 +736,16 @@ void Comet::update(int deltaTime)
 
 	if (!static_cast<KeplerOrbit*>(orbitPtr)->objectDateGoodEnoughForOrbits(dateJDE)) return; // don't do anything if out of useful date range. This allows having hundreds of comet elements.
 
+	const bool analyticalTail = Comet::isAnalyticalTailEnabled();
+	if (analyticalTail != lastAnalyticalTail)
+	{
+		lastAnalyticalTail = analyticalTail;
+		tailFactors = Vec2f(-1.f, -1.f);
+		tailActive = false;
+		tailBright = false;
+		static_cast<KeplerOrbit*>(orbitPtr)->setUpdateTails(true);
+	}
+
 	if (tailFactors[0] < 0.0f || fabs(lastJDEtail-dateJDE)>deltaJDEtail)
 	{
 		lastJDEtail=dateJDE;
@@ -733,8 +755,9 @@ void Comet::update(int deltaTime)
 			tailFactors=getComaDiameterAndTailLengthAU();
 			tailActive = (tailFactors[1] > 0.0f && tailFactors[0] > 0.0f);
 
-			// Only construct legacy paraboloid meshes if procedural shaders failed to initialize.
-			if (shaderInitFailed)
+			// Construct legacy paraboloid meshes whenever the analytical renderer is off
+			// (or if its shaders failed to initialize).
+			if (!analyticalTail || shaderInitFailed)
 			{
 				computeComa(1.0f*tailFactors[0]);
 				tailActive = (tailFactors[1] > tailFactors[0]);
@@ -765,13 +788,13 @@ void Comet::update(int deltaTime)
 		}
 	}
 
-	if (!shaderInitFailed)
+	if (analyticalTail && !shaderInitFailed)
 	{
 		tailBright = true;
 		return;
 	}
 
-	// Legacy brightness/extinction fallback path
+	// Legacy brightness/extinction path
 	const bool withAtmosphere=(core->getSkyDrawer()->getFlagHasAtmosphere());
 	StelToneReproducer* eye = core->getToneReproducer();
 	const float lum = core->getSkyDrawer()->surfaceBrightnessToLuminance(getVMagnitude(core)+13.0f);
@@ -896,9 +919,9 @@ void Comet::draw(StelCore* core, float maxMagLabels, const QFont& planetNameFont
 				ss->drawAsteroidMarker(core, &sPainter, screenPos[0], screenPos[1], color); // This does not draw directly, but record an entry to be drawn in a batch.
 		}
 
-		// Only draw the 3D rocky nucleus model when resolved on screen (or in legacy fallback);
+		// Only draw the 3D rocky nucleus model when resolved on screen (or in legacy mode);
 		// otherwise Planet::draw3dModel() draws a harsh star-like planet halo disk over the procedural coma.
-		if (screenRd > 1.0 || shaderInitFailed)
+		if (!Comet::isAnalyticalTailEnabled() || screenRd > 1.0 || shaderInitFailed)
 			draw3dModel(core, transfo, static_cast<float>(screenRd), 1.0);
 	}
 	else
@@ -918,7 +941,7 @@ void Comet::draw(StelCore* core, float maxMagLabels, const QFont& planetNameFont
 	if (tailFactors[0] < 0.0f)
 		tailFactors = getComaDiameterAndTailLengthAU();
 
-	if (ensureShaders())
+	if (Comet::isAnalyticalTailEnabled() && ensureShaders())
 	{
 		const Vec3d cometEcl = eclipticPos + aberrationPush;
 		const double rHelio = cometEcl.norm();
