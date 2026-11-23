@@ -783,6 +783,7 @@ export interface StellariumBridgeResponse {
   grsDrift?: number
   grsJd?: number
   vividAtmosphere?: boolean
+  cometAnalyticalTail?: boolean
   zoomFadeEnvironment?: boolean
   auroraEnabled?: boolean
   auroraStyle?: number

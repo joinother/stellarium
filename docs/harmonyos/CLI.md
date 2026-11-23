@@ -1,5 +1,14 @@
 # Stellarium 鸿蒙 CLI
 
+## 绚丽渲染门控与彗尾独立开关（2026-11-24）
+
+- `getVividRenderingState` 返回 `{ok, vivid, vividGeneration, starTrails, meteorAtmosphereGate, cometAnalytical}`。`vivid` 来自 `landscape/flag_vivid_atmosphere`；`starTrails` 是独立拖尾开关的实际值，不受绚丽模式门控；`cometAnalytical` 来自 `astro/flag_analytical_comet_tail`。
+- `getCometAnalyticalTail` 返回 `{ok, cometAnalyticalTail}`；`setCometAnalyticalTail 0|1` 独立控制解析式彗尾。打开绚丽模式时该开关联动打开；关闭绚丽模式不强制关闭，因此经典模式也可单独启用解析式彗尾。
+- 流星 `getMeteorDiagnostics.drawSuppression` 在无大气层且未开启强制流星活动时返回 `atmosphere-disabled`；普通流星与预览 salvo 共用该门控。
+- 卫星 `getSatellites` 增加 `markerLayer`、`stationComplexes`；`setSatellitesFlag markerLayer:0|1`、`setSatellitesFlag stationComplexes:0|1` 控制独立 OHOS UX 标记层/空间站编组。标记层默认 OHOS 开、桌面关；点源、标签、详情卡星等和 `getPickState().magnitude` 仍按上游光度语义。
+- 卫星 `getPickState` 新增 `markerDrawn`，TouchPicker 用该字段判断标记命中；标记评分夹取不写回光度星等。
+- `setSkyDisplaySetting vividAtmosphere|1` 会联动打开程序化彗尾；`LayerViewTabs` 的“程序化彗尾”开关直接调用 `setCometAnalyticalTail`。
+
 ## 目镜器材配置与导入导出（2026-11-22）
 
 目镜插件新增器材 CRUD、Telrad 四圈视场与传感器中心标记命令。器材配置仍写入可写用户目录的 `ocular.ini`，每次增删改后立即 `sync()`；导入导出是用户主动触发的本地文件操作，不联网。

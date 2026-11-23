@@ -82,7 +82,9 @@ test('meteor engine renders multi-spectral tapered ribbons with flare, afterglow
   assert.match(meteorSrc, /"amberGold"/);
   assert.match(meteorSrc, /"roseMagenta"/);
   assert.match(meteorSrc, /"iceBlue"/);
-  assert.doesNotMatch(meteorSrc, /FOV > 100\.0/);
+  // The upstream legacy thickness formula is intentionally retained in calculateThicknessLegacy().
+  assert.match(meteorSrc, /calculateThicknessLegacy/);
+  assert.match(meteorSrc, /FOV > 100\.0/);
   assert.match(sporadicSrc, /roseMagenta/);
   assert.match(sporadicSrc, /emerald/);
   assert.match(sporadicSrc, /amberGold/);

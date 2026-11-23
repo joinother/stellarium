@@ -1,8 +1,20 @@
 > **身份图例**：本文件真机记录中出现的 `com.cnchensh.stellarium` 是**本机调试签名身份**（本机 DevEco 自动生成，非发布身份）；发布身份为 `com.joinother.skyinstrument`。构建脚本 `build-ohos-hap-windows.ps1 -Install` 从产物 `pack.info` 读取实际包名，仓库不写死任何签名身份（见 `docs/harmonyos/release/BUNDLE-IDENTITY-CLEANUP.md`）。
 
-## [2026-11-23] 绚丽模式门控恒星光谱与星点 shader
+## [2026-11-24] 恒星光晕与星图渲染回溯审计（1a2ad277f8 起）
 
-- **修改文件：** `src/core/StelApp.hpp/.cpp`、`src/core/StelSkyDrawer.cpp/.hpp`、`src/core/modules/LandscapeMgr.cpp`、`src/StelMainView.cpp`、`src/StelOhosCommandCatalog.hpp`、`scripts/test-ohos-vivid-rendering-gate.mjs`（新）、`docs/harmonyos/CHANGELOG.md`。
+- **修改文件：** `docs/harmonyos/specs/VIVID-RENDERING.md`、`scripts/test-ohos-vivid-rendering-gate.mjs`、`docs/harmonyos/CHANGELOG.md`。
+- **审计范围：** `1a2ad277f8..HEAD` 中触及恒星点源、光晕、拖尾、颜色表、消光/闪烁与大气可见性的提交；重点核查 `coreHot`/`haloBoost` 是否在 `b4a12634d` 之前已引入。
+- **结论：**
+  1. 恒星光晕的显式改动只有 `81bffbf591` 的 star shader `coreHot`/`haloBoost` 与 `kSpectralStops`；`070de04fd2` 已把二者限定在 `vivid >= 0.5` 分支，经典模式先返回上游公式。`1a2ad277f8..b4a12634d` 之间没有 fork 自有的光晕 shader/纹理改动。
+  2. `f494e83fa9`/`3e7aae8f7b` 通过 `AtmosphereVivid::visualStrength()` 改变星点输入增益、消光与闪烁；绚丽关闭时该函数返回 1.0，经典行为不变。缩放特写淡出为默认关闭的独立开关。
+  3. `4658f12bd8`/`72509b376d` 的非现实星等可见性为默认开启“现实星等”的独立教学模式；关闭时才会改变星点半径/极限星等。
+  4. 亮星光晕（`stars/flag_star_halo`）与星芒（`stars/flag_star_spiky`）仍是上游独立开关，经典模式可用；`star16x16*.png`/`haloLune.png` 自审计起点未改动。
+  5. `haloBoost`/`coreHot` 同时作用于卫星、新星、类星体、超新星等共享 `drawPointSource()` 的点源，属于绚丽点源统一行为。
+- **验证：** `test-ohos-vivid-rendering-gate.mjs` 新增光晕分支断言，15/15 通过。真机（`192.168.1.4:36717`，关闭夜间模式）对比：经典模式星空为白/淡蓝紧凑点源，开启绚丽后同视场变暖色并带更大光晕；经典模式下“亮星光晕”开/关（天狼星 FOV 2°）和“星芒效果”开/关均正常。设备已恢复 `vivid=false`、`comet=false`、`bigStarHalo=true`、`starSpiky=false`、夜间模式开启、北极星视场。
+
+## [2026-11-24] 绚丽模式门控恒星光谱与星点 shader
+
+- **修改文件：** `src/core/StelApp.hpp/.cpp`、`src/core/StelSkyDrawer.cpp/.hpp`、`src/core/modules/LandscapeMgr.cpp`、`src/core/modules/Comet.cpp/.hpp`、`src/core/modules/SolarSystem.cpp/.hpp`、`src/core/modules/Meteor.cpp/.hpp`、`src/core/modules/SporadicMeteor.cpp`、`src/core/modules/SporadicMeteorMgr.cpp/.hpp`、`src/core/StelObject.hpp`、`src/core/TouchPicker.cpp`、`plugins/Satellites/src/Satellite.cpp/.hpp`、`plugins/Satellites/src/Satellites.cpp/.hpp`、`src/StelMainView.cpp`、`src/StelOhosCommandCatalog.hpp`、`harmonyos/ets-source/capability/I18n.ets`、`harmonyos/ets-source/capability/LayerController.ets`、`harmonyos/ets-source/capability/SatelliteController.ets`、`harmonyos/ets-source/common/types/MainWindowModels.ets`、`harmonyos/ets-source/common/types/StellariumTypes.ets`、`harmonyos/ets-source/pages/MainWindowNativeNode.ets`、`harmonyos/ets-source/panels/layers/LayerViewTabs.ets`、`harmonyos/ets-source/panels/panels/SatellitesPanel.ets`、`harmonyos/ets-source/state/LayerStore.ets`、`harmonyos/ets-source/state/SatelliteStore.ets`、`scripts/test-ohos-vivid-rendering-gate.mjs`（新）、`scripts/test-ohos-satellite-orbit-and-streaks.mjs`、`scripts/test-ohos-sky-tone-grs-meteors.mjs`、`docs/harmonyos/CLI.md`、`docs/harmonyos/specs/VIVID-RENDERING.md`（新）、`docs/harmonyos/CHANGELOG.md`。
 - **用户要求：** 把改变上游经典科学性渲染逻辑的改动限定在绚丽模式；恒星调时拖尾保持独立开关，绚丽模式之外也可用。
 - **核心改动：**
   1. `StelApp` 新增缓存的 `flagVividRendering` 与 generation，`LandscapeMgr` 在读取/切换 `landscape/flag_vivid_atmosphere` 时同步。
@@ -16,7 +28,12 @@
   9. 空间站编组增加 `Satellites/flag_station_complexes`（OHOS 默认开、桌面默认关），不改变光度语义。
   10. 彗星解析式彗尾增加独立开关 `astro/flag_analytical_comet_tail`：`SolarSystem` 暴露 `flagAnalyticalCometTail`，图层 → 太阳系天体增加“程序化彗尾”开关；打开绚丽模式时联动开启，关闭绚丽不强制关闭；`Comet` 关闭时跳过解析 shader，重建并走 `drawTail()`/`drawComa()` 经典纹理尾。
   11. 新增 `getVividRenderingState` 诊断命令，返回 `vivid`、`vividGeneration`、`starTrails`、`meteorAtmosphereGate`、`cometAnalytical`；新增 `getCometAnalyticalTail`/`setCometAnalyticalTail`。
-- **验证（待后续 Slice 补全）：** 引擎交叉编译成功；`test-ohos-vivid-rendering-gate.mjs` 14/14；`test-ohos-satellite-orbit-and-streaks.mjs` 8/8；`check-ohos-command-catalog.mjs` 446 命令一致。
+- **构建结果：** 引擎交叉编译成功；`-Release -SkipEngine -SkipResources -SkipDeploy -Install -Device 192.168.1.4:36717` BUILD SUCCESSFUL，signed HAP 817.1 MB，安装并启动成功。
+- **验证结果：**
+  - 主机：`test-ohos-vivid-rendering-gate.mjs` 14 项、`test-ohos-satellite-orbit-and-streaks.mjs` 8 项、`test-ohos-sky-tone-grs-meteors.mjs` 5 项，合计 27/27；`check-ohos-command-catalog.mjs` 446 命令一致；`check-ohos-i18n.mjs` 0 error；`check-ohos-ui-contract.mjs` intact（41 面板 / 73 静态 id / 35 动态前缀 / 111 anchor / 358 文件）。
+  - 真机语义 CLI（`192.168.1.4:36717`）：初始 `vivid=false, cometAnalytical=false`；经典模式下 `setCometAnalyticalTail 1` 生效；`vividAtmosphere|1` 联动把彗尾开关置为 true；绚丽模式下手动关闭彗尾保持 false；关闭绚丽模式不改变彗尾开关；重启后彗尾开关状态保持。`environmentMode|0` 时 `getMeteorDiagnostics.drawSuppression=atmosphere-disabled`，恢复大气层后回 `none`。卫星 `markerLayer` 默认 true，可独立开关；`stationComplexes` 设置后重启保持。
+  - 真机截图（关闭夜间模式，同一视场对比）：绚丽关时星点为紧凑的白/淡蓝点源；绚丽开时同视场恒星呈橙/暖色并带更大的 core/halo，星表位置与 FOV 不变。设备随后恢复 `vivid=false`、`comet=false` 并重新开启夜间模式。
+  - 未覆盖：读屏未滚动到图层面板折叠线以下的“程序化彗尾”与卫星面板“合并空间站模块”行（命令链路已验证）；未逐帧截图验证运行时切换瞬间的网格重建，仅确认切换无崩溃且回读状态正确。
 
 ## [2026-11-22] 目镜插件页签化与器材配置管理
 

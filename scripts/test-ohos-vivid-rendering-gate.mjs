@@ -30,6 +30,20 @@ test('star point shader falls back to the upstream formula when vivid is off', (
   assert.match(drawer, /setUniformValue\(starShaderVars\.vivid/);
 });
 
+test('star halo boost and hot core stay behind the vivid shader branch', () => {
+  const drawer = read('src/core/StelSkyDrawer.cpp');
+  const fallback = drawer.indexOf('if (vivid < 0.5)');
+  const coreHot = drawer.indexOf('coreHot');
+  const haloBoost = drawer.indexOf('haloBoost');
+  assert.ok(fallback >= 0, 'missing classic vivid fallback branch');
+  assert.ok(coreHot > fallback, 'coreHot must run only after the classic fallback returns');
+  assert.ok(haloBoost > fallback, 'haloBoost must run only after the classic fallback returns');
+  assert.match(drawer, /flagDrawBigStarHalo/);
+  assert.match(drawer, /conf->value\("stars\/flag_star_halo",true\)/);
+  assert.match(drawer, /flagRealisticStarVisibility/);
+  assert.match(drawer, /atmosphereVisualStrength = 1\.f/);
+});
+
 test('spectral B-V table is only installed in vivid mode', () => {
   const drawer = read('src/core/StelSkyDrawer.cpp');
   assert.match(drawer, /if \(vividRendering && !customColorTable\)/);
