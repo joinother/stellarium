@@ -39,12 +39,14 @@ test('group selection uses a local non-linear animation and preserves same-value
   assert.match(page, /duration: 180, curve: Curve\.EaseOut/);
 });
 
-test('filter rows precede variable results and retain their own bounded scroll container', () => {
+test('filter rows precede variable results; vertical scrolling belongs to the host panel', () => {
   // Phase 4j 复核：`satellites` 分支已在更早的切片下沉为 panels/panels/SatellitesPanel.ets，
   // 因此原按宿主文本切片的断言改读该组件文件（预存失配，本片顺带同步）。
   const panel = readFileSync(new URL('../harmonyos/ets-source/panels/panels/SatellitesPanel.ets', import.meta.url), 'utf8');
   assert.ok(panel.indexOf('SatelliteGroupSelector(') < panel.indexOf('ForEach(this.satelliteStore.satItems'));
-  assert.match(panel, /Scroll\(this\.panelScroller\)/);
+  // 卫星面板不再自带纵向 Scroll，统一由宿主面板滚动；分组选择器仍保留自己的横向滚动条。
+  assert.doesNotMatch(panel, /Scroll\(this\.panelScroller\)/);
+  assert.match(panel, /onRequestScrollTop/);
   const selector = readFileSync(new URL('../harmonyos/ets-source/panels/satellite/SatelliteGroupSelector.ets', import.meta.url), 'utf8');
   assert.match(selector, /Scroll\(this\.scroller\)/);
   assert.match(selector, /scrollable\(ScrollDirection\.Horizontal\)/);
@@ -63,7 +65,7 @@ test('queued filtering invalidates previous results before the debounce fires', 
 test('panel diagnostics remain available before scroll attachment and after closing', () => {
   const publish = new Function('error', 'AppStorage', method('publishSatellitePanelState').replaceAll(': SatelliteListItem', ''));
   const model = { satelliteStore: { satItems: [], satOrbitLines: false, satelliteListRequestId: 0, satelliteListElapsedMs: 0 },
-    satellitePanelScroller: { currentOffset: () => undefined },
+    activePanelScroller: () => ({ currentOffset: () => undefined }),
     satelliteGroupScroller: { currentOffset: () => undefined } };
   let state;
   publish.call(model, '', { setOrCreate: (key, value) => { state = JSON.parse(value); } });

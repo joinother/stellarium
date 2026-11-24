@@ -7,6 +7,7 @@ import { SatelliteGroupSelector } from '../satellite/SatelliteGroupSelector'
 import { UI_OPTION_ANIMATION_MS, UI_RADIUS_CARD, UI_RADIUS_CONTROL, UI_RADIUS_MEDIA, UI_RADIUS_PILL } from '../../common/ui/UiTokens'
 import { InfoTipButton } from '../../common/ui/InfoTipButton'
 import { SatelliteStore } from '../../state/SatelliteStore'
+import { isCustomSatelliteSource, satelliteSourceHost, satelliteSourceLabel } from '../../state/SatelliteSourceText'
 import { classifySatelliteArchetype, satelliteVisualProfile } from '../../form/SatelliteVisualRegistry'
 import { satelliteIconResource } from '../../form/WidgetVisuals'
 
@@ -23,9 +24,11 @@ export struct SatellitesPanel {
   @State private c: ThemeSlots = DEFAULT_SLOTS
   @State private sectionDirection: number = 1
   @State private expandedComplexIds: string[] = []
-  panelScroller: Scroller = new Scroller()
+  @State private sourceEditorOpen: boolean = false
+  @State private expandedSourceIndex: number = -1
   groupScroller: Scroller = new Scroller()
   onPublishState: () => void = () => {}
+  onRequestScrollTop: () => void = () => {}
   catalogHealthTextOf: (title: string, health: CatalogHealthEntry) => string = (title: string) => title
   catalogHealthColorOf: (health: CatalogHealthEntry) => ResourceColor = () => this.c.sub
   onDeleteSource: (index: number) => void = () => {}
@@ -33,7 +36,10 @@ export struct SatellitesPanel {
   onToggleSourceEnabled: (index: number, enabled: boolean) => void = () => {}
   onRestoreSources: () => void = () => {}
   onSourceInput: (value: string) => void = () => {}
+  onSourceTitleInput: (value: string) => void = () => {}
   onSourceAddNew: (value: boolean) => void = () => {}
+  onBeginAddSource: () => void = () => {}
+  onCancelSourceEdit: () => void = () => {}
   onAddSource: () => void = () => {}
   onRefreshCatalog: () => void = () => {}
   onTleFileInput: (value: string) => void = () => {}
@@ -264,23 +270,7 @@ export struct SatellitesPanel {
             .fontSize(12).fontColor(this.c.sub)
         }.width('100%')
         Text(I18n.t('sat_merge_policy')).fontSize(12).fontColor(this.c.sub).width('100%')
-
-        if (!OFFLINE_APPGALLERY_BUILD) {
-          TextInput({ text: this.satelliteStore.satSourceInput, placeholder: I18n.t('sat_source_placeholder') })
-            .height(38).fontSize(12).fontColor(this.c.text).placeholderColor(this.c.sub).width('100%')
-            .backgroundColor(this.c.input).border({ width: 1, color: this.c.inputBorder }).borderRadius(UI_RADIUS_CONTROL)
-            .onChange((value: string) => { this.onSourceInput(value) })
-          Row({ space: 8 }) {
-            Toggle({ type: ToggleType.Switch, isOn: this.satelliteStore.satSourceAddNew }).width(42).height(24)
-              .onChange((value: boolean) => { this.onSourceAddNew(value) })
-            Text(I18n.t('sat_source_add_new')).fontSize(11).fontColor(this.c.sub).layoutWeight(1)
-            Button(this.satelliteStore.editingSatelliteSourceIndex >= 0 ? I18n.t('sat_source_save') : I18n.t('sat_source_add'),
-              { type: ButtonType.Normal })
-              .fontSize(12).fontColor(this.c.onAccent).backgroundColor(this.c.accent)
-              .borderRadius(UI_RADIUS_CONTROL).height(32).padding({ left: 12, right: 12 })
-              .onClick(() => { this.onAddSource() })
-          }.width('100%').alignItems(VerticalAlign.Center)
-        }
+        Text(I18n.t('sat_source_enabled_hint')).fontSize(11).fontColor(this.c.sub).width('100%')
 
         Row({ space: 8 }) {
           Button(I18n.t('sat_source_restore'), { type: ButtonType.Normal })
@@ -290,6 +280,13 @@ export struct SatellitesPanel {
           Text(this.satelliteStore.satelliteUpdateStatusText())
             .fontSize(11).fontColor(this.c.sub).layoutWeight(1)
             .maxLines(1).textOverflow({ overflow: TextOverflow.Ellipsis })
+          if (!OFFLINE_APPGALLERY_BUILD) {
+            Button(I18n.t('sat_source_add'), { type: ButtonType.Normal })
+              .id('satellite-source-add')
+              .fontSize(11).fontColor(this.c.onAccent).backgroundColor(this.c.accent)
+              .borderRadius(UI_RADIUS_CONTROL).height(30).padding({ left: 10, right: 10 })
+              .onClick(() => { this.beginAddSource() })
+          }
         }.width('100%').alignItems(VerticalAlign.Center)
       }
         .width('100%').padding(12).backgroundColor(this.c.soft)
@@ -341,34 +338,62 @@ export struct SatellitesPanel {
             .backgroundColor(this.c.softStrong).borderRadius(UI_RADIUS_CONTROL)
 
           ForEach(this.satelliteStore.satSources, (source: SatelliteSource, sourceIndex: number) => {
-            Column({ space: 4 }) {
+            Column({ space: 0 }) {
+              // 单行条目：标题 + 更多开关；编辑/删除与完整地址收进展开区。
               Row({ space: 6 }) {
-                Column({ space: 2 }) {
-                  Text((source.local ? I18n.t('sat_source_local') : I18n.t('sat_source_remote')) + ' · ' + source.scheme.toUpperCase())
-                    .fontSize(11).fontColor(source.valid ? this.c.fourth : this.c.warning).maxLines(1)
-                  Text(source.url).fontSize(10.5).fontColor(this.c.sub)
-                    .maxLines(1).textOverflow({ overflow: TextOverflow.Ellipsis }).width('100%')
-                }.alignItems(HorizontalAlign.Start).layoutWeight(1)
-                Toggle({ type: ToggleType.Switch, isOn: source.addNew }).width(40).height(22)
-                  .onChange((value: boolean) => { this.onToggleSourceEnabled(sourceIndex, value) })
-                Button(I18n.t('sat_source_edit'), { type: ButtonType.Normal })
-                  .fontSize(10.5).fontColor(this.c.text).backgroundColor(this.c.softStrong)
-                  .borderRadius(UI_RADIUS_CONTROL).height(28).padding({ left: 8, right: 8 })
-                  .onClick(() => {
-                    this.onEditSource(sourceIndex)
-                    this.panelScroller.scrollTo({ xOffset: 0, yOffset: 0, animation: false })
-                  })
-                Button(I18n.t('sat_source_delete'), { type: ButtonType.Normal })
-                  .fontSize(10.5).fontColor(this.c.warning).backgroundColor(this.c.errorBg)
-                  .borderRadius(UI_RADIUS_CONTROL).height(28).padding({ left: 8, right: 8 })
-                  .onClick(() => { this.onDeleteSource(sourceIndex) })
+                Text(this.sourceTitle(source))
+                  .fontSize(13).fontWeight(FontWeight.Medium)
+                  .fontColor(!source.valid ? this.c.warning : (source.addNew ? this.c.accent : this.c.text))
+                  .maxLines(1).textOverflow({ overflow: TextOverflow.Ellipsis })
+                  .layoutWeight(1)
+                Text('⋯')
+                  .fontSize(16)
+                  .fontColor(this.expandedSourceIndex === sourceIndex ? this.c.onAccent : this.c.sub)
+                  .width(28).height(28).textAlign(TextAlign.Center)
+                  .backgroundColor(this.expandedSourceIndex === sourceIndex ? this.c.accent : this.c.softStrong)
+                  .borderRadius(UI_RADIUS_CONTROL)
+                  .hitTestBehavior(HitTestMode.Block)
+                  .accessibilityText(I18n.t('sat_source_more'))
+                  .onClick(() => { this.toggleSourceDetail(sourceIndex) })
               }.width('100%').alignItems(VerticalAlign.Center)
-              Text(this.satelliteStore.satelliteSourcePreview(source.url)).fontSize(10).fontColor(this.c.sub).width('100%')
-                .maxLines(1).textOverflow({ overflow: TextOverflow.Ellipsis }).height(14)
+              if (this.expandedSourceIndex === sourceIndex) {
+                Column({ space: 6 }) {
+                  Text(I18n.t('sat_source_detail_address')).fontSize(10).fontColor(this.c.sub).width('100%')
+                  Text(source.url)
+                    .fontSize(10.5).fontColor(this.c.sub).width('100%')
+                    .maxLines(4).wordBreak(WordBreak.BREAK_ALL)
+                    .textOverflow({ overflow: TextOverflow.Ellipsis })
+                  Row({ space: 8 }) {
+                    Button(I18n.t('sat_source_edit'), { type: ButtonType.Normal })
+                      .fontSize(10.5).fontColor(this.c.text).backgroundColor(this.c.softStrong)
+                      .borderRadius(UI_RADIUS_CONTROL).height(28).padding({ left: 10, right: 10 })
+                      .hitTestBehavior(HitTestMode.Block)
+                      .onClick(() => { this.beginEditSource(sourceIndex) })
+                    Button(I18n.t('sat_source_delete'), { type: ButtonType.Normal })
+                      .fontSize(10.5).fontColor(this.c.warning).backgroundColor(this.c.errorBg)
+                      .borderRadius(UI_RADIUS_CONTROL).height(28).padding({ left: 10, right: 10 })
+                      .hitTestBehavior(HitTestMode.Block)
+                      .onClick(() => {
+                        this.expandedSourceIndex = -1
+                        this.onDeleteSource(sourceIndex)
+                      })
+                  }.width('100%')
+                }
+                  .width('100%').alignItems(HorizontalAlign.Start)
+                  .padding({ top: 8 })
+                  // 展开区自身消费点击，避免查看地址时切换启用状态。
+                  .onClick(() => {})
+              }
             }
-              .width('100%').padding({ left: 10, right: 10, top: 7, bottom: 7 })
-              .backgroundColor(this.c.bg).borderRadius(UI_RADIUS_CONTROL)
-          }, (source: SatelliteSource) => source.index.toString() + ':' + source.url)
+              .width('100%').padding({ left: 10, right: 10, top: 8, bottom: 8 })
+              .backgroundColor(source.addNew ? this.c.accentSoft : this.c.bg)
+              .border({ width: 1, color: source.addNew ? this.c.accent : this.c.dividerSoft })
+              .borderRadius(UI_RADIUS_CONTROL)
+              .onClick(() => { this.onToggleSourceEnabled(sourceIndex, !source.addNew) })
+              .accessibilityText(I18n.t(source.addNew ? 'sat_source_enabled' : 'sat_source_disabled'))
+          }, (source: SatelliteSource) =>
+            source.index.toString() + ':' + source.url + ':' + (source.addNew ? '1' : '0') +
+              ':' + (this.expandedSourceIndex === source.index ? '1' : '0') + ':' + this.sourceTitle(source))
         }
           .width('100%').padding(10).backgroundColor(this.c.soft)
           .border({ width: 0.6, color: this.c.border }).borderRadius(UI_RADIUS_CARD)
@@ -378,6 +403,70 @@ export struct SatellitesPanel {
         Text(this.satelliteStore.satSourceStatus).fontSize(11).fontColor(this.c.fourth).width('100%').maxLines(3)
       }
     }.width('100%')
+  }
+
+  // TLE 来源编辑弹窗：多行 TextArea 完整展示网址，避免单行输入框只能看到前缀。
+  @Builder
+  sourceEditorCover() {
+    Column() {
+      Column({ space: 10 }) {
+        Text(this.satelliteStore.editingSatelliteSourceIndex >= 0
+          ? I18n.t('sat_source_editor_edit') : I18n.t('sat_source_editor_add'))
+          .fontSize(16).fontColor(this.c.text).width('100%')
+        Text(I18n.t('sat_source_url_label')).fontSize(11).fontColor(this.c.sub).width('100%')
+        TextArea({ text: this.satelliteStore.satSourceInput, placeholder: I18n.t('sat_source_placeholder') })
+          .id('satellite-source-editor-input')
+          .height(120).width('100%').fontSize(12)
+          .fontColor(this.c.text).placeholderColor(this.c.sub)
+          .backgroundColor(this.c.input)
+          .border({ width: 1, color: this.c.inputBorder })
+          .borderRadius(UI_RADIUS_CONTROL)
+          .wordBreak(WordBreak.BREAK_ALL)
+          .maxLength(4096)
+          .onChange((value: string) => { this.onSourceInput(value) })
+        if (isCustomSatelliteSource(this.satelliteStore.satSourceInput)) {
+          Text(I18n.t('sat_source_title_label')).fontSize(11).fontColor(this.c.sub).width('100%')
+          TextInput({ text: this.satelliteStore.satSourceTitleInput, placeholder: I18n.t('sat_source_title_placeholder') })
+            .id('satellite-source-editor-title')
+            .height(38).width('100%').fontSize(12)
+            .fontColor(this.c.text).placeholderColor(this.c.sub)
+            .backgroundColor(this.c.input)
+            .border({ width: 1, color: this.c.inputBorder })
+            .borderRadius(UI_RADIUS_CONTROL)
+            .maxLength(60)
+            .onChange((value: string) => { this.onSourceTitleInput(value) })
+        }
+        Row() {
+          Text(I18n.t('sat_source_add_new')).fontSize(13).fontColor(this.c.text).layoutWeight(1)
+          Toggle({ type: ToggleType.Switch, isOn: this.satelliteStore.satSourceAddNew })
+            .onChange((value: boolean) => { this.onSourceAddNew(value) })
+        }.width('100%').constraintSize({ minHeight: 40 })
+        Row({ space: 10 }) {
+          Button(I18n.t('sat_source_cancel'), { type: ButtonType.Normal })
+            .id('satellite-source-editor-cancel')
+            .fontSize(13).fontColor(this.c.text).backgroundColor(this.c.softStrong)
+            .borderRadius(UI_RADIUS_CONTROL).height(36).layoutWeight(1)
+            .onClick(() => { this.closeSourceEditor(true) })
+          Button(this.satelliteStore.editingSatelliteSourceIndex >= 0
+            ? I18n.t('sat_source_save') : I18n.t('sat_source_add'), { type: ButtonType.Normal })
+            .id('satellite-source-editor-save')
+            .fontSize(13).fontColor(this.c.onAccent).backgroundColor(this.c.accent)
+            .borderRadius(UI_RADIUS_CONTROL).height(36).layoutWeight(1)
+            .enabled(this.satelliteStore.satSourceInput.trim().length > 0)
+            .opacity(this.satelliteStore.satSourceInput.trim().length > 0 ? 1 : 0.45)
+            .onClick(() => { this.onAddSource(); this.sourceEditorOpen = false })
+        }.width('100%')
+      }
+        .width('90%').padding(16)
+        .backgroundColor(this.c.isNight ? '#150505' : '#101E2C')
+        .border({ width: 1, color: this.c.border })
+        .borderRadius(18)
+        .shadow({ radius: 24, color: 'rgba(0,0,0,0.45)' })
+    }
+      .width('100%').height('100%')
+      .justifyContent(FlexAlign.Center)
+      .backgroundColor('rgba(0,0,0,0.55)')
+      .id('satellite-source-editor')
   }
 
   @Builder
@@ -415,6 +504,36 @@ export struct SatellitesPanel {
   private hasInfoTip(value: ResourceStr): boolean {
     if (typeof value === 'string') return value.length > 0
     return true
+  }
+
+  private beginAddSource(): void {
+    this.onBeginAddSource()
+    this.sourceEditorOpen = true
+  }
+
+  private beginEditSource(index: number): void {
+    this.onEditSource(index)
+    this.sourceEditorOpen = true
+  }
+
+  private closeSourceEditor(cancel: boolean): void {
+    if (cancel) this.onCancelSourceEdit()
+    this.sourceEditorOpen = false
+  }
+
+  // 自定义标题优先；否则显示差异标识与域名（stations · celestrak.org）。
+  private sourceTitle(source: SatelliteSource): string {
+    const custom = this.satelliteStore.satelliteSourceTitle(source.url)
+    if (custom.length > 0) return custom
+    const label = satelliteSourceLabel(source.url)
+    const host = satelliteSourceHost(source.url)
+    const place = source.local ? I18n.t('sat_source_local_file') : host
+    if (label.length === 0) return place.length > 0 ? place : source.url
+    return place.length > 0 && place !== label ? label + ' · ' + place : label
+  }
+
+  private toggleSourceDetail(index: number): void {
+    this.expandedSourceIndex = this.expandedSourceIndex === index ? -1 : index
   }
 
   @Builder
@@ -693,7 +812,7 @@ export struct SatellitesPanel {
       this.satelliteStore.satPanelSection = section
     })
     if (section === 'diagnostics') this.satelliteStore.loadSatellites(true)
-    this.panelScroller.scrollTo({ xOffset: 0, yOffset: 0, animation: true })
+    this.onRequestScrollTop()
     this.onPublishState()
   }
 
@@ -817,7 +936,6 @@ export struct SatellitesPanel {
   }
 
   build() {
-    Scroll(this.panelScroller) {
       Column({ space: 12 }) {
         if (this.satelliteStore.satPanelSection !== 'main') {
           Button(this.satelliteStore.satPanelSection === 'settings'
@@ -895,8 +1013,12 @@ export struct SatellitesPanel {
           }.width('100%').alignItems(HorizontalAlign.Start).transition(this.sectionTransition())
         }
       }.width('100%').padding(10).alignItems(HorizontalAlign.Start)
-    }.width('100%').layoutWeight(1).scrollBar(BarState.Auto).scrollBarWidth(4).scrollBarColor(this.c.scrollbar)
-      .align(Alignment.TopStart)
-      .onScroll(() => { this.onPublishState() })
+      .bindContentCover(this.sourceEditorOpen, this.sourceEditorCover, {
+        // 系统返回键/下滑关闭不会经过取消按钮；这里统一复位输入与编辑态。
+        onDisappear: () => {
+          this.sourceEditorOpen = false
+          this.onCancelSourceEdit()
+        }
+      })
   }
 }

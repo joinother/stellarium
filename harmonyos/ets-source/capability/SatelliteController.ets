@@ -10,6 +10,7 @@ import { StellariumBridgeResponse } from '../pages/StellariumTypes'
 import { SatelliteSourceInput } from '../pages/MainWindowModels'
 import { CommandPort } from '../bridge/CommandPort'
 import { SatelliteStore } from '../state/SatelliteStore'
+import { isCustomSatelliteSource } from '../state/SatelliteSourceText'
 
 export interface SatelliteUrlSafetyOutcome {
   allowed: boolean
@@ -24,6 +25,8 @@ export interface SatelliteHostHooks {
   animateSatelliteGroupChange(action: () => void): void
   // 可选的华为 Device Security Kit 外部 URL 恶意检测钩子（离线/不支持时自动降级放行）。
   checkSourceUrlSafety?: (url: string) => Promise<SatelliteUrlSafetyOutcome>
+  // 自定义来源标题：Preferences 读写留在宿主，控制器只维护 URL → 标题映射。
+  persistSatelliteSourceTitles?: (json: string) => void
 }
 
 export class SatelliteController {
@@ -130,6 +133,12 @@ export class SatelliteController {
   addSatelliteSource(): void {
     const url = this.satelliteStore.satSourceInput.trim()
     if (url.length === 0) { this.satelliteStore.satSourceStatus = I18n.t('sat_source_empty'); return }
+    // 弹窗关闭会复位编辑态；先把目标索引、addNew 与标题固定下来，异步安全检测返回后仍写回原条目。
+    const editIndex = this.satelliteStore.editingSatelliteSourceIndex
+    const addNew = this.satelliteStore.satSourceAddNew
+    const title = this.satelliteStore.satSourceTitleInput.trim()
+    const previousUrl = editIndex >= 0 && editIndex < this.satelliteStore.satSources.length
+      ? this.satelliteStore.satSources[editIndex].url : ''
     const checker = this.hooks.checkSourceUrlSafety
     if (checker !== undefined && /^https?:\/\//i.test(url)) {
       const isZh = I18n.getLanguage().startsWith('zh')
@@ -141,28 +150,31 @@ export class SatelliteController {
             : 'Blocked by Device Security: unsafe URL was not added.')
           return
         }
-        this.commitSatelliteSource(url)
+        this.commitSatelliteSource(url, editIndex, addNew, title, previousUrl)
       }).catch(() => {
-        this.commitSatelliteSource(url)
+        this.commitSatelliteSource(url, editIndex, addNew, title, previousUrl)
       })
       return
     }
-    this.commitSatelliteSource(url)
+    this.commitSatelliteSource(url, editIndex, addNew, title, previousUrl)
   }
 
-  private commitSatelliteSource(url: string): void {
+  private commitSatelliteSource(url: string, editIndex: number, addNew: boolean,
+    title: string, previousUrl: string): void {
     const sources: SatelliteSourceInput[] = []
     for (let sourceIndex = 0; sourceIndex < this.satelliteStore.satSources.length; sourceIndex++) {
       const source = this.satelliteStore.satSources[sourceIndex]
       sources.push({
-        url: sourceIndex === this.satelliteStore.editingSatelliteSourceIndex ? url : source.url,
-        addNew: sourceIndex === this.satelliteStore.editingSatelliteSourceIndex ? this.satelliteStore.satSourceAddNew : source.addNew
+        url: sourceIndex === editIndex ? url : source.url,
+        addNew: sourceIndex === editIndex ? addNew : source.addNew
       })
     }
-    if (this.satelliteStore.editingSatelliteSourceIndex < 0) sources.push({ url: url, addNew: this.satelliteStore.satSourceAddNew })
+    if (editIndex < 0) sources.push({ url: url, addNew: addNew })
     this.port.requestInteractive('setSatelliteSources', JSON.stringify({ sources: sources }), (r: StellariumBridgeResponse) => {
       if (r.ok === true) {
+        this.applyCustomSourceTitle(url, previousUrl, title)
         this.satelliteStore.satSourceInput = ''
+        this.satelliteStore.satSourceTitleInput = ''
         this.satelliteStore.editingSatelliteSourceIndex = -1
         this.satelliteStore.satSourceStatus = I18n.t('sat_source_saved')
         this.satelliteStore.loadSatelliteSources()
@@ -170,8 +182,24 @@ export class SatelliteController {
     }, (failure: StellariumBridgeResponse) => { this.satelliteStore.satSourceStatus = failure.error ?? I18n.t('sat_source_invalid') })
   }
 
-  // 按索引剔除来源后写回。
-  deleteSatelliteSource(index: number): void {    const sources: SatelliteSourceInput[] = []
+  // 自定义来源保存标题覆盖；内置 CelesTrak 与清空标题时删除旧覆盖。
+  private applyCustomSourceTitle(url: string, previousUrl: string, title: string): void {
+    if (previousUrl.length > 0 && previousUrl !== url) this.satelliteStore.setSatelliteSourceTitle(previousUrl, '')
+    this.satelliteStore.setSatelliteSourceTitle(url, isCustomSatelliteSource(url) ? title : '')
+    this.hooks.persistSatelliteSourceTitles?.(this.satelliteStore.satelliteSourceTitlesJson())
+  }
+
+  private removeSourceTitle(url: string): void {
+    if (this.satelliteStore.satelliteSourceTitle(url).length === 0) return
+    this.satelliteStore.setSatelliteSourceTitle(url, '')
+    this.hooks.persistSatelliteSourceTitles?.(this.satelliteStore.satelliteSourceTitlesJson())
+  }
+
+  // 按索引剔除来源后写回，并清理自定义标题。
+  deleteSatelliteSource(index: number): void {
+    const deletedUrl = index >= 0 && index < this.satelliteStore.satSources.length
+      ? this.satelliteStore.satSources[index].url : ''
+    const sources: SatelliteSourceInput[] = []
     for (let sourceIndex = 0; sourceIndex < this.satelliteStore.satSources.length; sourceIndex++) {
       if (sourceIndex !== index) {
         const source = this.satelliteStore.satSources[sourceIndex]
@@ -180,20 +208,36 @@ export class SatelliteController {
     }
     this.port.requestInteractive('setSatelliteSources', JSON.stringify({ sources: sources }), (r: StellariumBridgeResponse) => {
       if (r.ok === true) {
+        this.removeSourceTitle(deletedUrl)
         this.satelliteStore.satSourceStatus = I18n.t('sat_source_deleted')
         this.satelliteStore.loadSatelliteSources()
       } else this.satelliteStore.satSourceStatus = r.error ?? I18n.t('sat_source_invalid')
     }, (failure: StellariumBridgeResponse) => { this.satelliteStore.satSourceStatus = failure.error ?? I18n.t('sat_source_invalid') })
   }
 
-  // 进入编辑：把来源 URL 回填输入框并展开该行。
+  // 打开新增来源的编辑态：清空输入，弹窗由面板负责显示。
+  beginAddSatelliteSource(): void {
+    this.satelliteStore.editingSatelliteSourceIndex = -1
+    this.satelliteStore.satSourceInput = ''
+    this.satelliteStore.satSourceTitleInput = ''
+    this.satelliteStore.satSourceAddNew = false
+  }
+
+  // 进入编辑：把来源 URL 与自定义标题回填，弹窗由面板负责显示。
   editSatelliteSource(index: number): void {
     const source = this.satelliteStore.satSources[index]
     if (source === undefined) return
     this.satelliteStore.editingSatelliteSourceIndex = index
     this.satelliteStore.satSourceInput = source.url
+    this.satelliteStore.satSourceTitleInput = this.satelliteStore.satelliteSourceTitle(source.url)
     this.satelliteStore.satSourceAddNew = source.addNew
-    this.satelliteStore.expandedSatelliteSourceIndex = index
+  }
+
+  // 取消编辑：清空输入与编辑索引；保留 addNew，避免异步提交读取到被重置的值。
+  cancelSatelliteSourceEdit(): void {
+    this.satelliteStore.editingSatelliteSourceIndex = -1
+    this.satelliteStore.satSourceInput = ''
+    this.satelliteStore.satSourceTitleInput = ''
   }
 
   // 开关单个来源的自动加入标志后写回。
@@ -232,8 +276,11 @@ export class SatelliteController {
     this.port.requestInteractive('restoreSatelliteSources', '', (r: StellariumBridgeResponse) => {
       if (r.ok === true) {
         this.satelliteStore.editingSatelliteSourceIndex = -1
-        this.satelliteStore.expandedSatelliteSourceIndex = -1
         this.satelliteStore.satSourceInput = ''
+        this.satelliteStore.satSourceTitleInput = ''
+        // 恢复默认来源会移除全部自定义条目，标题覆盖一并清空。
+        this.satelliteStore.applySatelliteSourceTitlesJson('')
+        this.hooks.persistSatelliteSourceTitles?.(this.satelliteStore.satelliteSourceTitlesJson())
         this.satelliteStore.satSourceStatus = I18n.t('sat_source_restore')
         this.satelliteStore.loadSatelliteSources()
       } else this.satelliteStore.satSourceStatus = r.error ?? I18n.t('sat_source_invalid')

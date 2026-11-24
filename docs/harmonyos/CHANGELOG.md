@@ -1,5 +1,24 @@
 > **身份图例**：本文件真机记录中出现的 `com.cnchensh.stellarium` 是**本机调试签名身份**（本机 DevEco 自动生成，非发布身份）；发布身份为 `com.joinother.skyinstrument`。构建脚本 `build-ohos-hap-windows.ps1 -Install` 从产物 `pack.info` 读取实际包名，仓库不写死任何签名身份（见 `docs/harmonyos/release/BUNDLE-IDENTITY-CLEANUP.md`）。
 
+## [2026-11-24] 卫星 TLE 来源列表显示差异字段并改为弹窗编辑
+
+- **修改文件：** `harmonyos/ets-source/state/SatelliteSourceText.ts`（新增）、`harmonyos/ets-source/state/SatelliteStore.ets`、`harmonyos/ets-source/panels/panels/SatellitesPanel.ets`、`harmonyos/ets-source/capability/SatelliteController.ets`、`harmonyos/ets-source/pages/MainWindowNativeNode.ets`、`harmonyos/ets-source/capability/I18n.ets`、`scripts/test-ohos-satellite-source-label.mjs`（新增）、`scripts/test-ohos-satellite-sources-ui.mjs`、`docs/harmonyos/json/ui-contract-baseline.json`、`docs/harmonyos/CHANGELOG.md`。
+- **用户要求：** TLE 来源列表当前恰好把真正差异的部分省略；标题改为 `stations · celestrak.org` 形式；移除行内开关，改用条目亮/灭（参考图层预设条目）；编辑器从面板内嵌改为弹窗，完整显示网址。
+- **根因：** 默认来源共用 `https://celestrak.org/NORAD/elements/gp.php?GROUP=<group>&FORMAT=CSV`，差异在 `GROUP`；原 URL 行与预览行都是单行尾部省略，公共前缀占满宽度，43 个来源显示完全相同。
+- **修复：**
+  1. 新增纯函数 `satelliteSourceLabel/Host`：优先取 `GROUP` 值，其次文件名、查询串、域名，用于单行条目的差异标识；完整地址收进展开区。
+  2. 来源行改为单行标题（13 号）+ `⋯` 更多按钮；点按条目切换启用，点按 `⋯` 展开完整地址与编辑/删除按钮。启用的来源使用图层预设的选中样式（`accentSoft` 背景、accent 亮边、accent 字体），未启用为普通背景与白色字体。
+  3. 来源编辑改为 `bindContentCover` 弹窗：多行 `TextArea` 完整展示网址，保留“自动加入新卫星”开关与底部取消/保存按钮；面板内嵌输入框移除，新增“添加来源”按钮；系统返回键关闭时复位编辑态。
+  4. `addSatelliteSource` 在异步安全检测前固定目标索引与 `addNew`，避免弹窗关闭复位编辑态后把“编辑”误当成“新增”。
+  5. 更新 `sat_source_enabled_hint` 文案说明点按切换；新增弹窗标题/网址标签 i18n；新增 UI 锚点并更新契约基线。
+  6. 卫星面板移除自带的纵向 `Scroll`，统一使用宿主面板滚动；分组入口/命令切换后滚动到顶部改走 `onRequestScrollTop`，`setSatellitePanelScroll` 与 `publishSatellitePanelState.scrollY` 改读当前宿主面板滚动器。
+  7. 条目改为整卡点击切换，`⋯` 与编辑/删除按钮独立命中；`ForEach` key 纳入 `addNew`，修复原生写回后同 key 子项不重建、亮/灭样式不刷新的问题。
+  8. 自定义来源支持标题覆盖：编辑弹窗对非内置 CelesTrak URL 显示“标题”输入，标题经 `SATELLITE_SOURCE_TITLE_STORE` Preferences 持久化；内置来源继续显示派生的 `GROUP · 域名`。删除来源或恢复默认来源时同步清理标题覆盖。
+- **构建结果：** `-Release -SkipEngine -SkipResources -Install -Device 192.168.1.4:36717` BUILD SUCCESSFUL（51 s），signed HAP 803.5 MB（842,542,286 字节），安装并启动成功。
+- **验证结果：**
+  - 主机：`test-ohos-satellite-sources-ui.mjs` 7/7；`test-ohos-satellite-source-label.mjs` 6/6；`check-ohos-ui-contract.mjs` intact（新增 5 个弹窗锚点）；`check-ohos-i18n.mjs` 通过。`test-ohos-satellite-panel.mjs` 仍有 1 项既有原生断言失败（`QtConcurrent::blockingMap`/原生源码漂移），与本次 UI 改动无关。
+  - 真机（`192.168.1.4:36717`）：来源列表通过宿主面板滚动；标题显示 `beidou · celestrak.org` 等差异标识，完整 URL 在第二行两行内显示；启用的条目为蓝色亮边/蓝字，停用为白字；点按标题或卡片空白均立即切换亮/灭（`beidou` false→true→false），编辑/删除按钮不会误触切换；编辑弹窗完整显示 URL，返回键关闭后可重新打开，保存后仍为 43 个来源且 `addNew` 保留；添加弹窗初始为空且保存按钮禁用。验证后恢复 `13 / 43` 启用状态。
+
 ## [2026-11-24] 内置图层预设统一极限星等 21
 
 - **修改文件：** `harmonyos/ets-source/state/LayerPresetStore.ets`、`scripts/test-ohos-layer-presets.mjs`、`docs/harmonyos/CHANGELOG.md`。

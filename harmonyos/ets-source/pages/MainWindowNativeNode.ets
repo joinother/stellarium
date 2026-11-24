@@ -296,7 +296,7 @@ import {
   SkyCultureMakerDraft, SkyCultureMakerIssue,
   HeliocentricOrbit, ConfigurationOption, SkyCultureVisualColors, CelestialPositionOptions,
   CelestialPositionCategory, PhenomenaOptions, PhenomenaStartOption, EphemerisOptions, RtsCalendarOptions, EclipseOptions,
-  LayerPresetState, LayerPresetDefinition, LayerPresetSnapshot, LAYER_PRESET_STORE,
+  LayerPresetState, LayerPresetDefinition, LayerPresetSnapshot, LAYER_PRESET_STORE, SATELLITE_SOURCE_TITLE_STORE,
   MARKING_LAYER_ACTION_IDS, CONTENT_LAYER_ACTION_IDS, AstroCsvExport, CELESTIAL_POSITION_CATEGORIES, HELIOCENTRIC_PLANET_ORBITS,
   HELIOCENTRIC_DISTANCE_GUIDES, PHENOMENA_START_OPTIONS,
   GyroGuideProjection, SkyUiObstacle, BookmarkItem,
@@ -1574,7 +1574,6 @@ export struct WindowNativeNode {
   @State private catalogHealthLoaded: boolean = false
   @State private catalogManifestPresent: boolean = false
   // catalogHealthLoaded / catalogManifestPresent 仍由宿主持有（与卫星面板共用）。
-  private satellitePanelScroller: Scroller = new Scroller()
   private satelliteGroupScroller: Scroller = new Scroller()
   // 三维地景：直接读取原版 scenery3d.ini 与语言描述文件
   @State private scenery3dCurrentId: string = ''
@@ -1909,6 +1908,7 @@ export struct WindowNativeNode {
     this.hostSettingsPort.configure((): common.UIAbilityContext => this.getUIContext().getHostContext() as common.UIAbilityContext)
     this.settingsRepository.attachPort(this.hostSettingsPort)
     this.loadPersistedUiSettings()
+    this.loadSatelliteSourceTitles()
     // 把宿主桥注入 ToolsStore。ToolsStore 消费方均为 @ObjectLink，字段赋值即刷新，
     // 故此处 onChanged 注入等价空实现（该域无 publish* 发布点）。
     const hostPort = this.commandPort()
@@ -2309,7 +2309,7 @@ export struct WindowNativeNode {
         if (['main', 'settings', 'sources', 'imports', 'display', 'countdown', 'diagnostics'].includes(section)) {
           this.satelliteStore.satPanelSection = section
           if (section === 'diagnostics') this.satelliteStore.loadSatellites(true)
-          this.satellitePanelScroller.scrollTo({ xOffset: 0, yOffset: 0, animation: false })
+          this.resetActivePanelScroll()
           this.publishSatellitePanelState()
         } else this.publishSatellitePanelState('unknown satellite section')
         return
@@ -2363,7 +2363,7 @@ export struct WindowNativeNode {
       if (commandName === 'setSatellitePanelScroll') {
         const offset = Number(event['payload'])
         if (Number.isFinite(offset) && offset >= 0) {
-          this.satellitePanelScroller.scrollTo({ xOffset: 0, yOffset: offset, animation: false })
+          this.activePanelScroller().scrollTo({ xOffset: 0, yOffset: offset, animation: false })
         }
         this.publishSatellitePanelState()
         return
@@ -4052,7 +4052,8 @@ export struct WindowNativeNode {
             }
           }
           return { allowed: true, threat: res.threat }
-        }
+        },
+        persistSatelliteSourceTitles: (json: string): void => { this.persistSatelliteSourceTitles(json) }
       }
       this.satelliteControllerImpl = new SatelliteController(this.commandPort(), this.satelliteStore, hooks)
     }
@@ -4705,7 +4706,7 @@ export struct WindowNativeNode {
       groups: this.satelliteStore.satGroups, requestId: this.satelliteStore.satelliteListRequestId,
       orbitLines: this.satelliteStore.satOrbitLines, hints: this.satelliteStore.satHints,
       elapsedMs: this.satelliteStore.satelliteListElapsedMs,
-      scrollY: this.satellitePanelScroller.currentOffset()?.yOffset ?? 0,
+      scrollY: this.activePanelScroller().currentOffset()?.yOffset ?? 0,
       groupScrollY: this.satelliteGroupScroller.currentOffset()?.yOffset ?? 0
     }))
   }
@@ -7573,6 +7574,40 @@ export struct WindowNativeNode {
 
   private persistLayerPresetJson(json: string): void {
     void this.writeLayerPresetStorage(json)
+  }
+
+  // ---- 卫星自定义来源标题：Preferences 持久化 ----
+
+  private async readSatelliteSourceTitles(): Promise<string> {
+    const ctx = this.getUIContext().getHostContext() as common.UIAbilityContext
+    const store = await preferences.getPreferences(ctx, SATELLITE_SOURCE_TITLE_STORE)
+    return (await store.get('titles', '')) as string
+  }
+
+  private async writeSatelliteSourceTitles(json: string): Promise<void> {
+    try {
+      const ctx = this.getUIContext().getHostContext() as common.UIAbilityContext
+      const store = await preferences.getPreferences(ctx, SATELLITE_SOURCE_TITLE_STORE)
+      await store.put('titles', json)
+      await store.flush()
+    } catch (error) {
+      hilog.warn(0x0000, 'StellariumArkUI', 'save satellite source titles failed')
+    }
+  }
+
+  private persistSatelliteSourceTitles(json: string): void {
+    void this.writeSatelliteSourceTitles(json)
+  }
+
+  // 启动早期 UIAbility 上下文可能尚未就绪；与图层预设同样做有限重试。
+  private loadSatelliteSourceTitles(attempt: number = 0): void {
+    this.readSatelliteSourceTitles().then((json: string) => {
+      this.satelliteStore.applySatelliteSourceTitlesJson(json)
+    }).catch(() => {
+      if (attempt < 12) {
+        setTimeout(() => { this.loadSatelliteSourceTitles(attempt + 1) }, 150)
+      }
+    })
   }
 
   private captureLayerPresetSnapshot(done: (snapshot: LayerPresetSnapshot) => void): void {
@@ -12230,9 +12265,9 @@ export struct WindowNativeNode {
     } else if (this.activePanel === 'satellites') {
       SatellitesPanel({
         satelliteStore: this.satelliteStore,
-        panelScroller: this.satellitePanelScroller,
         groupScroller: this.satelliteGroupScroller,
         onPublishState: () => { this.publishSatellitePanelState() },
+        onRequestScrollTop: () => { this.resetActivePanelScroll() },
         catalogHealthTextOf: (title: string, health: CatalogHealthEntry) => this.catalogHealthText(title, health),
         catalogHealthColorOf: (health: CatalogHealthEntry) => this.catalogHealthColor(health),
         onDeleteSource: (index: number) => { this.satelliteCtl().deleteSatelliteSource(index) },
@@ -12240,7 +12275,10 @@ export struct WindowNativeNode {
         onToggleSourceEnabled: (index: number, enabled: boolean) => { this.satelliteCtl().setSatelliteSourceEnabled(index, enabled) },
         onRestoreSources: () => { this.confirmRestoreSatelliteSources() },
         onSourceInput: (value: string) => { this.satelliteStore.satSourceInput = value },
+        onSourceTitleInput: (value: string) => { this.satelliteStore.satSourceTitleInput = value },
         onSourceAddNew: (value: boolean) => { this.satelliteStore.satSourceAddNew = value },
+        onBeginAddSource: () => { this.satelliteCtl().beginAddSatelliteSource() },
+        onCancelSourceEdit: () => { this.satelliteCtl().cancelSatelliteSourceEdit() },
         onAddSource: () => { this.satelliteCtl().addSatelliteSource() },
         onRefreshCatalog: () => { this.satelliteCtl().refreshSatelliteCatalog() },
         onTleFileInput: (value: string) => { this.satelliteStore.satTleFileInput = value },

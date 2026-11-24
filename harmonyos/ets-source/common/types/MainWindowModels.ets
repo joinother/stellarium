@@ -476,6 +476,7 @@ export const QUICK_PANEL_STORE: string = 'stellarium_quick_panel'
 export const INFO_WINDOW_STORE: string = 'stellarium_info_window'
 export const NIGHT_MODE_STORE: string = 'night_mode_store'
 export const LAYER_PRESET_STORE: string = 'stellarium_layer_presets'
+export const SATELLITE_SOURCE_TITLE_STORE: string = 'stellarium_satellite_source_titles'
 // 备案已完成，联网功能放开（2026-11）：在线星表下载、卫星目录刷新、望远镜在线控件恢复。
 // 需要退回纯离线包时，把它改回 true 并重新构建。
 export const OFFLINE_APPGALLERY_BUILD: boolean = false

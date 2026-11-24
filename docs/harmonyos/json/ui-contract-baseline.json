@@ -51,6 +51,7 @@
     "capability/SkyInputController.ets",
     "capability/SkyTextureStatusController.ets",
     "capability/StartupBridge.ets",
+    "capability/StationCrewService.ets",
     "capability/SurveyController.ets",
     "capability/TelescopeController.ets",
     "capability/TimeController.ets",
@@ -462,6 +463,12 @@
     "polar-scope-flip-horizontal",
     "polar-scope-flip-vertical",
     "red-light-overlay",
+    "satellite-source-add",
+    "satellite-source-editor",
+    "satellite-source-editor-cancel",
+    "satellite-source-editor-input",
+    "satellite-source-editor-save",
+    "satellite-source-editor-title",
     "satellites-back",
     "satellites-refresh",
     "screen-video-share",
@@ -514,11 +521,11 @@
     "satellites-",
     "search-category-"
   ],
-  "totalIdAnchors": 111,
+  "totalIdAnchors": 117,
   "count": {
     "panels": 41,
-    "staticIds": 73,
+    "staticIds": 79,
     "dynamicIdPrefixes": 35,
-    "totalIdAnchors": 111
+    "totalIdAnchors": 117
   }
 }

@@ -47,11 +47,13 @@ export class SatelliteStore {
     updateFrequencyHours: 2, secondsToUpdate: 0, updateState: 1
   }
   satSourceInput: string = ''
+  satSourceTitleInput: string = ''
+  // 自定义来源的标题覆盖：URL → 用户标题；仅 UI 展示，经 Preferences 持久化。
+  satSourceTitles: Record<string, string> = {}
   satTleFileInput: string = ''
   satSourceAddNew: boolean = false
   satSourceStatus: string = ''
-  // 来源编辑：-1 表示无；editing 控制保存/新增文案，expanded 控制展开行。
-  expandedSatelliteSourceIndex: number = -1
+  // 来源编辑：-1 表示无；editing 控制保存/新增文案。
   editingSatelliteSourceIndex: number = -1
   satUpdateFrequencyInput: string = '2'
   satelliteListLoading: boolean = false
@@ -102,15 +104,38 @@ export class SatelliteStore {
     }
   }
 
-  // 来源预览文案：本地文件显示「本地文件 · 路径」，远程显示「域名 · 路径」。
-  satelliteSourcePreview(url: string): string {
-    const value = url.trim()
-    if (value.toLowerCase().startsWith('file://')) {
-      return I18n.t('sat_source_local_file') + ' · ' + value.substring(7)
+  satelliteSourceTitle(url: string): string {
+    return this.satSourceTitles[url] ?? ''
+  }
+
+  setSatelliteSourceTitle(url: string, title: string): void {
+    const next: Record<string, string> = {}
+    for (const key of Object.keys(this.satSourceTitles)) {
+      if (key !== url) next[key] = this.satSourceTitles[key]
     }
-    const withoutScheme = value.replace(/^[a-z][a-z0-9+.-]*:\/\//i, '')
-    const slash = withoutScheme.indexOf('/')
-    return slash >= 0 ? withoutScheme.substring(0, slash) + ' · ' + withoutScheme.substring(slash) : withoutScheme
+    const trimmed = title.trim()
+    if (trimmed.length > 0) next[url] = trimmed
+    this.satSourceTitles = next
+  }
+
+  applySatelliteSourceTitlesJson(json: string): void {
+    const next: Record<string, string> = {}
+    if (json.length > 0) {
+      try {
+        const raw = JSON.parse(json) as Record<string, Object>
+        for (const key of Object.keys(raw)) {
+          const value = raw[key]
+          if (typeof value === 'string' && value.trim().length > 0) next[key] = value.trim()
+        }
+      } catch (error) {
+        // 缓存损坏时回退到派生标题，不阻塞面板。
+      }
+    }
+    this.satSourceTitles = next
+  }
+
+  satelliteSourceTitlesJson(): string {
+    return JSON.stringify(this.satSourceTitles)
   }
 
   // 更新状态文案：禁用 / 更新中 / 错误 / 倒计时（分/时）。
