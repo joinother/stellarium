@@ -54,14 +54,14 @@ function makeSnapshot(overrides = {}) {
   }
 }
 
-function fixture() {
+function fixture(persistedJson = '') {
   let persisted = ''
   let applied = undefined
   const hints = []
   let current = makeSnapshot()
   const store = new Store()
   store.attachHooks({
-    loadPresetJson: done => done(''),
+    loadPresetJson: done => done(persistedJson),
     persistPresetJson: json => { persisted = json },
     captureSnapshot: done => done(current),
     applySnapshot: (snapshot, done) => { applied = snapshot; done() },
@@ -87,6 +87,7 @@ test('five built-in presets keep vivid last and carry the requested scene settin
   assert.equal(clean.actions.actionShow_MilkyWay, true)
   assert.equal(clean.milkyWayBright, 6)
   assert.equal(clean.vividAtmosphere, false)
+  assert.equal(clean.starMagLimit, 21, 'all built-in presets default to the 21 mag limit')
 
   const observe = byId('observe').snapshot
   assert.equal(observe.actions.actionShow_Atmosphere, true)
@@ -113,7 +114,7 @@ test('five built-in presets keep vivid last and carry the requested scene settin
   assert.equal(study.actions.actionShow_Atmosphere, false)
   assert.equal(study.actions.actionShow_Ground, false)
   assert.equal(study.actions.actionShow_MistHorizon, false)
-  assert.equal(study.starMagLimit, undefined)
+  assert.equal(study.starMagLimit, 21)
 
   const vivid = byId('vivid').snapshot
   assert.equal(vivid.actions.actionShow_Atmosphere, true)
@@ -125,8 +126,33 @@ test('five built-in presets keep vivid last and carry the requested scene settin
   assert.equal(vivid.vividAtmosphere, true)
   assert.equal(vivid.realisticStarVisibility, false)
   assert.equal(vivid.constellationArt3d, true)
-  assert.equal(vivid.starMagLimit, undefined)
+  assert.equal(vivid.starMagLimit, 21)
   assert.equal(vivid.milkyWayBright, 6)
+})
+
+test('old persisted snapshots without a limit inherit the 21 default, explicit values stay', () => {
+  const oldClean = makeSnapshot({ vividAtmosphere: true })
+  delete oldClean.starMagLimit
+  oldClean.actions.actionShow_Stars = false
+  const oldStudy = makeSnapshot({ starMagLimit: 12 })
+  const custom = makeSnapshot({ starMagLimit: 6 })
+  const persisted = JSON.stringify({
+    version: 1,
+    selectedId: 'clean',
+    selectedDirty: false,
+    presets: [
+      { id: 'clean', kind: 'builtin', nameKey: 'preset_clean', customName: '', enabled: true, snapshot: oldClean },
+      { id: 'study', kind: 'builtin', nameKey: 'preset_study', customName: '', enabled: true, snapshot: oldStudy },
+      { id: 'custom-1', kind: 'custom', nameKey: 'preset_custom', customName: 'Mine', enabled: true, snapshot: custom, factory: custom }
+    ]
+  })
+  const { store } = fixture(persisted)
+  const byId = id => store.presets.find(preset => preset.id === id)
+  assert.equal(byId('clean').snapshot.starMagLimit, 21, 'missing field falls back to the factory default')
+  assert.equal(byId('clean').snapshot.vividAtmosphere, true, 'other saved fields stay untouched')
+  assert.equal(byId('clean').snapshot.actions.actionShow_Stars, false)
+  assert.equal(byId('study').snapshot.starMagLimit, 12, 'explicit user values are not overwritten')
+  assert.equal(byId('custom-1').snapshot.starMagLimit, 6, 'custom snapshots keep their saved limit')
 })
 
 test('manual edits keep the selected preset marked with an asterisk', () => {

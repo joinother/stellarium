@@ -1,5 +1,16 @@
 > **身份图例**：本文件真机记录中出现的 `com.cnchensh.stellarium` 是**本机调试签名身份**（本机 DevEco 自动生成，非发布身份）；发布身份为 `com.joinother.skyinstrument`。构建脚本 `build-ohos-hap-windows.ps1 -Install` 从产物 `pack.info` 读取实际包名，仓库不写死任何签名身份（见 `docs/harmonyos/release/BUNDLE-IDENTITY-CLEANUP.md`）。
 
+## [2026-11-24] 内置图层预设统一极限星等 21
+
+- **修改文件：** `harmonyos/ets-source/state/LayerPresetStore.ets`、`scripts/test-ohos-layer-presets.mjs`、`docs/harmonyos/CHANGELOG.md`。
+- **用户要求：** 排查切换到“纯净星空”后星等限制变为 2.0 的问题；所有预设模式的星等限制统一为 21。
+- **根因：** `clean`、`study`、`vivid` 的出厂快照没有 `starMagLimit`，应用预设时跳过 `setLimitMagnitude`，于是保留上一次场景或历史配置中的 2.0；旧持久化文档也会原样载入缺少该字段的内置快照，使问题一直无法被预设纠正。
+- **修复：** 五个内置预设（纯净星空、观测辅助、摄影构图、星图研习、绚丽星空）的出厂默认 `starMagLimit` 统一为 `MAX_STAR_MAG_LIMIT`（21），仅作为默认值，不强制覆盖用户选择；加载旧持久化文档时，缺少该字段的内置快照补入 21，已有显式值（包括用户“保存当前”写入的值）保持不变；自定义预设继续使用自身保存的星等限制。
+- **构建结果：** `-Release -SkipEngine -SkipResources -Install -Device 192.168.1.4:36717` BUILD SUCCESSFUL（48 s），signed HAP 803.5 MB（842,533,689 字节），安装并启动成功。
+- **验证结果：**
+  - 主机：`test-ohos-layer-presets.mjs` 9/9；新增旧文档迁移用例覆盖“缺少字段补 21、显式值和自定义预设不被覆盖”。
+  - 真机（`192.168.1.4:36717`）：先 `setLimitMagnitude 5`，应用“纯净星空”后 `getLimitMagnitude.customStarMagLimit=21`，天空星点明显变密，面板滑块显示 21.0；重启应用后仍为 21。
+
 ## [2026-11-24] 深空默认开启、注释气泡化与目镜编辑器返回修复
 
 - **修改文件：** `src/StelMainView.cpp`、`src/StelOhosCommandCatalog.hpp`、`harmonyos/ets-source/pages/MainWindowNativeNode.ets`、`harmonyos/ets-source/panels/panels/SatellitesPanel.ets`、`harmonyos/ets-source/panels/layers/LayerViewTabs.ets`、`harmonyos/ets-source/panels/panels/OcularsPanel.ets`、`harmonyos/ets-source/capability/I18n.ets`、`scripts/test-ohos-observer-planet-contract.mjs`、`scripts/test-ohos-place-atmosphere.mjs`、`scripts/test-ohos-oculars-equipment.mjs`、`scripts/test-ohos-vivid-rendering-gate.mjs`、`docs/harmonyos/CLI.md`、`docs/harmonyos/CHANGELOG.md`。

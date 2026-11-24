@@ -129,11 +129,14 @@ function neutralSnapshot(): LayerPresetSnapshot {
 }
 
 function factoryDefinitions(): Array<LayerPresetDefinition> {
-  const clean = buildSnapshot(CLEAN_ACTIONS, false, 6, true, false, false, false, false, true, false)
+  // 内置模式的默认极限星等统一为滑块上限：切换预设时不应继承上一场景
+  // 遗留的星等限制（曾有 clean 留下 2.0，导致切回纯净星空后只剩最亮星）；
+  // 用户仍可在应用后自由调整，并由“保存当前”写回该预设。
+  const clean = buildSnapshot(CLEAN_ACTIONS, false, 6, true, false, false, false, false, true, false, MAX_STAR_MAG_LIMIT)
   const observe = buildSnapshot(OBSERVE_ACTIONS, false, 3, true, true, true, true, false, true, false, MAX_STAR_MAG_LIMIT)
   const photo = buildSnapshot(PHOTO_ACTIONS, false, 3, true, false, false, false, true, false, false, MAX_STAR_MAG_LIMIT)
-  const study = buildSnapshot(STUDY_ACTIONS, false, 4, true, false, false, false, false, true, false)
-  const vivid = buildSnapshot(VIVID_ACTIONS, true, 6, false, false, false, false, false, true, true)
+  const study = buildSnapshot(STUDY_ACTIONS, false, 4, true, false, false, false, false, true, false, MAX_STAR_MAG_LIMIT)
+  const vivid = buildSnapshot(VIVID_ACTIONS, true, 6, false, false, false, false, false, true, true, MAX_STAR_MAG_LIMIT)
   return [
     { id: 'clean', kind: 'builtin', nameKey: 'preset_clean', customName: '', enabled: true, snapshot: clean, factory: cloneSnapshot(clean) },
     { id: 'observe', kind: 'builtin', nameKey: 'preset_observe', customName: '', enabled: true, snapshot: observe, factory: cloneSnapshot(observe) },
@@ -824,6 +827,11 @@ export class LayerPresetStore {
         const builtin = byId.get(id)
         if (builtin !== undefined) {
           builtin.enabled = enabled
+          // 旧版持久化快照可能没有星等限制字段：补入当前出厂默认值（21）。
+          // 已有显式值的快照（用户“保存当前”写过的）保持不变。
+          if (snapshot.starMagLimit === undefined) {
+            snapshot.starMagLimit = builtin.snapshot.starMagLimit
+          }
           builtin.snapshot = snapshot
           order.push(id)
         } else if (id.startsWith('custom-')) {
