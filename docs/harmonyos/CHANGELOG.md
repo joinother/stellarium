@@ -1,5 +1,22 @@
 > **身份图例**：本文件真机记录中出现的 `com.cnchensh.stellarium` 是**本机调试签名身份**（本机 DevEco 自动生成，非发布身份）；发布身份为 `com.joinother.skyinstrument`。构建脚本 `build-ohos-hap-windows.ps1 -Install` 从产物 `pack.info` 读取实际包名，仓库不写死任何签名身份（见 `docs/harmonyos/release/BUNDLE-IDENTITY-CLEANUP.md`）。
 
+## [2026-11-25] 恢复插件在启动遮罩期间同步加载
+
+- **修改文件：** `src/StelMainView.cpp`、`scripts/test-ohos-plugin-startup.mjs`（新增）、`docs/harmonyos/CHANGELOG.md`。
+- **用户要求：** 放弃按需/延迟加载方案，恢复插件在启动遮罩期间加载，逻辑更简单；接受启动遮罩时间变长，换取首个可交互星图已经包含全部插件状态。
+- **修复：**
+  1. `StelMainView::init()` 恢复 `stelApp->initPlugIns()` 同步加载，删除 OHOS 首帧后 1800 ms + 每 120 ms 一个的延迟插件队列，以及该队列配套的 `MeteorShowers` 预加载特例和延迟 `initScriptMgr()`。
+  2. 删除卫星命令处理里为延迟加载添加的 `#if defined(__OHOS__)` 补载兜底；所有插件在启动时已载入，不再需要按命令补载。
+  3. `StelModuleMgr` 保持“全部内置插件随启动载入”的策略；`setPluginLoadAtStartup` 继续作为兼容命令固定写入 `true`。
+- **行为：** 启动阶段（遮罩期间）同步加载全部插件，包括卫星、目镜、均时差、古天文线、导航星、3D 场景、离线纹理、世界多历法和太阳系小天体；首个可交互星图的卫星开关、图层与插件状态与上次一致。代价是启动遮罩时间变长（SolarSystemEditor 仍会在 `init()` 中解析发现数据），且卫星显示时的持续拖拽帧率仍低于关闭卫星时。
+- **构建结果：** `powershell -ExecutionPolicy Bypass -File scripts/build-ohos-hap-windows.ps1 -Release -SkipResources -Install -Device 192.168.1.4:36717`：`BUILD SUCCESSFUL`，signed HAP 803.5 MB（842,545,476 字节），安装并启动成功。
+- **验证结果：**
+  - 冷启动后 `getPluginList` 为 29/29 全部 `loaded=true`；`getState.satHints=true`，`Satellites/show_satellite_hints` 为 `true`，卫星快捷开关在重启后保持开。
+  - 从 `aa start` 到首次 `getPluginList` 返回 29/29 约 17.4 s（含 CLI 往返；冷启动包含全部插件与 SolarSystemEditor 发现数据解析）。
+  - 全部插件已载入、卫星显示时连续 `dragView` 为 25.0 fps（p50 46 ms、p95 53 ms）；关闭卫星后为 40.0 fps（p50 26 ms、p95 31 ms）。启动遮罩隐藏的是插件加载阶段，卫星的每帧更新/绘制成本仍在；需要更顺滑拖动时可关闭卫星开关。
+  - 静态：`node --test scripts/test-ohos-plugin-startup.mjs` 2/2 通过。
+  - 备注：若需缩短遮罩，可重新引入 SolarSystemEditor 发现数据的“首次使用”解析（约省 5 s），与插件加载时机相互独立。
+
 ## [2026-11-24] 卫星 TLE 来源列表显示差异字段并改为弹窗编辑
 
 - **修改文件：** `harmonyos/ets-source/state/SatelliteSourceText.ts`（新增）、`harmonyos/ets-source/state/SatelliteStore.ets`、`harmonyos/ets-source/panels/panels/SatellitesPanel.ets`、`harmonyos/ets-source/capability/SatelliteController.ets`、`harmonyos/ets-source/pages/MainWindowNativeNode.ets`、`harmonyos/ets-source/capability/I18n.ets`、`scripts/test-ohos-satellite-source-label.mjs`（新增）、`scripts/test-ohos-satellite-sources-ui.mjs`、`docs/harmonyos/json/ui-contract-baseline.json`、`docs/harmonyos/CHANGELOG.md`。

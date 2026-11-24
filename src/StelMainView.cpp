@@ -18819,13 +18819,6 @@ extern "C" __attribute__((visibility("default"))) const char* StellariumOhos_com
 			commandName == "refreshSatelliteCatalog")
 		{
 			Satellites* sats = static_cast<Satellites*>(StelApp::getInstance().getModuleMgr().getModule(QStringLiteral("Satellites"), true));
-#if defined(__OHOS__)
-			if (!sats)
-			{
-				StelApp::getInstance().getModuleMgr().loadPlugin(QStringLiteral("Satellites"));
-				sats = static_cast<Satellites*>(StelApp::getInstance().getModuleMgr().getModule(QStringLiteral("Satellites"), true));
-			}
-#endif
 			if (!sats) { result["ok"] = false; result["error"] = "Satellites plugin not loaded"; return result; }
 
 			auto sourceInfo = [](const QString& encoded, int index) {
@@ -19105,13 +19098,6 @@ extern "C" __attribute__((visibility("default"))) const char* StellariumOhos_com
 			QElapsedTimer catalogTimer;
 			catalogTimer.start();
 			Satellites* sats = static_cast<Satellites*>(StelApp::getInstance().getModuleMgr().getModule(QStringLiteral("Satellites"), true));
-#if defined(__OHOS__)
-			if (!sats)
-			{
-				StelApp::getInstance().getModuleMgr().loadPlugin(QStringLiteral("Satellites"));
-				sats = static_cast<Satellites*>(StelApp::getInstance().getModuleMgr().getModule(QStringLiteral("Satellites"), true));
-			}
-#endif
 			if (!sats) { result["ok"] = false; result["error"] = "Satellites plugin not loaded"; return result; }
 			const QStringList options = arg.split('|');
 			const QString group = options.value(0).trimmed();
@@ -19173,13 +19159,6 @@ extern "C" __attribute__((visibility("default"))) const char* StellariumOhos_com
 		if (commandName == "getSatellitePasses" || commandName == "getSatelliteDetail")
 		{
 			Satellites* sats = static_cast<Satellites*>(StelApp::getInstance().getModuleMgr().getModule(QStringLiteral("Satellites"), true));
-#if defined(__OHOS__)
-			if (!sats)
-			{
-				StelApp::getInstance().getModuleMgr().loadPlugin(QStringLiteral("Satellites"));
-				sats = static_cast<Satellites*>(StelApp::getInstance().getModuleMgr().getModule(QStringLiteral("Satellites"), true));
-			}
-#endif
 			if (!sats) { result["ok"] = false; result["error"] = "Satellites plugin not loaded"; return result; }
 
 			QString satelliteId;
@@ -19328,13 +19307,6 @@ extern "C" __attribute__((visibility("default"))) const char* StellariumOhos_com
 		if (commandName == "setSatellitesFlag")
 		{
 			Satellites* sats = static_cast<Satellites*>(StelApp::getInstance().getModuleMgr().getModule(QStringLiteral("Satellites"), true));
-#if defined(__OHOS__)
-			if (!sats)
-			{
-				StelApp::getInstance().getModuleMgr().loadPlugin(QStringLiteral("Satellites"));
-				sats = static_cast<Satellites*>(StelApp::getInstance().getModuleMgr().getModule(QStringLiteral("Satellites"), true));
-			}
-#endif
 			if (!sats) { result["ok"] = false; result["error"] = "Satellites plugin not loaded"; return result; }
 			QStringList parts = arg.split(":", Qt::SkipEmptyParts);
 			QString name = parts.size() > 0 ? parts[0].trimmed() : "";
@@ -24534,74 +24506,15 @@ void StelMainView::init()
         setMinTimeBetweenFrames(qMax(0, configuration->value("video/min_time_between_frames",5).toInt()));
 	setSkyBackgroundColor(Vec3f(configuration->value("color/sky_background_color", "0,0,0").toString()));
 
-#if defined(__OHOS__)
-	// Defer heavy optional plugins past the first rendered sky frame on OpenHarmony (~6s faster cold start!).
-	// Load lightweight MeteorShowers immediately (~2ms, used by tonight almanac & desktop widgets),
-	// then incrementally load remaining loadAtStartup plugins one-by-one on the Qt event loop.
-	stelApp->getModuleMgr().loadPlugin(QStringLiteral("MeteorShowers"));
-	// Wait 1800ms after first frame so startup interactive queries (widget planet switch,
-	// getTonightEvents desktop sync, first user gestures) execute immediately with zero contention!
-	QTimer::singleShot(1800, this, [this]() {
-		if (!stelApp)
-			return;
-		QStringList deferredIds;
-		const QList<StelModuleMgr::PluginDescriptor> allPlugins = stelApp->getModuleMgr().getPluginsList();
-		const QStringList heavyLast = {
-			QStringLiteral("Oculars"),
-			QStringLiteral("Pulsars"),
-			QStringLiteral("Quasars"),
-			QStringLiteral("Exoplanets")
-		};
-		for (const auto& d : allPlugins)
-		{
-			if (!d.loadAtStartup || d.loaded || d.info.id == QStringLiteral("MeteorShowers"))
-				continue;
-			if (d.info.id == QStringLiteral("Satellites"))
-				deferredIds.prepend(d.info.id);
-			else if (!heavyLast.contains(d.info.id))
-				deferredIds.append(d.info.id);
-		}
-		for (const auto& id : heavyLast)
-		{
-			for (const auto& d : allPlugins)
-			{
-				if (d.info.id == id && d.loadAtStartup && !d.loaded)
-					deferredIds.append(id);
-			}
-		}
-		auto queue = std::make_shared<QStringList>(deferredIds);
-		auto timer = new QTimer(this);
-		timer->setInterval(120);
-		connect(timer, &QTimer::timeout, this, [this, queue, timer]() {
-			if (!stelApp)
-			{
-				timer->stop();
-				timer->deleteLater();
-				return;
-			}
-			while (!queue->isEmpty())
-			{
-				const QString nextId = queue->takeFirst();
-				if (stelApp->getModuleMgr().getModule(nextId, true) != nullptr)
-					continue;
-				stelApp->getModuleMgr().loadPlugin(nextId);
-				return;
-			}
-			timer->stop();
-			timer->deleteLater();
-			stelApp->initScriptMgr();
-			qInfo() << "[StellariumOhos] deferred plugin & script initialization finished";
-		});
-		timer->start();
-	});
-#else
 	// XXX: This should be done in StelApp::init(), unfortunately for the moment we need to init the gui before the
 	// plugins, because the gui creates the QActions needed by some plugins.
+	// Load every plugin synchronously here, while the startup splash/mask is still covering
+	// the window: the first interactive sky frame then has all plugin state (satellites,
+	// 3D sceneries, eyepiece overlays, world calendars, ...) already restored.
 	stelApp->initPlugIns();
 
 	// The script manager can only be fully initialized after the plugins have loaded.
 	stelApp->initScriptMgr();
-#endif
 
 #ifndef NO_GUI
 	// Set the global stylesheet, this is only useful for the tooltips.
