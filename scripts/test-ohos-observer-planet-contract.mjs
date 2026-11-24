@@ -110,6 +110,17 @@ test('Earth uses the configured default (guereins) independently of auto-selecti
   assert.match(restore, /setCurrentLandscapeID\(target\)/);
 });
 
+test('OHOS first-run deep-sky defaults enable textures and proportional hints', () => {
+  assert.match(native, /commandName == "applyDeepSkyDefaults"/);
+  assert.match(native, /ohos\/defaults\/deep_sky_v1/);
+  assert.match(native, /skyLayers->setFlagShow\(true\)/);
+  assert.match(native, /nebulae->setHintsProportional\(true\)/);
+  assert.match(native, /astro\/flag_nebula_display_no_texture", false/);
+  assert.match(native, /astro\/flag_nebula_hints_proportional", true/);
+  assert.match(host, /requestWhenReady\('applyDeepSkyDefaults'/);
+  assert.match(catalog, /applyDeepSkyDefaults/);
+});
+
 test('session continuation carries the panorama instead of hardcoding Earth', () => {
   const sessionExport = command('getSessionState');
   assert.match(sessionExport, /result\["landscapeID"\] = lm->getCurrentLandscapeID\(\)/);

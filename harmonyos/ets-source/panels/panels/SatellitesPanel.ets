@@ -412,10 +412,27 @@ export struct SatellitesPanel {
     }.width('100%')
   }
 
+  private hasInfoTip(value: ResourceStr): boolean {
+    if (typeof value === 'string') return value.length > 0
+    return true
+  }
+
   @Builder
-  displayToggleRow(label: ResourceStr, isOn: boolean, onChange: (v: boolean) => void) {
-    Row() {
-      Text(label).fontSize(14).fontColor(this.c.text).layoutWeight(1)
+  displayToggleRow(label: ResourceStr, isOn: boolean, onChange: (v: boolean) => void, infoTip: ResourceStr) {
+    Row({ space: 4 }) {
+      Row({ space: 2 }) {
+        Text(label)
+          .fontSize(14).fontColor(this.c.text)
+          .maxLines(2)
+          .textOverflow({ overflow: TextOverflow.Ellipsis })
+          .layoutWeight(this.hasInfoTip(infoTip) ? 0 : 1)
+          .constraintSize(this.hasInfoTip(infoTip) ? { maxWidth: '88%' } : {})
+        if (this.hasInfoTip(infoTip)) {
+          InfoTipButton({ title: label, tip: infoTip })
+        }
+      }
+        .layoutWeight(1)
+        .alignItems(VerticalAlign.Center)
       Toggle({ type: ToggleType.Switch, isOn: isOn })
         .onChange((v: boolean) => { onChange(v) })
     }
@@ -431,14 +448,15 @@ export struct SatellitesPanel {
     Column({ space: 8 }) {
       Text(I18n.t('sat_display_settings'))
         .fontSize(15).fontWeight(FontWeight.Medium).fontColor(this.c.text).width('100%').padding({ left: 2 })
-      this.displayToggleRow(I18n.t('c_show_labels'), this.satelliteStore.satLabels, (v: boolean) => { this.onSetFlag('labels', v) })
-      this.displayToggleRow(I18n.t('c_show_orbits'), this.satelliteStore.satOrbitLines, (v: boolean) => { this.onSetFlag('orbitLines', v) })
-      this.displayToggleRow(I18n.t('c_show_markers'), this.satelliteStore.satMarkerLayer, (v: boolean) => { this.onSetFlag('markerLayer', v) })
-      this.displayToggleRow(I18n.t('c_station_complexes'), this.satelliteStore.satStationComplexes, (v: boolean) => { this.onSetFlag('stationComplexes', v) })
-      Text(I18n.t('sat_orbit_preview_hint')).fontSize(11).fontColor(this.c.sub).width('100%').padding({ left: 4, right: 4 })
-      this.displayToggleRow(I18n.t('c_show_hints'), this.satelliteStore.satHints, (v: boolean) => { this.onSetFlag('hints', v) })
-      this.displayToggleRow(I18n.t('c_icon_mode'), this.satelliteStore.satIconicMode, (v: boolean) => { this.onSetFlag('iconicMode', v) })
-      this.displayToggleRow(I18n.t('c_hide_invisible'), this.satelliteStore.satHideInvisible, (v: boolean) => { this.onSetFlag('hideInvisible', v) })
+      this.displayToggleRow(I18n.t('c_show_labels'), this.satelliteStore.satLabels, (v: boolean) => { this.onSetFlag('labels', v) }, '')
+      this.displayToggleRow(I18n.t('c_show_orbits'), this.satelliteStore.satOrbitLines, (v: boolean) => { this.onSetFlag('orbitLines', v) }, '')
+      // Orbit-preview explanation belongs to the marker row as a compact ⓘ bubble,
+      // not as an inline paragraph between the marker and hint rows.
+      this.displayToggleRow(I18n.t('c_show_markers'), this.satelliteStore.satMarkerLayer, (v: boolean) => { this.onSetFlag('markerLayer', v) }, I18n.t('sat_orbit_preview_hint'))
+      this.displayToggleRow(I18n.t('c_station_complexes'), this.satelliteStore.satStationComplexes, (v: boolean) => { this.onSetFlag('stationComplexes', v) }, '')
+      this.displayToggleRow(I18n.t('c_show_hints'), this.satelliteStore.satHints, (v: boolean) => { this.onSetFlag('hints', v) }, '')
+      this.displayToggleRow(I18n.t('c_icon_mode'), this.satelliteStore.satIconicMode, (v: boolean) => { this.onSetFlag('iconicMode', v) }, '')
+      this.displayToggleRow(I18n.t('c_hide_invisible'), this.satelliteStore.satHideInvisible, (v: boolean) => { this.onSetFlag('hideInvisible', v) }, '')
     }
       .width('100%').padding(12).backgroundColor(this.c.soft)
       .border({ width: 0.6, color: this.c.border }).borderRadius(UI_RADIUS_CARD)

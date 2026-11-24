@@ -217,6 +217,7 @@ node scripts/stellarium-cli.mjs --device 7LZBB26323200303 --command getDeepSkyIm
 - `getTouchPickRadius` 返回触控基准半径；`setTouchPickRadius 66|48` 仅保留为诊断/回归命令。设置页已移除“触控拾取范围”，应用固定使用默认 66 vp。宽视场下实际半径可能因 10° 上限小于基准值，以 `effectiveRadiusVp` 为准。
 - `getNebulaFlags` / `setNebulaFlag` 扩展为完整 DSO 设置：`show`、`hints`、`catalogFilters`（掩码或 `all|standard|none`；`standard` = M/NGC/IC/PGC/Other）、`typeFilterUsage`、`typeFilters`（掩码或 `all|none`）、`labelsAmount`、`hintsAmount`、`labelsBrightness`、`hintsBrightness`、`designations`、`additionalNames`、`showOnlyNamed`、`outlines`、`hintsProportional`、`surfaceBrightness`、`sizeLimits`、`minSizeLimit`、`maxSizeLimit`、`nebulaMagnitudeLimit`、`nebulaMagnitude`。
 - 图层 → 深空面板提供星表/类型筛选、标签/提示数量与亮度、目录编号、附加名称、仅显示有名称、轮廓、比例提示、表面亮度、尺寸限制和 DSO 星等限制；本轮不提供 DSO 颜色自定义。
+- `applyDeepSkyDefaults` 为 OHOS 首次运行迁移：`ohos/defaults/deep_sky_v1` 标记缺失时开启 `astro/flag_nebula_display_no_texture=false`（深空背景图）并设置 `astro/flag_nebula_hints_proportional=true`（比例标识）；写入标记后保留用户后续选择。
 
 ```bash
 node scripts/stellarium-cli.mjs --device <设备ID> --command getTouchPickRadius --json

@@ -401,6 +401,13 @@ export struct OcularsPanel {
     }
     .width('100%').height('100%')
     .padding({ left: 8, right: 8, top: 8 })
-    .bindContentCover(this.showForm || this.importChoiceOpen, this.modalCover)
+    .bindContentCover(this.showForm || this.importChoiceOpen, this.modalCover, {
+      // 返回键/下滑关闭浮层不会经过 onCancel；必须同步复位，否则 showForm
+      // 仍为 true，再次点“编辑”不会触发新的 bindContentCover。
+      onDisappear: () => {
+        this.showForm = false
+        this.importChoiceOpen = false
+      }
+    })
   }
 }

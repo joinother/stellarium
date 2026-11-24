@@ -1,5 +1,22 @@
 > **身份图例**：本文件真机记录中出现的 `com.cnchensh.stellarium` 是**本机调试签名身份**（本机 DevEco 自动生成，非发布身份）；发布身份为 `com.joinother.skyinstrument`。构建脚本 `build-ohos-hap-windows.ps1 -Install` 从产物 `pack.info` 读取实际包名，仓库不写死任何签名身份（见 `docs/harmonyos/release/BUNDLE-IDENTITY-CLEANUP.md`）。
 
+## [2026-11-24] 深空默认开启、注释气泡化与目镜编辑器返回修复
+
+- **修改文件：** `src/StelMainView.cpp`、`src/StelOhosCommandCatalog.hpp`、`harmonyos/ets-source/pages/MainWindowNativeNode.ets`、`harmonyos/ets-source/panels/panels/SatellitesPanel.ets`、`harmonyos/ets-source/panels/layers/LayerViewTabs.ets`、`harmonyos/ets-source/panels/panels/OcularsPanel.ets`、`harmonyos/ets-source/capability/I18n.ets`、`scripts/test-ohos-observer-planet-contract.mjs`、`scripts/test-ohos-place-atmosphere.mjs`、`scripts/test-ohos-oculars-equipment.mjs`、`scripts/test-ohos-vivid-rendering-gate.mjs`、`docs/harmonyos/CLI.md`、`docs/harmonyos/CHANGELOG.md`。
+- **用户要求：** 深空背景图默认开启；比例标识默认开启；修正“显示卫星标记”注释位置并改用小气泡；图层-地景面板注释统一为气泡；目镜器材编辑弹窗用返回键关闭后可再次打开。
+- **修复：**
+  1. 新增 `applyDeepSkyDefaults` 首次运行迁移：标记 `ohos/defaults/deep_sky_v1` 缺失时设置 `astro/flag_nebula_display_no_texture=false`、`astro/flag_nebula_hints_proportional=true`，并同步运行时 `StelSkyLayerMgr`/`NebulaMgr`；标记存在后保留用户选择。宿主启动时调用一次；命令目录与 CLI 文档同步。
+  2. `SatellitesPanel.displayToggleRow` 支持统一的 ⓘ `InfoTipButton` 气泡；“显示卫星标记”行挂载 `sat_orbit_preview_hint`，删除标记/提示行之间的行间长文本。
+  3. 图层-地景面板的自动选择、雾山、地面预选、俯视淡出说明改为 `LayerSwitchRow.infoTip` 气泡，删除行内 `Text` 段落；同步修正 `landscape_auto_selection_hint` 与 `m_observer_map_hint` 文案，说明地球无匹配地景时回退默认地景、其他天体才使用平坦地平线。
+  4. `OcularsPanel.bindContentCover` 增加 `onDisappear` 复位 `showForm`/`importChoiceOpen`；系统返回键关闭编辑器后可再次打开。
+- **构建结果：** `-Release` 引擎编译通过（`StelMainView.cpp`、`StelOhosCommandCatalog.hpp`）；最终 `-Release -SkipEngine -SkipResources -Install -Device 192.168.1.4:36717` BUILD SUCCESSFUL（50 s），signed HAP 803.5 MB（842,535,051 字节），安装并启动成功。
+- **验证结果：**
+  - 主机：`test-ohos-observer-planet-contract.mjs` 19/19；`test-ohos-oculars-equipment.mjs` 11/11；`test-ohos-design-system-and-infotip.mjs` 5/5；`test-ohos-vivid-rendering-gate.mjs` 15/15；`test-ohos-place-atmosphere.mjs` 13/14（既有 `bortleScale` 注释断言失败，与本次改动无关）；`check-ohos-command-catalog.mjs` 447 命令一致；`check-ohos-ui-contract.mjs` intact；`check-ohos-i18n.mjs` 源/构建镜像一致。
+  - 真机（`192.168.1.4:36717`）：安装后 `applyDeepSkyDefaults` 返回 `dsoTextures=true`、`hintsProportional=true`、`initialized=false`（迁移标记已存在，保留用户选择）；此前同一逻辑构建中已验证两项手动关闭后重启仍为关闭，迁移不会覆盖用户选择，验证后已恢复开启。
+  - 目镜：打开器材编辑弹窗 → `uitest uiInput keyEvent Back` 关闭 → 再次点击“编辑”弹窗重新出现。
+  - 卫星：显示页“显示卫星标记 ⓘ”点击后气泡展示 `sat_orbit_preview_hint`，标题与说明锚定图标；原行间长文本已移除。
+  - 图层-地景：地面、自动选择、雾山、俯视淡出均为行内 ⓘ；真机截图确认“地面”“随观测星球自动选择地景”气泡位置与文案，更新后的文案（地球回退默认地景）已随最终 HAP 生效；面板内无内联说明段落。
+
 ## [2026-11-24] 地球启动地景恢复盖兰并记住手选地景
 
 - **修改文件：** `src/core/modules/LandscapeMgr.cpp`、`src/core/StelApp.cpp`、`src/gui/LocationDialog.cpp`、`src/StelMainView.cpp`、`harmonyos/ets-source/capability/LocationController.ets`、`harmonyos/ets-source/qability/CollaborationSessionService.ets`、`scripts/test-ohos-observer-planet-contract.mjs`、`scripts/test-ohos-collaboration-contract.mjs`、`docs/harmonyos/CLI.md`、`docs/harmonyos/specs/SETTINGS-PERSISTENCE.md`、`docs/harmonyos/CHANGELOG.md`。

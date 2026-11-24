@@ -258,13 +258,15 @@ test('landscape auto-selection is exposed with Earth-safe fallback and Earth-onl
   assert.match(layersPanel, /onToggleLandscapeAutoSelection/)
   assert.match(layersPanel, /earthObserver: this\.earthObserver/)
   assert.match(host, /onToggleLandscapeAutoSelection: \(enabled: boolean\) => \{ this\.layerCtl\(\)\.setLandscapeAutoSelection\(enabled\) \}/)
-  // 说明文字统一放在开关行外；自动地景、雾山、俯视淡出复用同一行组件与注释样式。
-  assert.doesNotMatch(layerTabs, /hint: I18n\.t\('landscape_auto_selection_hint'\)/)
-  assert.doesNotMatch(layerTabs, /hint: this\.earthObserver/)
-  assert.match(layerTabs, /Text\(I18n\.t\('landscape_auto_selection_hint'\)\)/)
-  assert.match(layerTabs, /Text\(this\.earthObserver \? I18n\.t\('mist_horizon_hint'\) : I18n\.t\('mist_horizon_earth_only'\)\)/)
+  // 说明文字统一收进开关行的 ⓘ 气泡；不再在行间展开长段落。
+  assert.match(layerTabs, /infoTip: I18n\.t\('landscape_auto_selection_hint'\)/)
+  assert.match(layerTabs, /infoTip: this\.earthObserver \? I18n\.t\('mist_horizon_hint'\) : I18n\.t\('mist_horizon_earth_only'\)/)
+  assert.match(layerTabs, /infoTip: this\.layerStore\.ground \? '' : I18n\.t\('landscape_preselect_hint'\)/)
+  assert.doesNotMatch(layerTabs, /Text\(I18n\.t\('landscape_auto_selection_hint'\)\)/)
+  assert.doesNotMatch(layerTabs, /Text\(this\.earthObserver \? I18n\.t\('mist_horizon_hint'\)/)
   assert.match(layerTabs, /label: I18n\.t\('landscape_fade_with_zoom'\)/)
-  assert.match(layerTabs, /Text\(I18n\.t\('landscape_fade_with_zoom_hint'\)\)/)
+  assert.match(layerTabs, /infoTip: I18n\.t\('landscape_fade_with_zoom_hint'\)/)
+  assert.doesNotMatch(layerTabs, /Text\(I18n\.t\('landscape_fade_with_zoom_hint'\)\)/)
   // 透明度控件位于地景列表之前，不再挂在页尾。
   const transparencyIndex = layerTabs.indexOf("I18n.t('i0289')")
   const listIndex = layerTabs.indexOf('ForEach(this.layerViewStore.landscapeList')

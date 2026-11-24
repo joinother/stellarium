@@ -2152,6 +2152,8 @@ export struct WindowNativeNode {
       setSkyCultureObserverLatitude: (value: number): void => { this.skyCultureSettingsStore.skyCultureObserverLatitude = value },
       setObserverPlanet: (value: string): void => { this.sessionToolStore.observerPlanet = value }
     })
+    // OHOS 首次运行默认开启深空背景图与比例标识；迁移标记存在后保留用户选择。
+    this.commandPort().requestWhenReady('applyDeepSkyDefaults', '', () => { this.refreshState() })
     // OHOS 首次运行默认开启“随观测星球自动选择地景”；已显式保存过的偏好保持不变。
     this.commandPort().requestWhenReady('applyLandscapeDefaults', '', () => { this.refreshState() })
     // OHOS 没有 PC 位置对话框中的“自动启用大气”选项：固定开启，返回地球时由核心

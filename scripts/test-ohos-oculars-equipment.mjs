@@ -134,6 +134,10 @@ test('panel hosts summary, six tabs, equipment pages and modal CRUD', () => {
   assert.ok(panel.includes("@Prop @Watch('onEditorRequestChanged') editorRequest"))
   assert.ok(panel.includes('onEditorRequestChanged()'))
   assert.ok(panel.includes('this.store.ocularPanelTab'))
+  // 返回键关闭 bindContentCover 时必须复位弹窗状态，否则无法再次打开编辑器。
+  assert.match(panel, /bindContentCover\(this\.showForm \|\| this\.importChoiceOpen, this\.modalCover, \{[\s\S]*onDisappear:/)
+  assert.match(panel, /onDisappear: \(\) => \{\s*this\.showForm = false\s*this\.importChoiceOpen = false/)
+
   assert.ok(panel.includes("@Prop @Watch('onScrollRequestChanged') scrollRequest"))
   const store = read('harmonyos/ets-source/state/TelescopeStore.ets')
   assert.ok(store.includes('ocularPanelTab: number = 0'))

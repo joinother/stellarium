@@ -10827,6 +10827,35 @@ extern "C" __attribute__((visibility("default"))) const char* StellariumOhos_com
 			result["enabled"] = lmgr->getFlagEnvironmentAutoEnable();
 			return result;
 		}
+		// applyDeepSkyDefaults — OHOS first-run migration. Earlier builds shipped
+		// the deep-sky texture switch and proportional hints off on some devices.
+		// Enable both once, then keep any later user choice.
+		if (commandName == "applyDeepSkyDefaults")
+		{
+			QSettings* conf = StelApp::getInstance().getSettings();
+			StelSkyLayerMgr* skyLayers = GETSTELMODULE(StelSkyLayerMgr);
+			NebulaMgr* nebulae = GETSTELMODULE(NebulaMgr);
+			if (!conf || !skyLayers || !nebulae)
+			{
+				result["error"] = "deep-sky modules not available";
+				return result;
+			}
+			bool initialized = false;
+			if (!conf->contains("ohos/defaults/deep_sky_v1"))
+			{
+				skyLayers->setFlagShow(true);
+				nebulae->setHintsProportional(true);
+				StelApp::immediateSaveNow("astro/flag_nebula_display_no_texture", false);
+				StelApp::immediateSaveNow("astro/flag_nebula_hints_proportional", true);
+				StelApp::immediateSaveNow("ohos/defaults/deep_sky_v1", true);
+				initialized = true;
+			}
+			result["ok"] = true;
+			result["initialized"] = initialized;
+			result["dsoTextures"] = skyLayers->getFlagShow();
+			result["hintsProportional"] = nebulae->getHintsProportional();
+			return result;
+		}
 		// applyEnvironmentDefaults — OHOS has no Location dialog, so automatic
 		// atmosphere/fog switching is a fixed product behavior. Ensure it is on
 		// and persist the value so the core environment history remains enabled.

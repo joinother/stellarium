@@ -121,6 +121,9 @@ test('satellite marker layer has an independent platform switch', () => {
   assert.match(store, /satMarkerLayer: boolean = true/);
   assert.match(controller, /name === 'markerLayer'/);
   assert.match(panel, /c_show_markers/);
+  // 轨道预览说明挂在“显示卫星标记”行的 ⓘ 气泡，不再作为行间长文本。
+  assert.match(panel, /displayToggleRow\(I18n\.t\('c_show_markers'\)[\s\S]{0,240}?I18n\.t\('sat_orbit_preview_hint'\)\)/);
+  assert.doesNotMatch(panel, /Text\(I18n\.t\('sat_orbit_preview_hint'\)\)/);
 });
 
 test('satellite touch picking uses markerDrawn instead of faking icon magnitude', () => {

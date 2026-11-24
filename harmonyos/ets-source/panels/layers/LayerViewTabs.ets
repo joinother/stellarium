@@ -1239,40 +1239,34 @@ export struct LayerLandscapeTab {
 
   build() {
     Column({ space: 0 }) {
-      LayerSwitchRow({ label: I18n.t('s0306'), isOn: this.layerStore.ground, onToggle: (value: boolean) => { this.onToggleLayer('actionShow_Ground', '', value) } })
+      LayerSwitchRow({
+        label: I18n.t('s0306'),
+        infoTip: this.layerStore.ground ? '' : I18n.t('landscape_preselect_hint'),
+        isOn: this.layerStore.ground,
+        onToggle: (value: boolean) => { this.onToggleLayer('actionShow_Ground', '', value) }
+      })
       LayerSwitchRow({
         label: I18n.t('landscape_auto_selection'),
+        infoTip: I18n.t('landscape_auto_selection_hint'),
         isOn: this.layerStore.landscapeAutoSelection,
         onToggle: (value: boolean) => { this.onToggleLandscapeAutoSelection(value) }
       })
-      Text(I18n.t('landscape_auto_selection_hint'))
-        .fontSize(panelFontSize(11, this.readableUi)).fontColor(this.c.sub).width('100%')
-        .padding({ left: 10, right: 10, bottom: 8 })
       LayerSwitchRow({
         label: I18n.t('mist_horizon'),
+        infoTip: this.earthObserver ? I18n.t('mist_horizon_hint') : I18n.t('mist_horizon_earth_only'),
         isOn: this.layerStore.mistHorizon,
         rowEnabled: this.earthObserver,
         onToggle: (value: boolean) => { this.onToggleLayer('actionShow_MistHorizon', '', value) }
       })
-      Text(this.earthObserver ? I18n.t('mist_horizon_hint') : I18n.t('mist_horizon_earth_only'))
-        .fontSize(panelFontSize(11, this.readableUi)).fontColor(this.c.sub).width('100%')
-        .padding({ left: 10, right: 10, bottom: 8 })
-      if (!this.layerStore.ground) {
-        Text(I18n.t('landscape_preselect_hint'))
-          .fontSize(panelFontSize(11, this.readableUi)).fontColor(this.c.sub).width('100%')
-          .padding({ left: 10, right: 10, bottom: 8 })
-      }
       LayerSwitchRow({ label: I18n.t('s0520'), isOn: this.layerStore.landscapeIllum, onToggle: (value: boolean) => { this.onToggleLayer('actionShow_LandscapeIllumination', '', value) } })
       LayerSwitchRow({ label: I18n.t('s0521'), isOn: this.layerStore.landscapeLabels, onToggle: (value: boolean) => { this.onToggleLayer('actionShow_LandscapeLabels', '', value) } })
       LayerSwitchRow({ label: I18n.t('s0307'), isOn: this.layerStore.fogEffect, onToggle: (value: boolean) => { this.onToggleLayer('actionShow_Fog', '', value) } })
       LayerSwitchRow({
         label: I18n.t('landscape_fade_with_zoom'),
+        infoTip: I18n.t('landscape_fade_with_zoom_hint'),
         isOn: this.layerViewStore.landscapeFadeWithZoom,
         onToggle: (value: boolean) => { this.onSetLandscapeFadeWithZoom(value) }
       })
-      Text(I18n.t('landscape_fade_with_zoom_hint'))
-        .fontSize(panelFontSize(11, this.readableUi)).fontColor(this.c.sub).width('100%')
-        .padding({ left: 10, right: 10, bottom: 8 })
       Row() {
         Text(I18n.t('i0289')).fontSize(panelFontSize(14, this.readableUi)).fontColor(this.c.text).width(86)
         Text(this.layerViewStore.landscapeTransp + '%')
