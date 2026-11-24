@@ -343,15 +343,19 @@ export class LocationController {
   async restoreObserverLocation(): Promise<void> {
     const json = await this.readObserverLocationStorage()
     if (json.length === 0) {
+      // 没有持久化观测点时引擎仍在地球；仍需把记住的地球地景应用到默认地景之后。
+      this.requestSavedEarthLandscapeRestore()
       return
     }
     let rec: ObserverLocationRecord | undefined = undefined
     try {
       rec = JSON.parse(json) as ObserverLocationRecord
     } catch (e) {
+      this.requestSavedEarthLandscapeRestore()
       return
     }
     if (rec === undefined || !Number.isFinite(rec.latitude) || !Number.isFinite(rec.longitude)) {
+      this.requestSavedEarthLandscapeRestore()
       return
     }
     const planet = typeof rec.planet === 'string' && rec.planet.length > 0 ? rec.planet : 'Earth'
@@ -370,8 +374,13 @@ export class LocationController {
     this.restoreDetailLongitude = rec.longitude
     hilog.info(0x0000, 'StellariumArkUI', '[location] restoring persisted observer location')
     this.setLocation(name, rec.latitude, rec.longitude, restoredAltitude, planet, true, source)
-    // 自动选择开启且启动落在地球时，若引擎仍停在 zero，则恢复上次记住的地球地景。
     // 非地球记录会在随后的 setObserverPlanet 中由自动匹配覆盖，这里无需判断 planet。
+    this.requestSavedEarthLandscapeRestore()
+  }
+
+  // 启动兜底：引擎已加载默认地景（盖兰）后，应用用户记住的地球地景。
+  // 命令自身会判断当前是否在地球；无记录或记录损坏时也安全。
+  private requestSavedEarthLandscapeRestore(): void {
     this.port.requestWhenReady('restoreSavedEarthLandscape', '', () => {})
   }
 }

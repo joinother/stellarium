@@ -913,7 +913,11 @@ void LandscapeMgr::init()
 	// Put the atmosphere's Skylight under the StelProperty system (simpler and more consistent GUI)
 	StelApp::getInstance().getStelPropertyManager()->registerObject(&skylight);
 
-	defaultLandscapeID = conf->value("init_location/landscape_name").toString();
+	defaultLandscapeID = conf->value("init_location/landscape_name").toString().trimmed();
+	// Guereins is the bundled Earth default. Keeping a real fallback here avoids
+	// startup with a flat zero horizon when a config predates the key.
+	if (defaultLandscapeID.isEmpty())
+		defaultLandscapeID = QStringLiteral("guereins");
 
 	// We must make sure to allow auto location or command-line location even if landscape usually should set location.
 	StelCore *core = StelApp::getInstance().getCore();
@@ -1313,6 +1317,11 @@ void LandscapeMgr::onTargetLocationChanged(const StelLocation &loc, const QStrin
 		// indexOf()==0 is a valid match; >0 wrongly falls back to the zero horizon.
 		if (getAllLandscapeNames().indexOf(loc.planetName) >= 0)
 			setCurrentLandscapeName(loc.planetName);
+		// Earth has no landscape named "Earth". Restore the configured default
+		// (guereins unless the user selected another default) instead of a flat
+		// colored horizon. Other bodies without a landscape still use zero.
+		else if (loc.planetName == QStringLiteral("Earth") && !defaultLandscapeID.isEmpty())
+			setCurrentLandscapeID(defaultLandscapeID);
 		else
 			setCurrentLandscapeID("zero");
 		setFlagLandscapeSetsLocation(landscapeSetsLocation);

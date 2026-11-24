@@ -667,9 +667,13 @@ void LocationDialog::moveToAnotherPlanet()
 			// Details: https://bugs.launchpad.net/stellarium/+bug/1173254
 			if (lMgr->getAllLandscapeNames().contains(loc.planetName))
 				lMgr->setCurrentLandscapeName(loc.planetName); // TODO: Why not setCurrentLandscapeID?
+			// Earth has no landscape named "Earth"; use the configured default
+			// instead of a flat zero horizon. Harmonize with
+			// LandscapeMgr::onTargetLocationChanged().
+			else if (loc.planetName == "Earth" && !lMgr->getDefaultLandscapeID().isEmpty())
+				lMgr->setCurrentLandscapeID(lMgr->getDefaultLandscapeID());
 			else
-				//lMgr->setProperty("currentLandscapeID", lMgr->property("defaultLandscapeID"));
-				lMgr->setCurrentLandscapeID("zero"); // harmonize with LandscapeMgr::onTargetLocationChanged()
+				lMgr->setCurrentLandscapeID("zero");
 		}
 
 		// populate site list with sites only from that planet, or full list for Earth (faster than removing the ~50 non-Earth positions...).

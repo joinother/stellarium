@@ -1,5 +1,21 @@
 > **身份图例**：本文件真机记录中出现的 `com.cnchensh.stellarium` 是**本机调试签名身份**（本机 DevEco 自动生成，非发布身份）；发布身份为 `com.joinother.skyinstrument`。构建脚本 `build-ohos-hap-windows.ps1 -Install` 从产物 `pack.info` 读取实际包名，仓库不写死任何签名身份（见 `docs/harmonyos/release/BUNDLE-IDENTITY-CLEANUP.md`）。
 
+## [2026-11-24] 地球启动地景恢复盖兰并记住手选地景
+
+- **修改文件：** `src/core/modules/LandscapeMgr.cpp`、`src/core/StelApp.cpp`、`src/gui/LocationDialog.cpp`、`src/StelMainView.cpp`、`harmonyos/ets-source/capability/LocationController.ets`、`harmonyos/ets-source/qability/CollaborationSessionService.ets`、`scripts/test-ohos-observer-planet-contract.mjs`、`scripts/test-ohos-collaboration-contract.mjs`、`docs/harmonyos/CLI.md`、`docs/harmonyos/specs/SETTINGS-PERSISTENCE.md`、`docs/harmonyos/CHANGELOG.md`。
+- **用户要求：** 默认位置在地球；默认地景为盖兰；地球场景下用户可能手选其他地景；非地球自动选择行为保持不变。经桌面端分析确认自动地景问题并非 OHOS 独有，因此核心修复不设 OHOS 门控，便于后续向上游提交 bugfix PR。
+- **根因：** `StelApp::init` 在 `init_location/location=auto` 且自动选择开启时无条件发 `ZeroColor(...)`；`LandscapeMgr::onTargetLocationChanged` 与桌面 `LocationDialog::moveToAnotherPlanet` 在地球没有同名地景时回落到 `zero`。`setLandscape` 不保存手选；`restoreSavedEarthLandscape` 仅在 `saved_earth_landscape_id` 非空且当前为 zero 时生效，缺少默认盖兰回退。
+- **修复：**
+  1. 跨平台核心修复：`LandscapeMgr::init` 的默认地景缺失时回落到 `guereins`；`StelApp::init` 在地球已加载真实地景时跳过启动 `ZeroColor`；`LandscapeMgr::onTargetLocationChanged` 与桌面 `LocationDialog::moveToAnotherPlanet` 在地球无同名地景时改用 `defaultLandscapeID`，不再加载 zero。非地球行为不变；显式 `zero` 默认值仍保留地形着色路径。
+  2. OHOS 持久化：`setLandscape` 在地球成功后立即写入 `landscape/saved_earth_landscape_id`（含显式 `zero`；无效 ID 回落 zero 不写入）。
+  3. `setObserverPlanet` 返回地球时始终按记忆/默认地景传 hint，不受自动选择开关影响；离开地球时保存当前真实地景；非地球仍按名称自动匹配。
+  4. `restoreSavedEarthLandscape` 改为启动兜底：引擎加载默认盖兰后，记忆无效或当前相同则不动作，不同才应用；不再要求自动选择开启或当前为 zero。`LocationController` 在无持久化观测点时也会调用一次。
+  5. `getSessionState`/`applySessionState` 携带 `landscapeID`，移除 Earth→`garching` 硬编码；协作会话仅在 `includeLocation=true` 时携带地景，避免泄露站点信息。
+- **构建结果：** 全量 `-Release` 引擎交叉编译通过（`StelApp.cpp`、`LandscapeMgr.cpp`、`LocationDialog.cpp`、`StelMainView.cpp`）；`-Release -SkipEngine -SkipResources -Install -Device 192.168.1.4:36717` BUILD SUCCESSFUL，signed HAP 803.5 MB（842,522,006 字节），安装并启动成功。
+- **验证结果：**
+  - 主机：`test-ohos-observer-planet-contract.mjs` 18/18；`test-ohos-collaboration-contract.mjs` 通过；`check-ohos-command-catalog.mjs` 446 命令一致；`check-ohos-ui-contract.mjs` intact；`check-ohos-i18n.mjs` 无 error。
+  - 真机（`192.168.1.4:36717`）：安装后启动 `current=guereins`、自动选择开启；清空记忆键并重启仍为 `guereins`；手选 `garching` 后配置写入并在重启后保持；关闭自动选择时地球往返/重启仍恢复 `garching`；开启后火星自动匹配 `mars`、返回地球恢复 `garching`；显式 `zero` 重启保持；`getSessionState.landscapeID=guereins`，`applySessionState` 会应用携带的 `garching`。设备最终 `current=guereins`、记忆键为空、自动选择开启。
+
 ## [2026-11-24] 修复应用图层预设后 FOV 跳到最大放大
 
 - **修改文件：** `plugins/Oculars/src/Oculars.cpp`、`scripts/test-ohos-oculars-equipment.mjs`、`docs/harmonyos/CHANGELOG.md`。

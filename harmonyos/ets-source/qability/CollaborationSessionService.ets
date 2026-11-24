@@ -96,6 +96,12 @@ function copyState(nativeState: Record<string, Object>, includeLocation: boolean
   if (includeLocation) {
     const location = copyLocation(nativeState['location'])
     if (location !== undefined) state['location'] = location
+    // A panorama ID can identify a site, so it follows the location privacy
+    // switch. Without it the receiver uses its local Earth memory/default.
+    const landscapeID = nativeState['landscapeID']
+    if (typeof landscapeID === 'string' && landscapeID.length > 0) {
+      state['landscapeID'] = shortText(landscapeID)
+    }
   }
   return state
 }

@@ -27,7 +27,7 @@ assert.match(service, /schemaVersion/);
 assert.match(service, /expiresAt/);
 assert.match(service, /locationIncluded/);
 assert.match(service, /redactedFields/);
-for (const field of ['viewJ2000', 'fovDeg', 'jd', 'selected', 'flags']) {
+for (const field of ['viewJ2000', 'fovDeg', 'jd', 'selected', 'landscapeID', 'flags']) {
   assert.match(service, new RegExp(`\\['${field}'\\]`), `${field} is not explicitly whitelisted`);
 }
 assert.doesNotMatch(service, /nativeState\[['"](SN|UDID|password|telescopeHost|telescopePort)['"]\]/);

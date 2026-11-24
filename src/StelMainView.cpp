@@ -10737,6 +10737,16 @@ extern "C" __attribute__((visibility("default"))) const char* StellariumOhos_com
 			if (!lmgr->getFlagLandscape()) lmgr->setFlagLandscapeSetsLocation(false);
 			const bool ok = lmgr->getCurrentLandscapeID() == arg || lmgr->setCurrentLandscapeID(arg);
 			lmgr->setFlagLandscapeSetsLocation(setsLocation);
+			// Remember an explicit Earth panorama across restarts. Persist only a
+			// request that actually became current, so an unknown ID falling back
+			// to "zero" is not mistaken for a user choice. "zero" itself is a
+			// legitimate explicit choice and is remembered too.
+			StelCore* coreState = StelApp::getInstance().getCore();
+			if (ok && coreState && lmgr->getCurrentLandscapeID() == arg &&
+				coreState->getCurrentLocation().planetName == QStringLiteral("Earth"))
+			{
+				StelApp::immediateSaveNow("landscape/saved_earth_landscape_id", arg);
+			}
 			result["ok"] = ok;
 			result["current"] = lmgr->getCurrentLandscapeID();
 			return result;
@@ -10860,26 +10870,31 @@ extern "C" __attribute__((visibility("default"))) const char* StellariumOhos_com
 			result["enabled"] = lmgr->getFlagLandscapeAutoSelection();
 			return result;
 		}
-		// restoreSavedEarthLandscape — startup only. When the app comes back on
-		// Earth with the zero horizon but automatic selection is on, re-apply the
-		// panorama remembered before the last departure. A real non-zero landscape
-		// is left alone so a user's current choice is not overridden.
+		// restoreSavedEarthLandscape — startup reconciliation. Earth always uses
+		// the user's remembered panorama, or the configured default (guereins)
+		// when no valid choice exists. This is independent of the "match the
+		// observing body" auto-selection switch, which only governs non-Earth
+		// planets. Apply only when the current panorama differs, so a landscape
+		// already loaded by LandscapeMgr::init (or restored with the location)
+		// is left untouched.
 		if (commandName == "restoreSavedEarthLandscape")
 		{
 			LandscapeMgr* lmgr = GETSTELMODULE(LandscapeMgr);
 			StelCore* coreState = StelApp::getInstance().getCore();
-			if (!lmgr || !coreState || !lmgr->getFlagLandscapeAutoSelection() ||
+			if (!lmgr || !coreState ||
 				coreState->getCurrentLocation().planetName != QStringLiteral("Earth"))
 			{
 				result["ok"] = true;
 				result["applied"] = false;
 				return result;
 			}
-			const QString saved = StelApp::getInstance().getSettings()
+			QString target = StelApp::getInstance().getSettings()
 				->value("landscape/saved_earth_landscape_id").toString();
+			if (target.isEmpty() || !lmgr->getAllLandscapeIDs().contains(target))
+				target = lmgr->getDefaultLandscapeID();
 			const QString current = lmgr->getCurrentLandscapeID();
-			if (saved.isEmpty() || !lmgr->getAllLandscapeIDs().contains(saved) ||
-				(!current.isEmpty() && current != QStringLiteral("zero")))
+			if (target.isEmpty() || !lmgr->getAllLandscapeIDs().contains(target) ||
+				current == target)
 			{
 				result["ok"] = true;
 				result["applied"] = false;
@@ -10888,7 +10903,7 @@ extern "C" __attribute__((visibility("default"))) const char* StellariumOhos_com
 			}
 			const bool setsLocation = lmgr->getFlagLandscapeSetsLocation();
 			lmgr->setFlagLandscapeSetsLocation(false);
-			const bool applied = lmgr->setCurrentLandscapeID(saved);
+			const bool applied = lmgr->setCurrentLandscapeID(target);
 			lmgr->setFlagLandscapeSetsLocation(setsLocation);
 			result["ok"] = true;
 			result["applied"] = applied;
@@ -13586,35 +13601,37 @@ extern "C" __attribute__((visibility("default"))) const char* StellariumOhos_com
 				}
 			}
 			LandscapeMgr* landscapeMgr = GETSTELMODULE(LandscapeMgr);
-			// The engine's auto-selection matches a landscape by the observer body's
-			// English name and falls back to zero. Earth has no such landscape, so
-			// remember the last Earth panorama in the OHOS bridge and pass it as an
-			// explicit landscape ID when returning, without changing core behavior.
+			// Earth always returns to the remembered panorama (or the configured
+			// default, guereins); this is not the "auto-select by observing body"
+			// feature and must also work with that switch off. Other bodies keep
+			// the upstream auto-selection route. Remember the departing Earth
+			// panorama before switching away.
 			QString landscapeHint;
-			const bool autoLandscape = planetChanged && landscapeMgr &&
-				landscapeMgr->getFlagLandscapeAutoSelection();
-			if (autoLandscape)
+			if (planetChanged && landscapeMgr)
 			{
 				const QString previousPlanet = core->getCurrentLocation().planetName;
+				if (previousPlanet == QStringLiteral("Earth") &&
+					loc.planetName != QStringLiteral("Earth"))
+				{
+					const QString earthLandscape = landscapeMgr->getCurrentLandscapeID();
+					// A transient zero horizon must not overwrite the remembered
+					// panorama.
+					if (!earthLandscape.isEmpty() && earthLandscape != QStringLiteral("zero"))
+						StelApp::immediateSaveNow("landscape/saved_earth_landscape_id", earthLandscape);
+				}
 				if (loc.planetName == QStringLiteral("Earth"))
 				{
 					QString savedEarth = StelApp::getInstance().getSettings()
 						->value("landscape/saved_earth_landscape_id").toString();
 					if (savedEarth.isEmpty() || !landscapeMgr->getAllLandscapeIDs().contains(savedEarth))
 						savedEarth = landscapeMgr->getDefaultLandscapeID();
-					landscapeHint = savedEarth;
+					if (!savedEarth.isEmpty() && landscapeMgr->getAllLandscapeIDs().contains(savedEarth))
+						landscapeHint = savedEarth;
+					else
+						landscapeHint = QStringLiteral("zero");
 				}
-				else
+				else if (landscapeMgr->getFlagLandscapeAutoSelection())
 				{
-					if (previousPlanet == QStringLiteral("Earth"))
-					{
-						const QString earthLandscape = landscapeMgr->getCurrentLandscapeID();
-						// Startup restoration may switch away from the engine's default
-						// Earth before the persisted observer location is applied; do not
-						// let that transient zero horizon overwrite the saved panorama.
-						if (!earthLandscape.isEmpty() && earthLandscape != QStringLiteral("zero"))
-							StelApp::immediateSaveNow("landscape/saved_earth_landscape_id", earthLandscape);
-					}
 					landscapeHint = loc.planetName;
 				}
 			}
@@ -17336,7 +17353,16 @@ extern "C" __attribute__((visibility("default"))) const char* StellariumOhos_com
 			result["selected"] = selName;
 			QJsonObject fl;
 			LandscapeMgr* lm = GETSTELMODULE(LandscapeMgr);
-			if (lm) { fl["atmosphere"] = lm->getFlagAtmosphere(); fl["fog"] = lm->getFlagFog(); fl["landscape"] = lm->getFlagLandscape(); fl["cardinals"] = lm->getFlagCardinalPoints(); }
+			if (lm)
+			{
+				fl["atmosphere"] = lm->getFlagAtmosphere();
+				fl["fog"] = lm->getFlagFog();
+				fl["landscape"] = lm->getFlagLandscape();
+				fl["cardinals"] = lm->getFlagCardinalPoints();
+				// Carry the exact panorama so the receiving device does not
+				// hardcode a different Earth landscape.
+				result["landscapeID"] = lm->getCurrentLandscapeID();
+			}
 			ConstellationMgr* cm = GETSTELMODULE(ConstellationMgr);
 			if (cm) { fl["constLines"] = cm->getFlagLines(); fl["constLabels"] = cm->getFlagLabels(); }
 			fl["tracking"] = movementMgr->getFlagTracking();
@@ -17372,15 +17398,38 @@ extern "C" __attribute__((visibility("default"))) const char* StellariumOhos_com
 					loc.altitude = lo["altitude"].toInt();
 					loc.role = QChar('X');
 					loc.ianaTimeZone = lo["ianaTimeZone"].toString(QStringLiteral("system_default"));
-					QString landscapeID;
-					if (planet == "Moon") landscapeID = "moon";
-					else if (planet == "Mars") landscapeID = "mars";
-					else if (planet == "Jupiter") landscapeID = "jupiter";
-					else if (planet == "Saturn") landscapeID = "saturn";
-					else if (planet == "Uranus") landscapeID = "uranus";
-					else if (planet == "Neptune") landscapeID = "neptune";
-					else if (planet == "Sun") landscapeID = "sun";
-					else if (planet == "Earth") landscapeID = "garching";
+					// Prefer the panorama exported with the session; older sessions
+					// fall back to the planet panorama, and Earth uses the local
+					// remembered/default panorama instead of a hardcoded landscape.
+					QString landscapeID = s.value("landscapeID").toString();
+					LandscapeMgr* lm = GETSTELMODULE(LandscapeMgr);
+					if (!landscapeID.isEmpty() &&
+						(!lm || !lm->getAllLandscapeIDs().contains(landscapeID)))
+						landscapeID.clear();
+					if (landscapeID.isEmpty())
+					{
+						if (planet == "Moon") landscapeID = "moon";
+						else if (planet == "Mars") landscapeID = "mars";
+						else if (planet == "Jupiter") landscapeID = "jupiter";
+						else if (planet == "Saturn") landscapeID = "saturn";
+						else if (planet == "Uranus") landscapeID = "uranus";
+						else if (planet == "Neptune") landscapeID = "neptune";
+						else if (planet == "Sun") landscapeID = "sun";
+						else if (planet == "Earth")
+						{
+							QString savedEarth = StelApp::getInstance().getSettings()
+								->value("landscape/saved_earth_landscape_id").toString();
+							if (lm)
+							{
+								if (savedEarth.isEmpty() || !lm->getAllLandscapeIDs().contains(savedEarth))
+									savedEarth = lm->getDefaultLandscapeID();
+								if (!savedEarth.isEmpty() && lm->getAllLandscapeIDs().contains(savedEarth))
+									landscapeID = savedEarth;
+							}
+							if (landscapeID.isEmpty())
+								landscapeID = QStringLiteral("zero");
+						}
+					}
 					core->moveObserverTo(loc, 0.0, 0.0, landscapeID);
 				}
 			}

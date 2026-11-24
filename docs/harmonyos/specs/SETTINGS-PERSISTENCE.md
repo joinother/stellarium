@@ -253,6 +253,7 @@ Preferences 写失败多数只 `hilog.warn`；`QSettings::sync()` 的返回值/�
 | `localization/*` | `app_locale`、`time_display_format`、`date_display_format` | **S0** | 当前 `app_locale` 未写入（P3） |
 | `color/*` | `const_lines_color`、`object_trails_color` 等 | S2 | 颜色选择器关闭时 flush |
 | `landscape/*`、`stars/*`、插件分组 | 各模块配置 | S2 | |
+| `landscape/saved_earth_landscape_id` | OHOS 地球手选地景 ID | S0（选择即写入） | 仅 OHOS 桥写入；引擎启动先加载 `init_location/landscape_name`（缺省盖兰），随后由 `restoreSavedEarthLandscape` 应用该记忆值；自动选择开关不影响地球恢复 |
 | `main/restore_defaults` | 布尔 | 一次性 | 重启消费后清除 |
 
 ### 5.2 Preferences

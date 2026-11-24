@@ -118,10 +118,12 @@ node scripts/stellarium-cli.mjs --device <设备ID> --command getARState --json
 
 - `getLandscapeAutoSelection` 返回 `{ok, enabled}`；`setLandscapeAutoSelection` 接受 `0|1|true|false`，写回 `viewing/flag_landscape_autoselection`（上游同名键），无新增权限或联网。
 - `applyLandscapeDefaults` 为 OHOS 首次运行迁移：配置中不存在 `viewing/flag_landscape_autoselection` 时写为开启；用户已显式保存的 true/false 不会被覆盖。
-- 开启后，`setObserverPlanet` 仅在观测星球变化时触发自动匹配：非地球天体按英文名匹配同名地景，无匹配回落 `zero`；Earth 不参与名称匹配。
-- OHOS 桥在离开地球时把当前地景 ID 记到 `landscape/saved_earth_landscape_id`，返回地球时作为显式地景 ID 传入，避免上游按 `"Earth"` 匹配失败而回落到 zero。`getAllLandscapeNames().indexOf(...) > 0` 的上游边界 bug 已在单独 commit 中修为 `>= 0`；其余自动选择行为与 PC 一致。
-- `restoreSavedEarthLandscape` 为启动恢复辅助命令：自动选择开启、当前落在地球且引擎仍为 `zero` 时，重新应用记住的地球地景；已有非零地球地景则不覆盖。`LocationController.restoreObserverLocation()` 在恢复持久化观测点后调用一次。
-- 手动 `setLandscape` 与自动选择互相独立：手动选择只应用本次资源，不修改自动开关；下一次观测星球变化仍按自动开关处理。
+- 开启后，`setObserverPlanet` 仅在观测星球变化时触发自动匹配：非地球天体按英文名匹配同名地景，无匹配回落 `zero`；Earth 不参与名称匹配，而是恢复配置的默认地景（盖兰）。该行为已提升为跨平台核心修复：`LandscapeMgr::onTargetLocationChanged()` 在地球无同名地景时加载 `defaultLandscapeID`，桌面 `LocationDialog::moveToAnotherPlanet()` 使用同一回落；其他星球无匹配仍使用 zero。
+- `StelApp::init` 在所有平台上不再用启动 `ZeroColor` 覆盖已加载的真实地球地景；默认地景缺失时 `LandscapeMgr::init` 回落到盖兰。显式默认 `zero` 时仍走原有 `ZeroColor` 地形着色路径。
+- OHOS 桥在离开地球时把当前地景 ID 记到 `landscape/saved_earth_landscape_id`，返回地球时作为显式地景 ID 传入。`getAllLandscapeNames().indexOf(...) > 0` 的上游边界 bug 已在单独 commit 中修为 `>= 0`；其余自动选择行为与 PC 一致。地球恢复不受 `viewing/flag_landscape_autoselection` 开关影响。
+- 手动 `setLandscape` 在地球上成功后会立即写入 `landscape/saved_earth_landscape_id`（包括显式选择 `zero`）；无效 ID 回落到 zero 时不写入。手动选择不修改自动开关，下一次非地球观测星球变化仍按自动开关处理。
+- `restoreSavedEarthLandscape` 为 OHOS 启动兜底命令：引擎加载默认地景后，地球且当前地景与“记忆值（无效则默认盖兰）”不同时应用目标值；不再要求自动选择开启或当前为 zero。`LocationController.restoreObserverLocation()` 即使没有持久化观测点也会调用一次。
+- `getSessionState` 新增 `landscapeID`；`applySessionState` 优先使用会话携带的地景，旧会话缺少该字段时 Earth 回落到本机记忆/默认盖兰，不再硬编码 `garching`。
 - 「图层 → 地景」新增「随观测星球自动选择地景」行；非地球观测点时「动态雾山地景」行置灰并提示“动态雾山仅在地球可用”，但保留原开关偏好，返回地球后继续生效。
 
 ## 自动大气与雾（2026-11-19）

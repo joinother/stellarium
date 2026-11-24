@@ -738,7 +738,16 @@ void StelApp::init(QSettings* conf)
 	landscape->init();
 	getModuleMgr().registerModule(landscape);
 	// Only now we can switch to auto-landscape. (GH:#3550)
-	if (landscape->getFlagLandscapeAutoSelection() && (confSettings->value("init_location/location", "auto").toString() == "auto"))
+	// On Earth a configured real landscape (the guereins default or a user
+	// default) is authoritative. A ZeroColor horizon is only a fallback for
+	// locations without a landscape. An explicit "zero" choice still goes
+	// through the ZeroColor path, keeping its terrain tint.
+	const QString currentLandscapeID = landscape->getCurrentLandscapeID();
+	const bool keepEarthLandscape =
+		core->getCurrentLocation().planetName == QStringLiteral("Earth") &&
+		!currentLandscapeID.isEmpty() &&
+		currentLandscapeID != QStringLiteral("zero");
+	if (!keepEarthLandscape && landscape->getFlagLandscapeAutoSelection() && (confSettings->value("init_location/location", "auto").toString() == "auto"))
 	{
 		StelLocation loc=core->getCurrentLocation();
 		QColor color=planetLocationMgr->getColorForCoordinates(loc.getLongitude(), loc.getLatitude());

@@ -7,6 +7,7 @@ const native = read('src/StelMainView.cpp');
 const dialog = read('src/gui/LocationDialog.cpp');
 const core = read('src/core/StelCore.cpp');
 const landscape = read('src/core/modules/LandscapeMgr.cpp');
+const stelApp = read('src/core/StelApp.cpp');
 const catalog = read('src/StelOhosCommandCatalog.hpp');
 const host = read('harmonyos/ets-source/pages/MainWindowNativeNode.ets');
 const locationController = read('harmonyos/ets-source/capability/LocationController.ets');
@@ -58,22 +59,66 @@ test('observer picker metadata exposes stable planet types and moon parents', ()
   }
 })
 
-test('planet changes remember the Earth landscape in the OHOS bridge and reuse the upstream auto route', () => {
+test('planet changes remember the Earth landscape and keep auto-selection for other bodies', () => {
   assert.match(switchPlanet, /core->moveObserverTo\(loc, 0\.0, 0\.0, landscapeHint\)/);
-  assert.match(switchPlanet,
-    /autoLandscape = planetChanged && landscapeMgr &&\s+landscapeMgr->getFlagLandscapeAutoSelection\(\)/);
+  assert.match(switchPlanet, /if \(planetChanged && landscapeMgr\)/);
+  assert.match(switchPlanet, /previousPlanet == QStringLiteral\("Earth"\)/);
+  assert.match(switchPlanet, /loc\.planetName != QStringLiteral\("Earth"\)/);
   assert.match(switchPlanet, /value\("landscape\/saved_earth_landscape_id"\)/)
   assert.match(switchPlanet, /earthLandscape != QStringLiteral\("zero"\)/)
   assert.match(switchPlanet, /immediateSaveNow\("landscape\/saved_earth_landscape_id", earthLandscape\)/)
   assert.match(switchPlanet, /landscapeHint = savedEarth/)
   assert.match(switchPlanet, /landscapeHint = loc\.planetName/)
+  assert.match(switchPlanet, /landscapeHint = QStringLiteral\("zero"\)/)
+  assert.match(switchPlanet, /else if \(landscapeMgr->getFlagLandscapeAutoSelection\(\)\)/)
   assert.match(block(dialog, 'void LocationDialog::moveToAnotherPlanet('), /moveObserverTo\(loc, 0\., 0\., loc\.planetName\)/);
+  assert.match(block(dialog, 'void LocationDialog::moveToAnotherPlanet('), /setCurrentLandscapeID\(lMgr->getDefaultLandscapeID\(\)\)/);
   assert.match(moveObserver, /emit targetLocationChanged\(target, landscapeID\)/);
   assert.match(targetChanged, /else if \(flagLandscapeAutoSelection && \(loc\.planetName != currentPlanetName\)\)/);
   assert.match(targetChanged, /getAllLandscapeNames\(\)\.indexOf\(loc\.planetName\) >= 0/);
+  assert.match(targetChanged, /loc\.planetName == QStringLiteral\("Earth"\)/);
+  assert.match(targetChanged, /setCurrentLandscapeID\(defaultLandscapeID\)/);
   assert.match(targetChanged, /setCurrentLandscapeID\("zero"\)/);
   assert.match(targetChanged, /setFlagLandscapeSetsLocation\(false\)/);
   assert.match(targetChanged, /setFlagLandscapeSetsLocation\(landscapeSetsLocation\)/);
+});
+
+test('Earth uses the configured default (guereins) independently of auto-selection', () => {
+  const init = block(landscape, 'void LandscapeMgr::init()');
+  assert.match(init, /init_location\/landscape_name/);
+  assert.match(init, /QStringLiteral\("guereins"\)/);
+  assert.match(init, /setCurrentLandscapeID\(defaultLandscapeID\)/);
+  assert.doesNotMatch(init, /#ifdef __OHOS__/);
+
+  const setLandscape = command('setLandscape');
+  assert.match(setLandscape, /getCurrentLandscapeID\(\) == arg/);
+  assert.match(setLandscape, /saved_earth_landscape_id/);
+  assert.match(setLandscape, /immediateSaveNow\("landscape\/saved_earth_landscape_id", arg\)/);
+  assert.match(setLandscape, /planetName == QStringLiteral\("Earth"\)/);
+
+  const stelAppInit = block(stelApp, 'void StelApp::init(QSettings* conf)');
+  assert.match(stelAppInit, /keepEarthLandscape/);
+  assert.match(stelAppInit, /currentLandscapeID = landscape->getCurrentLandscapeID\(\)/);
+  assert.match(stelAppInit, /currentLandscapeID != QStringLiteral\("zero"\)/);
+  assert.match(stelAppInit, /!keepEarthLandscape && landscape->getFlagLandscapeAutoSelection/);
+  assert.doesNotMatch(stelAppInit, /#ifdef __OHOS__/);
+
+  const restore = command('restoreSavedEarthLandscape');
+  assert.doesNotMatch(restore, /getFlagLandscapeAutoSelection/);
+  assert.match(restore, /target = lmgr->getDefaultLandscapeID\(\)/);
+  assert.match(restore, /current == target/);
+  assert.match(restore, /setCurrentLandscapeID\(target\)/);
+});
+
+test('session continuation carries the panorama instead of hardcoding Earth', () => {
+  const sessionExport = command('getSessionState');
+  assert.match(sessionExport, /result\["landscapeID"\] = lm->getCurrentLandscapeID\(\)/);
+
+  const sessionApply = command('applySessionState');
+  assert.match(sessionApply, /s\.value\("landscapeID"\)\.toString\(\)/);
+  assert.doesNotMatch(sessionApply, /planet == "Earth"\) landscapeID = "garching"/);
+  assert.match(sessionApply, /saved_earth_landscape_id/);
+  assert.match(sessionApply, /lm->getDefaultLandscapeID\(\)/);
 });
 
 test('landscape auto-selection and environment auto-enable are exposed through the OHOS bridge', () => {
@@ -199,8 +244,9 @@ test('same-planet fine tuning cannot reset the initial view or choose another la
   assert.match(cleanup, /movementMgr->resetInitViewPos\(\)/);
   assert.equal(switchPlanet.match(/resetInitViewPos\(/g)?.length, 1);
   assert.match(switchPlanet, /if \(planetChanged \|\| parts\.size\(\) >= 4\)\s+core->moveObserverTo/);
-  assert.match(switchPlanet,
-    /autoLandscape = planetChanged && landscapeMgr &&\s+landscapeMgr->getFlagLandscapeAutoSelection\(\)/);
+  const hintBlock = block(switchPlanet, 'if (planetChanged && landscapeMgr)');
+  assert.equal(hintBlock.match(/landscapeHint = /g)?.length, 3);
+  assert.match(hintBlock, /if \(loc\.planetName == QStringLiteral\("Earth"\)\)/);
 });
 
 test('ordinary destinations clear selection of the home planet and observers reuse core tracking', () => {
