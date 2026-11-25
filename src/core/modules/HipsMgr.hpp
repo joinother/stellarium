@@ -168,6 +168,7 @@ private:
 		int texPrev = -1;
 		int crossFade = -1;
 		int alpha = -1;
+		int bicubicBlend = -1;
 		int projectionMatrixInverse = -1;
 	} panoShaderVars;
 
@@ -200,6 +201,7 @@ private:
 		int lensFlags = -1;
 		int activeBandIdx = -1;
 		int dpr = -1;
+		int bicubicBlend = -1;
 		int projectionMatrixInverse = -1;
 	} lensShaderVars;
 };

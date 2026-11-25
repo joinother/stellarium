@@ -106,7 +106,7 @@ QByteArray StelOpenGL::globalShaderPrefix(const ShaderType type)
 	}
 
 	if (glInfo.isGLES)
-		prefix += "precision mediump float;\n";
+		prefix += glInfo.isHighGraphicsMode ? "precision highp float;\n" : "precision mediump float;\n";
 
 	switch (type)
 	{

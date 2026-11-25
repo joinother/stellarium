@@ -2400,8 +2400,8 @@ void StelPainter::initGLShaders()
 	QOpenGLShader vshader3(QOpenGLShader::Vertex);
 	const auto vsrc3 =
 		StelOpenGL::globalShaderPrefix(StelOpenGL::VERTEX_SHADER) +
-		"ATTRIBUTE mediump vec3 vertex;\n"
-		"uniform mediump mat4 projectionMatrix;\n"
+		"ATTRIBUTE highp vec3 vertex;\n"
+		"uniform highp mat4 projectionMatrix;\n"
 		"void main(void)\n"
 		"{\n"
 		"    gl_Position = projectionMatrix*vec4(vertex, 1.);\n"
@@ -2433,9 +2433,9 @@ void StelPainter::initGLShaders()
 	QOpenGLShader vshaderInterpolatedColor(QOpenGLShader::Vertex);
 	const auto vshaderInterpolatedColorSrc =
 		StelOpenGL::globalShaderPrefix(StelOpenGL::VERTEX_SHADER) +
-		"ATTRIBUTE mediump vec3 vertex;\n"
+		"ATTRIBUTE highp vec3 vertex;\n"
 		"ATTRIBUTE mediump vec4 color;\n"
-		"uniform mediump mat4 projectionMatrix;\n"
+		"uniform highp mat4 projectionMatrix;\n"
 		"VARYING mediump vec4 fragcolor;\n"
 		"void main(void)\n"
 		"{\n"
@@ -2471,9 +2471,9 @@ void StelPainter::initGLShaders()
 	const auto textVSrc =
 		StelOpenGL::globalShaderPrefix(StelOpenGL::VERTEX_SHADER) + R"(
 ATTRIBUTE highp vec3 vertex;
-ATTRIBUTE mediump vec2 texCoord;
-uniform mediump mat4 projectionMatrix;
-VARYING mediump vec2 texc;
+ATTRIBUTE highp vec2 texCoord;
+uniform highp mat4 projectionMatrix;
+VARYING highp vec2 texc;
 void main()
 {
 	gl_Position = projectionMatrix * vec4(vertex, 1.);
@@ -2486,7 +2486,7 @@ void main()
 	QOpenGLShader textFShader(QOpenGLShader::Fragment);
 	const auto textFSrc =
 		StelOpenGL::globalShaderPrefix(StelOpenGL::FRAGMENT_SHADER) + R"(
-VARYING mediump vec2 texc;
+VARYING highp vec2 texc;
 uniform sampler2D tex;
 uniform mediump vec4 textColor;
 void main()
@@ -2513,9 +2513,9 @@ void main()
 	const auto vsrc2 =
 		StelOpenGL::globalShaderPrefix(StelOpenGL::VERTEX_SHADER) +
 		"ATTRIBUTE highp vec3 vertex;\n"
-		"ATTRIBUTE mediump vec2 texCoord;\n"
-		"uniform mediump mat4 projectionMatrix;\n"
-		"VARYING mediump vec2 texc;\n"
+		"ATTRIBUTE highp vec2 texCoord;\n"
+		"uniform highp mat4 projectionMatrix;\n"
+		"VARYING highp vec2 texc;\n"
 		"void main(void)\n"
 		"{\n"
 		"    gl_Position = projectionMatrix * vec4(vertex, 1.);\n"
@@ -2528,7 +2528,7 @@ void main()
 	QOpenGLShader fshader2(QOpenGLShader::Fragment);
 	const auto fsrc2 =
 		StelOpenGL::globalShaderPrefix(StelOpenGL::FRAGMENT_SHADER) +
-		"VARYING mediump vec2 texc;\n"
+		"VARYING highp vec2 texc;\n"
 		"uniform sampler2D tex;\n"
 		"uniform mediump vec4 texColor;\n"
 		"void main(void)\n"
@@ -2553,7 +2553,7 @@ void main()
 	const auto adjustedFsrc2 =
 		StelOpenGL::globalShaderPrefix(StelOpenGL::FRAGMENT_SHADER) +
 		makeSaturationShader()+
-		"VARYING mediump vec2 texc;\n"
+		"VARYING highp vec2 texc;\n"
 		"uniform sampler2D tex;\n"
 		"uniform mediump vec4 texColor;\n"
 		"uniform mediump float gamma;\n"
@@ -2618,10 +2618,10 @@ void main()
 	const auto vsrc4 =
 		StelOpenGL::globalShaderPrefix(StelOpenGL::VERTEX_SHADER) +
 		"ATTRIBUTE highp vec3 vertex;\n"
-		"ATTRIBUTE mediump vec2 texCoord;\n"
+		"ATTRIBUTE highp vec2 texCoord;\n"
 		"ATTRIBUTE mediump vec4 color;\n"
-		"uniform mediump mat4 projectionMatrix;\n"
-		"VARYING mediump vec2 texc;\n"
+		"uniform highp mat4 projectionMatrix;\n"
+		"VARYING highp vec2 texc;\n"
 		"VARYING mediump vec4 outColor;\n"
 		"void main(void)\n"
 		"{\n"
@@ -2637,7 +2637,7 @@ void main()
 	const auto fsrc4 =
 		StelOpenGL::globalShaderPrefix(StelOpenGL::FRAGMENT_SHADER) +
 		makeSaturationShader()+
-		"VARYING mediump vec2 texc;\n"
+		"VARYING highp vec2 texc;\n"
 		"VARYING mediump vec4 outColor;\n"
 		"uniform sampler2D tex;\n"
 	"uniform lowp float saturation;\n"

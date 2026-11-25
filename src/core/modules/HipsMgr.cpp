@@ -625,13 +625,49 @@ uniform sampler2D texCurrent;
 uniform sampler2D texPrev;
 uniform mediump float crossFade;
 uniform mediump float alpha;
-uniform mat4 projectionMatrixInverse;
+uniform mediump float bicubicBlend;
+uniform highp mat4 projectionMatrixInverse;
+
+highp vec3 sampleSpectralSmooth(sampler2D tex, highp vec2 uv)
+{
+	highp vec3 linCol = texture2D(tex, uv).rgb;
+	if (bicubicBlend <= 0.001)
+		return linCol;
+	const highp vec2 texSize = vec2(4096.0, 2048.0);
+	const highp vec2 invTexSize = vec2(1.0 / 4096.0, 1.0 / 2048.0);
+	highp vec2 tc = uv * texSize - 0.5;
+	highp vec2 i = floor(tc);
+	highp vec2 f = tc - i;
+	highp vec2 f2 = f * f;
+	highp vec2 f3 = f2 * f;
+	highp vec2 omf = 1.0 - f;
+	highp vec2 w0 = (omf * omf * omf) * (1.0 / 6.0);
+	highp vec2 w1 = (3.0 * f3 - 6.0 * f2 + 4.0) * (1.0 / 6.0);
+	highp vec2 w3 = f3 * (1.0 / 6.0);
+	highp vec2 s0 = w0 + w1;
+	highp vec2 s1 = 1.0 - s0;
+	highp vec2 h0 = (w1 / s0) - 1.0;
+	highp vec2 h1 = (w3 / s1) + 1.0;
+	highp vec2 tc0 = (i + 0.5 + h0) * invTexSize;
+	highp vec2 tc1 = (i + 0.5 + h1) * invTexSize;
+	tc0.x = fract(tc0.x);
+	tc1.x = fract(tc1.x);
+	tc0.y = clamp(tc0.y, 0.5 * invTexSize.y, 1.0 - 0.5 * invTexSize.y);
+	tc1.y = clamp(tc1.y, 0.5 * invTexSize.y, 1.0 - 0.5 * invTexSize.y);
+	highp vec3 c00 = texture2D(tex, vec2(tc0.x, tc0.y)).rgb;
+	highp vec3 c10 = texture2D(tex, vec2(tc1.x, tc0.y)).rgb;
+	highp vec3 c01 = texture2D(tex, vec2(tc0.x, tc1.y)).rgb;
+	highp vec3 c11 = texture2D(tex, vec2(tc1.x, tc1.y)).rgb;
+	highp vec3 bicCol = mix(mix(c11, c01, s0.x), mix(c10, c00, s0.x), s0.y);
+	return mix(linCol, bicCol, bicubicBlend);
+}
+
 void main(void)
 {
-	const float PI = 3.14159265359;
-	vec4 winPos = projectionMatrixInverse * vec4(ndcPos, 1.0);
+	const highp float PI = 3.14159265359;
+	highp vec4 winPos = projectionMatrixInverse * vec4(ndcPos, 1.0);
 	bool ok = false;
-	vec3 modelPos = unProject(winPos.x, winPos.y, ok).xyz;
+	highp vec3 modelPos = unProject(winPos.x, winPos.y, ok).xyz;
 	if (!ok)
 	{
 		FRAG_COLOR = vec4(0.0);
@@ -639,15 +675,18 @@ void main(void)
 	}
 	modelPos = normalize(modelPos);
 	modelPos = applyAberrationToViewDir(modelPos);
-	float ra = atan(modelPos.y, modelPos.x);
-	float dec = asin(clamp(modelPos.z, -1.0, 1.0));
-	vec2 texc = vec2(fract(ra / (2.0 * PI)), 0.5 + dec / PI);
-	vec3 col = texture2D(texCurrent, texc).rgb;
+	highp float ra = atan(modelPos.y, modelPos.x);
+	highp float dec = asin(clamp(modelPos.z, -1.0, 1.0));
+	highp vec2 texc = vec2(fract(ra / (2.0 * PI)), clamp(0.5 + dec / PI, 0.0, 1.0));
+	highp vec3 col = sampleSpectralSmooth(texCurrent, texc);
 	if (crossFade < 0.999)
 	{
-		vec3 colPrev = texture2D(texPrev, texc).rgb;
+		highp vec3 colPrev = sampleSpectralSmooth(texPrev, texc);
 		col = mix(colPrev, col, crossFade);
 	}
+	// Subtle 1-LSB interleaved gradient dither to remove 8-bit dark-sky banding
+	highp float ign = fract(52.9829189 * fract(dot(gl_FragCoord.xy, vec2(0.06711056, 0.00583715))));
+	col = max(col + (ign - 0.5) / 255.0, vec3(0.0));
 	FRAG_COLOR = vec4(col, alpha);
 }
 )";
@@ -666,6 +705,7 @@ void main(void)
 		panoShaderVars.texPrev = panoProgram->uniformLocation("texPrev");
 		panoShaderVars.crossFade = panoProgram->uniformLocation("crossFade");
 		panoShaderVars.alpha = panoProgram->uniformLocation("alpha");
+		panoShaderVars.bicubicBlend = panoProgram->uniformLocation("bicubicBlend");
 		panoShaderVars.projectionMatrixInverse = panoProgram->uniformLocation("projectionMatrixInverse");
 		panoProgram->release();
 	}
@@ -702,8 +742,11 @@ void main(void)
 	}
 	panoProgram->setUniformValue(panoShaderVars.texPrev, 1);
 
+	const double fovDeg = core->getMovementMgr() ? core->getMovementMgr()->getCurrentFov() : 60.0;
+	const float bicubicFactor = static_cast<float>(qBound(0.0, (24.0 - fovDeg) / 14.0, 1.0));
 	panoProgram->setUniformValue(panoShaderVars.crossFade, static_cast<GLfloat>(cf));
 	panoProgram->setUniformValue(panoShaderVars.alpha, static_cast<GLfloat>(fade * spectralOpacity));
+	panoProgram->setUniformValue(panoShaderVars.bicubicBlend, static_cast<GLfloat>(bicubicFactor));
 	panoProgram->setUniformValue(panoShaderVars.projectionMatrixInverse, projector->getProjectionMatrix().toQMatrix().inverted());
 	core->setAberrationUniforms(*panoProgram);
 	projector->setUnProjectUniforms(*panoProgram);
@@ -807,9 +850,44 @@ uniform mediump float chromeAlpha;
 uniform mediump vec4 lensFlags;
 uniform int activeBandIdx;
 uniform highp float dpr;
-uniform mat4 projectionMatrixInverse;
+uniform mediump float bicubicBlend;
+uniform highp mat4 projectionMatrixInverse;
 
-float sdRoundBox(vec2 p, vec2 b, float r)
+highp vec3 sampleSpectralSmooth(sampler2D tex, highp vec2 uv)
+{
+	highp vec3 linCol = texture2D(tex, uv).rgb;
+	if (bicubicBlend <= 0.001)
+		return linCol;
+	const highp vec2 texSize = vec2(4096.0, 2048.0);
+	const highp vec2 invTexSize = vec2(1.0 / 4096.0, 1.0 / 2048.0);
+	highp vec2 tc = uv * texSize - 0.5;
+	highp vec2 i = floor(tc);
+	highp vec2 f = tc - i;
+	highp vec2 f2 = f * f;
+	highp vec2 f3 = f2 * f;
+	highp vec2 omf = 1.0 - f;
+	highp vec2 w0 = (omf * omf * omf) * (1.0 / 6.0);
+	highp vec2 w1 = (3.0 * f3 - 6.0 * f2 + 4.0) * (1.0 / 6.0);
+	highp vec2 w3 = f3 * (1.0 / 6.0);
+	highp vec2 s0 = w0 + w1;
+	highp vec2 s1 = 1.0 - s0;
+	highp vec2 h0 = (w1 / s0) - 1.0;
+	highp vec2 h1 = (w3 / s1) + 1.0;
+	highp vec2 tc0 = (i + 0.5 + h0) * invTexSize;
+	highp vec2 tc1 = (i + 0.5 + h1) * invTexSize;
+	tc0.x = fract(tc0.x);
+	tc1.x = fract(tc1.x);
+	tc0.y = clamp(tc0.y, 0.5 * invTexSize.y, 1.0 - 0.5 * invTexSize.y);
+	tc1.y = clamp(tc1.y, 0.5 * invTexSize.y, 1.0 - 0.5 * invTexSize.y);
+	highp vec3 c00 = texture2D(tex, vec2(tc0.x, tc0.y)).rgb;
+	highp vec3 c10 = texture2D(tex, vec2(tc1.x, tc0.y)).rgb;
+	highp vec3 c01 = texture2D(tex, vec2(tc0.x, tc1.y)).rgb;
+	highp vec3 c11 = texture2D(tex, vec2(tc1.x, tc1.y)).rgb;
+	highp vec3 bicCol = mix(mix(c11, c01, s0.x), mix(c10, c00, s0.x), s0.y);
+	return mix(linCol, bicCol, bicubicBlend);
+}
+
+highp float sdRoundBox(highp vec2 p, highp vec2 b, highp float r)
 {
 	vec2 q = abs(p) - b + vec2(r);
 	return length(max(q, 0.0)) + min(max(q.x, q.y), 0.0) - r;
@@ -925,25 +1003,27 @@ void main(void)
 	// 3. 4K Multi-Spectral Glass Interior
 	if (dist <= radiusPx + aa)
 	{
-		float zoom = max(1.0, lensZoom);
-		vec2 samplePx = centerPx + deltaPx / zoom;
-		vec2 sampleNdc = (samplePx / viewportSize) * 2.0 - 1.0;
-		vec4 winPos = projectionMatrixInverse * vec4(sampleNdc.x, sampleNdc.y, 0.0, 1.0);
+		highp float zoom = max(1.0, lensZoom);
+		highp vec2 samplePx = centerPx + deltaPx / zoom;
+		highp vec2 sampleNdc = (samplePx / viewportSize) * 2.0 - 1.0;
+		highp vec4 winPos = projectionMatrixInverse * vec4(sampleNdc.x, sampleNdc.y, 0.0, 1.0);
 		bool ok = false;
-		vec3 modelPos = unProject(winPos.x, winPos.y, ok).xyz;
+		highp vec3 modelPos = unProject(winPos.x, winPos.y, ok).xyz;
 		if (ok)
 		{
 			modelPos = normalize(modelPos);
 			modelPos = applyAberrationToViewDir(modelPos);
-			float ra = atan(modelPos.y, modelPos.x);
-			float dec = asin(clamp(modelPos.z, -1.0, 1.0));
-			vec2 texc = vec2(fract(ra / (2.0 * PI)), 0.5 + dec / PI);
-			vec3 col = texture2D(texCurrent, texc).rgb;
+			highp float ra = atan(modelPos.y, modelPos.x);
+			highp float dec = asin(clamp(modelPos.z, -1.0, 1.0));
+			highp vec2 texc = vec2(fract(ra / (2.0 * PI)), clamp(0.5 + dec / PI, 0.0, 1.0));
+			highp vec3 col = sampleSpectralSmooth(texCurrent, texc);
 			if (crossFade < 0.999)
 			{
-				vec3 colPrev = texture2D(texPrev, texc).rgb;
+				highp vec3 colPrev = sampleSpectralSmooth(texPrev, texc);
 				col = mix(colPrev, col, crossFade);
 			}
+			highp float ign = fract(52.9829189 * fract(dot(gl_FragCoord.xy, vec2(0.06711056, 0.00583715))));
+			col = max(col + (ign - 0.5) / 255.0, vec3(0.0));
 			float normR = dist / max(1.0, radiusPx);
 			float rimShade = 1.0 - 0.14 * smoothstep(0.84, 1.0, normR);
 			float glassMask = 1.0 - smoothstep(radiusPx - aa * 0.6, radiusPx + aa * 0.6, dist);
@@ -1037,6 +1117,7 @@ void main(void)
 		lensShaderVars.lensFlags = lensProgram->uniformLocation("lensFlags");
 		lensShaderVars.activeBandIdx = lensProgram->uniformLocation("activeBandIdx");
 		lensShaderVars.dpr = lensProgram->uniformLocation("dpr");
+		lensShaderVars.bicubicBlend = lensProgram->uniformLocation("bicubicBlend");
 		lensShaderVars.projectionMatrixInverse = lensProgram->uniformLocation("projectionMatrixInverse");
 		lensProgram->release();
 	}
@@ -1115,7 +1196,11 @@ void main(void)
 	lensProgram->setUniformValue(lensShaderVars.chromeAlpha, static_cast<GLfloat>(chromeA));
 	lensProgram->setUniformValue(lensShaderVars.lensFlags, QVector4D(flagResizing ? 1.f : 0.f, flagRotating ? 1.f : 0.f, showCrosshair, isNight ? 1.f : 0.f));
 	lensProgram->setUniformValue(lensShaderVars.activeBandIdx, bandIdx);
+	const double fovDeg = core->getMovementMgr() ? core->getMovementMgr()->getCurrentFov() : 60.0;
+	const double effectiveLensFov = fovDeg / static_cast<double>(qMax(1.0f, lensZoomCurrent));
+	const float bicubicFactor = static_cast<float>(qBound(0.0, (24.0 - effectiveLensFov) / 14.0, 1.0));
 	lensProgram->setUniformValue(lensShaderVars.dpr, static_cast<GLfloat>(dprVal));
+	lensProgram->setUniformValue(lensShaderVars.bicubicBlend, static_cast<GLfloat>(bicubicFactor));
 	lensProgram->setUniformValue(lensShaderVars.projectionMatrixInverse, projector->getProjectionMatrix().toQMatrix().inverted());
 	core->setAberrationUniforms(*lensProgram);
 	projector->setUnProjectUniforms(*lensProgram);

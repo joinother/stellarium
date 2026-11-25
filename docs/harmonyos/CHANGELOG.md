@@ -1,5 +1,16 @@
 > **身份图例**：本文件真机记录中出现的 `com.cnchensh.stellarium` 是**本机调试签名身份**（本机 DevEco 自动生成，非发布身份）；发布身份为 `com.joinother.skyinstrument`。构建脚本 `build-ohos-hap-windows.ps1 -Install` 从产物 `pack.info` 读取实际包名，仓库不写死任何签名身份（见 `docs/harmonyos/release/BUNDLE-IDENTITY-CLEANUP.md`）。
 
+## [2026-11-26] 鸿蒙 OpenGL ES 3.0 全局 `highp` 32 位精度升级 + 4K 多光谱 GPU 双三次平滑与防色带抖动
+
+- **修改文件：** `src/core/StelOpenGL.cpp`、`src/core/StelPainter.cpp`、`src/core/modules/HipsMgr.hpp`、`src/core/modules/HipsMgr.cpp`、`docs/harmonyos/CHANGELOG.md`。
+- **根因与升级内容：**
+  1. **根治放大出现硬边方形色块（`StelOpenGL.cpp`）**：鸿蒙 OpenGL ES 3.0（`#version 300 es`）此前沿用旧 ES 2.0 时代的 `precision mediump float;`（FP16 仅 10 bit 有效精度 = 1024 级），导致全屏球面反投影着色器（4K 多光谱、银河系 `MilkyWay`、黄道光 `ZodiacalLight`、球面/鱼眼地景 `Landscape`、行星着色器）在小视场放大时 UV 坐标被截断成离散台阶，双线性过滤失效并裂出硬边色块。现对 OpenGL ES 3.0（`isHighGraphicsMode`）将全局默认浮点精度升级为 `precision highp float;`（32 位 FP32，精度提升 `16,384×`），旧 ES 2.0 回退路径保持 `mediump`。
+  2. **修复 2560px+ 高分屏显式 `mediump` 顶点与纹理量化（`StelPainter.cpp`）**：将基础图元、插值色、文字、纹理及调色纹理着色器中的 `vertex`、`projectionMatrix`、`texCoord`、`texc` 从显式 `mediump` 升为 `highp`，消除超 `2048px` 平板右侧 2 像素对齐抖动及深空/HiPS 瓦片/字体图集的 UV 量化。
+  3. **多光谱 4-Tap GPU 双三次 B 样条平滑 + 1-LSB 暗部防色带抖动（`HipsMgr.hpp`、`HipsMgr.cpp`）**：为全屏 4K 多光谱全景与统一 GPU 放大镜着色器新增自适应 `bicubicBlend`（宽视场 `≥24°` 保持 1-tap 原始 4K 锐度零额外开销；放大至 `<24°` 或放大镜 `2×` 时无缝过渡至 4-tap `highp` Cubic B-Spline 并支持 `RA=0h/24h` 无缝环绕与两极钳位），同时加入 Interleaved Gradient Noise 1-LSB 抖动消除暗空 8-bit 断层色带。
+- **验证结果：**
+  - 主机：全部 36 项 UI 契约 / 命令目录 / 单元测试通过。
+  - 真机（`HUAWEI MatePad Mini 悦读版`，PID `38494` 稳定无崩溃）：全引擎所有着色器在华为 GPU 上零编译/链接报错；60° 常规渲染耗时保持 `38.0 ms`、`2×` 双三次放大镜 `23.26 FPS`，相对升级前零性能回退；实拍 `2.0°` 视场 X 射线全屏与 `2×` Hα 放大镜，此前明显的方形色块完全消失，暗蓝/暗红渐变如丝绸般顺滑。
+
 ## [2026-11-26] 统一单 Shader GPU 多光谱放大镜（彻底根治拖动/拉边缘镜内画面掉队与卡顿）
 
 - **修改文件：** `src/core/modules/HipsMgr.hpp`、`src/core/modules/HipsMgr.cpp`、`src/StelMainView.cpp`、`harmonyos/cpp-source/hello.cpp`、`harmonyos/ets-source/panels/overlay/SpectralLensOverlay.ets`、`harmonyos/ets-source/capability/SkyInputController.ets`、`docs/harmonyos/CHANGELOG.md`。
