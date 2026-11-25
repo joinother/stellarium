@@ -1,5 +1,18 @@
 > **身份图例**：本文件真机记录中出现的 `com.cnchensh.stellarium` 是**本机调试签名身份**（本机 DevEco 自动生成，非发布身份）；发布身份为 `com.joinother.skyinstrument`。构建脚本 `build-ohos-hap-windows.ps1 -Install` 从产物 `pack.info` 读取实际包名，仓库不写死任何签名身份（见 `docs/harmonyos/release/BUNDLE-IDENTITY-CLEANUP.md`）。
 
+## [2026-11-25] 疏散星团符号升级连续弧长虚线椭圆 + 修复小 FOV 深空天体触控难选中
+
+- **修改文件：** `src/core/modules/Nebula.cpp`、`src/core/TouchPicker.cpp`、`docs/harmonyos/CHANGELOG.md`。
+- **问题根因：**
+  1. `Nebula::renderMarkerPointedCircle` 使用 `getSmallerPowerOfTwo` 控制点数，捏合缩放跨 2 的幂阈值时点点会瞬间翻倍（`8→16→32→64→128`），视觉跳变生硬，且小圆点贴图质感不如矢量虚线。
+  2. 小视场放大查看深空天体（如 `NGC 5218`）时，`TouchPicker` 仍对无 `outlines.dat` 的星系/星团写死 `visualRadiusVp = 3.0`，且 `searchAround` 搜索角半径随 FOV 缩至 `< 0.015°`、`label.rect` 仍写死旧 `15/dpr` 偏移，导致点在星系本体或标签上均被判未命中。
+- **修复：**
+  1. `renderMarkerPointedCircle` 改用基于天球投影多边形的**恒定屏幕弧长整数步进矢量虚线**（`5.8 px` 实段 + `4.6 px` 间隙，缩放全程连续无跳变，接缝自动留白防黏连）。
+  2. `TouchPicker` 扩大深空天体小视场搜索半径（`max(fovRadiusDeg, min(fov*0.65, 6°))`），对按比例绘制的深空符号圈使用真实投影半径（暗星云/天区保守封顶 24 vp 防吞噬前景恒星，星系/星云/星团封顶视口短边 35%），并同步 `wideFovLabelPenalty`（`25°` 起步）与 `label.rect` 真实偏移。
+- **验证结果：**
+  - 主机：`test-ohos-empty-sky-and-daytime-picking.mjs` 5/5、`test-ohos-realistic-star-visibility.mjs` 15/15、`test-ohos-selection-reticle-and-pill.mjs` 5/5、`test-ohos-vivid-rendering-gate.mjs` 15/15、`test-visual-extinction.py` PASS。
+  - 真机（`HUAWEI MatePad Mini 悦读版`，PID `14011` 连续无崩溃）：M44 在 6°→3° 缩放下虚线细腻均匀无跳变；`NGC 5218` 在 0.2°（半径 38.4 vp）与 0.08°（半径 96.0 vp）视场下，点击星系盘内 `0 / +20 / +40 / +60 / +80 vp` 均 100% 直接命中 `NGC 5218`，点击外侧空天仍正常取消选中。
+
 ## [2026-11-25] 深空天体符号圈球面精确贴合（真实长短轴与位置角 PA）
 
 - **修改文件：** `src/core/modules/Nebula.hpp`、`src/core/modules/Nebula.cpp`、`src/core/modules/NebulaMgr.cpp`、`docs/harmonyos/CHANGELOG.md`。

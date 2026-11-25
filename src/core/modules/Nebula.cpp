@@ -1115,32 +1115,106 @@ void Nebula::renderMarkerPointedCircle(StelPainter& sPainter, const Vec3d& direc
 	if (!f.valid)
 		return;
 
-	const auto& prj = sPainter.getProjector();
-	const auto numPoints = StelUtils::getSmallerPowerOfTwo(std::clamp(int(0.4f * f.majorPx / f.scale), 8, 128));
-	const auto spriteSize = std::min(0.24f * 2.f * M_PIf * f.majorPx / numPoints, 4.0f * f.scale);
-	if (insideRect && f.majorPx > 4.f * spriteSize)
+	if (insideRect && f.majorPx > 12.f * f.scale)
 	{
-		const double shrink = std::max(0.5, 1.0 - (2.0 * static_cast<double>(spriteSize)) / static_cast<double>(f.majorPx));
+		const double shrink = std::max(0.75, 1.0 - (4.5 * static_cast<double>(f.scale)) / static_cast<double>(f.majorPx));
 		f.majorRad *= shrink;
 		f.minorRad *= shrink;
+		f.majorPx = static_cast<float>(f.majorPx * shrink);
 	}
 
-	const float* const cossin = StelUtils::ComputeCosSinRhoZone((2.f * M_PIf) / numPoints, numPoints, 0);
-	std::vector<Vec2f> points;
-	points.reserve(numPoints);
-	for (int n = 0; n < numPoints; ++n)
+	// Continuous screen arc-length dashed ellipse projected on the celestial sphere:
+	// crisp vector dashes with constant screen pitch during pinch-zoom (zero power-of-2 dot jumping).
+	const auto& prj = sPainter.getProjector();
+	const int numSamples = std::clamp(int(std::lround(f.majorPx / 2.2f)), 48, 180);
+	const float* const cossin = StelUtils::ComputeCosSinTheta(numSamples);
+
+	QVarLengthArray<Vec2f, 192> scrPts;
+	QVarLengthArray<bool, 192> segBreak;
+	scrPts.reserve(numSamples + 1);
+	segBreak.reserve(numSamples + 1);
+
+	Vec3d prevSky(0.0);
+	bool hasPrev = false;
+	float totalLen = 0.f;
+	for (int n = 0; n <= numSamples; ++n)
 	{
+		const int idx = n % numSamples;
 		Vec3d sky, scr;
-		if (projectSkyMarkerPoint(prj, f, static_cast<double>(cossin[2 * n]), static_cast<double>(cossin[2 * n + 1]), sky, scr))
-			points.emplace_back(static_cast<float>(scr[0]), static_cast<float>(scr[1]));
+		if (!projectSkyMarkerPoint(prj, f, static_cast<double>(cossin[2 * idx]), static_cast<double>(cossin[2 * idx + 1]), sky, scr))
+		{
+			hasPrev = false;
+			continue;
+		}
+		const bool broke = !hasPrev || prj->intersectViewportDiscontinuity(prevSky, sky);
+		const Vec2f pt(static_cast<float>(scr[0]), static_cast<float>(scr[1]));
+		if (!broke && !scrPts.isEmpty())
+			totalLen += std::hypot(pt[0] - scrPts.last()[0], pt[1] - scrPts.last()[1]);
+		scrPts.append(pt);
+		segBreak.append(broke);
+		prevSky = sky;
+		hasPrev = true;
 	}
-	if (points.empty())
+	if (scrPts.size() < 2 || totalLen < 1.f)
 		return;
 
-	texPointElement->bind();
-	sPainter.setColor(color, alpha);
-	sPainter.setBlending(true, GL_SRC_ALPHA, GL_ONE);
-	sPainter.drawSprite2dModeNoDeviceScale(points, spriteSize);
+	// Scale dash rhythm gently down for tiny zoomed-out rings, constant crisp pitch when zoomed in.
+	const bool tinyRing = f.majorPx < 14.f * f.scale;
+	const float dashLen = std::max(1.5f, (tinyRing ? 3.8f : 5.8f) * f.scale);
+	const float gapLen  = std::max(1.5f, (tinyRing ? 3.4f : 4.6f) * f.scale);
+	const float period  = dashLen + gapLen;
+	const float seamCutoff = std::max(dashLen, totalLen - gapLen * 0.85f);
+
+	QVarLengthArray<float, 1024> lineVerts;
+	lineVerts.reserve(scrPts.size() * 4);
+	float accum = 0.f;
+	for (int i = 1; i < scrPts.size(); ++i)
+	{
+		if (segBreak[i])
+			continue;
+		const Vec2f& a = scrPts[i - 1];
+		const Vec2f& b = scrPts[i];
+		const float dx = b[0] - a[0];
+		const float dy = b[1] - a[1];
+		const float segLen = std::hypot(dx, dy);
+		if (segLen < 1e-4f || segLen > 20000.f)
+			continue;
+
+		const float segStart = accum;
+		const float segEnd = std::min(accum + segLen, seamCutoff);
+		if (segEnd > segStart + 1e-3f)
+		{
+			const int kStart = static_cast<int>(std::floor(segStart / period));
+			const int kEnd = std::min(kStart + 256, static_cast<int>(std::floor(segEnd / period)));
+			for (int k = kStart; k <= kEnd; ++k)
+			{
+				const float d0 = std::max(segStart, static_cast<float>(k) * period);
+				const float d1 = std::min(segEnd, static_cast<float>(k) * period + dashLen);
+				if (d1 > d0 + 1e-3f)
+				{
+					const float t0 = (d0 - segStart) / segLen;
+					const float t1 = (d1 - segStart) / segLen;
+					lineVerts.push_back(a[0] + dx * t0);
+					lineVerts.push_back(a[1] + dy * t0);
+					lineVerts.push_back(a[0] + dx * t1);
+					lineVerts.push_back(a[1] + dy * t1);
+				}
+			}
+		}
+		accum += segLen;
+	}
+	if (lineVerts.size() < 4)
+		return;
+
+	sPainter.setBlending(true);
+	sPainter.setLineSmooth(true);
+	sPainter.setLineWidth(f.scale * std::clamp(f.majorPx / 55.f, 0.9f, 1.6f));
+	const float drawAlpha = (f.majorPx > 40.f * f.scale) ? (alpha * 0.85f) : alpha;
+	sPainter.setColor(color, drawAlpha);
+	sPainter.enableClientStates(true);
+	sPainter.setVertexPointer(2, GL_FLOAT, lineVerts.constData());
+	sPainter.drawFromArray(StelPainter::Lines, lineVerts.size() / 2, 0, false);
+	sPainter.enableClientStates(false);
 }
 
 float Nebula::getHintSize(StelPainter& sPainter) const

@@ -179,10 +179,16 @@ double visualRadiusForObject(const StelCore* core, const ViewContext& ctx, const
 	}
 	if (type == QLatin1String("Nebula"))
 	{
-		// NebulaMgr draws a small hint marker (6 px, or 12 px for regions)
-		// rather than a filled disk the size of the catalogue angular radius.
-		// Use the marker footprint; the angular radius would let a 4-degree
-		// dark nebula swallow nearby stars over a ~50 vp invisible target.
+		const NebulaP nebulaObj = qSharedPointerCast<Nebula>(object);
+		const NebulaMgr* nebulaMgr = GETSTELMODULE(NebulaMgr);
+		if (nebulaObj && nebulaMgr && nebulaMgr->getHintsProportional())
+		{
+			const bool isDarkOrRegion = (nebulaObj->getDSOType() == Nebula::NebDn
+				|| nebulaObj->getDSOType() == Nebula::NebRegion);
+			const double angularVp = angularRadiusToVp(core, ctx, object->getAngularRadius(core));
+			const double maxCapVp = isDarkOrRegion ? 24.0 : 0.35 * qMin(ctx.viewport[2] / ctx.scaleX, ctx.viewport[3] / ctx.scaleY);
+			return qBound(6.0, angularVp, qMax(6.0, maxCapVp));
+		}
 		return 3.0;
 	}
 	return qMax(0.0, angularRadiusToVp(core, ctx, object->getAngularRadius(core)));
@@ -593,12 +599,17 @@ PickResult TouchPicker::pickAt(const StelCore* core, int xVp, int yVp, int skyW,
 		if (nebulaMgr->getFlagShow() && nebulaHints && core->getFlagClearSky())
 		{
 			const float maxMagHints = nebulaMgr->computeMaxMagHint(core->getSkyDrawer());
-			const float wideFovLabelPenalty = (ctx.fov > 75.0)
-				? static_cast<float>(qMin(2.4, 5.0 * std::log10(ctx.fov / 75.0)))
+			const float wideFovLabelPenalty = (ctx.fov > 25.0)
+				? static_cast<float>(qMin(3.2, 3.6 * std::log10(ctx.fov / 25.0)))
 				: 0.f;
 			const float maxMagLabels = core->getSkyDrawer()->getSkyObjectLimitMagnitude() - 2.f
 				+ static_cast<float>(nebulaMgr->getLabelsAmount() * 1.2) - 2.f - wideFovLabelPenalty;
-			const QList<StelObjectP> nebulae = nebulaMgr->searchAround(tapDirection, fovRadiusDeg, core);
+			// Expand DSO center search radius at small FOV so tapping anywhere on a zoomed-in
+			// galaxy/cluster body or its offset label still discovers the object center.
+			const double dsoSearchDeg = qMax(fovRadiusDeg, qMin(ctx.fov * 0.65, 6.0));
+			const QList<StelObjectP> nebulae = nebulaMgr->searchAround(tapDirection, dsoSearchDeg, core);
+			const bool hintsProportional = nebulaMgr->getHintsProportional();
+			const double screenScale = static_cast<double>(StelApp::getInstance().getScreenScale());
 			for (const StelObjectP& nebula : nebulae)
 			{
 				const NebulaP nebulaObject = qSharedPointerCast<Nebula>(nebula);
@@ -615,9 +626,16 @@ PickResult TouchPicker::pickAt(const StelCore* core, int xVp, int yVp, int skyW,
 				Vec3d screenDevice;
 				if (!projectToVp(ctx, nebula->getJ2000EquatorialPos(core), screenVp, screenDevice))
 					continue;
-				const double rVp = render.outlineDrawn
-					? angularRadiusToVp(core, ctx, nebula->getAngularRadius(core))
-					: 3.0;
+				const bool isDarkOrRegion = (nebulaObject->getDSOType() == Nebula::NebDn
+					|| nebulaObject->getDSOType() == Nebula::NebRegion);
+				const double angularVp = angularRadiusToVp(core, ctx, nebula->getAngularRadius(core));
+				double rVp = 3.0;
+				if (render.outlineDrawn)
+					rVp = qBound(3.0, angularVp, qMax(3.0, 0.35 * minViewportVp));
+				else if (render.hintDrawn && hintsProportional)
+					rVp = isDarkOrRegion
+						? qBound(6.0, angularVp, 24.0)
+						: qBound(6.0, angularVp, qMax(6.0, 0.35 * minViewportVp));
 
 				LabelTarget label;
 				if (render.labelDrawn)
@@ -626,7 +644,11 @@ PickResult TouchPicker::pickAt(const StelCore* core, int xVp, int yVp, int skyW,
 					if (!text.isEmpty())
 					{
 						label.present = true;
-						label.rect = labelRectUpRight(labelMetrics, text, screenVp, 15.0 / ctx.dpr, ctx.dpr);
+						const double hintLogical = hintsProportional
+							? qMin(qMax(6.0, angularVp * ctx.dpr / qMax(1.0, screenScale)), 96.0)
+							: 0.0;
+						const double labelOffsetVp = (15.0 + hintLogical) / ctx.dpr;
+						label.rect = labelRectUpRight(labelMetrics, text, screenVp, labelOffsetVp, ctx.dpr);
 					}
 				}
 				const bool labelHit = label.present && label.rect.contains(ctx.tapVp);
