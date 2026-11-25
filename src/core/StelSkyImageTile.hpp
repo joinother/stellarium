@@ -137,8 +137,12 @@ protected:
 	//! The image luminance in cd/m^2
 	float luminance;
 
-	//! Whether the texture must be blended
+	//! Whether the texture must be blended (additive GL_ONE, GL_ONE)
 	bool alphaBlend;
+
+	//! Whether the texture uses standard alpha blending (GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA),
+	//! e.g. for translucent dark-nebula dust masks that occlude background Milky Way light.
+	bool normalAlphaBlend;
 
 	//! True if the tile is just a list of other tiles without texture for itself
 	bool noTexture;

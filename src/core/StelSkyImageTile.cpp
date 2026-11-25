@@ -44,6 +44,7 @@ void StelSkyImageTile::initCtor()
 	minResolution = -1;
 	luminance = -1;
 	alphaBlend = false;
+	normalAlphaBlend = false;
 	noTexture = false;
 	texFader = Q_NULLPTR;
 	birthJD = -1e10;
@@ -64,6 +65,7 @@ StelSkyImageTile::StelSkyImageTile(const QString& url, StelSkyImageTile* parent,
 	{
 		luminance = parent->luminance;
 		alphaBlend = parent->alphaBlend;
+		normalAlphaBlend = parent->normalAlphaBlend;
 	}
 	initFromUrl(url);
 }
@@ -77,6 +79,7 @@ StelSkyImageTile::StelSkyImageTile(const QVariantMap& map, StelSkyImageTile* par
 	{
 		luminance = parent->luminance;
 		alphaBlend = parent->alphaBlend;
+		normalAlphaBlend = parent->normalAlphaBlend;
 	}
 	initFromQVariantMap(map);
 }
@@ -118,13 +121,21 @@ void StelSkyImageTile::draw(StelCore* core, StelPainter& sPainter, float opacity
 		qInfo() << "[dso-textures] viewport candidates=" << result.size()
 				<< "pending=" << numToBeLoaded;
 
-	// Draw in the good order
-	sPainter.setBlending(true, GL_ONE, GL_ONE);
+	// Draw dark-dust alpha-blended tiles first (occluding Milky Way), then additive DSOs
 	auto i = result.end();
 	while (i!=result.begin())
 	{
 		--i;
-		i.value()->drawTile(core, sPainter, vel);
+		if (i.value()->normalAlphaBlend)
+			i.value()->drawTile(core, sPainter, vel);
+	}
+	sPainter.setBlending(true, GL_ONE, GL_ONE);
+	i = result.end();
+	while (i!=result.begin())
+	{
+		--i;
+		if (!i.value()->normalAlphaBlend)
+			i.value()->drawTile(core, sPainter, vel);
 	}
 
 	deleteUnusedSubTiles();
@@ -311,19 +322,38 @@ bool StelSkyImageTile::drawTile(StelCore* core, StelPainter& sPainter, const Vec
 
 	// Draw the real texture for this image
 	float ad_lum = (luminance>0) ? qMin(1.0f, core->getSkyDrawer()->adaptSkyObjectLuminanceScaled(luminance)) : 1.f;
+	// Smooth wide-FOV attenuation: keep wide Milky Way vistas serene (down to 0.40 at >=65° FOV)
+	// and restore 100% full DSO richness when zooming in (<=18° FOV).
+	const float fovDeg = static_cast<float>(sPainter.getProjector()->getFov());
+	const float wideT = qBound(0.f, (fovDeg - 18.f) / 47.f, 1.f);
+	const float smoothWide = wideT * wideT * (3.f - 2.f * wideT);
+	const float wideFovGain = 1.f - 0.60f * smoothWide;
 	Vec4f color;
-	if (alphaBlend || texFader->state()==QTimeLine::Running)
+	if (normalAlphaBlend)
 	{
+		// Dark nebulae occlude the background via baked dust alpha rather than emitting light.
+		// Anchor night-sky visibility to a 13.0 mag/arcmin^2 reference so faint-catalogued dust
+		// lanes (e.g. Barnard 72, maxBrightness=15.5) stay crisp at night while still fading to 0 in daytime.
+		const float darkRefLum = core->getSkyDrawer()->surfaceBrightnessToLuminance(13.0f);
+		const float darkVis = qBound(0.f, core->getSkyDrawer()->adaptSkyObjectLuminanceScaled(qMax(luminance, darkRefLum)), 1.f);
+		const float darkWideGain = 1.f - 0.50f * smoothWide;
+		sPainter.setBlending(true, GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+		color.set(1.f, 1.f, 1.f, darkVis * darkWideGain * static_cast<float>(texFader->currentValue()));
+	}
+	else if (alphaBlend || texFader->state()==QTimeLine::Running)
+	{
+		const float effLum = ad_lum * wideFovGain;
 		if (!alphaBlend)
 			sPainter.setBlending(true); // Normal transparency mode
 		else
 			sPainter.setBlending(true, GL_ONE, GL_ONE); // additive blending
-		color.set(ad_lum,ad_lum,ad_lum, static_cast<float>(texFader->currentValue()));
+		color.set(effLum, effLum, effLum, static_cast<float>(texFader->currentValue()));
 	}
 	else
 	{
+		const float effLum = ad_lum * wideFovGain;
 		sPainter.setBlending(false);
-		color.set(ad_lum,ad_lum,ad_lum, 1.f);
+		color.set(effLum, effLum, effLum, 1.f);
 	}
 
 	const bool withExtinction=(getFrameType()!=StelCore::FrameAltAz && core->getSkyDrawer()->getFlagHasAtmosphere() && core->getSkyDrawer()->getVisualExtinction().getExtinctionCoefficient()>=0.01f);
@@ -384,9 +414,16 @@ bool StelSkyImageTile::drawTile(StelCore* core, StelPainter& sPainter, const Vec
 			core->getSkyDrawer()->getVisualExtinction().forward(altAz, &extinctionMagnitude);
 			// compute a simple factor from magnitude loss.
 			float extinctionFactor=std::pow(0.4f , extinctionMagnitude); // drop of one magnitude: factor 2.5 or 40%
-			extinctedColor[0]*=fabs(extinctionFactor);
-			extinctedColor[1]*=fabs(extinctionFactor);
-			extinctedColor[2]*=fabs(extinctionFactor);
+			if (normalAlphaBlend)
+			{
+				extinctedColor[3]*=fabs(extinctionFactor);
+			}
+			else
+			{
+				extinctedColor[0]*=fabs(extinctionFactor);
+				extinctedColor[1]*=fabs(extinctionFactor);
+				extinctedColor[2]*=fabs(extinctionFactor);
+			}
 		}
 		sPainter.setColor(extinctedColor);
 		sPainter.drawSphericalRegion(poly.data(), StelPainter::SphericalPolygonDrawModeTextureFill, Q_NULLPTR, true, 5., vel);
@@ -538,6 +575,11 @@ void StelSkyImageTile::loadFromQVariantMap(const QVariantMap& map)
 		alphaBlend = map.value("alphaBlend").toBool();
 	}
 
+	if (map.contains("normalAlphaBlend"))
+	{
+		normalAlphaBlend = map.value("normalAlphaBlend").toBool();
+	}
+
 	// Load the convex polygons (if any)
 	QVariantList polyList = map.value("skyConvexPolygons").toList();
 	if (polyList.empty())
@@ -681,6 +723,8 @@ QVariantMap StelSkyImageTile::toQVariantMap() const
 		res["maxBrightness"]=StelApp::getInstance().getCore()->getSkyDrawer()->luminanceToSurfacebrightness(luminance);
 	if (alphaBlend)
 		res["alphaBlend"]=true;
+	if (normalAlphaBlend)
+		res["normalAlphaBlend"]=true;
 	if (noTexture==false)
 		res["imageUrl"]=absoluteImageURI;
 	if (birthJD>-1e10)

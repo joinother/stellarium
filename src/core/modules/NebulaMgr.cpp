@@ -722,7 +722,7 @@ struct DrawNebulaFuncObject
 				candidate.label = n->getScreenLabel();
 				if (candidate.label.isEmpty() || n->designationUsage)
 					candidate.label = n->getDSODesignation();
-				candidate.labelShift = 15.f + (n->drawHintProportional ? n->getHintSize(*sPainter) : 0.f);
+				candidate.labelShift = 15.f + (n->drawHintProportional ? std::min(n->getHintSize(*sPainter), 96.f) : 0.f);
 				const auto rect = sPainter->skyLabelRect(n->XY[0], n->XY[1], candidate.label,
 					candidate.labelShift, candidate.labelShift);
 				if (!candidate.label.isEmpty() && rect.intersects(viewport))
@@ -1134,8 +1134,8 @@ void NebulaMgr::draw(StelCore* core)
 		// Print all the nebulae of all the selected zones
 		float maxMagHints  = computeMaxMagHint(skyDrawer);
 		const float fovDeg = static_cast<float>(prj->getFov());
-		const float wideFovLabelPenalty = (fovDeg > 75.f)
-			? std::min(2.4f, 5.0f * std::log10(fovDeg / 75.f))
+		const float wideFovLabelPenalty = (fovDeg > 25.f)
+			? std::min(3.2f, 3.6f * std::log10(fovDeg / 25.f))
 			: 0.f;
 		float maxMagLabels = skyDrawer->getSkyObjectLimitMagnitude()-2.f+static_cast<float>(labelsAmount*1.2)-2.f - wideFovLabelPenalty;
 		const auto selected = GETSTELMODULE(StelObjectMgr)->getSelectedObject("Nebula");

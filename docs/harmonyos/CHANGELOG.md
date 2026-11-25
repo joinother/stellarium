@@ -1,5 +1,18 @@
 > **身份图例**：本文件真机记录中出现的 `com.cnchensh.stellarium` 是**本机调试签名身份**（本机 DevEco 自动生成，非发布身份）；发布身份为 `com.joinother.skyinstrument`。构建脚本 `build-ohos-hap-windows.ps1 -Install` 从产物 `pack.info` 读取实际包名，仓库不写死任何签名身份（见 `docs/harmonyos/release/BUNDLE-IDENTITY-CLEANUP.md`）。
 
+## [2026-11-25] 深空贴图全量去星清洗、暗星云透明尘埃遮挡、AI 银河去底噪与广角视觉统筹
+
+- **修改文件：** `nebulae/default/`（640 张去星/无缝拼接/暗尘埃清洗贴图，移除 34 张疏散星团假星贴图）、`nebulae/default/textures.json`、`textures/milkyway.png`、`src/core/StelSkyImageTile.hpp`、`src/core/StelSkyImageTile.cpp`、`src/core/modules/NebulaMgr.cpp`、`harmonyos/ets-source/qability/StellariumResourceBootstrap.ets`、`docs/harmonyos/CHANGELOG.md`。
+- **改动摘要：**
+  1. **全量深空贴图去星与拼接清洗（674 → 640 张）**：使用 StarNet2 对 436 张星云/星系去星并做逐通道底噪剥离与圆角柔边羽化；对 116 个球状星团与极密星团保留本体并做径向羽化；对 6 组共 32 块多图拼接（LMC 4×4、SMC 2×2、蛇夫座 ρ 2×2、巴纳德环、女巫头 IC 2118、船帆座超新星遗迹）整图无缝拼合清洗后再原位切回，彻底消除内部拼缝；移除 34 张纯疏散星团假星贴片并修复 `textures.json` 原始非法控制字符，包体深空贴图由 143 MB 降至 129 MB。
+  2. **暗星云方案 B（`normalAlphaBlend` 透明尘埃遮挡）**：为 9 个经典暗星云（`barnard72.png`、`barnard142-vasey.png`、`barnard150.png`、`barnard173-vasey.png`、`barnard22.png`、`darkshark-vasey.png`、`ldn43.png`、`ldn673.png`、`n4372-darkdoodad.png`）生成 1:1 坐标对齐的 RGBA 暗尘埃遮罩；`StelSkyImageTile` 新增 `normalAlphaBlend`（`GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA`），先于发射星云绘制，夜间以 `13.0 mag/arcmin²` 基准保持暗尘埃层次清晰，白天/晨昏随大气亮度与消光自动淡出至不可见。
+  3. **AI 银河银盘外纯黑底噪清洗**：保留用户选定的 AI 银河色调与无噪点质感，将银盘外微弱灰底 `(4,5,5)` 精准归零至 `(0,0,0)`，与深空贴图叠加彻底无灰框。
+  4. **广角 FOV 柔和压暗与标签防拥挤**：`StelSkyImageTile::drawTile()` 增加 `18° → 65°` Hermite 平滑压暗（广角柔落至 40% 与银河融为一体，缩放到 `≤18°` 恢复 100% 细节）；`NebulaMgr::draw()` 将广角深空标签对数收敛起点前移至 `25°` 并为大视场 `labelShift` 增加 `96px` 上限，避免广角标签堆叠与特写标签飞出屏幕。
+  5. **鸿蒙资源热更新迁移**：`StellariumResourceBootstrap.ets` 升级 `DEEP_SKY_INSTALL_MARKER`（`v3_starless`）、`MILKYWAY_TEXTURE_MARKER`（`v3`）与一次性旧缓存清理标记，确保老设备覆盖安装时完整替换旧贴图并清除 34 张已废弃文件。
+- **构建与验证结果：**
+  - 主机契约与单测：`test-ohos-realistic-star-visibility.mjs` 15/15、`test-visual-extinction.py` PASS、`test-ohos-deep-sky-status.mjs` 10/10、`test-ohos-vivid-rendering-gate.mjs` 15/15、`check-ohos-ui-contract.mjs` 与 `check-ohos-star-catalog.mjs` 全部通过。
+  - 真机（`HUAWEI MatePad Mini 悦读版`，`192.168.31.234:42713`）：合编 PR #13 与本次改动，`hvigorw assembleHap` `BUILD SUCCESSFUL`（signed Debug HAP 874 MB），安装运行稳定（PID `58575` 连续无崩溃，`onDiskCount=642` / `referencedCount=640` / `missingCount=0` / `activeTextureErrorCount=0`）。实机截图核验通过：M31 / IC 434 / NGC 7000 零假星零硬边、蛇夫座 ρ 2×2 与 LMC 4×4 零内缝、60° 银心广角深空柔和不抢戏且标签清爽、Barnard 142 & Barnard 72 夜间暗尘埃清晰且白天大气开启完全消隐。
+
 ## [2026-11-25] 恢复插件在启动遮罩期间同步加载
 
 - **修改文件：** `src/StelMainView.cpp`、`scripts/test-ohos-plugin-startup.mjs`（新增）、`docs/harmonyos/CHANGELOG.md`。

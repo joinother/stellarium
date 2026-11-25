@@ -18,11 +18,13 @@ const RAW_NEBULAE_ROOT = `${RAW_ROOT}/nebulae/default`;
 // The old completion marker was created before the optional image collection
 // became upgradeable. Use a new marker and verify the two prominent images so
 // an existing filesDir cannot permanently hide an incomplete collection.
-const DEEP_SKY_INSTALL_MARKER = '.ohos_complete_v2';
+const DEEP_SKY_INSTALL_MARKER = '.ohos_complete_v3_starless';
+const DEEP_SKY_MIGRATION_PURGE_MARKER = '.ohos_purged_v3_starless';
 const DEEP_SKY_SENTINELS: Array<string> = ['m31.png', 'n2244.png'];
 const DEEP_SKY_PRIORITY_IMAGES: Array<string> = [
   'm31.png', 'm42.png', 'm51-vasey.png', 'm1dumont.png', 'm13.png',
   'pleiades.png', 'n2244.png', 'm8.png', 'm20.png', 'm57dumont.png',
+  'ic434.png', 'n7000.png', 'ic1805.png', 'barnard72.png',
 ];
 const DEEP_SKY_INDEX_FILES: Array<string> = [
   'catalog.dat',
@@ -37,8 +39,8 @@ const DETAIL_MEDIA_NEBULA_PATH = /^nebulae\/default\/[a-z][a-z0-9_-]*\.png$/i;
 const DETAIL_MEDIA_IMAGE_EXTENSION = /\.(?:png|jpe?g|webp)$/i;
 const TEXTURE_COMPAT_MARKER = '.ohos_texture_compat_v1';
 const TEXTURE_COMPAT_FILES: Array<string> = ['charon.png', 'neptune.png', 'sedna.png', 'uranus.png'];
-const MILKYWAY_TEXTURE_MARKER = '.ohos_milkyway_ai_4k_v2';
-const STARTUP_CORE_REFRESH_MARKER = '.ohos_startup_core_v1';
+const MILKYWAY_TEXTURE_MARKER = '.ohos_milkyway_ai_4k_v3';
+const STARTUP_CORE_REFRESH_MARKER = '.ohos_startup_core_v2';
 const DETAIL_MODEL_TEXTURE_MARKER = '.ohos_detail_model_rgba_v2';
 const DETAIL_MODEL_TEXTURE_FILES: Array<string> = [
   'sun.png', 'mercury.png', 'venus.png', 'earth_cmap.png', 'moon.png', 'mars.png', 'jupiter.png', 'saturn.png',
@@ -866,6 +868,28 @@ export function scheduleDeepSkyImageExtraction(
   deepSkyExtractionCurrent = '';
   deepSkyExtractionStarted = true;
   ensureDir(imageRoot);
+  const purgeMarker = `${imageRoot}/${DEEP_SKY_MIGRATION_PURGE_MARKER}`;
+  if (!exists(purgeMarker)) {
+    try {
+      const staleFiles = fs.listFileSync(imageRoot);
+      let purged = 0;
+      for (const f of staleFiles) {
+        if (DEEP_SKY_IMAGE_FILE.test(f)) {
+          try {
+            fs.unlinkSync(`${imageRoot}/${f}`);
+            purged++;
+          } catch (_) {
+          }
+        }
+      }
+      writeMarker(purgeMarker);
+      hilog.info(LOG_DOMAIN, LOG_TAG,
+        `[deep-sky-warmup] purged ${purged} legacy PNGs prior to v3 starless refresh`);
+    } catch (err) {
+      hilog.warn(LOG_DOMAIN, LOG_TAG,
+        `[deep-sky-warmup] purge scan failed: ${JSON.stringify(err)}`);
+    }
+  }
   let nextIndex = 0;
   let copiedCount = 0;
   let skippedCount = 0;
