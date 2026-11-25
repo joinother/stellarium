@@ -635,9 +635,13 @@ export async function prepareStellariumResourcesAsync(appContext: common.Applica
     await writeRawFileAsync(appContext, `${RAW_ROOT}/${CATALOG_MANIFEST}`, manifestPath);
     await writeRawFileAsync(appContext, `${RAW_ROOT}/data/ssystem_minor.ini`,
       `${installRoot}/data/ssystem_minor.ini`);
+    await writeRawFileAsync(appContext, `${RAW_ROOT}/data/shaders/planet.vert`,
+      `${installRoot}/data/shaders/planet.vert`);
+    await writeRawFileAsync(appContext, `${RAW_ROOT}/data/shaders/planet.frag`,
+      `${installRoot}/data/shaders/planet.frag`);
     await writeRawFileAsync(appContext, `${RAW_ROOT}/translations/stellarium-scripts/zh_CN.qm`,
       `${installRoot}/translations/stellarium-scripts/zh_CN.qm`);
-    hilog.info(LOG_DOMAIN, LOG_TAG, '[startup] refreshed bundled catalogue manifest, minor bodies, and script translation');
+    hilog.info(LOG_DOMAIN, LOG_TAG, '[startup] refreshed bundled catalogue manifest, minor bodies, planet shaders, and script translation');
     const indexPath = `${installRoot}/${MULTILINGUAL_SEARCH_INDEX}`;
     if (!exists(indexPath)) {
       await writeRawFileAsync(appContext, `${RAW_ROOT}/${MULTILINGUAL_SEARCH_INDEX}`, indexPath);

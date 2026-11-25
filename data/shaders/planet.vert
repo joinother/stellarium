@@ -22,12 +22,12 @@
  */
 
 ATTRIBUTE highp vec4 vertex; // vertex projected by CPU
-ATTRIBUTE mediump vec2 texCoord;
+ATTRIBUTE highp vec2 texCoord;
 #ifndef PROJECTOR_PRESENT
 ATTRIBUTE highp vec4 unprojectedVertex; //original vertex coordinate (in km for OBJ models, in AU otherwise)
 #endif
 #ifdef IS_OBJ
-    ATTRIBUTE mediump vec3 normalIn; // OBJs have pre-calculated normals
+    ATTRIBUTE highp vec3 normalIn; // OBJs have pre-calculated normals
 #endif
 
 uniform highp mat4 projectionMatrix;
@@ -36,7 +36,7 @@ uniform highp mat4 shadowMatrix;
 VARYING highp vec4 shadowCoord;
 #endif
 
-VARYING mediump vec2 texc; //texture coord
+VARYING highp vec2 texc; //texture coord
 VARYING highp vec3 P; //original unprojected position (in AU)
 
 #ifdef IS_MOON
@@ -45,7 +45,7 @@ VARYING highp vec3 P; //original unprojected position (in AU)
     VARYING highp vec3 normalY;
     VARYING highp vec3 normalZ;
 #else
-    VARYING mediump vec3 normalVS;
+    VARYING highp vec3 normalVS;
     //normal objects use gouraud shading
     //good enough for our spheres
     uniform highp vec3 lightDirection;

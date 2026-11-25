@@ -2531,9 +2531,18 @@ void main()
 		"VARYING highp vec2 texc;\n"
 		"uniform sampler2D tex;\n"
 		"uniform mediump vec4 texColor;\n"
+		"uniform highp vec4 circularClip;\n"
 		"void main(void)\n"
 		"{\n"
-		"    FRAG_COLOR = texture2D(tex, texc)*texColor;\n"
+		"    mediump vec4 color = texture2D(tex, texc)*texColor;\n"
+		"    if (circularClip.z > 0.0)\n"
+		"    {\n"
+		"        highp float clipDist = length(gl_FragCoord.xy - circularClip.xy);\n"
+		"        highp float clipMask = 1.0 - smoothstep(circularClip.z - circularClip.w, circularClip.z + circularClip.w, clipDist);\n"
+		"        if (clipMask <= 0.001) discard;\n"
+		"        color.a *= clipMask;\n"
+		"    }\n"
+		"    FRAG_COLOR = color;\n"
 		"}\n";
 	fshader2.compileSourceCode(fsrc2);
 	if (!fshader2.log().isEmpty())
@@ -2548,6 +2557,7 @@ void main()
 	texturesShaderVars.vertex = texturesShaderProgram->attributeLocation("vertex");
 	texturesShaderVars.texColor = texturesShaderProgram->uniformLocation("texColor");
 	texturesShaderVars.texture = texturesShaderProgram->uniformLocation("tex");
+	texturesShaderVars.circularClip = texturesShaderProgram->uniformLocation("circularClip");
 
 	QOpenGLShader adjustedFshader2(QOpenGLShader::Fragment);
 	const auto adjustedFsrc2 =
@@ -2563,6 +2573,7 @@ void main()
 		"uniform int colorChannel;\n"
 		"uniform int invertedColors;\n"
 		"uniform int premultiplyAlpha;\n"
+		"uniform highp vec4 circularClip;\n"
 		"void main(void)\n"
 		"{\n"
 		"    mediump vec4 color = texture2D(tex, texc)*texColor;\n"
@@ -2584,6 +2595,13 @@ void main()
 		"            color.rgb = vec3(0.0, luma, 0.0);\n"
 		"        else\n"
 		"            color.rgb = vec3(0.0, 0.0, luma);\n"
+		"    }\n"
+		"    if (circularClip.z > 0.0)\n"
+		"    {\n"
+		"        highp float clipDist = length(gl_FragCoord.xy - circularClip.xy);\n"
+		"        highp float clipMask = 1.0 - smoothstep(circularClip.z - circularClip.w, circularClip.z + circularClip.w, clipDist);\n"
+		"        if (clipMask <= 0.001) discard;\n"
+		"        color.a *= clipMask;\n"
 		"    }\n"
 		"    if (premultiplyAlpha != 0)\n"
 		"    {\n"
@@ -2612,6 +2630,7 @@ void main()
 	adjustedTexturesShaderVars.colorChannel = adjustedTexturesShaderProgram->uniformLocation("colorChannel");
 	adjustedTexturesShaderVars.invertedColors = adjustedTexturesShaderProgram->uniformLocation("invertedColors");
 	adjustedTexturesShaderVars.premultiplyAlpha = adjustedTexturesShaderProgram->uniformLocation("premultiplyAlpha");
+	adjustedTexturesShaderVars.circularClip = adjustedTexturesShaderProgram->uniformLocation("circularClip");
 
 	// Texture shader program + interpolated color per vertex
 	QOpenGLShader vshader4(QOpenGLShader::Vertex);
@@ -2648,6 +2667,7 @@ void main()
 		"uniform int invertedColors;\n"
 		"uniform int premultiplyAlpha;\n"
 		"uniform mediump float alpha;\n"
+		"uniform highp vec4 circularClip;\n"
 		"void main(void)\n"
 		"{\n"
 		"    mediump vec4 color = texture2D(tex, texc)*outColor;\n"
@@ -2670,6 +2690,13 @@ void main()
 		"            color.rgb = vec3(0.0, luma, 0.0);\n"
 		"        else\n"
 		"            color.rgb = vec3(0.0, 0.0, luma);\n"
+		"    }\n"
+		"    if (circularClip.z > 0.0)\n"
+		"    {\n"
+		"        highp float clipDist = length(gl_FragCoord.xy - circularClip.xy);\n"
+		"        highp float clipMask = 1.0 - smoothstep(circularClip.z - circularClip.w, circularClip.z + circularClip.w, clipDist);\n"
+		"        if (clipMask <= 0.001) discard;\n"
+		"        color.a *= clipMask;\n"
 		"    }\n"
 		"    if (premultiplyAlpha != 0)\n"
 		"    {\n"
@@ -2699,6 +2726,7 @@ void main()
 	texturesColorShaderVars.invertedColors = texturesColorShaderProgram->uniformLocation("invertedColors");
 	texturesColorShaderVars.premultiplyAlpha = texturesColorShaderProgram->uniformLocation("premultiplyAlpha");
 	texturesColorShaderVars.alpha = texturesColorShaderProgram->uniformLocation("alpha");
+	texturesColorShaderVars.circularClip = texturesColorShaderProgram->uniformLocation("circularClip");
 
 	const auto& glInfo = StelMainView::getInstance().getGLInformation();
 	if(glInfo.isCoreProfile && glInfo.isHighGraphicsMode && !glInfo.isGLES)
@@ -3186,6 +3214,7 @@ void StelPainter::drawFromArrayImpl(DrawingMode mode, int count, int offset, boo
 		pr->enableAttributeArray(shaderVars.vertex);
 		pr->setUniformValue(shaderVars.projectionMatrix, qMat);
 		pr->setUniformValue(shaderVars.texColor, currentColor.toQVector());
+		pr->setUniformValue(shaderVars.circularClip, circularClip.toQVector());
 		if (useAdjustedTextureShader)
 		{
 			pr->setUniformValue(shaderVars.gamma, textureGamma);
@@ -3234,6 +3263,7 @@ void StelPainter::drawFromArrayImpl(DrawingMode mode, int count, int offset, boo
 		pr->setUniformValue(texturesColorShaderVars.invertedColors, textureInvertedColors ? 1 : 0);
 		pr->setUniformValue(texturesColorShaderVars.premultiplyAlpha, texturePremultiplyAlpha ? 1 : 0);
 		pr->setUniformValue(texturesColorShaderVars.alpha, textureAlpha);
+		pr->setUniformValue(texturesColorShaderVars.circularClip, circularClip.toQVector());
 	}
 	else if (!texCoordArray.enabled && colorArray.enabled && !normalArray.enabled)
 	{

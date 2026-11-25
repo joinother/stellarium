@@ -1,5 +1,18 @@
 > **身份图例**：本文件真机记录中出现的 `com.cnchensh.stellarium` 是**本机调试签名身份**（本机 DevEco 自动生成，非发布身份）；发布身份为 `com.joinother.skyinstrument`。构建脚本 `build-ohos-hap-windows.ps1 -Install` 从产物 `pack.info` 读取实际包名，仓库不写死任何签名身份（见 `docs/harmonyos/release/BUNDLE-IDENTITY-CLEANUP.md`）。
 
+## [2026-11-26] 行星高倍 `highp` 贴图精度升级 + 多光谱放大镜内在线高清 HiPS 瓦片圆形精准叠加
+
+- **修改文件：** `data/shaders/planet.vert`、`data/shaders/planet.frag`、`src/core/StelViewportEffect.cpp`、`harmonyos/ets-source/qability/StellariumResourceBootstrap.ets`、`src/core/StelPainter.hpp`、`src/core/StelPainter.cpp`、`src/core/modules/HipsMgr.hpp`、`src/core/modules/HipsMgr.cpp`、`docs/harmonyos/CHANGELOG.md`。
+- **升级内容：**
+  1. **行星/月球高倍贴图与法线全链路 `highp`（`planet.vert`、`planet.frag`、`StelViewportEffect.cpp`、`StellariumResourceBootstrap.ets`）**：将 `planet.vert` / `planet.frag` 中的贴图坐标 `texCoord`、`texc`、月球法线与地平线自阴影坐标 `moonTexCoord` / `texDx` / `texDy` / `normal`、土星环影坐标 `ring_radius` / `s` 及法线插值 `normalVS` 全部由 `mediump` 升级为 `highp`（FP32），同步补齐 `StelViewportEffect.cpp` 的 `highp` 投影与 UV；启动资源引导自动刷新已安装设备沙箱内的 `planet.vert` / `planet.frag`。
+  2. **多光谱放大镜内在线高清 HiPS 瓦片叠加（`StelPainter`、`HipsMgr`）**：在 `StelPainter` 纹理着色器中新增零开销解析抗锯齿圆形裁剪接口 `setCircularClip(centerX, centerY, radiusPx, featherPx)`（无需依赖模板缓冲）；`HipsMgr::setSpectralLens` 为支持深空高清源的 5 个波段（DSS2 可见光、AllWISE 中红外、2MASS 近红外、GALEX 紫外、eROSITA X 射线）懒预热在线 HiPS 元数据，当视场放大至 `< 14°` 且放大镜静止于 `1×` 光学对齐态时，在镜圈内侧（`radiusPx - 2.6*dpr`）自动渐入在线高清瓦片，镜圈、刻度点与转柄保持锐利覆于顶层、镜外零像素溢出；拖动/拉大/旋柄期间自动切回 4K 离线图维持满帧跟手，抬指即刻清晰呈现。
+- **验证结果：**
+  - 主机：UI 契约（123 锚点）、命令目录（449 命令）及 36 项单元测试全部通过。
+  - 真机（`HUAWEI MatePad Mini 悦读版`，PID `45097` 稳定无崩溃，6 组行星着色器与 `StelPainter`/`HipsMgr` 着色器零编译报错）：
+    - `0.8°` 月球近景特写环形山与晨昏线法线凹凸阴影极其锐利；
+    - `3.0°` 猎户座大星云 M42 中红外放大镜内实测加载 `338/338` 块 AllWISE 在线高清瓦片，尘埃纤维与星点纤毫毕现且与橙色金属镜圈零像素溢出；
+    - `4.0°` 仙女座星系 M31 可见光放大镜内实测加载 `163` 块 DSS2 在线高清瓦片，旋臂暗尘带与伴星系 M32/M110 清晰呈现于蓝色镜圈内。
+
 ## [2026-11-26] 鸿蒙 OpenGL ES 3.0 全局 `highp` 32 位精度升级 + 4K 多光谱 GPU 双三次平滑与防色带抖动
 
 - **修改文件：** `src/core/StelOpenGL.cpp`、`src/core/StelPainter.cpp`、`src/core/modules/HipsMgr.hpp`、`src/core/modules/HipsMgr.cpp`、`docs/harmonyos/CHANGELOG.md`。

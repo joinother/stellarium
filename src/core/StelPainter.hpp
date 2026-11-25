@@ -311,6 +311,17 @@ public:
 	//! Restores neutral texture color adjustment for subsequent simple textured draws.
 	void resetTextureDisplayAdjustment();
 
+	//! Clip subsequent textured draws to a soft anti-aliased framebuffer circle (bottom-left pixel coords).
+	void setCircularClip(float centerX, float centerY, float radiusPx, float featherPx = 1.5f)
+	{
+		circularClip.set(centerX, centerY, qMax(0.f, radiusPx), qMax(0.5f, featherPx));
+	}
+	//! Disable circular clipping on subsequent textured draws.
+	void clearCircularClip()
+	{
+		circularClip.set(0.f, 0.f, 0.f, 1.5f);
+	}
+
 	//! Create the OpenGL shaders programs used by the StelPainter.
 	//! This method needs to be called once at init.
 	static void initGLShaders();
@@ -483,6 +494,7 @@ private:
 	bool textureInvertedColors = false;
 	bool texturePremultiplyAlpha = false;
 	float textureAlpha = 1.f;
+	Vec4f circularClip = Vec4f(0.f, 0.f, 0.f, 1.5f);
 	bool hasTextureDisplayAdjustment() const;
 
 	static QOpenGLShaderProgram* basicShaderProgram;
@@ -520,6 +532,7 @@ private:
 		int colorChannel;
 		int invertedColors;
 		int premultiplyAlpha;
+		int circularClip;
 	};
 	static TexturesShaderVars texturesShaderVars;
 	static QOpenGLShaderProgram* adjustedTexturesShaderProgram;
@@ -539,6 +552,7 @@ private:
 		int invertedColors;
 		int premultiplyAlpha;
 		int alpha;
+		int circularClip;
 	};
 	static TexturesColorShaderVars texturesColorShaderVars;
 

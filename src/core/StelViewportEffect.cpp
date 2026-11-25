@@ -263,10 +263,10 @@ void StelViewportDistorterFisheyeToSphericMirror::setupShaders()
 	const auto vsrc =
 		StelOpenGL::globalShaderPrefix(StelOpenGL::VERTEX_SHADER) +
 		"ATTRIBUTE highp vec3 vertex;\n"
-		"ATTRIBUTE mediump vec2 texCoord;\n"
+		"ATTRIBUTE highp vec2 texCoord;\n"
 		"ATTRIBUTE mediump vec4 color;\n"
-		"uniform mediump mat4 projectionMatrix;\n"
-		"VARYING mediump vec2 texc;\n"
+		"uniform highp mat4 projectionMatrix;\n"
+		"VARYING highp vec2 texc;\n"
 		"VARYING mediump vec4 outColor;\n"
 		"void main()\n"
 		"{\n"
@@ -281,7 +281,7 @@ void StelViewportDistorterFisheyeToSphericMirror::setupShaders()
 	QOpenGLShader fsh(QOpenGLShader::Fragment);
 	const auto fsrc =
 		StelOpenGL::globalShaderPrefix(StelOpenGL::FRAGMENT_SHADER) +
-		"VARYING mediump vec2 texc;\n"
+		"VARYING highp vec2 texc;\n"
 		"VARYING mediump vec4 outColor;\n"
 		"uniform sampler2D tex;\n"
 		"void main()\n"

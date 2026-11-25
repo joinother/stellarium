@@ -1218,6 +1218,44 @@ void main(void)
 		texPrev->release();
 	texCur->release();
 	lensProgram->release();
+
+	// Hybrid online HD zoom inside the magnifying glass:
+	// When stationary at 1x optical alignment and zoomed inside 14 deg, smoothly overlay
+	// deep online HiPS tiles strictly clipped inside the inner glass bezel (0.00px spill).
+	const bool lensStationary = !flagDragging && !flagResizing && !flagRotating && !flagBlooming && !flagExpanding;
+	if (lensStationary && fovDeg < 14.0 && lensZoomCurrent < 1.15f && cf > 0.90f)
+	{
+		const SpectralDataset* desc = findSpectralDescriptor(lensDatasetId);
+		const HipsSurveyP survey = spectralSurveys.value(lensDatasetId);
+		if (desc && desc->hasDeepOnlineHd && survey && survey->isVisible() &&
+		    survey->isRemotePropertiesLoaded() && survey->hasValidProperties())
+		{
+			const float hdZoomFactor = static_cast<float>(qBound(0.0, (14.0 - fovDeg) / 6.0, 1.0));
+			const float zoomAlignFactor = qBound(0.0f, (1.15f - lensZoomCurrent) / 0.15f, 1.0f);
+			// Keep alpha strictly < 1.0 so HipsSurvey::drawTile enables alpha blending for circular feathering.
+			const float hdAlpha = qMin(0.996f, fade * spectralOpacity * hdZoomFactor * zoomAlignFactor);
+			const float clipRadiusPx = qMax(0.0f, curRadiusNorm * qMin(vpW, vpH) - 2.6f * dprVal);
+			if (hdAlpha > 0.01f && clipRadiusPx > 4.0f)
+			{
+				StelPainter sPainter(core->getProjection(StelCore::FrameJ2000));
+				const float clipCenterX = curCenterX * vpW;
+				const float clipCenterY = (1.0f - curCenterY) * vpH;
+				const float clipFeatherPx = qMax(1.0f, 1.15f * dprVal);
+				sPainter.setCircularClip(clipCenterX, clipCenterY, clipRadiusPx, clipFeatherPx);
+				const float savedOpacity = survey->getOpacity();
+				{
+					const QSignalBlocker blocker(survey.data());
+					survey->setOpacity(hdAlpha);
+				}
+				survey->draw(&sPainter, 2.0 * M_PI, Q_NULLPTR, flagShowAtmosphericExtinction);
+				{
+					const QSignalBlocker blocker(survey.data());
+					survey->setOpacity(savedOpacity);
+				}
+				sPainter.clearCircularClip();
+			}
+		}
+	}
 }
 
 void HipsMgr::draw(StelCore* core)
@@ -1454,6 +1492,38 @@ QJsonObject HipsMgr::getSpectralState() const
 	return state;
 }
 
+HipsSurveyP HipsMgr::ensureSpectralSurvey(const QString& datasetId)
+{
+	const SpectralDataset* descriptor = findSpectralDescriptor(datasetId);
+	if (!descriptor || !descriptor->hasDeepOnlineHd)
+		return HipsSurveyP();
+
+	HipsSurveyP survey = spectralSurveys.value(datasetId);
+	if (!survey)
+	{
+		const QString frame = QString::fromUtf8(descriptor->frame);
+		QMap<QString, QString> initialProperties;
+		initialProperties.insert(QStringLiteral("obs_title"), QString::fromUtf8(descriptor->title));
+		initialProperties.insert(QStringLiteral("hips_frame"), frame);
+		initialProperties.insert(QStringLiteral("hips_status"), QStringLiteral("public master clonableOnce"));
+		survey = HipsSurveyP(new HipsSurvey(QString::fromUtf8(descriptor->surveyUrl), QStringLiteral("spectral"), frame, QStringLiteral("image"), initialProperties));
+		survey->setOpacity(spectralOpacity);
+		connect(survey.data(), &HipsSurvey::propertiesChanged, this, &HipsMgr::surveysChanged);
+		connect(survey.data(), &HipsSurvey::visibleChanged, this, &HipsMgr::updateActiveSurveys);
+		connect(survey.data(), &HipsSurvey::displaySettingsChanged, this, &HipsMgr::saveSurveySettings);
+		spectralSurveys.insert(datasetId, survey);
+		surveys.append(survey);
+		emit gotNewSurvey(survey);
+	}
+	else
+	{
+		survey->setOpacity(spectralOpacity);
+		if (!survey->isRemotePropertiesLoaded() && !survey->isLoading())
+			survey->retryProperties();
+	}
+	return survey;
+}
+
 bool HipsMgr::setSpectralView(const QString& datasetId, const bool enabled, QString* error)
 {
 	const SpectralDataset* descriptor = findSpectralDescriptor(datasetId);
@@ -1519,33 +1589,8 @@ bool HipsMgr::setSpectralView(const QString& datasetId, const bool enabled, QStr
 	for (auto it = spectralSurveys.cbegin(); it != spectralSurveys.cend(); ++it)
 		if (it.key() != datasetId && it.value()) it.value()->setVisible(false);
 
-	if (descriptor->hasDeepOnlineHd)
-	{
-		HipsSurveyP survey = spectralSurveys.value(datasetId);
-		if (!survey)
-		{
-			const QString frame = QString::fromUtf8(descriptor->frame);
-			QMap<QString, QString> initialProperties;
-			initialProperties.insert(QStringLiteral("obs_title"), QString::fromUtf8(descriptor->title));
-			initialProperties.insert(QStringLiteral("hips_frame"), frame);
-			initialProperties.insert(QStringLiteral("hips_status"), QStringLiteral("public master clonableOnce"));
-			survey = HipsSurveyP(new HipsSurvey(QString::fromUtf8(descriptor->surveyUrl), QStringLiteral("spectral"), frame, QStringLiteral("image"), initialProperties));
-			survey->setOpacity(spectralOpacity);
-			connect(survey.data(), &HipsSurvey::propertiesChanged, this, &HipsMgr::surveysChanged);
-			connect(survey.data(), &HipsSurvey::visibleChanged, this, &HipsMgr::updateActiveSurveys);
-			connect(survey.data(), &HipsSurvey::displaySettingsChanged, this, &HipsMgr::saveSurveySettings);
-			spectralSurveys.insert(datasetId, survey);
-			surveys.append(survey);
-			emit gotNewSurvey(survey);
-		}
-		else
-		{
-			survey->setOpacity(spectralOpacity);
-			if (!survey->isRemotePropertiesLoaded() && !survey->isLoading())
-				survey->retryProperties();
-		}
+	if (HipsSurveyP survey = ensureSpectralSurvey(datasetId))
 		survey->setVisible(true);
-	}
 
 	visible = true;
 	emit showChanged(true);
@@ -1591,6 +1636,11 @@ bool HipsMgr::setSpectralLens(const bool enabled, const QString& datasetId,
 	{
 		lensEnabled = false;
 		lensFader = false;
+		if (!spectralFader)
+		{
+			for (auto it = spectralSurveys.cbegin(); it != spectralSurveys.cend(); ++it)
+				if (it.value()) it.value()->setVisible(false);
+		}
 		return true;
 	}
 
@@ -1648,6 +1698,16 @@ bool HipsMgr::setSpectralLens(const bool enabled, const QString& datasetId,
 			lensZoomCurrent = zoom;
 	}
 
+	// Prime deep online HD HiPS properties for supported bands so zooming inside 14 deg
+	// overlays crisp HiPS tiles inside the circular lens without full-screen spill.
+	for (auto it = spectralSurveys.cbegin(); it != spectralSurveys.cend(); ++it)
+		if (it.key() != resolvedId && it.value()) it.value()->setVisible(false);
+	if (HipsSurveyP survey = ensureSpectralSurvey(resolvedId))
+	{
+		survey->setVisible(true);
+		updateActiveSurveys();
+	}
+
 	lensEnabled = true;
 	lensFader = true;
 	return true;
@@ -1683,6 +1743,10 @@ QJsonObject HipsMgr::getSpectralLensState() const
 	{
 		state["title"] = QString::fromUtf8(desc->title);
 		state["band"] = QString::fromUtf8(desc->band);
+		const HipsSurveyP survey = spectralSurveys.value(lensDatasetId);
+		state["hdReady"] = desc->hasDeepOnlineHd && survey && survey->isRemotePropertiesLoaded() && survey->hasValidProperties();
+		state["loadedTiles"] = survey ? survey->getLoadedTileCount() : 0;
+		state["visibleTiles"] = survey ? survey->getVisibleTileCount() : 0;
 	}
 	return state;
 }

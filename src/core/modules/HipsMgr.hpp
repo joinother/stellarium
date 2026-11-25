@@ -138,6 +138,7 @@ private:
 	void releasePanoramaVAO();
 	void ensurePanoramaGL();
 	StelTextureSP getSpectralPanoramaTexture(const QString& datasetId);
+	HipsSurveyP ensureSpectralSurvey(const QString& datasetId);
 	void drawSpectralPanorama(StelCore* core);
 
 	QList<HipsSurveyP> surveys;

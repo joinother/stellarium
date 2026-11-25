@@ -21,7 +21,7 @@
   This is the fragment shader for solar system object rendering
  */
 
-VARYING mediump vec2 texc; //texture coord
+VARYING highp vec2 texc; //texture coord
 VARYING highp vec3 P; //original vertex pos in model space
 
 const highp float PI = 3.14159265;
@@ -75,7 +75,7 @@ uniform highp vec3 lightDirection;
     VARYING highp vec3 normalY;
     VARYING highp vec3 normalZ;
 #else
-    VARYING mediump vec3 normalVS; //pre-calculated normals or spherical normals in model space
+    VARYING highp vec3 normalVS; //pre-calculated normals or spherical normals in model space
 #endif
 
 const highp float M_PI=3.1415926535897932384626433832795;
@@ -172,7 +172,7 @@ lowp float outgasFactor(in mediump vec3 normal, in highp vec3 lightDir, in mediu
     return opac;
 }
 
-vec4 sampleTexDxDy(sampler2D sampler, vec2 texCoord, vec2 texDx, vec2 texDy)
+highp vec4 sampleTexDxDy(sampler2D sampler, highp vec2 texCoord, highp vec2 texDx, highp vec2 texDy)
 {
 #ifdef textureGrad_SUPPORTED
     if(texCoordsFromFragment)
@@ -231,8 +231,8 @@ void main()
             highp float u = - P.z / ray.z;
             if(u > 0.0 && u < 1e10)
             {
-                mediump float ring_radius = length(P + u * ray);
-                mediump float s = (ring_radius - innerRadius) / (outerRadius - innerRadius);
+                highp float ring_radius = length(P + u * ray);
+                highp float s = (ring_radius - innerRadius) / (outerRadius - innerRadius);
                 lowp float ringAlpha = texture2D(ringS, vec2(s, 0.5)).w;
 
                 // FIXME: this compensates for too much transparency in the texture (see e.g. Saturn)
@@ -298,8 +298,8 @@ void main()
     }
 
 #ifdef IS_MOON
-    mediump vec2 moonTexCoord = texc;
-    mediump vec2 texDx = vec2(0), texDy = vec2(0);
+    highp vec2 moonTexCoord = texc;
+    highp vec2 texDx = vec2(0), texDy = vec2(0);
     if(texCoordsFromFragment)
     {
         moonTexCoord = vec2(atan(normalZ.x, -normalZ.y)/(2.*PI)+0.5, asin(normalize(normalZ).z)/PI+0.5);
@@ -312,20 +312,20 @@ void main()
         // as a (continuous) multivalued function. We differentiate
         // atan(normalZ.x(x,y), -normalZ.y(x,y)) with respect to x and y and yield
         // gradLongitude vector.
-        vec2 gradNormalZX = vec2(dFdx(normalZ.x), dFdy(normalZ.x));
-        vec2 gradNormalZY = vec2(dFdx(-normalZ.y), dFdy(-normalZ.y));
-        vec2 gradLongitude = vec2(-normalZ.y*gradNormalZX.s-normalZ.x*gradNormalZY.s,
-                                  -normalZ.y*gradNormalZX.t-normalZ.x*gradNormalZY.t)
-                                                       /
-                                             dot(normalZ, normalZ);
-        float texTdx = dFdx(moonTexCoord.t);
-        float texTdy = dFdy(moonTexCoord.t);
+        highp vec2 gradNormalZX = vec2(dFdx(normalZ.x), dFdy(normalZ.x));
+        highp vec2 gradNormalZY = vec2(dFdx(-normalZ.y), dFdy(-normalZ.y));
+        highp vec2 gradLongitude = vec2(-normalZ.y*gradNormalZX.s-normalZ.x*gradNormalZY.s,
+                                        -normalZ.y*gradNormalZX.t-normalZ.x*gradNormalZY.t)
+                                                             /
+                                                   dot(normalZ, normalZ);
+        highp float texTdx = dFdx(moonTexCoord.t);
+        highp float texTdy = dFdy(moonTexCoord.t);
         texDx = vec2(gradLongitude.s/(2.*PI), texTdx);
         texDy = vec2(gradLongitude.t/(2.*PI), texTdy);
 #endif
     }
 
-    mediump vec3 normal;
+    highp vec3 normal;
     if(hasNormalMap)
         normal = sampleTexDxDy(normalMap, moonTexCoord, texDx, texDy).rgb-vec3(0.5);
     else
@@ -383,7 +383,7 @@ void main()
     }
 #else
     // important to normalize here again
-    mediump vec3 normal = normalize(normalVS);
+    highp vec3 normal = normalize(normalVS);
 #endif
 #ifdef OREN_NAYAR
     // Use an Oren-Nayar model for rough surfaces
