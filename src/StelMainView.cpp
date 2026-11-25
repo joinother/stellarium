@@ -16781,7 +16781,16 @@ extern "C" __attribute__((visibility("default"))) const char* StellariumOhos_com
 			HipsMgr* hips = GETSTELMODULE(HipsMgr);
 			QJsonDocument payload = QJsonDocument::fromJson(arg.toUtf8());
 			const QJsonObject options = payload.isObject() ? payload.object() : QJsonObject();
-			const QString datasetId = options.value("id").toString(arg.section('|', 0, 0));
+			const bool hasOpacity = options.contains("opacity");
+			if (hips && hasOpacity)
+				hips->setSpectralOpacity(static_cast<float>(options.value("opacity").toDouble(1.0)));
+			const QString datasetId = options.value("id").toString(payload.isObject() ? QString() : arg.section('|', 0, 0));
+			if (datasetId.isEmpty() && hasOpacity)
+			{
+				result["ok"] = hips != nullptr;
+				if (hips) result["spectral"] = hips->getSpectralState();
+				return result;
+			}
 			const bool enabled = options.contains("enabled")
 				? options.value("enabled").toBool()
 				: (arg.section('|', 1, 1).isEmpty() || arg.section('|', 1, 1) == "1" || arg.section('|', 1, 1) == "true");

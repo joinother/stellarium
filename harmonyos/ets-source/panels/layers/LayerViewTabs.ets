@@ -1405,9 +1405,6 @@ export struct LayerSurveysTab {
     Column({ space: 0 }) {
       LayerSwitchRow({ label: I18n.t('s0600'), isOn: this.layerStore.hipsSurveys, onToggle: (value: boolean) => { this.onToggleLayer('actionShow_Hips_Surveys', '', value) } })
       LayerSwitchRow({ label: I18n.t('s0601'), isOn: this.layerStore.toastSurvey, onToggle: (value: boolean) => { this.onToggleLayer('actionShow_Toast_Survey', '', value) } })
-      Row() {
-        Text(I18n.t('i0215')).fontSize(10).fontColor(this.c.iconSecondary).width('100%').padding({ left: 2 })
-      }.height(18).width('100%').margin({ top: 8 })
       LayerSpectralSection({
         surveyStore: this.surveyStore,
         onRefreshSurvey: () => { this.onRefreshSurvey() },

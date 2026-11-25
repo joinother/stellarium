@@ -110,6 +110,7 @@ export class LayerController {
       // 夜间模式和赤道仪模式切换时立即持久化，避免应用被杀死后丢失
       if (actionId === 'actionShow_Night_Mode') { this.hooks.persistNightMode() }
       if (actionId === 'actionSwitch_Equatorial_Mount') { this.hooks.persistEquatorialMount() }
+      if (actionId === 'actionShow_Hips_Surveys' || actionId === 'actionShow_Toast_Survey') { this.hooks.loadSurveyState() }
     })
   }
 

@@ -40,6 +40,18 @@ const DETAIL_MEDIA_IMAGE_EXTENSION = /\.(?:png|jpe?g|webp)$/i;
 const TEXTURE_COMPAT_MARKER = '.ohos_texture_compat_v1';
 const TEXTURE_COMPAT_FILES: Array<string> = ['charon.png', 'neptune.png', 'sedna.png', 'uranus.png'];
 const MILKYWAY_TEXTURE_MARKER = '.ohos_milkyway_ai_4k_v3';
+const SPECTRAL_ALLSKY_MARKER = '.ohos_spectral_allsky_v1';
+const SPECTRAL_ALLSKY_FILES: Array<string> = [
+  'dss2-color_allsky.jpg',
+  'finkbeiner-ha_allsky.jpg',
+  '2mass-color_allsky.jpg',
+  'allwise-color_allsky.jpg',
+  'planck-lfi_allsky.jpg',
+  'haslam-radio_allsky.jpg',
+  'galex-nuv_allsky.jpg',
+  'rass-xray_allsky.jpg',
+  'fermi-gamma_allsky.jpg',
+];
 const STARTUP_CORE_REFRESH_MARKER = '.ohos_startup_core_v2';
 const DETAIL_MODEL_TEXTURE_MARKER = '.ohos_detail_model_rgba_v2';
 const DETAIL_MODEL_TEXTURE_FILES: Array<string> = [
@@ -293,6 +305,34 @@ async function refreshMilkyWayTexture(
   writeMarker(markerPath);
   hilog.info(LOG_DOMAIN, LOG_TAG,
     `[startup] refreshed 4K AI Milky Way texture (${fileSize(targetPath)} bytes) in ${Date.now() - startedAt} ms`);
+}
+
+async function refreshSpectralAllskyAssets(
+  appContext: common.ApplicationContext,
+  installRoot: string,
+): Promise<void> {
+  const surveyRoot = `${installRoot}/data/surveys`;
+  const markerPath = `${surveyRoot}/${SPECTRAL_ALLSKY_MARKER}`;
+  if (exists(markerPath) &&
+    SPECTRAL_ALLSKY_FILES.every((name: string) => fileSize(`${surveyRoot}/${name}`) > 0)) {
+    return;
+  }
+  const startedAt = Date.now();
+  ensureDir(surveyRoot);
+  let copied = 0;
+  for (const name of SPECTRAL_ALLSKY_FILES) {
+    try {
+      await writeRawFileAsync(appContext, `${RAW_ROOT}/data/surveys/${name}`, `${surveyRoot}/${name}`);
+      copied += 1;
+    } catch (err) {
+      hilog.warn(LOG_DOMAIN, LOG_TAG, `[startup] skip spectral allsky ${name}: ${JSON.stringify(err)}`);
+    }
+  }
+  if (copied === SPECTRAL_ALLSKY_FILES.length) {
+    writeMarker(markerPath);
+  }
+  hilog.info(LOG_DOMAIN, LOG_TAG,
+    `[startup] refreshed ${copied}/${SPECTRAL_ALLSKY_FILES.length} spectral allsky atlases in ${Date.now() - startedAt} ms`);
 }
 
 async function refreshObjectTypeTranslations(appContext: common.ApplicationContext, installRoot: string): Promise<void> {
@@ -1100,6 +1140,12 @@ export async function prepareStellariumResources(appContext: common.ApplicationC
     await refreshMilkyWayTexture(appContext, installRoot);
   } catch (err) {
     hilog.error(LOG_DOMAIN, LOG_TAG, `Failed to refresh Milky Way texture: ${JSON.stringify(err)}`);
+  }
+
+  try {
+    await refreshSpectralAllskyAssets(appContext, installRoot);
+  } catch (err) {
+    hilog.error(LOG_DOMAIN, LOG_TAG, `Failed to refresh spectral allsky assets: ${JSON.stringify(err)}`);
   }
 
   try {

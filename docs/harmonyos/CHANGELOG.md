@@ -1,5 +1,20 @@
 > **身份图例**：本文件真机记录中出现的 `com.cnchensh.stellarium` 是**本机调试签名身份**（本机 DevEco 自动生成，非发布身份）；发布身份为 `com.joinother.skyinstrument`。构建脚本 `build-ohos-hap-windows.ps1 -Install` 从产物 `pack.info` 读取实际包名，仓库不写死任何签名身份（见 `docs/harmonyos/release/BUNDLE-IDENTITY-CLEANUP.md`）。
 
+## [2026-11-25] 修复多光谱 / HiPS 巡天引擎并升级 9 波段离线全天 + 在线高清混合巡天
+
+- **修改文件：** `src/core/StelHips.hpp`、`src/core/StelHips.cpp`、`src/core/modules/HipsMgr.hpp`、`src/core/modules/HipsMgr.cpp`、`src/StelMainView.cpp`、`data/surveys/*_allsky.jpg`（9 个 Norder3 全天图集，合计 3.23 MB）、`harmonyos/ets-source/qability/StellariumResourceBootstrap.ets`、`harmonyos/ets-source/common/types/StellariumTypes.ets`、`harmonyos/ets-source/capability/SurveyController.ets`、`harmonyos/ets-source/capability/LayerController.ets`、`harmonyos/ets-source/panels/layers/LayerViewTabs.ets`、`harmonyos/ets-source/panels/layers/LayerSpectralSection.ets`、`docs/harmonyos/CHANGELOG.md`。
+- **问题根因：**
+  1. 原硬编码 3 个 CDS Strasbourg 巡天源（`alasky.cds.unistra.fr/RASS`、`GALEXGR6_7_NUV`、`2MASS/Color`）因上游服务器故障全部返回 404/超时。
+  2. `StelHips.cpp` 存在多处引擎缺陷：URL 末尾斜杠拼出 `//properties`；构造函数中局部变量 `networkReply` 遮蔽成员变量导致 `isLoading()` 恒为假；在 `properties` 返回前即执行 `getAllsky()` / `draw()`，导致请求 `Norder3/Allsky.` 404、`tileWidth=0` 除零与 `order=0` 永久冻结；`hips_version >= 1.4` 且 `orderMin >= 3` 时跳过 `Allsky` 导致广角并发请求百余瓦片；`bindTextures()` 未判空 `tile.texture`。
+  3. `HipsMgr.cpp` 使用 `fromLatin1` 导致中文字段乱码，检查不存在的 `hips_order_max` 键名导致 `ready` 恒为假；打开「HiPS 巡天」总开关时因无激活数据集导致画面无变化；「巡天」页签存在重复小标题且缺少自动状态轮询。
+- **修复与升级：**
+  1. **引擎全量修复 + 离线/在线混合架构（`StelHips` / `HipsMgr`）**：修复上述全部 8 处 Bug；新增 `setOfflineAllskyPath()`、`hasValidProperties()`、`getEffectiveOrderMin()`、`retryProperties()`；每个波段点击瞬间（0ms）即以内置 `Norder3` 全天图集按精确坐标系（赤道 J2000 / 银道 Galactic）铺满天球，联网后自动异步拉取远程 `properties` 并在放大时无缝叠加载入最高 Order 8/9 的 512px 高清瓦片；断网时零报错平滑保持离线全天视图。
+  2. **升级全电磁波谱 9 波段（高速可达官方源）**：保留原有 `2mass-color`、`galex-nuv`、`rass-xray` ID 兼容，覆盖可见光（China-VO DSS2 Color）、Hα（ESA Finkbeiner）、近红外（China-VO 2MASS）、中红外（China-VO AllWISE）、微波（China-VO Planck LFI）、射电（ESA Haslam 408 MHz）、紫外（China-VO GALEX）、软 X 射线（MPE SRG/eROSITA DR1）、伽马射线（ESA Fermi LAT）。
+  3. **交互与面板优化**：打开「HiPS 巡天」总开关无激活项时自动启停最近/默认光学巡天并回刷列表；`LayerSpectralSection` 移除重复标题，增加波段色标圆点、清晰中文覆盖说明、整行点按切换/再点关闭，以及 `高清在线 / 全天·连高清 / 已显示·离线` 状态自动轮询刷新；`StellariumResourceBootstrap` 通过 `.ohos_spectral_allsky_v1` 标记自动增量释放 9 份离线图集。
+- **验证结果：**
+  - 主机：`test-ohos-pointer-surveys-ui.mjs` 5/5、`check-ohos-ui-contract.mjs`、`check-ohos-resource-dirs.mjs`、`check-ohos-network-sources.mjs` 全部通过。
+  - 真机（`HUAWEI MatePad Mini 悦读版`，PID `38481` 连续无崩溃）：`getSpectralDatasets` 9 波段中文零乱码且全部 `offlineReady: true`；打开 `actionShow_Hips_Surveys` 自动激活 `dss2-color` 且 1 秒内 `hdReady: true`（409/409 瓦片）；实拍验证 Orion（M 42）Hα 巴纳德环与 AllWISE Order 8 高清红外星云像素级贴合、银心（M 8）Planck 微波 / Fermi 伽马 / Haslam 射电 / 2MASS 近红外银道精确对齐、船帆座 eROSITA 软 X 射线与「图层 → 巡天」面板 9 波段 `高清在线` UI 正常渲染。
+
 ## [2026-11-25] 内置实拍深空天体自动标注与可点击（豁免冷门目录与仅命名过滤）
 
 - **修改文件：** `src/core/modules/Nebula.hpp`、`src/core/modules/Nebula.cpp`、`src/core/modules/NebulaMgr.hpp`、`src/core/modules/NebulaMgr.cpp`、`docs/harmonyos/CHANGELOG.md`。

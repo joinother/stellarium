@@ -31,7 +31,9 @@
 #include "StelProgressController.hpp"
 #include "StelHealpix.hpp"
 
+#include <QFileInfo>
 #include <QNetworkReply>
+#include <QPointer>
 #include <QTimeLine>
 
 class HipsTile
@@ -48,7 +50,14 @@ public:
 
 	bool isLoading() const
 	{
-		if (!texture || texture->isLoading()) return true;
+		if (texture)
+		{
+			if (texture->isLoading()) return true;
+		}
+		else if (!allsky)
+		{
+			return true;
+		}
 		if (normalTexture && normalTexture->isLoading()) return true;
 		if (horizonTexture && horizonTexture->isLoading()) return true;
 		return false;
@@ -86,7 +95,119 @@ QUrl HipsSurvey::getUrlFor(const QString& path) const
 	if (base.scheme().isEmpty()) base.setScheme("file");
 	if (base.scheme() != "file")
 		args += QString("?v=%1").arg(static_cast<int>(releaseDate));
-	return QString("%1/%2%3").arg(base.url(), path, args);
+	QString baseUrl = base.url();
+	while (baseUrl.endsWith('/'))
+		baseUrl.chop(1);
+	QString cleanPath = path;
+	while (cleanPath.startsWith('/'))
+		cleanPath.remove(0, 1);
+	return QString("%1/%2%3").arg(baseUrl, cleanPath, args);
+}
+
+void HipsSurvey::startPropertiesDownload()
+{
+	if (networkReply || url.isEmpty())
+		return;
+	QNetworkRequest req = QNetworkRequest(getUrlFor("properties"));
+	req.setAttribute(QNetworkRequest::CacheLoadControlAttribute, QNetworkRequest::PreferCache);
+	req.setTransferTimeout(12000);
+	req.setRawHeader("User-Agent", StelUtils::getUserAgentString().toLatin1());
+	QNetworkReply* reply = StelApp::getInstance().getNetworkAccessManager()->get(req);
+	this->networkReply = reply;
+	QPointer<HipsSurvey> self(this);
+	connect(reply, &QNetworkReply::finished, this, [self, reply] {
+		if (!self)
+		{
+			reply->deleteLater();
+			return;
+		}
+		QByteArray data = reply->readAll();
+		self->lastError.clear();
+		if (reply->error() != QNetworkReply::NoError)
+		{
+			self->lastError = reply->errorString();
+		}
+		else
+		{
+			for (const QByteArray &line : data.split('\n'))
+			{
+				if (line.startsWith("#")) continue;
+				const QString lineStr = QString::fromUtf8(line);
+				const int sep = lineStr.indexOf('=');
+				if (sep <= 0) continue;
+				const QString key = lineStr.left(sep).trimmed();
+				if (key.isEmpty()) continue;
+				const QString value = lineStr.mid(sep + 1).trimmed();
+				self->properties[key] = value;
+			}
+			if (self->properties.contains("hips_release_date"))
+			{
+				// XXX: StelUtils::getJulianDayFromISO8601String does not work
+				// without the seconds!
+				QDateTime date = QDateTime::fromString(self->properties["hips_release_date"].toString(), Qt::ISODate);
+				date.setTimeSpec(Qt::UTC);
+				self->releaseDate = StelUtils::qDateTimeToJd(date);
+			}
+			if (self->properties.contains("hips_frame"))
+				self->hipsFrame = self->properties["hips_frame"].toString().toLower();
+			if (self->hasValidProperties())
+			{
+				self->remotePropertiesLoaded = true;
+				self->order = -1; // Recalculate max order from loaded properties
+				self->noAllsky = false;
+			}
+			else
+			{
+				self->lastError = QStringLiteral("Invalid HiPS properties response");
+			}
+		}
+
+		self->checkForPlanetarySurvey();
+		if (self->networkReply == reply)
+			self->networkReply = Q_NULLPTR;
+		emit self->propertiesChanged();
+		emit self->statusChanged();
+		reply->deleteLater();
+		if (!self->lastError.isEmpty())
+			qWarning() << "Failed to load HiPS properties for" << self->url << ":" << self->lastError;
+	});
+}
+
+void HipsSurvey::retryProperties()
+{
+	if (remotePropertiesLoaded || networkReply)
+		return;
+	lastError.clear();
+	startPropertiesDownload();
+	emit statusChanged();
+}
+
+void HipsSurvey::setOfflineAllskyPath(const QString& filePath, const int orderValue)
+{
+	if (filePath.isEmpty() || !QFileInfo::exists(filePath))
+		return;
+	offlineAllskyPath = filePath;
+	allskyOrder = qMax(0, orderValue);
+	noAllsky = false;
+}
+
+bool HipsSurvey::hasValidProperties() const
+{
+	return properties.contains("hips_order") &&
+	       !getExt(properties["hips_tile_format"].toString()).isEmpty() &&
+	       getPropertyInt("hips_tile_width") > 0;
+}
+
+int HipsSurvey::getEffectiveOrderMin() const
+{
+	const bool remoteReady = remotePropertiesLoaded && hasValidProperties();
+	if (!remoteReady)
+		return !allsky.isNull() ? allskyOrder : 3;
+	const int maxOrd = order >= 0 ? order : getPropertyInt("hips_order", 3);
+	int orderMin = getPropertyInt("hips_order_min", qMin(3, maxOrd));
+	if (!allsky.isNull() && allskyOrder <= maxOrd)
+		orderMin = qMax(orderMin, allskyOrder);
+	return qBound(0, orderMin, maxOrd);
 }
 
 HipsSurvey::HipsSurvey(const QString& url_, const QString& group, const QString& frame, const QString& type,
@@ -107,45 +228,7 @@ HipsSurvey::HipsSurvey(const QString& url_, const QString& group, const QString&
 	checkForPlanetarySurvey();
 
 	// Immediately download the properties and replace the hipslist data with them.
-	QNetworkRequest req = QNetworkRequest(getUrlFor("properties"));
-	req.setAttribute(QNetworkRequest::CacheLoadControlAttribute, QNetworkRequest::PreferCache);
-	req.setTransferTimeout(12000);
-	req.setRawHeader("User-Agent", StelUtils::getUserAgentString().toLatin1());
-	QNetworkReply* networkReply = StelApp::getInstance().getNetworkAccessManager()->get(req);
-	connect(networkReply, &QNetworkReply::finished, this, [&, networkReply] {
-		QByteArray data = networkReply->readAll();
-		lastError.clear();
-		if (networkReply->error() != QNetworkReply::NoError)
-			lastError = networkReply->errorString();
-		for (const QByteArray &line : data.split('\n'))
-		{
-			if (line.startsWith("#")) continue;
-			QStringList list=QString(line).split("=");
-			if (list.length()!=2) continue;
-			QString key = list.at(0).trimmed();
-			if (key.isEmpty()) continue;
-			QString value = list.at(1).trimmed();
-			properties[key] = value;
-		}
-		if (properties.contains("hips_release_date"))
-		{
-			// XXX: StelUtils::getJulianDayFromISO8601String does not work
-			// without the seconds!
-			QDateTime date = QDateTime::fromString(properties["hips_release_date"].toString(), Qt::ISODate);
-			date.setTimeSpec(Qt::UTC);
-			releaseDate = StelUtils::qDateTimeToJd(date);
-		}
-		if (properties.contains("hips_frame"))
-			hipsFrame = properties["hips_frame"].toString().toLower();
-
-		checkForPlanetarySurvey();
-		emit propertiesChanged();
-		emit statusChanged();
-		networkReply->deleteLater();
-		this->networkReply = Q_NULLPTR;
-		if (!lastError.isEmpty())
-			qWarning() << "Failed to load HiPS properties for" << url << ":" << lastError;
-	});
+	startPropertiesDownload();
 }
 
 HipsSurvey::~HipsSurvey()
@@ -314,7 +397,7 @@ void HipsSurvey::hideProgressBar()
 	}
 }
 
-int HipsSurvey::getPropertyInt(const QString& key, int fallback)
+int HipsSurvey::getPropertyInt(const QString& key, int fallback) const
 {
 	if (!properties.contains(key)) return fallback;
 	QJsonValue val = properties[key];
@@ -325,11 +408,26 @@ int HipsSurvey::getPropertyInt(const QString& key, int fallback)
 
 bool HipsSurvey::getAllsky()
 {
-	if (!allsky.isNull() || noAllsky) return true;
-	if (properties.isEmpty()) return false;
+	if (!allsky.isNull()) return true;
+	if (!offlineAllskyPath.isEmpty())
+	{
+		QImage localAllsky(offlineAllskyPath);
+		if (!localAllsky.isNull())
+		{
+			allsky = std::move(localAllsky);
+			noAllsky = false;
+			return true;
+		}
+		offlineAllskyPath.clear();
+	}
+	if (noAllsky) return true;
+	if (!hasValidProperties()) return false;
 
-	// Allsky is deprecated after version 1.4.
-	if (properties.contains("hips_version")) {
+	const int maxOrder = getPropertyInt("hips_order", 3);
+	const int minOrder = qBound(0, getPropertyInt("hips_order_min", qMin(3, maxOrder)), maxOrder);
+	// Allsky is deprecated after version 1.4, except when orderMin >= 3 where
+	// skipping Allsky causes 100+ individual Norder3 requests at wide FOV.
+	if (minOrder < 3 && properties.contains("hips_version")) {
 		QStringList version = properties["hips_version"].toString().split(".");
 		if ((version.size() >= 2) && (version[0].toInt() * 100 + version[1].toInt() >= 104)) {
 			noAllsky = true;
@@ -340,7 +438,13 @@ bool HipsSurvey::getAllsky()
 	if (!networkReply)
 	{
 		QString ext = getExt(properties["hips_tile_format"].toString());
-		QUrl path = getUrlFor(QString("Norder%1/Allsky.%2").arg(getPropertyInt("hips_order_min", 3)).arg(ext));
+		if (ext.isEmpty())
+		{
+			noAllsky = true;
+			return true;
+		}
+		allskyOrder = minOrder;
+		QUrl path = getUrlFor(QString("Norder%1/Allsky.%2").arg(allskyOrder).arg(ext));
 		qDebug() << "Load allsky" << path;
 		QNetworkRequest req = QNetworkRequest(path);
 		req.setAttribute(QNetworkRequest::CacheLoadControlAttribute, QNetworkRequest::PreferCache);
@@ -358,7 +462,6 @@ bool HipsSurvey::getAllsky()
 	{
 		updateProgressBar(100, 100);
 		if (networkReply->error() == QNetworkReply::NoError) {
-			lastError.clear();
 			QByteArray data = networkReply->readAll();
 			qDebug().nospace() << "Got allsky for " << getTitle() << ", " << data.size() << " bytes";
 			allsky = QImage::fromData(data);
@@ -368,14 +471,14 @@ bool HipsSurvey::getAllsky()
 				noAllsky = true;
 			}
 		} else {
-			lastError = networkReply->errorString();
+			// Missing Allsky is non-fatal; individual tiles still load normally.
 			noAllsky = true;
 		}
 		networkReply->deleteLater();
 		networkReply = Q_NULLPTR;
 		emit statusChanged();
 	}
-	return !allsky.isNull();
+	return !allsky.isNull() || noAllsky;
 }
 
 bool HipsSurvey::isLoading(void) const
@@ -419,14 +522,15 @@ void HipsSurvey::setHorizonsSurvey(const HipsSurveyP& horizons)
 
 void HipsSurvey::draw(StelPainter* sPainter, double angle, HipsSurvey::DrawCallback callback, bool withAtmosphericExtinction)
 {
-	// We don't draw anything until we get the properties file and the
-	// allsky texture (if available).
+	// We don't draw anything until we have either valid remote properties or a
+	// local offline all-sky preview atlas.
 	const bool outside = qFuzzyCompare(angle, 2.0 * M_PI);
-	if (properties.isEmpty()) return;
+	const bool remoteReady = remotePropertiesLoaded && hasValidProperties();
+	if (!remoteReady && allsky.isNull() && offlineAllskyPath.isEmpty()) return;
 	bool gotAllsky = getAllsky();
 	if (normals) gotAllsky &= normals->getAllsky();
 	if (horizons) gotAllsky &= horizons->getAllsky();
-	if (!gotAllsky) return;
+	if (!gotAllsky && !remoteReady) return;
 	if (fader.getInterstate() == 0.0f) return;
 
 	// Set the projection.
@@ -518,29 +622,38 @@ void HipsSurvey::draw(StelPainter* sPainter, double angle, HipsSurvey::DrawCallb
 	// We know that each tile at level L represents an angle of 90 / 2^L
 	// The maximum angle we want to see is the size of a tile in pixels time the angle for one visible pixel.
 	double px = static_cast<double>(sPainter->getProjector()->getPixelPerRadAtCenter()) * angle;
-	int tileWidth = getPropertyInt("hips_tile_width");
+	int tileWidth = remoteReady ? qMax(64, getPropertyInt("hips_tile_width", 512)) : 64;
 
-	int orderMin = getPropertyInt("hips_order_min", 3);
-	if (order < 0)
+	int maxOrder = allskyOrder;
+	if (remoteReady)
 	{
-		order = getPropertyInt("hips_order");
-		int normalsOrder = normals ? normals->getPropertyInt("hips_order") : order;
-		int horizonsOrder = horizons ? horizons->getPropertyInt("hips_order") : order;
-		if (normalsOrder < order)
+		if (order < 0)
 		{
-			qWarning().nospace() << "Normal map survey's hips_order=" << normalsOrder << " is less than that of the color survey: "
-			                     << order << ". Will reduce the total order accordingly.";
-			order = normalsOrder;
+			order = getPropertyInt("hips_order", allskyOrder);
+			int normalsOrder = normals ? normals->getPropertyInt("hips_order", order) : order;
+			int horizonsOrder = horizons ? horizons->getPropertyInt("hips_order", order) : order;
+			if (normalsOrder < order)
+			{
+				qWarning().nospace() << "Normal map survey's hips_order=" << normalsOrder << " is less than that of the color survey: "
+				                     << order << ". Will reduce the total order accordingly.";
+				order = normalsOrder;
+			}
+			if (horizonsOrder < order)
+			{
+				qWarning().nospace() << "Horizon map survey's hips_order=" << horizonsOrder << " is less than that of the color survey: "
+				                     << order << ". Will reduce the total order accordingly.";
+				order = horizonsOrder;
+			}
 		}
-		if (horizonsOrder < order)
-		{
-			qWarning().nospace() << "Horizon map survey's hips_order=" << horizonsOrder << " is less than that of the color survey: "
-			                     << order << ". Will reduce the total order accordingly.";
-			order = horizonsOrder;
-		}
+		maxOrder = order;
 	}
+	const int orderMin = getEffectiveOrderMin();
 	int drawOrder;
-	if (outside)
+	if (!remoteReady)
+	{
+		drawOrder = orderMin;
+	}
+	else if (outside)
 	{
 		drawOrder = ceil(log2(px / (4.0 * std::sqrt(2.0) * tileWidth)));
 	}
@@ -550,7 +663,7 @@ void HipsSurvey::draw(StelPainter* sPainter, double angle, HipsSurvey::DrawCallb
 		// most often taken by the most stretched tiles (the ones near the poles).
 		drawOrder = ceil(log2(px / 1.5 / tileWidth));
 	}
-	drawOrder = qBound(orderMin, drawOrder, order);
+	drawOrder = qBound(orderMin, drawOrder, qMax(orderMin, maxOrder));
 	int splitOrder = qMax(drawOrder, 4);
 	if (tileWidth < 512)
 	{
@@ -618,23 +731,18 @@ HipsTile* HipsSurvey::getTile(int order, int pix)
 {
 	int nside = 1 << order;
 	const auto uid = pix + qint64(4) * nside * nside;
-	int orderMin = getPropertyInt("hips_order_min", 3);
+	const bool remoteReady = remotePropertiesLoaded && hasValidProperties();
+	const StelTexture::StelTextureParams texParams(true, GL_LINEAR, GL_CLAMP_TO_EDGE, true, 1, false);
+	StelTextureMgr& texMgr = StelApp::getInstance().getTextureManager();
 	HipsTile* tile = tiles[uid];
 	if (!tile)
 	{
-		StelTextureMgr& texMgr = StelApp::getInstance().getTextureManager();
 		tile = new HipsTile();
 		tile->order = order;
 		tile->pix = pix;
-		QString ext = getExt(properties["hips_tile_format"].toString());
-		const bool isShifted = planetarySurvey && properties["type"].toString().isEmpty();
-		const int texturePix = isShifted ? shiftPix180deg(order, pix) : pix;
-		QUrl path = getUrlFor(QString("Norder%1/Dir%2/Npix%3.%4").arg(order).arg((texturePix / 10000) * 10000).arg(texturePix).arg(ext));
-		const StelTexture::StelTextureParams texParams(true, GL_LINEAR, GL_CLAMP_TO_EDGE, true, 1, false);
-		tile->texture = texMgr.createTextureThread(path.url(), texParams, false);
 
-		// Use the allsky image until we load the full texture.
-		if (order == orderMin && !allsky.isNull())
+		// Use the allsky image until we load the full remote tile.
+		if (order == allskyOrder && !allsky.isNull())
 		{
 			int nbw = static_cast<int>(std::sqrt(12 * (1 << (2 * order))));
 			int x = (pix % nbw) * allsky.width() / nbw;
@@ -643,9 +751,21 @@ HipsTile* HipsSurvey::getTile(int order, int pix)
 			QImage image = allsky.copy(x, y, s, s);
 			tile->allsky = texMgr.createTexture(image, texParams);
 		}
-		int tileWidth = getPropertyInt("hips_tile_width", 512);
+		int tileWidth = qMax(64, getPropertyInt("hips_tile_width", 512));
 		tiles.insert(uid, tile, static_cast<qint64>(tileWidth) * tileWidth);
 		cachedTiles.insert(uid);
+	}
+
+	if (tile && !tile->texture && remoteReady)
+	{
+		QString ext = getExt(properties["hips_tile_format"].toString());
+		if (!ext.isEmpty())
+		{
+			const bool isShifted = planetarySurvey && properties["type"].toString().isEmpty();
+			const int texturePix = isShifted ? shiftPix180deg(order, pix) : pix;
+			QUrl path = getUrlFor(QString("Norder%1/Dir%2/Npix%3.%4").arg(order).arg((texturePix / 10000) * 10000).arg(texturePix).arg(ext));
+			tile->texture = texMgr.createTextureThread(path.url(), texParams, false);
+		}
 	}
 
 	if (tile && normals && !tile->normalTexture)
@@ -710,7 +830,7 @@ bool HipsSurvey::bindTextures(HipsTile& tile, const int orderMin, Vec2f& texCoor
 	if (normals && !tile.normalTexture && !tile.normalAllsky) return false;
 	if (horizons && !tile.horizonTexture && !tile.horizonAllsky) return false;
 
-	bool ok = tile.texture->bind(colorTexUnit);
+	bool ok = tile.texture && tile.texture->bind(colorTexUnit);
 	if (!ok) ok = tile.allsky && tile.allsky->bind(colorTexUnit);
 	if (ok && normals)
 	{
@@ -759,7 +879,7 @@ void HipsSurvey::drawTile(int order, int pix, int drawOrder, int splitOrder, boo
 	Vec2f texCoordShift(0,0);
 	float texCoordScale = 1;
 	HipsTile *tile;
-	int orderMin = getPropertyInt("hips_order_min", 3);
+	int orderMin = getEffectiveOrderMin();
 	QVector<Vec3d> vertsArray;
 	QVector<Vec2f> texArray;
 	QVector<Vec4f> colorArray;

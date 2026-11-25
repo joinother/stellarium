@@ -1034,6 +1034,9 @@ export interface SpectralDataset {
   enabled?: boolean
   loading?: boolean
   ready?: boolean
+  offlineReady?: boolean
+  hdReady?: boolean
+  opacity?: number
   error?: string
 }
 
@@ -1043,6 +1046,11 @@ export interface SpectralState {
   datasetId?: string
   loading?: boolean
   ready?: boolean
+  offlineReady?: boolean
+  hdReady?: boolean
+  opacity?: number
+  visibleTiles?: number
+  loadedTiles?: number
   error?: string
 }
 

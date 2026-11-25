@@ -78,6 +78,8 @@ public:
 	QJsonArray getSpectralDatasets() const;
 	QJsonObject getSpectralState() const;
 	bool setSpectralView(const QString& datasetId, bool enabled, QString* error = nullptr);
+	void setSpectralOpacity(float opacity);
+	float getSpectralOpacity() const { return spectralOpacity; }
 	void closeSpectralView();
 
 	State getState() const {return state;}
@@ -113,11 +115,14 @@ private:
 	QList<HipsSurveyP> surveys;
 	QList<HipsSurveyP> activeSurveys;
 	bool visible = true;
+	bool initialized = false;
 	bool flagShowAtmosphericExtinction = false;
 	State state = Created;
 	//! Used internally to keep track of the loading state.
 	int nbSourcesLoaded = 0;
 	QMap<QString, HipsSurveyP> spectralSurveys;
+	QString lastSpectralDatasetId;
+	float spectralOpacity = 1.0f;
 };
 
 #endif // HIPSMGR_HPP

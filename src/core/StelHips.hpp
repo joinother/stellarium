@@ -123,6 +123,18 @@ public:
 	bool isLoading(void) const;
 	//! Return the last properties/all-sky request error, if any.
 	QString getLastError() const { return lastError; }
+	//! Return whether valid HiPS properties (order/tile format/tile width) are loaded.
+	bool hasValidProperties() const;
+	//! Return whether remote properties have been fetched successfully.
+	bool isRemotePropertiesLoaded() const { return remotePropertiesLoaded; }
+	//! Configure a local fallback Norder3 Allsky image for instant offline/startup rendering.
+	void setOfflineAllskyPath(const QString& filePath, int allskyOrder = 3);
+	//! Return whether a local fallback Allsky image is available or loaded.
+	bool hasOfflineAllsky() const { return !allsky.isNull() || !offlineAllskyPath.isEmpty(); }
+	//! Retry downloading remote properties if not yet loaded and no request is in flight.
+	void retryProperties();
+	int getVisibleTileCount() const { return nbVisibleTiles; }
+	int getLoadedTileCount() const { return nbLoadedTiles; }
 
 	bool isPlanetarySurvey(void) const { return planetarySurvey; }
 
@@ -189,7 +201,10 @@ private:
 	QString lastError;
 
 	QImage allsky = QImage();
+	QString offlineAllskyPath;
+	int allskyOrder = 3;
 	bool noAllsky = false;
+	bool remotePropertiesLoaded = false;
 
 	// Values from the property file.
 	QJsonObject properties;
@@ -202,7 +217,9 @@ private:
 
 	QString getTitle(void) const;
 	QUrl getUrlFor(const QString& path) const;
-	int getPropertyInt(const QString& key, int fallback = 0);
+	int getPropertyInt(const QString& key, int fallback = 0) const;
+	int getEffectiveOrderMin() const;
+	void startPropertiesDownload();
 	bool getAllsky();
 	HipsTile* getTile(int order, int pix);
 	/*! @brief Bind textures for drawing

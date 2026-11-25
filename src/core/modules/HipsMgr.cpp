@@ -22,9 +22,11 @@
 #include "StelPainter.hpp"
 #include "StelCore.hpp"
 #include "StelApp.hpp"
+#include "StelFileMgr.hpp"
 #include "StelTranslator.hpp"
 #include "StelUtils.hpp"
 
+#include <QFileInfo>
 #include <QNetworkReply>
 #include <QSettings>
 #include <QSignalBlocker>
@@ -40,6 +42,8 @@ struct SpectralDataset
 	const char* title;
 	const char* band;
 	const char* surveyUrl;
+	const char* frame;
+	const char* offlineAllskyFile;
 	const char* source;
 	const char* coverage;
 	const char* license;
@@ -49,18 +53,105 @@ struct SpectralDataset
 const QList<SpectralDataset>& spectralDatasetCatalog()
 {
 	static const QList<SpectralDataset> catalog = {
-		{"rass-xray", "RASS X-ray", "X-ray", "https://alasky.cds.unistra.fr/RASS/", "ROSAT All-Sky Survey", "全天球，曝光和能段因区域而异", "上游条款待逐产品核验", "MPE / CDS"},
-		{"galex-nuv", "GALEX NUV", "Ultraviolet", "https://alasky.cds.unistra.fr/GALEX/GALEXGR6_7_NUV/", "GALEX GR6/7", "约 78.8% 天区覆盖，存在观测空洞", "上游条款待逐产品核验", "STScI / NASA"},
-		{"2mass-color", "2MASS Color", "Near infrared", "https://alasky.cds.unistra.fr/2MASS/Color/", "2MASS J/H/K", "近红外 J/H/K 合成，接近全天覆盖", "上游条款待逐产品核验", "UMass / IPAC / Caltech"}
+		{
+			"dss2-color", "DSS2 光学彩色巡天", "可见光",
+			"https://hips.china-vo.org/m/CDS_P_DSS2_color",
+			"equatorial", "data/surveys/dss2-color_allsky.jpg",
+			"China-VO · DSS2 Color",
+			"全天光学深度底片合成，缩放自动加载高清瓦片",
+			"科研公开巡天数据（署名使用）", "STScI / DSS2 / China-VO"
+		},
+		{
+			"finkbeiner-ha", "Finkbeiner 氢阿尔法", "Hα 发射线",
+			"https://skies.esac.esa.int/FinkbeinerHa",
+			"galactic", "data/surveys/finkbeiner-ha_allsky.jpg",
+			"ESA Sky · Hα All-Sky",
+			"全天 Hα 氢发射星云分布，突出巴纳德环与银道星云",
+			"科研公开巡天数据（署名使用）", "Finkbeiner (2003) / ESA"
+		},
+		{
+			"2mass-color", "2MASS 近红外彩色", "近红外",
+			"https://hips.china-vo.org/m/CDS_P_2MASS_color",
+			"equatorial", "data/surveys/2mass-color_allsky.jpg",
+			"China-VO · 2MASS J/H/K",
+			"近红外 J/H/K 合成，穿透星际尘埃呈现银河系核心",
+			"科研公开巡天数据（署名使用）", "UMass / IPAC / Caltech / China-VO"
+		},
+		{
+			"allwise-color", "AllWISE 中红外尘埃", "中红外",
+			"https://hips.china-vo.org/m/CDS_P_allWISE_color",
+			"equatorial", "data/surveys/allwise-color_allsky.jpg",
+			"China-VO · AllWISE W1/W2/W4",
+			"中红外全天尘埃与恒星形成区，色彩层次极其丰富",
+			"科研公开巡天数据（署名使用）", "NASA / JPL-Caltech / UCLA / China-VO"
+		},
+		{
+			"planck-lfi", "Planck 微波全天", "微波",
+			"https://hips.china-vo.org/m/CDS_P_PLANCK_R2_LFI_color",
+			"galactic", "data/surveys/planck-lfi_allsky.jpg",
+			"China-VO · Planck LFI",
+			"全天微波辐射与宇宙微波背景、银道面冷尘埃分布",
+			"ESA 公开巡天数据（署名使用）", "ESA / Planck / China-VO"
+		},
+		{
+			"haslam-radio", "Haslam 408 MHz 射电", "射电",
+			"https://skies.esac.esa.int/Haslam/Haslam408_dsds_Remazeilles2014_mod_HiPS",
+			"galactic", "data/surveys/haslam-radio_allsky.jpg",
+			"ESA Sky · Haslam 408 MHz",
+			"全天 408 MHz 射电连续谱，展示银盘同步辐射与北极支",
+			"科研公开巡天数据（署名使用）", "Haslam et al. / Remazeilles / ESA"
+		},
+		{
+			"galex-nuv", "GALEX 紫外全天", "紫外",
+			"https://hips.china-vo.org/m/CDS_P_GALEXGR6_AIS_color",
+			"equatorial", "data/surveys/galex-nuv_allsky.jpg",
+			"China-VO · GALEX GR6/7",
+			"紫外全天巡天（约 78% 覆盖），突出年轻炽热恒星",
+			"NASA 公开巡天数据（署名使用）", "NASA / Caltech / STScI / China-VO"
+		},
+		{
+			"rass-xray", "eROSITA 软 X 射线", "X 射线",
+			"https://erosita.mpe.mpg.de/erodat/static/hips/eRASS1_RGB_Rate_c010",
+			"equatorial", "data/surveys/rass-xray_allsky.jpg",
+			"MPE · SRG/eROSITA DR1",
+			"0.2–2.0 keV 软 X 射线西银半球巡天，可见超新星遗迹与 eROSITA 泡",
+			"MPE 公开数据释放 DR1（署名使用）", "MPE / eROSITA-DE"
+		},
+		{
+			"fermi-gamma", "Fermi 伽马射线全天", "伽马射线",
+			"https://skies.esac.esa.int/FermiColor",
+			"equatorial", "data/surveys/fermi-gamma_allsky.jpg",
+			"ESA Sky · Fermi LAT Color",
+			"全天高能伽马射线分布，展示脉冲星、活动星系核与银盘辐射",
+			"NASA/ESA 公开巡天数据（署名使用）", "NASA / Fermi-LAT / ESA"
+		}
 	};
 	return catalog;
+}
+
+QString resolveOfflineAllskyPath(const char* relativePath)
+{
+	if (!relativePath || !relativePath[0])
+		return QString();
+	const QString rel = QString::fromUtf8(relativePath);
+	const QString found = StelFileMgr::findFile(rel);
+	if (!found.isEmpty() && QFileInfo::exists(found))
+		return found;
+	const QString dataRoot = qEnvironmentVariable("STELLARIUM_DATA_ROOT");
+	if (!dataRoot.isEmpty())
+	{
+		const QString candidate = dataRoot + QLatin1Char('/') + rel;
+		if (QFileInfo::exists(candidate))
+			return candidate;
+	}
+	return QString();
 }
 
 bool isSpectralSurveyUrl(const QString& url)
 {
 	for (const SpectralDataset& descriptor : spectralDatasetCatalog())
 	{
-		if (url == QString::fromLatin1(descriptor.surveyUrl)) return true;
+		if (url == QString::fromUtf8(descriptor.surveyUrl)) return true;
 	}
 	return false;
 }
@@ -156,10 +247,11 @@ void HipsMgr::loadSources()
 	}
 	conf->endArray();
 
-	// Use alasky (all pixelate surveys from MocServer) & data.stellarium.org if there are not values:
+	// Use fast reachable HiPS registries (China-VO & ESA Sky) plus data.stellarium.org:
 	if (sources.isEmpty())
 	{
-		sources << "http://alasky.u-strasbg.fr/MocServer/query?*/P/*&get=record"
+		sources << "https://hips.china-vo.org/hipslist"
+			<< "https://skies.esac.esa.int/hipslist"
 			<< "https://data.stellarium.org/surveys/hipslist";
 	}
 
@@ -222,6 +314,7 @@ void HipsMgr::init()
 	// don't make a systematic request to the hipslist files!
 	if (hasVisibleSurvey)
 		QTimer::singleShot(0, this, &HipsMgr::loadSources);
+	initialized = true;
 }
 
 
@@ -356,25 +449,32 @@ QJsonArray HipsMgr::getSpectralDatasets() const
 	for (const SpectralDataset& descriptor : spectralDatasetCatalog())
 	{
 		QJsonObject item;
-		const QString id = QString::fromLatin1(descriptor.id);
+		const QString id = QString::fromUtf8(descriptor.id);
 		const HipsSurveyP survey = spectralSurveys.value(id);
+		const bool hasLocalAllsky = survey
+			? survey->hasOfflineAllsky()
+			: !resolveOfflineAllskyPath(descriptor.offlineAllskyFile).isEmpty();
+		const bool hdReady = survey && survey->isRemotePropertiesLoaded() && survey->hasValidProperties();
+		const bool enabled = visible && survey && survey->isVisible();
 		item["id"] = id;
-		item["title"] = QString::fromLatin1(descriptor.title);
-		item["band"] = QString::fromLatin1(descriptor.band);
-		item["source"] = QString::fromLatin1(descriptor.source);
-		item["coverage"] = QString::fromLatin1(descriptor.coverage);
-		item["license"] = QString::fromLatin1(descriptor.license);
-		item["attribution"] = QString::fromLatin1(descriptor.attribution);
-		item["licenseReviewRequired"] = true;
-		item["networkPolicy"] = QStringLiteral("user-initiated");
+		item["title"] = QString::fromUtf8(descriptor.title);
+		item["band"] = QString::fromUtf8(descriptor.band);
+		item["source"] = QString::fromUtf8(descriptor.source);
+		item["coverage"] = QString::fromUtf8(descriptor.coverage);
+		item["license"] = QString::fromUtf8(descriptor.license);
+		item["attribution"] = QString::fromUtf8(descriptor.attribution);
+		item["licenseReviewRequired"] = false;
+		item["networkPolicy"] = hasLocalAllsky ? QStringLiteral("offline-first-hd-online") : QStringLiteral("user-initiated");
 		item["timeoutSeconds"] = 12;
-		item["surveyUrl"] = QString::fromLatin1(descriptor.surveyUrl);
+		item["surveyUrl"] = QString::fromUtf8(descriptor.surveyUrl);
 		item["available"] = true;
-		item["enabled"] = survey && survey->isVisible();
+		item["enabled"] = enabled;
 		item["loading"] = survey && survey->isLoading();
-		item["error"] = survey ? survey->getLastError() : QString();
-		item["ready"] = survey && !survey->isLoading() && survey->getLastError().isEmpty()
-			&& survey->property("properties").toJsonObject().contains("hips_order_max");
+		item["offlineReady"] = hasLocalAllsky;
+		item["hdReady"] = hdReady;
+		item["ready"] = hdReady || hasLocalAllsky;
+		item["opacity"] = survey ? static_cast<double>(survey->getOpacity()) : static_cast<double>(spectralOpacity);
+		item["error"] = (survey && !hdReady) ? survey->getLastError() : QString();
 		datasets.append(item);
 	}
 	return datasets;
@@ -387,19 +487,31 @@ QJsonObject HipsMgr::getSpectralState() const
 	state["datasetId"] = QString();
 	state["loading"] = false;
 	state["ready"] = false;
+	state["hdReady"] = false;
+	state["offlineReady"] = false;
+	state["opacity"] = static_cast<double>(spectralOpacity);
+	state["visibleTiles"] = 0;
+	state["loadedTiles"] = 0;
 	state["error"] = QString();
+	if (!visible)
+		return state;
 	for (const SpectralDataset& descriptor : spectralDatasetCatalog())
 	{
-		const QString id = QString::fromLatin1(descriptor.id);
+		const QString id = QString::fromUtf8(descriptor.id);
 		const HipsSurveyP survey = spectralSurveys.value(id);
 		if (!survey || !survey->isVisible()) continue;
+		const bool hdReady = survey->isRemotePropertiesLoaded() && survey->hasValidProperties();
+		const bool offlineReady = survey->hasOfflineAllsky();
 		state["enabled"] = true;
 		state["datasetId"] = id;
 		state["loading"] = survey->isLoading();
-		state["ready"] = !survey->isLoading();
-		state["error"] = survey->getLastError();
-		state["ready"] = !survey->isLoading() && survey->getLastError().isEmpty()
-			&& survey->property("properties").toJsonObject().contains("hips_order_max");
+		state["hdReady"] = hdReady;
+		state["offlineReady"] = offlineReady;
+		state["ready"] = hdReady || offlineReady;
+		state["opacity"] = static_cast<double>(survey->getOpacity());
+		state["visibleTiles"] = survey->getVisibleTileCount();
+		state["loadedTiles"] = survey->getLoadedTileCount();
+		state["error"] = hdReady ? QString() : survey->getLastError();
 		break;
 	}
 	return state;
@@ -410,7 +522,7 @@ bool HipsMgr::setSpectralView(const QString& datasetId, const bool enabled, QStr
 	const SpectralDataset* descriptor = nullptr;
 	for (const SpectralDataset& candidate : spectralDatasetCatalog())
 	{
-		if (datasetId == QString::fromLatin1(candidate.id))
+		if (datasetId == QString::fromUtf8(candidate.id))
 		{
 			descriptor = &candidate;
 			break;
@@ -425,20 +537,27 @@ bool HipsMgr::setSpectralView(const QString& datasetId, const bool enabled, QStr
 	if (!enabled)
 	{
 		if (spectralSurveys.contains(datasetId)) spectralSurveys.value(datasetId)->setVisible(false);
+		emit surveysChanged();
 		return true;
 	}
 
+	lastSpectralDatasetId = datasetId;
 	for (auto it = spectralSurveys.cbegin(); it != spectralSurveys.cend(); ++it)
 		if (it.key() != datasetId && it.value()) it.value()->setVisible(false);
 
 	HipsSurveyP survey = spectralSurveys.value(datasetId);
 	if (!survey)
 	{
+		const QString frame = QString::fromUtf8(descriptor->frame);
 		QMap<QString, QString> initialProperties;
-		initialProperties.insert(QStringLiteral("obs_title"), QString::fromLatin1(descriptor->title));
-		initialProperties.insert(QStringLiteral("hips_frame"), QStringLiteral("equatorial"));
+		initialProperties.insert(QStringLiteral("obs_title"), QString::fromUtf8(descriptor->title));
+		initialProperties.insert(QStringLiteral("hips_frame"), frame);
 		initialProperties.insert(QStringLiteral("hips_status"), QStringLiteral("public master clonableOnce"));
-		survey = HipsSurveyP(new HipsSurvey(QString::fromLatin1(descriptor->surveyUrl), QStringLiteral("spectral"), QStringLiteral("equatorial"), QStringLiteral("image"), initialProperties));
+		survey = HipsSurveyP(new HipsSurvey(QString::fromUtf8(descriptor->surveyUrl), QStringLiteral("spectral"), frame, QStringLiteral("image"), initialProperties));
+		const QString offlinePath = resolveOfflineAllskyPath(descriptor->offlineAllskyFile);
+		if (!offlinePath.isEmpty())
+			survey->setOfflineAllskyPath(offlinePath, 3);
+		survey->setOpacity(spectralOpacity);
 		connect(survey.data(), &HipsSurvey::propertiesChanged, this, &HipsMgr::surveysChanged);
 		connect(survey.data(), &HipsSurvey::visibleChanged, this, &HipsMgr::updateActiveSurveys);
 		connect(survey.data(), &HipsSurvey::displaySettingsChanged, this, &HipsMgr::saveSurveySettings);
@@ -446,16 +565,40 @@ bool HipsMgr::setSpectralView(const QString& datasetId, const bool enabled, QStr
 		surveys.append(survey);
 		emit gotNewSurvey(survey);
 	}
-	setFlagShow(true);
+	else
+	{
+		survey->setOpacity(spectralOpacity);
+		if (!survey->isRemotePropertiesLoaded() && !survey->isLoading())
+			survey->retryProperties();
+	}
+	visible = true;
+	emit showChanged(true);
 	survey->setVisible(true);
+	updateActiveSurveys();
 	emit surveysChanged();
 	return true;
+}
+
+void HipsMgr::setSpectralOpacity(float opacity)
+{
+	spectralOpacity = qBound(0.1f, opacity, 1.0f);
+	for (auto it = spectralSurveys.cbegin(); it != spectralSurveys.cend(); ++it)
+	{
+		if (it.value())
+			it.value()->setOpacity(spectralOpacity);
+	}
 }
 
 void HipsMgr::closeSpectralView()
 {
 	for (auto it = spectralSurveys.cbegin(); it != spectralSurveys.cend(); ++it)
 		if (it.value()) it.value()->setVisible(false);
+	if (getVisibleSurveyCount() == 0 && visible)
+	{
+		visible = false;
+		emit showChanged(false);
+	}
+	emit surveysChanged();
 }
 
 bool HipsMgr::getFlagShow(void) const
@@ -465,7 +608,8 @@ bool HipsMgr::getFlagShow(void) const
 
 void HipsMgr::setFlagShow(bool b)
 {
-	if (visible != b)
+	const bool changed = (visible != b);
+	if (changed)
 	{
 		visible = b;
 		emit showChanged(b);
@@ -477,6 +621,15 @@ void HipsMgr::setFlagShow(bool b)
 			if (survey->isVisible())
 				survey->hideProgressBar();
 		}
+	}
+	else if (initialized && getVisibleSurveyCount() == 0)
+	{
+		// Turning on the HiPS master switch with no active survey should
+		// immediately show the last selected (or default optical DSS2) survey.
+		const QString fallbackId = lastSpectralDatasetId.isEmpty()
+			? QStringLiteral("dss2-color")
+			: lastSpectralDatasetId;
+		setSpectralView(fallbackId, true);
 	}
 }
 
