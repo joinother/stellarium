@@ -8,6 +8,7 @@ import {
 } from '../../common/derive/quickActions'
 import { UI_RADIUS_PILL } from '../../common/ui/UiTokens'
 import { NightModeStore } from '../../state/NightModeStore'
+import { BridgeClient } from '../../bridge/BridgeClient'
 import { QuickActionCell } from '../quick/QuickActionCell'
 import { QuickActionGrid } from '../quick/QuickActionGrid'
 
@@ -109,7 +110,9 @@ export class QuickPanelStore {
     next[slotIndex] = dragged
     this.order = next
     const placed = quickActionById(dragged)
-    if (placed !== undefined && placed.labelKey.length > 0) this.hooks.hint(I18n.t(placed.labelKey))
+    if (placed !== undefined && placed.labelKey.length > 0) {
+      this.hooks.hint(placed.id === 'spectral_lens' ? '多光谱透视镜' : I18n.t(placed.labelKey))
+    }
   }
 
   // 恢复默认：只改内存（仍需「完成」提交）—— 否则「丢弃」会半途生效，语义自相矛盾。
@@ -135,12 +138,29 @@ export struct QuickPanel {
   @Prop gyroActive: boolean = false
   @Prop arCameraActive: boolean = false
   @Prop arCameraStarting: boolean = false
+  @StorageLink('stellariumSpectralLensActive') spectralLensActive: boolean = false
   @State private c: ThemeSlots = DEFAULT_SLOTS
   onToggle: (id: string, value: boolean) => void = () => {}
   onToggleArCamera: () => void = () => {}
   onHint: (text: string) => void = () => {}
 
   onWillApplyTheme(theme: Theme): void { this.c = slotsFromTheme(theme) }
+
+  private handleQuickToggle(id: string, value: boolean): void {
+    if (id === 'spectral_lens') {
+      const next = !this.spectralLensActive
+      AppStorage.setOrCreate('stellariumSpectralLensActive', next)
+      if (!next) {
+        BridgeClient.send('setSpectralLens', '0')
+        this.onHint('多光谱透视镜已关闭')
+      } else {
+        this.onHint('多光谱透视镜已开启 · 拖动圆镜，转动转柄切换 9 波段')
+        AppStorage.setOrCreate('stellariumRequestBack', Date.now())
+      }
+      return
+    }
+    this.onToggle(id, value)
+  }
 
   @Builder
   candidateSlot(item: QuickActionItem) {
@@ -153,10 +173,10 @@ export struct QuickPanel {
       QuickActionCell({
         item: item,
         // 正常态直接反映开关值（候选也是可用按钮）；编辑态候选恒不点亮。
-        isOn: this.store.editable ? false : this.values[item.id] === true,
+        isOn: this.store.editable ? false : (item.id === 'spectral_lens' ? this.spectralLensActive : this.values[item.id] === true),
         editable: this.store.editable,
         candidate: true,
-        onToggle: (id: string, value: boolean) => { this.onToggle(id, value) },
+        onToggle: (id: string, value: boolean) => { this.handleQuickToggle(id, value) },
         onHint: (text: string) => { this.onHint(text) },
         onDragBegin: (id: string) => { this.store.beginDrag(id) }
       })
@@ -183,7 +203,7 @@ export struct QuickPanel {
         values: this.values,
         nightModeStore: this.nightModeStore,
         editable: this.store.editable,
-        onToggle: (id: string, value: boolean) => { this.onToggle(id, value) },
+        onToggle: (id: string, value: boolean) => { this.handleQuickToggle(id, value) },
         onHint: (text: string) => { this.onHint(text) },
         onDragBegin: (id: string) => { this.store.beginDrag(id) },
         onDropOnSlot: (slotId: string) => { this.store.dropOnSlot(slotId) }

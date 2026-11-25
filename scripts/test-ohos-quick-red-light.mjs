@@ -20,8 +20,8 @@ test('red light is a candidate-only quick action and keeps the 12-slot default g
   assert.equal(item.type, 'toggle');
   assert.equal(item.kind, 'vector');
   assert.equal(item.labelKey, 'quick_red_light');
-  // 天文馆模式开关移除后，候选池为 17 项；原格子由卫星提示回到默认网格。
-  assert.equal(pool.length, 17);
+  // 含多光谱透视镜后，候选池为 18 项（12 格默认 + 6 格候选 = 完整 1 行）。
+  assert.equal(pool.length, 18);
 
   const defaults = quick.quickActionDefaultOrder();
   assert.equal(defaults.length, 12);
@@ -29,7 +29,7 @@ test('red light is a candidate-only quick action and keeps the 12-slot default g
   assert.ok(defaults.includes('satellites'));
 
   const candidates = quick.quickActionCandidatesFor(defaults);
-  assert.equal(candidates.length, 5);
+  assert.equal(candidates.length, 6);
   assert.ok(candidates.some((entry) => entry.id === 'red_light'));
   assert.equal(quick.quickCandidateRowsFor(defaults), 1);
   assert.equal(quick.quickCandidateSlotsFor(defaults).length, 6);

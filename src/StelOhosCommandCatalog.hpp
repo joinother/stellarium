@@ -50,7 +50,7 @@ inline QStringList names()
 		"selectOcularInstrument,addOcularEquipment,updateOcularEquipment,deleteOcularEquipment,moveOcularEquipment,importOcularEquipment,setTelradFov,setOcularMode,setOcularSetting,rotateOcularReticle,resetOcularInstrument,setMosaicCamera,setEquationOfTime,setArchaeoLineSetting,setNavStarsSetting,setOrbitDisplaySetting,setPluginLoadAtStartup,setPointerCoordinates,setProjectionType,setSatellitesFlag,setScenery3dEnabled,setScenery3dScene,setScriptRate,setSkyCulture,"
 		"setSkyCultureCommonNames,setSkyCultureDefault,setSkyCultureLabelStyle,setSkyCultureScreenLabelStyle,"
 		"setSkyCultureShortLabels,setSkyCultureVisualColor,setSkyCultureVisualSetting,setSkyDisplaySetting,setSolarSystemFlag,"
-        "setStarFlag,setStarLabelsAmount,setStarScale,setSpectralView,setTelrad,setTimeFormat,setTimeRate,setTimeToJD,setJulianDate,setTracking,"
+        "setStarFlag,setStarLabelsAmount,setStarScale,setSpectralView,setSpectralLens,getSpectralLensState,setTelrad,setTimeFormat,setTimeRate,setTimeToJD,setJulianDate,setTracking,"
 		"setTrailDisplaySetting,setVerticalClamp,setViewLock,setViewportOffset,setNavigationSetting,setInformationSetting,setTimeSetting,setEphemerisSetting,setKeyboardShortcut,resetKeyboardShortcuts,setTelescopeLivePosition,setLocationMapProvider,setUiLayoutMode,saveCurrentView,saveAllSettings,restoreDefaultSettings,startPanInertia,startVideoRecording,openPluginFeature,"
 		"stopPanInertia,stopScript,continueScript,sendKey,stopVideoRecording,createCollaborationSession,exportCollaborationSession,previewCollaborationSession,importLandscape,getTelescopeControl,getTelescopeProfiles,saveTelescopeProfile,deleteTelescopeProfile,selectTelescopeProfile,testTelescopeConnection,getTelescopePosition,centerScreenOnTelescope,telescopeLx200Abort,telescopeLx200GotoSelected,telescopeLx200SyncSelected,"
             "triggerAction,unloadPlugin,validateNebulaTexture,closeSpectralView,zoomBy,zoomStep,getCommandCatalog,getCommandSchema,getCommandStatus,"
@@ -284,6 +284,13 @@ inline QJsonObject item(const QString& name)
 	}
 	else if (name == "closeSpectralView")
 		value["description"] = QStringLiteral("关闭多波段图层并取消其可见瓦片绘制，不删除缓存");
+	else if (name == "setSpectralLens")
+	{
+		value["description"] = QStringLiteral("控制 Sky Guide 风格圆形多光谱透视放大镜的位置、半径、波段与 1x/2x 放大倍率");
+		value["examplePayload"] = "1|finkbeiner-ha|0.50|0.44|0.22|1.0";
+	}
+	else if (name == "getSpectralLensState")
+		value["description"] = QStringLiteral("读取当前多光谱透视放大镜的开关、波段、归一化屏幕坐标、半径与倍率状态");
 	else if (name == "listNebulaTextures")
 		value["description"] = QStringLiteral("列出用户导入的星云纹理及图片、解码、映射状态；不包含内置深空图库");
 	else if (name == "importNebulaTexture")

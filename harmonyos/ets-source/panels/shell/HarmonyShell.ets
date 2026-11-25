@@ -2,6 +2,7 @@ import { Theme } from '@kit.ArkUI'
 import { UI_RADIUS_PILL } from '../../common/ui/UiTokens'
 import { I18n } from '../../capability/I18n'
 import { ViewCenterCoordinateOverlay } from '../overlay/ViewCenterCoordinateOverlay'
+import { SpectralLensOverlay } from '../overlay/SpectralLensOverlay'
 import { GyroTargetGuide } from '../astro/GyroTargetGuide'
 import { OverlayStore } from '../../state/OverlayStore'
 import { GyroStore } from '../../state/GyroStore'
@@ -42,6 +43,13 @@ export struct HarmonyShell {
 
   build() {
     Stack() {
+      // Sky Guide 风格多光谱透视放大镜（可拖动圆镜 + 旋转转柄切换 9 波段 + 1×/2× 倍率）
+      SpectralLensOverlay()
+        .width('100%')
+        .height('100%')
+        .zIndex(9)
+        .hitTestBehavior(HitTestMode.Transparent)
+
       if (this.viewCoordinatesVisible) {
         Stack() {
           ViewCenterCoordinateOverlay({

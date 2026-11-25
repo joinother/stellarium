@@ -14,6 +14,7 @@ export struct QuickActionGrid {
   @Prop items: QuickActionItem[]
   @Prop values: Record<string, boolean>
   @ObjectLink nightModeStore: NightModeStore
+  @StorageLink('stellariumSpectralLensActive') spectralLensActive: boolean = false
   @Prop editable: boolean
   // 编辑态：格子显示可投放描边并接收拖放。
   @State private c: ThemeSlots = DEFAULT_SLOTS
@@ -29,6 +30,7 @@ export struct QuickActionGrid {
     // The values record is a plain @Prop snapshot and does not refresh when the
     // night-mode store changes; read the observable store directly instead.
     if (id === 'night_mode') return this.nightModeStore.nightMode
+    if (id === 'spectral_lens') return this.spectralLensActive
     return this.values[id] === true
   }
 

@@ -44,6 +44,11 @@ export struct QuickActionCell {
 
   onWillApplyTheme(theme: Theme) { this.c = slotsFromTheme(theme) }
 
+  private resolvedLabel(): string {
+    if (this.item.id === 'spectral_lens') return '多光谱透视镜'
+    return I18n.t(this.item.labelKey)
+  }
+
   // 注意：成员名不得与组件内置属性方法重名（`borderColor` 是内置属性），故加 cell 前缀。
   private cellBorderColor(): ResourceColor {
     if (this.dragOver) return this.c.accent
@@ -98,7 +103,7 @@ export struct QuickActionCell {
       .border({ width: 1, color: this.cellBorderColor() })
       .borderRadius(UI_RADIUS_CONTROL)
       .clickEffect({ level: ClickEffectLevel.LIGHT })
-      .accessibilityText(I18n.t(this.item.labelKey))
+      .accessibilityText(this.resolvedLabel())
       .onClick(() => {
         // 编辑态内点按不切换开关（改用拖拽替换），避免与拖拽语义打架。
         if (this.editable) return
@@ -109,7 +114,7 @@ export struct QuickActionCell {
       // —— 表现就是「按住能按，但松手不替换」。把 duration 拉到不可能到达即可让出竞技场。
       .gesture(LongPressGesture({ repeat: false, duration: this.editable ? 600000 : 600 }).onAction(() => {
         if (this.editable) return
-        this.onHint(I18n.t(this.item.labelKey))
+        this.onHint(this.resolvedLabel())
       }))
       // —— 编辑态拖拽：候选格可拖出，槽位可接收 ——
       // 应用内拖放**不加 `allowDrop` / `setData`**：ArkUI 官方示例（FAQ faqs-arkui-1173「图标垃圾桶」）

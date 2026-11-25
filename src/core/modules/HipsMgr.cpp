@@ -18,6 +18,7 @@
  */
 
 #include "HipsMgr.hpp"
+#include "LandscapeMgr.hpp"
 #include "ToastMgr.hpp"
 #include "StelHips.hpp"
 #include "StelModuleMgr.hpp"
@@ -187,6 +188,8 @@ HipsMgr::HipsMgr()
 {
 	setObjectName("HipsMgr");
 	spectralFader.setDuration(350);
+	lensFader.setDuration(260);
+	lensDatasetId = QStringLiteral("finkbeiner-ha");
 	connect(this, &HipsMgr::surveysChanged, this, &HipsMgr::restoreVisibleSurveys);
 }
 
@@ -418,9 +421,11 @@ void HipsMgr::saveSurveySettings() const
 void HipsMgr::deinit()
 {
 	panoProgram.reset();
+	lensProgram.reset();
 	panoVao.reset();
 	panoVbo.reset();
 	prevPanoProjector.reset();
+	prevLensProjector.reset();
 	spectralPanoramaTextures.clear();
 	spectralTextureLru.clear();
 }
@@ -515,14 +520,15 @@ StelTextureSP HipsMgr::getSpectralPanoramaTexture(const QString& datasetId)
 	spectralTextureLru.append(datasetId);
 
 	// Cap resident 4K textures at 3 (~96 MB peak VRAM) while keeping active & prev textures resident.
-	while (spectralTextureLru.size() > 3)
+	int guardSteps = 0;
+	while (spectralTextureLru.size() > 3 && guardSteps < spectralTextureLru.size())
 	{
 		const QString victim = spectralTextureLru.first();
-		if (victim == activeSpectralId || victim == prevSpectralId)
+		if (victim == activeSpectralId || victim == prevSpectralId ||
+		    victim == lensDatasetId || victim == lensPrevDatasetId)
 		{
 			spectralTextureLru.move(0, spectralTextureLru.size() - 1);
-			if (spectralTextureLru.size() <= 2)
-				break;
+			++guardSteps;
 			continue;
 		}
 		spectralTextureLru.removeFirst();
@@ -678,12 +684,223 @@ void main(void)
 	panoProgram->release();
 }
 
+bool HipsMgr::shouldDrawLensOverAtmosphere(const StelCore* core) const
+{
+	if (!isSpectralLensActive())
+		return false;
+	// In 2x magnifying mode, draw over optical stars/atmosphere so unzoomed 1x stars
+	// don't double-expose inside the zoomed lens.
+	if (lensZoomCurrent > 1.04f)
+		return true;
+	// During daytime with atmosphere visible, non-visible spectral bands punch straight
+	// through the blue sky inside the circular lens (while staying behind landscape ground).
+	if (lensDatasetId != QLatin1String("dss2-color"))
+	{
+		if (const auto* lMgr = GETSTELMODULE(LandscapeMgr))
+		{
+			if (lMgr->getFlagAtmosphere() && lMgr->getAtmosphereFadeIntensity() > 0.05f &&
+			    lMgr->getAtmosphereAverageLuminance() > 0.05f)
+			{
+				Q_UNUSED(core);
+				return true;
+			}
+		}
+	}
+	return false;
+}
+
+void HipsMgr::drawSpectralLens(StelCore* core)
+{
+	const float fade = lensFader.getInterstate();
+	if (fade <= 0.001f || lensDatasetId.isEmpty())
+		return;
+
+	StelTextureSP texCur = getSpectralPanoramaTexture(lensDatasetId);
+	if (!texCur || !texCur->canBind())
+		return;
+
+	ensurePanoramaGL();
+	if (!panoVbo || !panoVbo->isCreated())
+		return;
+
+	const auto modelView = core->getJ2000ModelViewTransform();
+	const auto projector = core->getProjection(modelView);
+
+	if (!lensProgram || !prevLensProjector || !projector->isSameProjection(*prevLensProjector))
+	{
+		lensProgram.reset(new QOpenGLShaderProgram);
+		prevLensProjector = projector;
+
+		const auto vert =
+			StelOpenGL::globalShaderPrefix(StelOpenGL::VERTEX_SHADER) +
+			R"(
+ATTRIBUTE highp vec3 vertex;
+VARYING highp vec3 ndcPos;
+void main()
+{
+	gl_Position = vec4(vertex, 1.0);
+	ndcPos = vertex;
+}
+)";
+		if (!lensProgram->addShaderFromSourceCode(QOpenGLShader::Vertex, vert))
+		{
+			qWarning().noquote() << "HipsMgr lens vertex shader error:\n" << lensProgram->log();
+			return;
+		}
+
+		const auto frag =
+			StelOpenGL::globalShaderPrefix(StelOpenGL::FRAGMENT_SHADER) +
+			projector->getUnProjectShader() +
+			core->getAberrationShader() +
+			R"(
+VARYING highp vec3 ndcPos;
+uniform sampler2D texCurrent;
+uniform sampler2D texPrev;
+uniform mediump float crossFade;
+uniform mediump float alpha;
+uniform highp vec2 viewportSize;
+uniform highp vec2 lensCenter;
+uniform highp float lensRadiusNorm;
+uniform highp float lensZoom;
+uniform mat4 projectionMatrixInverse;
+void main(void)
+{
+	const float PI = 3.14159265359;
+	vec2 uv = ndcPos.xy * 0.5 + 0.5;
+	vec2 px = uv * viewportSize;
+	vec2 centerPx = vec2(lensCenter.x, 1.0 - lensCenter.y) * viewportSize;
+	float radiusPx = lensRadiusNorm * min(viewportSize.x, viewportSize.y);
+	vec2 deltaPx = px - centerPx;
+	float dist = length(deltaPx);
+	if (dist > radiusPx + 2.5)
+	{
+		discard;
+	}
+
+	float zoom = max(1.0, lensZoom);
+	vec2 samplePx = centerPx + deltaPx / zoom;
+	vec2 sampleNdc = (samplePx / viewportSize) * 2.0 - 1.0;
+	vec4 winPos = projectionMatrixInverse * vec4(sampleNdc.x, sampleNdc.y, 0.0, 1.0);
+	bool ok = false;
+	vec3 modelPos = unProject(winPos.x, winPos.y, ok).xyz;
+	if (!ok)
+	{
+		discard;
+	}
+	modelPos = normalize(modelPos);
+	modelPos = applyAberrationToViewDir(modelPos);
+	float ra = atan(modelPos.y, modelPos.x);
+	float dec = asin(clamp(modelPos.z, -1.0, 1.0));
+	vec2 texc = vec2(fract(ra / (2.0 * PI)), 0.5 + dec / PI);
+	vec3 col = texture2D(texCurrent, texc).rgb;
+	if (crossFade < 0.999)
+	{
+		vec3 colPrev = texture2D(texPrev, texc).rgb;
+		col = mix(colPrev, col, crossFade);
+	}
+
+	float edgeMask = 1.0 - smoothstep(radiusPx - 2.0, radiusPx + 1.0, dist);
+	float normR = dist / max(1.0, radiusPx);
+	// Subtle optical loupe inner rim shading + crisp glass rim sheen
+	float rimShade = 1.0 - 0.16 * smoothstep(0.82, 1.0, normR);
+	FRAG_COLOR = vec4(col * rimShade, alpha * edgeMask);
+}
+)";
+		if (!lensProgram->addShaderFromSourceCode(QOpenGLShader::Fragment, frag))
+		{
+			qWarning().noquote() << "HipsMgr lens fragment shader error:\n" << lensProgram->log();
+			return;
+		}
+
+		lensProgram->bindAttributeLocation("vertex", PANO_VERTEX_ATTRIB_INDEX);
+		if (!StelPainter::linkProg(lensProgram.get(), "HipsMgr 4K spectral lens program"))
+			return;
+
+		lensProgram->bind();
+		lensShaderVars.texCurrent = lensProgram->uniformLocation("texCurrent");
+		lensShaderVars.texPrev = lensProgram->uniformLocation("texPrev");
+		lensShaderVars.crossFade = lensProgram->uniformLocation("crossFade");
+		lensShaderVars.alpha = lensProgram->uniformLocation("alpha");
+		lensShaderVars.viewportSize = lensProgram->uniformLocation("viewportSize");
+		lensShaderVars.lensCenter = lensProgram->uniformLocation("lensCenter");
+		lensShaderVars.lensRadiusNorm = lensProgram->uniformLocation("lensRadiusNorm");
+		lensShaderVars.lensZoom = lensProgram->uniformLocation("lensZoom");
+		lensShaderVars.projectionMatrixInverse = lensProgram->uniformLocation("projectionMatrixInverse");
+		lensProgram->release();
+	}
+
+	if (!lensProgram || !lensProgram->isLinked())
+		return;
+
+	StelTextureSP texPrev;
+	float cf = 1.0f;
+	if (lensCrossFade < 0.999f && !lensPrevDatasetId.isEmpty() && lensPrevDatasetId != lensDatasetId)
+	{
+		texPrev = getSpectralPanoramaTexture(lensPrevDatasetId);
+		if (texPrev && texPrev->canBind())
+			cf = lensCrossFade * lensCrossFade * (3.0f - 2.0f * lensCrossFade);
+	}
+
+	const float vpW = static_cast<float>(qMax(1, projector->getViewportWidth()));
+	const float vpH = static_cast<float>(qMax(1, projector->getViewportHeight()));
+
+	auto& gl = *QOpenGLContext::currentContext()->functions();
+	lensProgram->bind();
+
+	texCur->bind(0);
+	gl.glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT);
+	gl.glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+	lensProgram->setUniformValue(lensShaderVars.texCurrent, 0);
+
+	if (texPrev && cf < 0.999f)
+	{
+		texPrev->bind(1);
+		gl.glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT);
+		gl.glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+	}
+	else
+	{
+		texCur->bind(1);
+	}
+	lensProgram->setUniformValue(lensShaderVars.texPrev, 1);
+
+	lensProgram->setUniformValue(lensShaderVars.crossFade, static_cast<GLfloat>(cf));
+	lensProgram->setUniformValue(lensShaderVars.alpha, static_cast<GLfloat>(fade));
+	lensProgram->setUniformValue(lensShaderVars.viewportSize, QVector2D(vpW, vpH));
+	lensProgram->setUniformValue(lensShaderVars.lensCenter, QVector2D(lensCenterX, lensCenterY));
+	lensProgram->setUniformValue(lensShaderVars.lensRadiusNorm, static_cast<GLfloat>(lensRadiusNorm));
+	lensProgram->setUniformValue(lensShaderVars.lensZoom, static_cast<GLfloat>(lensZoomCurrent));
+	lensProgram->setUniformValue(lensShaderVars.projectionMatrixInverse, projector->getProjectionMatrix().toQMatrix().inverted());
+	core->setAberrationUniforms(*lensProgram);
+	projector->setUnProjectUniforms(*lensProgram);
+
+	gl.glDisable(GL_DEPTH_TEST);
+	gl.glDisable(GL_CULL_FACE);
+	gl.glEnable(GL_BLEND);
+	gl.glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+	bindPanoramaVAO();
+	gl.glDrawArrays(GL_TRIANGLE_STRIP, 0, 4);
+	releasePanoramaVAO();
+	gl.glDisable(GL_BLEND);
+
+	if (texPrev && cf < 0.999f)
+		texPrev->release();
+	texCur->release();
+	lensProgram->release();
+}
+
 void HipsMgr::draw(StelCore* core)
 {
 	const float panoFade = spectralFader.getInterstate();
 	const bool hasSpectralPano = !activeSpectralId.isEmpty() && panoFade > 0.001f;
 	if (hasSpectralPano)
 		drawSpectralPanorama(core);
+
+	// Nighttime 1x spectral lens draws at CallOrder=7 so optical stars & constellation lines
+	// sit crisply on top of the lens; daytime or 2x lens draws inside LandscapeMgr::draw
+	// (right after atmosphere and right before landscape ground).
+	if (isSpectralLensActive() && !shouldDrawLensOverAtmosphere(core))
+		drawSpectralLens(core);
 
 	if (!visible)
 		return;
@@ -740,6 +957,21 @@ void HipsMgr::update(double deltaTime)
 	{
 		activeSpectralId.clear();
 		prevSpectralId.clear();
+	}
+
+	lensFader.update(static_cast<int>(deltaTime * 1000));
+	if (lensCrossFade < 1.0f)
+	{
+		lensCrossFade = qMin(1.0f, lensCrossFade + static_cast<float>(deltaTime / 0.45));
+		if (lensCrossFade >= 1.0f)
+			lensPrevDatasetId.clear();
+	}
+	if (std::fabs(lensZoomCurrent - lensZoomTarget) > 0.001f)
+	{
+		const float alpha = qMin(1.0f, static_cast<float>(deltaTime * 12.0));
+		lensZoomCurrent += (lensZoomTarget - lensZoomCurrent) * alpha;
+		if (std::fabs(lensZoomCurrent - lensZoomTarget) < 0.002f)
+			lensZoomCurrent = lensZoomTarget;
 	}
 
 	for (auto it = activeSurveys.begin(); it != activeSurveys.end();)
@@ -910,6 +1142,12 @@ bool HipsMgr::setSpectralView(const QString& datasetId, const bool enabled, QStr
 		return true;
 	}
 
+	// Opening full-screen spectral view cleanly dismisses the circular lens.
+	if (lensEnabled)
+	{
+		lensEnabled = false;
+		lensFader = false;
+	}
 	lastSpectralDatasetId = datasetId;
 	if (activeSpectralId != datasetId)
 	{
@@ -991,6 +1229,87 @@ void HipsMgr::closeSpectralView()
 		emit showChanged(false);
 	}
 	emit surveysChanged();
+}
+
+bool HipsMgr::setSpectralLens(const bool enabled, const QString& datasetId,
+                              const float normX, const float normY,
+                              const float radiusNorm, const float zoom,
+                              QString* error)
+{
+	if (!enabled)
+	{
+		lensEnabled = false;
+		lensFader = false;
+		return true;
+	}
+
+	const QString resolvedId = datasetId.isEmpty()
+		? (lensDatasetId.isEmpty() ? QStringLiteral("finkbeiner-ha") : lensDatasetId)
+		: datasetId;
+	const SpectralDataset* descriptor = findSpectralDescriptor(resolvedId);
+	if (!descriptor)
+	{
+		if (error) *error = QStringLiteral("unknown spectral dataset: %1").arg(resolvedId);
+		return false;
+	}
+
+	// Opening circular magnifying lens cleanly closes full-screen spectral mode
+	// so the outside sky shows normal optical stars & constellations.
+	if (visible && spectralFader)
+		closeSpectralView();
+
+	if (lensDatasetId != resolvedId)
+	{
+		if (!lensDatasetId.isEmpty() && lensFader.getInterstate() > 0.01f)
+		{
+			lensPrevDatasetId = lensDatasetId;
+			lensCrossFade = 0.0f;
+		}
+		else
+		{
+			lensPrevDatasetId.clear();
+			lensCrossFade = 1.0f;
+		}
+		lensDatasetId = resolvedId;
+	}
+	lastSpectralDatasetId = resolvedId;
+
+	if (normX >= 0.0f && normX <= 1.0f)
+		lensCenterX = normX;
+	if (normY >= 0.0f && normY <= 1.0f)
+		lensCenterY = normY;
+	if (radiusNorm >= 0.05f && radiusNorm <= 0.49f)
+		lensRadiusNorm = radiusNorm;
+	if (zoom >= 1.0f && zoom <= 3.0f)
+	{
+		const bool wasInactive = !lensEnabled && lensFader.getInterstate() <= 0.01f;
+		lensZoomTarget = zoom;
+		if (wasInactive)
+			lensZoomCurrent = zoom;
+	}
+
+	lensEnabled = true;
+	lensFader = true;
+	return true;
+}
+
+QJsonObject HipsMgr::getSpectralLensState() const
+{
+	QJsonObject state;
+	state["enabled"] = lensEnabled;
+	state["active"] = isSpectralLensActive();
+	state["datasetId"] = lensDatasetId;
+	state["x"] = static_cast<double>(lensCenterX);
+	state["y"] = static_cast<double>(lensCenterY);
+	state["radius"] = static_cast<double>(lensRadiusNorm);
+	state["zoom"] = static_cast<double>(lensZoomTarget);
+	state["currentZoom"] = static_cast<double>(lensZoomCurrent);
+	if (const SpectralDataset* desc = findSpectralDescriptor(lensDatasetId))
+	{
+		state["title"] = QString::fromUtf8(desc->title);
+		state["band"] = QString::fromUtf8(desc->band);
+	}
+	return state;
 }
 
 bool HipsMgr::getFlagShow(void) const

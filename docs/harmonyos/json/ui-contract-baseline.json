@@ -12,6 +12,7 @@
     "capability/AstroCalcController.ets",
     "capability/AstronomyCalendarController.ets",
     "capability/AstronomySubscriptionFeed.ets",
+    "capability/AudioCatalog.ets",
     "capability/AudioEngine.ets",
     "capability/BarometerReader.ets",
     "capability/ControllerHooks.ets",
@@ -180,6 +181,7 @@
     "panels/overlay/ObjectInspectorModelOverlay.ets",
     "panels/overlay/PolarScopeOverlay.ets",
     "panels/overlay/SkyCultureArtPreviewOverlay.ets",
+    "panels/overlay/SpectralLensOverlay.ets",
     "panels/overlay/ViewCenterCoordinateOverlay.ets",
     "panels/panels/AngleMeasurePanel.ets",
     "panels/panels/ArchaeoLinesPanel.ets",
@@ -482,6 +484,12 @@
     "skyZoomOutButton",
     "skyculture-art-models-toggle",
     "skyculture-line-center-anim-toggle",
+    "spectral-lens-close",
+    "spectral-lens-fullscreen",
+    "spectral-lens-handle",
+    "spectral-lens-pill",
+    "spectral-lens-ring",
+    "spectral-lens-zoom-toggle",
     "video-frames-share"
   ],
   "dynamicIdPrefixes": [
@@ -521,11 +529,11 @@
     "satellites-",
     "search-category-"
   ],
-  "totalIdAnchors": 117,
+  "totalIdAnchors": 123,
   "count": {
     "panels": 41,
-    "staticIds": 79,
+    "staticIds": 85,
     "dynamicIdPrefixes": 35,
-    "totalIdAnchors": 117
+    "totalIdAnchors": 123
   }
 }

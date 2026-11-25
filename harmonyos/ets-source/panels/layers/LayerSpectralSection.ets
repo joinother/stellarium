@@ -5,6 +5,7 @@ import { I18n } from '../../pages/I18n'
 import { UI_RADIUS_CONTROL, UI_RADIUS_TAG } from '../../common/ui/UiTokens'
 import { SurveyStore } from '../../state/SurveyStore'
 import { SpectralDataset } from '../../common/types/StellariumTypes'
+import { BridgeClient } from '../../bridge/BridgeClient'
 
 // 「巡天」标签页内的多波段图层区块：巡天状态文案 + 刷新、全电磁波谱数据集列表（点击切换/关闭）、
 // 状态文案与关闭。宿主持有 SurveyStore 与三个动作回调。
@@ -13,6 +14,7 @@ export struct LayerSpectralSection {
   @StorageProp('stellariumReadableUi') readableUi: boolean = false
   @ObjectLink surveyStore: SurveyStore
   @Prop @Watch('onHipsEnabledChanged') hipsEnabled: boolean = false
+  @StorageLink('stellariumSpectralLensActive') spectralLensActive: boolean = false
   @State private c: ThemeSlots = DEFAULT_SLOTS
   onRefreshSurvey: () => void = () => {}
   onSelectSpectral: (id: string) => void = () => {}
@@ -62,6 +64,50 @@ export struct LayerSpectralSection {
       Text(I18n.t('survey_usage')).fontSize(panelFontSize(11, this.readableUi)).fontColor(this.c.sub).width('100%').maxLines(3)
         .textOverflow({ overflow: TextOverflow.Ellipsis }).margin({ top: 6 })
       Text(this.surveyStore.surveyStateText).fontSize(panelFontSize(11, this.readableUi)).fontColor(this.c.sub).width('100%').margin({ top: 6 })
+      Row({ space: 8 }) {
+        Image($r('app.media.ic_spectral_lens'))
+          .width(18)
+          .height(18)
+          .objectFit(ImageFit.Contain)
+          .supportSvg2(true)
+        Column({ space: 1 }) {
+          Text('多光谱透视镜')
+            .fontSize(panelFontSize(12, this.readableUi))
+            .fontWeight(FontWeight.Medium)
+            .fontColor(this.spectralLensActive ? this.c.accent : this.c.text)
+          Text('可拖动圆镜 · 转动转柄切换 9 波段 · 1×/2×')
+            .fontSize(panelFontSize(10, this.readableUi))
+            .fontColor(this.c.sub)
+            .maxLines(1)
+            .textOverflow({ overflow: TextOverflow.Ellipsis })
+        }.alignItems(HorizontalAlign.Start).layoutWeight(1)
+        Text(this.spectralLensActive ? '关闭' : '开启')
+          .fontSize(panelFontSize(10, this.readableUi))
+          .fontColor(this.spectralLensActive ? this.c.accent : this.c.text)
+          .padding({ left: 10, right: 10, top: 5, bottom: 5 })
+          .backgroundColor(this.spectralLensActive ? this.c.softStrong : this.c.bg)
+          .borderRadius(UI_RADIUS_CONTROL)
+      }
+      .width('100%')
+      .alignItems(VerticalAlign.Center)
+      .padding({ left: 10, right: 8, top: 8, bottom: 8 })
+      .margin({ top: 8 })
+      .backgroundColor(this.spectralLensActive ? this.c.accentSoft : this.c.soft)
+      .border({ width: 1, color: this.spectralLensActive ? this.c.chipActiveBorder : this.c.border })
+      .borderRadius(UI_RADIUS_CONTROL)
+      .clickEffect({ level: ClickEffectLevel.LIGHT, scale: 0.985 })
+      .onClick(() => {
+        const next = !this.spectralLensActive
+        AppStorage.setOrCreate('stellariumSpectralLensActive', next)
+        if (!next) {
+          BridgeClient.send('setSpectralLens', '0')
+        } else {
+          if (this.surveyStore.spectralActiveId.length > 0) {
+            AppStorage.setOrCreate('stellariumSpectralLensBand', this.surveyStore.spectralActiveId)
+          }
+          AppStorage.setOrCreate('stellariumRequestBack', Date.now())
+        }
+      })
       Column({ space: 6 }) {
         ForEach(this.surveyStore.spectralDatasets, (dataset: SpectralDataset) => {
           Row({ space: 8 }) {
@@ -104,7 +150,12 @@ export struct LayerSpectralSection {
           .border({ width: 1, color: this.surveyStore.spectralActiveId === dataset.id ? this.c.chipActiveBorder : this.c.border })
           .borderRadius(UI_RADIUS_CONTROL)
           .clickEffect({ level: ClickEffectLevel.LIGHT, scale: 0.985 })
-          .onClick(() => { this.onSelectSpectral(dataset.id) })
+          .onClick(() => {
+            if (this.spectralLensActive) {
+              AppStorage.setOrCreate('stellariumSpectralLensActive', false)
+            }
+            this.onSelectSpectral(dataset.id)
+          })
         }, (dataset: SpectralDataset) => dataset.id + '|' + (this.surveyStore.spectralActiveId === dataset.id ? '1' : '0') + '|' + (dataset.hdReady === true ? 'h' : '0') + '|' + (dataset.loading === true ? 'l' : '0'))
       }.width('100%').margin({ top: 8 })
       Text(this.surveyStore.spectralStateText).fontSize(panelFontSize(10, this.readableUi)).fontColor(this.c.sub).width('100%').maxLines(3).textOverflow({ overflow: TextOverflow.Ellipsis }).margin({ top: 8 })

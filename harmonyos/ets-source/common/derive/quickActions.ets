@@ -52,8 +52,9 @@ export function quickActionPool(): QuickActionItem[] {
     { id: 'flip_horizontal', labelKey: 'quick_flip_horizontal', icon: 'bt_flip_horizontal', kind: 'raster', type: 'toggle', actionId: 'actionHorizontal_Flip', openPanel: '' },
     { id: 'observing_list', labelKey: 'more_observe_list', icon: 'bt_obs_list', kind: 'raster', type: 'entry', actionId: '', openPanel: 'observing' },
     { id: 'oculars', labelKey: 'panel_oculars', icon: 'oculars', kind: 'vector', type: 'entry', actionId: '', openPanel: 'oculars' },
-    // —— 红光手电：全屏红色照明，默认只在扩展列（候选带）出现 ——
-    { id: 'red_light', labelKey: 'quick_red_light', icon: 'red_light', kind: 'vector', type: 'toggle', actionId: '', openPanel: '' }
+    // —— 红光手电 & 多光谱透视镜：默认在扩展列（候选带）第 5、6 格，可拖入前 12 格常驻 ——
+    { id: 'red_light', labelKey: 'quick_red_light', icon: 'red_light', kind: 'vector', type: 'toggle', actionId: '', openPanel: '' },
+    { id: 'spectral_lens', labelKey: 'quick_spectral_lens', icon: 'spectral_lens', kind: 'vector', type: 'toggle', actionId: '', openPanel: '' }
   ]
 }
 

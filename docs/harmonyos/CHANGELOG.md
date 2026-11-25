@@ -1,5 +1,16 @@
 > **身份图例**：本文件真机记录中出现的 `com.cnchensh.stellarium` 是**本机调试签名身份**（本机 DevEco 自动生成，非发布身份）；发布身份为 `com.joinother.skyinstrument`。构建脚本 `build-ohos-hap-windows.ps1 -Install` 从产物 `pack.info` 读取实际包名，仓库不写死任何签名身份（见 `docs/harmonyos/release/BUNDLE-IDENTITY-CLEANUP.md`）。
 
+## [2026-11-25] Sky Guide 风格多光谱透视放大镜（可拖动圆镜 + 360° 旋转转柄切 9 波段 + 1×/2× 倍率）
+
+- **修改文件：** `src/core/modules/HipsMgr.hpp`、`src/core/modules/HipsMgr.cpp`、`src/core/modules/LandscapeMgr.cpp`、`src/StelOhosCommandCatalog.hpp`、`src/StelMainView.cpp`、`harmonyos/ets-source/panels/overlay/SpectralLensOverlay.ets`（新增）、`harmonyos/ets-source/panels/shell/HarmonyShell.ets`、`harmonyos/ets-source/panels/panels/QuickPanel.ets`、`harmonyos/ets-source/panels/quick/QuickActionGrid.ets`、`harmonyos/ets-source/panels/quick/QuickActionCell.ets`、`harmonyos/ets-source/panels/layers/LayerSpectralSection.ets`、`harmonyos/ets-source/common/derive/quickActions.ets`、`harmonyos/ets-source/common/ui/ShellIcons.ets`、`harmonyos/ets-source/resources/base/media/ic_spectral_lens.svg`（新增）、`scripts/test-ohos-quick-red-light.mjs`、`docs/harmonyos/json/ui-contract-baseline.json`、`docs/harmonyos/CHANGELOG.md`。
+- **新增能力：**
+  1. **GPU 圆形透视与局部放大引擎（`HipsMgr`、`LandscapeMgr`、`StelMainView`）**：新增 `setSpectralLens` / `getSpectralLensState` 命令与单 Draw Call 全屏圆镜光线投射着色器，支持 450ms GPU 波段交叉淡入、1× 坐标对齐透视与 2× 局部光学放大平滑过渡（`lensZoomCurrent` 指数缓动），夜间 `1×` 自动绘制在恒星/星座线之下保持严丝合缝，白天非可见光或 `2×` 模式自动绘制在大气层之上、地景之前，实现“白天镜内穿透蓝天、地平线树影自然遮挡”。
+  2. **可拖动圆镜 + 360° 可旋转转柄（`SpectralLensOverlay.ets`）**：镜面单指自由拖动，镜外所有星图拖动/缩放/点选 100% 透传；外圈均匀排布 9 个波段发光棘轮刻度（每 40° 一档），单指绕镜心转动金属防滑转柄即可连续切换 9 个波段并触发轻微触觉震动回弹，也可直接点按镜圈刻度跳转；镜框上方紧凑悬浮胶囊提供当前波段显示、`1× / 2×` 倍率切换、一键展开全屏与关闭。
+  3. **快捷开关与巡天双入口（`quickActions.ets`、`QuickPanel.ets`、`LayerSpectralSection.ets`）**：作为第 18 项能力加入「快捷开关」扩展第 6 格（支持编辑态拖入前 12 格常驻），并同步在「图层 → 巡天」顶部提供快捷开关，打开时自动收起面板直达星空。
+- **验证结果：**
+  - 主机：`check-ohos-ui-contract.mjs`（123 锚点）、`check-ohos-command-catalog.mjs`（449 命令）、`test-ohos-quick-red-light.mjs`、`test-ohos-pointer-surveys-ui.mjs`、`test-ohos-layer-presets.mjs`、`test-ohos-vivid-rendering-gate.mjs` 共 35 项测试全部通过。
+  - 真机（`HUAWEI MatePad Mini 悦读版`，PID `12107` / `15678` 稳定无崩溃）：实测「快捷开关」上拉点按开启圆镜、猎户座 `55°` 1× 红宝石 Hα 镜圈零像素偏差、真实手势旋转转柄切至 `AllWISE 中红外` 与 `ROSAT X 射线`、真实拖动圆镜平移且树影自然遮挡镜底、点击胶囊 `1× → 2×` 实现局部 2 倍放大、正午 `12:00` 蓝天实拍验证镜内穿透蓝天、点击 `✕` 平滑关闭。
+
 ## [2026-11-25] Sky Guide 级无缝离线 4K 多光谱全天全景 + GPU 丝滑交叉淡入与混合高清缩放
 
 - **修改文件：** `src/core/modules/HipsMgr.hpp`、`src/core/modules/HipsMgr.cpp`、`src/core/modules/StarMgr.cpp`、`data/surveys/*_4k.jpg`（9 张 `4096×2048` J2000 无缝等距圆柱离线全景，合计 `9.6 MB`，替换旧 `*_allsky.jpg`）、`harmonyos/ets-source/qability/StellariumResourceBootstrap.ets`、`harmonyos/ets-source/panels/layers/LayerSpectralSection.ets`、`docs/harmonyos/CHANGELOG.md`。

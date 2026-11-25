@@ -16822,6 +16822,53 @@ extern "C" __attribute__((visibility("default"))) const char* StellariumOhos_com
 			return result;
 		}
 
+		if (commandName == "setSpectralLens")
+		{
+			HipsMgr* hips = GETSTELMODULE(HipsMgr);
+			bool enabled = true;
+			QString datasetId;
+			float normX = -1.0f;
+			float normY = -1.0f;
+			float radiusNorm = -1.0f;
+			float zoom = -1.0f;
+			const QJsonDocument payload = QJsonDocument::fromJson(arg.toUtf8());
+			if (payload.isObject())
+			{
+				const QJsonObject obj = payload.object();
+				enabled = obj.value("enabled").toBool(true);
+				datasetId = obj.value("datasetId").toString(obj.value("id").toString());
+				if (obj.contains("x")) normX = static_cast<float>(obj.value("x").toDouble(-1.0));
+				if (obj.contains("y")) normY = static_cast<float>(obj.value("y").toDouble(-1.0));
+				if (obj.contains("radius")) radiusNorm = static_cast<float>(obj.value("radius").toDouble(-1.0));
+				if (obj.contains("zoom")) zoom = static_cast<float>(obj.value("zoom").toDouble(-1.0));
+			}
+			else
+			{
+				const QStringList parts = arg.split('|');
+				if (!parts.isEmpty() && !parts[0].isEmpty())
+					enabled = (parts[0] == "1" || parts[0].compare("true", Qt::CaseInsensitive) == 0);
+				if (parts.size() > 1) datasetId = parts[1].trimmed();
+				bool ok = false;
+				if (parts.size() > 2 && !parts[2].isEmpty()) { const float v = parts[2].toFloat(&ok); if (ok) normX = v; }
+				if (parts.size() > 3 && !parts[3].isEmpty()) { const float v = parts[3].toFloat(&ok); if (ok) normY = v; }
+				if (parts.size() > 4 && !parts[4].isEmpty()) { const float v = parts[4].toFloat(&ok); if (ok) radiusNorm = v; }
+				if (parts.size() > 5 && !parts[5].isEmpty()) { const float v = parts[5].toFloat(&ok); if (ok) zoom = v; }
+			}
+			QString error;
+			result["ok"] = hips && hips->setSpectralLens(enabled, datasetId, normX, normY, radiusNorm, zoom, &error);
+			if (!error.isEmpty()) result["error"] = error;
+			if (hips) result["lens"] = hips->getSpectralLensState();
+			return result;
+		}
+
+		if (commandName == "getSpectralLensState")
+		{
+			HipsMgr* hips = GETSTELMODULE(HipsMgr);
+			result["ok"] = hips != nullptr;
+			if (hips) result["lens"] = hips->getSpectralLensState();
+			return result;
+		}
+
 		// getDeepSkyImageStatus — distinguish copied files from textures that
 		// the lazy deep-sky renderer has actually made ready for display.
 		if (commandName == "getDeepSkyImageStatus")

@@ -745,6 +745,14 @@ void LandscapeMgr::draw(StelCore* core)
 	if (auroraRenderer.effectiveOpacity() > 0.002f)
 		auroraRenderer.draw(core);
 
+	// Daytime X-ray / 2x magnifying spectral lens draws over atmosphere scattering
+	// so it punches through blue daytime sky while staying occluded by landscape ground.
+	if (HipsMgr* hipsMut = GETSTELMODULE(HipsMgr))
+	{
+		if (hipsMut->isSpectralLensActive() && hipsMut->shouldDrawLensOverAtmosphere(core))
+			hipsMut->drawSpectralLens(core);
+	}
+
 	// Draw the landscape
 	const double currentFov = core->getMovementMgr() ? core->getMovementMgr()->getCurrentFov() : 60.0;
 	const float envZoom = EnvironmentZoomFade::environmentVisibility(flagZoomFadeEnvironment, currentFov);

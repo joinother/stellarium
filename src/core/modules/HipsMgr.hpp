@@ -94,6 +94,11 @@ public:
 	void setSpectralOpacity(float opacity);
 	float getSpectralOpacity() const { return spectralOpacity; }
 	void closeSpectralView();
+	bool setSpectralLens(bool enabled, const QString& datasetId, float normX, float normY, float radiusNorm, float zoom, QString* error = nullptr);
+	QJsonObject getSpectralLensState() const;
+	bool isSpectralLensActive() const { return lensFader.getInterstate() > 0.001f; }
+	bool shouldDrawLensOverAtmosphere(const StelCore* core) const;
+	void drawSpectralLens(StelCore* core);
 
 	State getState() const {return state;}
 	bool isLoaded() const {return state == Loaded;}
@@ -162,6 +167,32 @@ private:
 		int alpha = -1;
 		int projectionMatrixInverse = -1;
 	} panoShaderVars;
+
+	// Sky Guide style multi-spectral magnifying lens (circular X-ray loupe)
+	bool lensEnabled = false;
+	LinearFader lensFader;
+	float lensCenterX = 0.5f;
+	float lensCenterY = 0.44f;
+	float lensRadiusNorm = 0.22f;
+	float lensZoomTarget = 1.0f;
+	float lensZoomCurrent = 1.0f;
+	QString lensDatasetId;
+	QString lensPrevDatasetId;
+	float lensCrossFade = 1.0f;
+	std::unique_ptr<QOpenGLShaderProgram> lensProgram;
+	StelProjectorP prevLensProjector;
+	struct
+	{
+		int texCurrent = -1;
+		int texPrev = -1;
+		int crossFade = -1;
+		int alpha = -1;
+		int viewportSize = -1;
+		int lensCenter = -1;
+		int lensRadiusNorm = -1;
+		int lensZoom = -1;
+		int projectionMatrixInverse = -1;
+	} lensShaderVars;
 };
 
 #endif // HIPSMGR_HPP
