@@ -10850,6 +10850,15 @@ extern "C" __attribute__((visibility("default"))) const char* StellariumOhos_com
 				StelApp::immediateSaveNow("ohos/defaults/deep_sky_v1", true);
 				initialized = true;
 			}
+			if (!conf->contains("ohos/defaults/deep_sky_v2_common_names"))
+			{
+				// Prefer localized common names (e.g. 仙女座星系 / 猎户座大星云)
+				// over bare catalog IDs by default; users can still toggle back on.
+				nebulae->setDesignationUsage(false);
+				StelApp::immediateSaveNow("astro/flag_dso_designation_usage", false);
+				StelApp::immediateSaveNow("ohos/defaults/deep_sky_v2_common_names", true);
+				initialized = true;
+			}
 			result["ok"] = true;
 			result["initialized"] = initialized;
 			result["dsoTextures"] = skyLayers->getFlagShow();

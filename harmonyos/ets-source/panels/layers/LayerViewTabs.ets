@@ -628,6 +628,22 @@ export struct LayerSsoTab {
     return 0
   }
 
+  private orbitColorStyleLabel(): string {
+    const style = this.layerViewStore.orbitColorStyle
+    if (style === 'groups') return '按天体分组'
+    if (style === 'major_planets') return '按八大行星'
+    if (style === 'major_planets_minor_types') return '行星与小天体分类'
+    return '统一颜色'
+  }
+
+  private trailColorPresets(): Array<string> {
+    return ['#F26B6B', '#F5B841', '#56CCF2', '#52D68A', '#B589F5', '#E6EDF5']
+  }
+
+  private isTrailPresetActive(hex: string): boolean {
+    return this.layerViewStore.trailColorInput.trim().toUpperCase() === hex.toUpperCase()
+  }
+
   build() {
     Column({ space: 0 }) {
       Text('基础显示').fontSize(11).fontColor(this.c.sub).width('100%').margin({ top: 2, bottom: 6 }).padding({ left: 2 })
@@ -699,7 +715,7 @@ export struct LayerSsoTab {
             Row({ space: 8 }) {
               Text('轨道配色').fontSize(11).fontColor(this.c.text).width(64)
               Select([{ value: '统一颜色' }, { value: '按天体分组' }, { value: '按八大行星' }, { value: '行星与小天体分类' }])
-                .selected(this.orbitColorStyleIndex()).value('轨道配色').height(30).layoutWeight(1)
+                .selected(this.orbitColorStyleIndex()).value(this.orbitColorStyleLabel()).height(30).layoutWeight(1)
                 .onSelect((index: number) => { this.onSetOrbitColorStyle(index) })
             }.height(34).width('100%').padding({ left: 8, right: 8 }).backgroundColor(this.c.rowBg).borderRadius(UI_RADIUS_CONTROL)
           }.width('100%').padding({ left: 8, right: 8, top: 8, bottom: 8 }).backgroundColor(this.c.soft).borderRadius(UI_RADIUS_CONTROL).margin({ bottom: 8 })
@@ -763,15 +779,38 @@ export struct LayerSsoTab {
                 .layoutWeight(1).trackColor(this.c.softStrong).showSteps(false).showTips(false)
                 .onChange((value: number) => { this.onSetTrailNumber('thickness', value) })
             }.height(34).width('100%').padding({ left: 8, right: 10 }).backgroundColor(this.c.rowBg).borderRadius(UI_RADIUS_CONTROL)
-            Row({ space: 8 }) {
-              Text('轨迹颜色').fontSize(11).fontColor(this.c.text).width(64)
-              TextInput({ text: this.layerViewStore.trailColorInput, placeholder: '#RRGGBB' })
-                .fontSize(11).fontColor(this.c.text).placeholderColor(this.c.sub).height(30).layoutWeight(1)
-                .backgroundColor(this.c.bg).borderRadius(UI_RADIUS_CONTROL).padding({ left: 8, right: 8 })
-                .onChange((value: string) => { this.layerViewStore.trailColorInput = value })
-              Button('应用').fontSize(10).fontColor(this.c.accent).height(28).backgroundColor(this.c.bg).borderRadius(UI_RADIUS_CONTROL)
-                .padding({ left: 9, right: 9 }).onClick(() => { this.onApplyTrailColor() })
-            }.height(34).width('100%').padding({ left: 8, right: 8 }).backgroundColor(this.c.rowBg).borderRadius(UI_RADIUS_CONTROL)
+            Column({ space: 6 }) {
+              Row({ space: 8 }) {
+                Text('轨迹颜色').fontSize(11).fontColor(this.c.text).width(64)
+                Row({ space: 8 }) {
+                  ForEach(this.trailColorPresets(), (hex: string) => {
+                    Row()
+                      .width(20)
+                      .height(20)
+                      .borderRadius(10)
+                      .backgroundColor(hex)
+                      .border({
+                        width: this.isTrailPresetActive(hex) ? 2 : 1,
+                        color: this.isTrailPresetActive(hex) ? this.c.accent : this.c.border
+                      })
+                      .clickEffect({ level: ClickEffectLevel.LIGHT, scale: 0.92 })
+                      .onClick(() => {
+                        this.layerViewStore.trailColorInput = hex
+                        this.onApplyTrailColor()
+                      })
+                  }, (hex: string) => hex + (this.isTrailPresetActive(hex) ? '1' : '0'))
+                }.layoutWeight(1).justifyContent(FlexAlign.Start).alignItems(VerticalAlign.Center)
+              }.width('100%').height(28)
+              Row({ space: 8 }) {
+                Text('自定义色值').fontSize(10).fontColor(this.c.sub).width(64)
+                TextInput({ text: this.layerViewStore.trailColorInput, placeholder: '#RRGGBB' })
+                  .fontSize(11).fontColor(this.c.text).placeholderColor(this.c.sub).height(30).layoutWeight(1)
+                  .backgroundColor(this.c.bg).borderRadius(UI_RADIUS_CONTROL).padding({ left: 8, right: 8 })
+                  .onChange((value: string) => { this.layerViewStore.trailColorInput = value })
+                Button('应用').fontSize(10).fontColor(this.c.accent).height(28).backgroundColor(this.c.bg).borderRadius(UI_RADIUS_CONTROL)
+                  .padding({ left: 9, right: 9 }).onClick(() => { this.onApplyTrailColor() })
+              }.width('100%').height(32)
+            }.width('100%').padding({ left: 8, right: 8, top: 6, bottom: 6 }).backgroundColor(this.c.rowBg).borderRadius(UI_RADIUS_CONTROL)
           }.width('100%').padding({ left: 8, right: 8, top: 8, bottom: 8 }).backgroundColor(this.c.soft).borderRadius(UI_RADIUS_CONTROL).margin({ bottom: 8 })
         }
       }
@@ -983,6 +1022,9 @@ export struct LayerMarkingsTab {
   @ObjectLink overlayStore: OverlayStore
   @StorageProp('stellariumReadableUi') readableUi: boolean = false
   @State private c: ThemeSlots = DEFAULT_SLOTS
+  @State private moreLinesExpanded: boolean = false
+  @State private moreGridsExpanded: boolean = false
+  @State private pointMarksExpanded: boolean = false
   onToggleLayer: (actionId: string, cmd: string, value: boolean) => void = () => {}
   onSetFovMarker: (setting: string, value: number) => void = () => {}
   onToggleViewCoordinates: (visible: boolean) => void = () => {}
@@ -990,6 +1032,60 @@ export struct LayerMarkingsTab {
   onSelectViewEquatorialEpoch: (epoch: string) => void = () => {}
 
   onWillApplyTheme(theme: Theme) { this.c = slotsFromTheme(theme) }
+
+  private activeExtraLinesCount(): number {
+    let n = 0
+    if (this.layerStore.supergalacticEq) n++
+    if (this.layerStore.equJ2000Line) n++
+    if (this.layerStore.eclJ2000Line) n++
+    if (this.layerStore.primeVerticalLine) n++
+    if (this.layerStore.currentVerticalLine) n++
+    if (this.layerStore.colureLines) n++
+    if (this.layerStore.precessionCircles) n++
+    if (this.layerStore.circumpolarCircles) n++
+    if (this.layerStore.invariantPlaneLine) n++
+    if (this.layerStore.solarEquatorLine) n++
+    if (this.layerStore.fixedEquatorLine) n++
+    if (this.layerStore.longitudeLine) n++
+    if (this.layerStore.quadratureLine) n++
+    return n
+  }
+
+  private activeExtraGridsCount(): number {
+    let n = 0
+    if (this.layerStore.galacticGrid) n++
+    if (this.layerStore.equatorialJ2000Grid) n++
+    if (this.layerStore.eclipticJ2000Grid) n++
+    if (this.layerStore.eclipticGrid) n++
+    if (this.layerStore.supergalacticGrid) n++
+    if (this.layerStore.fixedEquatorialGrid) n++
+    return n
+  }
+
+  private activePointMarksCount(): number {
+    let n = 0
+    if (this.layerStore.celestialPoles) n++
+    if (this.layerStore.eclipticPoles) n++
+    if (this.layerStore.galacticPoles) n++
+    if (this.layerStore.equinoxPoints) n++
+    if (this.layerStore.solsticePoints) n++
+    if (this.layerStore.antisolarPoint) n++
+    if (this.layerStore.umbraCircle) n++
+    if (this.layerStore.penumbraCircle) n++
+    if (this.layerStore.intercardinalPts) n++
+    if (this.layerStore.secondaryIntercardinalPts) n++
+    if (this.layerStore.tertiaryIntercardinalPts) n++
+    if (this.layerStore.zenithNadir) n++
+    if (this.layerStore.celestialJ2000Poles) n++
+    if (this.layerStore.eclipticJ2000Poles) n++
+    if (this.layerStore.equinoxJ2000Pts) n++
+    if (this.layerStore.solsticeJ2000Pts) n++
+    if (this.layerStore.galacticCenter) n++
+    if (this.layerStore.supergalacticPoles) n++
+    if (this.layerStore.apexPoints) n++
+    if (this.layerStore.umbraCenter) n++
+    return n
+  }
 
   build() {
     Column({ space: 0 }) {
@@ -1003,7 +1099,7 @@ export struct LayerMarkingsTab {
       LayerSwitchRow({ label: I18n.t('s0538'), isOn: this.layerStore.gridlinesMaster, onToggle: (value: boolean) => { this.onToggleLayer('actionShow_Gridlines', '', value) } })
       LayerSwitchRow({ label: I18n.t('s0323'), isOn: this.layerStore.equatorialGrid, onToggle: (value: boolean) => { this.onToggleLayer('actionShow_Equatorial_Grid', '', value) } })
       LayerSwitchRow({ label: I18n.t('s0324'), isOn: this.layerStore.azimuthGrid, onToggle: (value: boolean) => { this.onToggleLayer('actionShow_Azimuthal_Grid', '', value) } })
-      // 特殊线
+      // 常用天球线
       Row()
         .width('100%').height(0.5)
         .backgroundColor(this.c.border)
@@ -1015,33 +1111,7 @@ export struct LayerMarkingsTab {
       LayerSwitchRow({ label: I18n.t('s0327'), isOn: this.layerStore.meridianLine, onToggle: (value: boolean) => { this.onToggleLayer('actionShow_Meridian_Line', '', value) } })
       LayerSwitchRow({ label: I18n.t('s0328'), isOn: this.layerStore.horizonLine, onToggle: (value: boolean) => { this.onToggleLayer('actionShow_Horizon_Line', '', value) } })
       LayerSwitchRow({ label: I18n.t('s0329'), isOn: this.layerStore.galacticEquator, onToggle: (value: boolean) => { this.onToggleLayer('actionShow_Galactic_Equator_Line', '', value) } })
-      LayerSwitchRow({ label: I18n.t('s0330'), isOn: this.layerStore.supergalacticEq, onToggle: (value: boolean) => { this.onToggleLayer('actionShow_Supergalactic_Equator_Line', '', value) } })
-      LayerSwitchRow({ label: I18n.t('s0331'), isOn: this.layerStore.galacticGrid, onToggle: (value: boolean) => { this.onToggleLayer('actionShow_Galactic_Grid', '', value) } })
-      // J2000 线
-      Row()
-        .width('100%').height(0.5)
-        .backgroundColor(this.c.border)
-        .margin({ top: 6, bottom: 4 })
-      Text(I18n.t('i0199')).fontSize(11).fontColor(this.c.sub).width('100%').padding({ left: 2 })
-        .height(18).width('100%')
-      LayerSwitchRow({ label: I18n.t('s0332'), isOn: this.layerStore.equJ2000Line, onToggle: (value: boolean) => { this.onToggleLayer('actionShow_Equator_J2000_Line', '', value) } })
-      LayerSwitchRow({ label: I18n.t('s0333'), isOn: this.layerStore.eclJ2000Line, onToggle: (value: boolean) => { this.onToggleLayer('actionShow_Ecliptic_J2000_Line', '', value) } })
-      // 点标记
-      Row()
-        .width('100%').height(0.5)
-        .backgroundColor(this.c.border)
-        .margin({ top: 6, bottom: 4 })
-      Text(I18n.t('i0200')).fontSize(11).fontColor(this.c.sub).width('100%').padding({ left: 2 })
-        .height(18).width('100%')
-      LayerSwitchRow({ label: I18n.t('s0334'), isOn: this.layerStore.celestialPoles, onToggle: (value: boolean) => { this.onToggleLayer('actionShow_Celestial_Poles', '', value) } })
-      LayerSwitchRow({ label: I18n.t('s0335'), isOn: this.layerStore.eclipticPoles, onToggle: (value: boolean) => { this.onToggleLayer('actionShow_Ecliptic_Poles', '', value) } })
-      LayerSwitchRow({ label: I18n.t('s0336'), isOn: this.layerStore.galacticPoles, onToggle: (value: boolean) => { this.onToggleLayer('actionShow_Galactic_Poles', '', value) } })
-      LayerSwitchRow({ label: I18n.t('s0337'), isOn: this.layerStore.equinoxPoints, onToggle: (value: boolean) => { this.onToggleLayer('actionShow_Equinox_Points', '', value) } })
-      LayerSwitchRow({ label: I18n.t('s0338'), isOn: this.layerStore.solsticePoints, onToggle: (value: boolean) => { this.onToggleLayer('actionShow_Solstice_Points', '', value) } })
-      LayerSwitchRow({ label: I18n.t('s0339'), isOn: this.layerStore.antisolarPoint, onToggle: (value: boolean) => { this.onToggleLayer('actionShow_Antisolar_Point', '', value) } })
-      LayerSwitchRow({ label: I18n.t('s0340'), isOn: this.layerStore.umbraCircle, onToggle: (value: boolean) => { this.onToggleLayer('actionShow_Umbra_Circle', '', value) } })
-      LayerSwitchRow({ label: I18n.t('s0341'), isOn: this.layerStore.penumbraCircle, onToggle: (value: boolean) => { this.onToggleLayer('actionShow_Penumbra_Circle', '', value) } })
-      // 辅助标记
+      // 视场辅助标记
       Row()
         .width('100%').height(0.5)
         .backgroundColor(this.c.border)
@@ -1099,54 +1169,108 @@ export struct LayerMarkingsTab {
           .backgroundColor(this.c.bg).border({ width: 1, color: this.c.dividerSoft })
           .borderRadius(UI_RADIUS_CONTROL).margin({ bottom: 6 })
       }
-      LayerSwitchRow({ label: I18n.t('s0344'), isOn: this.layerStore.intercardinalPts, onToggle: (value: boolean) => { this.onToggleLayer('actionShow_Intercardinal_Points', '', value) } })
-      LayerSwitchRow({ label: I18n.t('s0536'), isOn: this.layerStore.secondaryIntercardinalPts, onToggle: (value: boolean) => { this.onToggleLayer('actionShow_Secondary_Intercardinal_Points', '', value) } })
-      LayerSwitchRow({ label: I18n.t('s0537'), isOn: this.layerStore.tertiaryIntercardinalPts, onToggle: (value: boolean) => { this.onToggleLayer('actionShow_Tertiary_Intercardinal_Points', '', value) } })
-      // 更多标记线
+      // 专业坐标系与点标记（折叠抽屉，避免 30+ 专业项淹没常用开关）
       Row()
         .width('100%').height(0.5)
         .backgroundColor(this.c.border)
-        .margin({ top: 6, bottom: 4 })
-      Text(I18n.t('i0285')).fontSize(11).fontColor(this.c.sub).width('100%').padding({ left: 2 })
-        .height(18).width('100%')
-      LayerSwitchRow({ label: I18n.t('s0345'), isOn: this.layerStore.primeVerticalLine, onToggle: (value: boolean) => { this.onToggleLayer('actionShow_Prime_Vertical_Line', '', value) } })
-      LayerSwitchRow({ label: I18n.t('s0346'), isOn: this.layerStore.currentVerticalLine, onToggle: (value: boolean) => { this.onToggleLayer('actionShow_Current_Vertical_Line', '', value) } })
-      LayerSwitchRow({ label: I18n.t('s0347'), isOn: this.layerStore.colureLines, onToggle: (value: boolean) => { this.onToggleLayer('actionShow_Colure_Lines', '', value) } })
-      LayerSwitchRow({ label: I18n.t('s0348'), isOn: this.layerStore.precessionCircles, onToggle: (value: boolean) => { this.onToggleLayer('actionShow_Precession_Circles', '', value) } })
-      LayerSwitchRow({ label: I18n.t('s0500'), isOn: this.layerStore.circumpolarCircles, onToggle: (value: boolean) => { this.onToggleLayer('actionShow_Circumpolar_Circles', '', value) } })
-      LayerSwitchRow({ label: I18n.t('s0501'), isOn: this.layerStore.invariantPlaneLine, onToggle: (value: boolean) => { this.onToggleLayer('actionShow_Invariable_Plane_Line', '', value) } })
-      LayerSwitchRow({ label: I18n.t('s0502'), isOn: this.layerStore.solarEquatorLine, onToggle: (value: boolean) => { this.onToggleLayer('actionShow_Solar_Equator_Line', '', value) } })
-      // 更多网格
-      Row()
-        .width('100%').height(0.5)
-        .backgroundColor(this.c.border)
-        .margin({ top: 6, bottom: 4 })
-      Text(I18n.t('i0286')).fontSize(11).fontColor(this.c.sub).width('100%').padding({ left: 2 })
-        .height(18).width('100%')
-      LayerSwitchRow({ label: I18n.t('s0503'), isOn: this.layerStore.equatorialJ2000Grid, onToggle: (value: boolean) => { this.onToggleLayer('actionShow_Equatorial_J2000_Grid', '', value) } })
-      LayerSwitchRow({ label: I18n.t('s0504'), isOn: this.layerStore.eclipticJ2000Grid, onToggle: (value: boolean) => { this.onToggleLayer('actionShow_Ecliptic_J2000_Grid', '', value) } })
-      LayerSwitchRow({ label: I18n.t('s0505'), isOn: this.layerStore.eclipticGrid, onToggle: (value: boolean) => { this.onToggleLayer('actionShow_Ecliptic_Grid', '', value) } })
-      LayerSwitchRow({ label: I18n.t('s0506'), isOn: this.layerStore.supergalacticGrid, onToggle: (value: boolean) => { this.onToggleLayer('actionShow_Supergalactic_Grid', '', value) } })
-      LayerSwitchRow({ label: I18n.t('s0507'), isOn: this.layerStore.fixedEquatorialGrid, onToggle: (value: boolean) => { this.onToggleLayer('actionShow_Fixed_Equatorial_Grid', '', value) } })
-      LayerSwitchRow({ label: I18n.t('s0508'), isOn: this.layerStore.fixedEquatorLine, onToggle: (value: boolean) => { this.onToggleLayer('actionShow_Fixed_Equator_Line', '', value) } })
-      // 更多点标记
-      Row()
-        .width('100%').height(0.5)
-        .backgroundColor(this.c.border)
-        .margin({ top: 6, bottom: 4 })
-      Text(I18n.t('i0287')).fontSize(11).fontColor(this.c.sub).width('100%').padding({ left: 2 })
-        .height(18).width('100%')
-      LayerSwitchRow({ label: I18n.t('s0509'), isOn: this.layerStore.zenithNadir, onToggle: (value: boolean) => { this.onToggleLayer('actionShow_Zenith_Nadir', '', value) } })
-      LayerSwitchRow({ label: I18n.t('s0510'), isOn: this.layerStore.celestialJ2000Poles, onToggle: (value: boolean) => { this.onToggleLayer('actionShow_Celestial_J2000_Poles', '', value) } })
-      LayerSwitchRow({ label: I18n.t('s0511'), isOn: this.layerStore.eclipticJ2000Poles, onToggle: (value: boolean) => { this.onToggleLayer('actionShow_Ecliptic_J2000_Poles', '', value) } })
-      LayerSwitchRow({ label: I18n.t('s0512'), isOn: this.layerStore.equinoxJ2000Pts, onToggle: (value: boolean) => { this.onToggleLayer('actionShow_Equinox_J2000_Points', '', value) } })
-      LayerSwitchRow({ label: I18n.t('s0513'), isOn: this.layerStore.solsticeJ2000Pts, onToggle: (value: boolean) => { this.onToggleLayer('actionShow_Solstice_J2000_Points', '', value) } })
-      LayerSwitchRow({ label: I18n.t('s0514'), isOn: this.layerStore.galacticCenter, onToggle: (value: boolean) => { this.onToggleLayer('actionShow_Galactic_Center', '', value) } })
-      LayerSwitchRow({ label: I18n.t('s0515'), isOn: this.layerStore.supergalacticPoles, onToggle: (value: boolean) => { this.onToggleLayer('actionShow_Supergalactic_Poles', '', value) } })
-      LayerSwitchRow({ label: I18n.t('s0516'), isOn: this.layerStore.apexPoints, onToggle: (value: boolean) => { this.onToggleLayer('actionShow_Apex_Points', '', value) } })
-      LayerSwitchRow({ label: I18n.t('s0517'), isOn: this.layerStore.umbraCenter, onToggle: (value: boolean) => { this.onToggleLayer('actionShow_Umbra_Center_Point', '', value) } })
-      LayerSwitchRow({ label: I18n.t('s0518'), isOn: this.layerStore.longitudeLine, onToggle: (value: boolean) => { this.onToggleLayer('actionShow_Longitude_Line', '', value) } })
-      LayerSwitchRow({ label: I18n.t('s0519'), isOn: this.layerStore.quadratureLine, onToggle: (value: boolean) => { this.onToggleLayer('actionShow_Quadrature_Line', '', value) } })
+        .margin({ top: 6, bottom: 6 })
+      Text('专业天球线、网格与极点').fontSize(11).fontColor(this.c.sub).width('100%').padding({ left: 2 }).margin({ bottom: 6 })
+      // 抽屉 1：更多天球线与 J2000 线
+      Row() {
+        Column({ space: 2 }) {
+          Text(I18n.t('i0285') + ' / ' + I18n.t('i0199')).fontSize(12).fontColor(this.c.text).width('100%')
+          Text(this.activeExtraLinesCount() > 0 ? '已开启 ' + this.activeExtraLinesCount().toString() + ' 项' : 'J2000 线、岁差圆、卯酉圈、拱极圈等 13 项')
+            .fontSize(10).fontColor(this.activeExtraLinesCount() > 0 ? this.c.accent : this.c.sub).width('100%')
+        }.layoutWeight(1).alignItems(HorizontalAlign.Start)
+        Text(this.moreLinesExpanded ? '收起' : '展开')
+          .fontSize(10).fontColor(this.c.accent)
+          .backgroundColor(this.c.softStrong).borderRadius(UI_RADIUS_CONTROL)
+          .padding({ left: 9, right: 9, top: 6, bottom: 6 })
+      }.width('100%').padding({ left: 10, right: 8, top: 7, bottom: 7 })
+        .backgroundColor(this.c.bg).border({ width: 1, color: this.c.dividerSoft })
+        .borderRadius(UI_RADIUS_CONTROL).margin({ bottom: this.moreLinesExpanded ? 4 : 6 })
+        .onClick(() => { this.moreLinesExpanded = !this.moreLinesExpanded })
+      if (this.moreLinesExpanded) {
+        Column({ space: 0 }) {
+          LayerSwitchRow({ label: I18n.t('s0330'), isOn: this.layerStore.supergalacticEq, onToggle: (value: boolean) => { this.onToggleLayer('actionShow_Supergalactic_Equator_Line', '', value) } })
+          LayerSwitchRow({ label: I18n.t('s0332'), isOn: this.layerStore.equJ2000Line, onToggle: (value: boolean) => { this.onToggleLayer('actionShow_Equator_J2000_Line', '', value) } })
+          LayerSwitchRow({ label: I18n.t('s0333'), isOn: this.layerStore.eclJ2000Line, onToggle: (value: boolean) => { this.onToggleLayer('actionShow_Ecliptic_J2000_Line', '', value) } })
+          LayerSwitchRow({ label: I18n.t('s0345'), isOn: this.layerStore.primeVerticalLine, onToggle: (value: boolean) => { this.onToggleLayer('actionShow_Prime_Vertical_Line', '', value) } })
+          LayerSwitchRow({ label: I18n.t('s0346'), isOn: this.layerStore.currentVerticalLine, onToggle: (value: boolean) => { this.onToggleLayer('actionShow_Current_Vertical_Line', '', value) } })
+          LayerSwitchRow({ label: I18n.t('s0347'), isOn: this.layerStore.colureLines, onToggle: (value: boolean) => { this.onToggleLayer('actionShow_Colure_Lines', '', value) } })
+          LayerSwitchRow({ label: I18n.t('s0348'), isOn: this.layerStore.precessionCircles, onToggle: (value: boolean) => { this.onToggleLayer('actionShow_Precession_Circles', '', value) } })
+          LayerSwitchRow({ label: I18n.t('s0500'), isOn: this.layerStore.circumpolarCircles, onToggle: (value: boolean) => { this.onToggleLayer('actionShow_Circumpolar_Circles', '', value) } })
+          LayerSwitchRow({ label: I18n.t('s0501'), isOn: this.layerStore.invariantPlaneLine, onToggle: (value: boolean) => { this.onToggleLayer('actionShow_Invariable_Plane_Line', '', value) } })
+          LayerSwitchRow({ label: I18n.t('s0502'), isOn: this.layerStore.solarEquatorLine, onToggle: (value: boolean) => { this.onToggleLayer('actionShow_Solar_Equator_Line', '', value) } })
+          LayerSwitchRow({ label: I18n.t('s0508'), isOn: this.layerStore.fixedEquatorLine, onToggle: (value: boolean) => { this.onToggleLayer('actionShow_Fixed_Equator_Line', '', value) } })
+          LayerSwitchRow({ label: I18n.t('s0518'), isOn: this.layerStore.longitudeLine, onToggle: (value: boolean) => { this.onToggleLayer('actionShow_Longitude_Line', '', value) } })
+          LayerSwitchRow({ label: I18n.t('s0519'), isOn: this.layerStore.quadratureLine, onToggle: (value: boolean) => { this.onToggleLayer('actionShow_Quadrature_Line', '', value) } })
+        }.width('100%').padding({ left: 6, right: 6, top: 6, bottom: 2 }).backgroundColor(this.c.soft).borderRadius(UI_RADIUS_CONTROL).margin({ bottom: 6 })
+      }
+      // 抽屉 2：更多网格
+      Row() {
+        Column({ space: 2 }) {
+          Text(I18n.t('i0286')).fontSize(12).fontColor(this.c.text).width('100%')
+          Text(this.activeExtraGridsCount() > 0 ? '已开启 ' + this.activeExtraGridsCount().toString() + ' 项' : '银道网格、黄道网格、J2000 与超星系网格等 6 项')
+            .fontSize(10).fontColor(this.activeExtraGridsCount() > 0 ? this.c.accent : this.c.sub).width('100%')
+        }.layoutWeight(1).alignItems(HorizontalAlign.Start)
+        Text(this.moreGridsExpanded ? '收起' : '展开')
+          .fontSize(10).fontColor(this.c.accent)
+          .backgroundColor(this.c.softStrong).borderRadius(UI_RADIUS_CONTROL)
+          .padding({ left: 9, right: 9, top: 6, bottom: 6 })
+      }.width('100%').padding({ left: 10, right: 8, top: 7, bottom: 7 })
+        .backgroundColor(this.c.bg).border({ width: 1, color: this.c.dividerSoft })
+        .borderRadius(UI_RADIUS_CONTROL).margin({ bottom: this.moreGridsExpanded ? 4 : 6 })
+        .onClick(() => { this.moreGridsExpanded = !this.moreGridsExpanded })
+      if (this.moreGridsExpanded) {
+        Column({ space: 0 }) {
+          LayerSwitchRow({ label: I18n.t('s0331'), isOn: this.layerStore.galacticGrid, onToggle: (value: boolean) => { this.onToggleLayer('actionShow_Galactic_Grid', '', value) } })
+          LayerSwitchRow({ label: I18n.t('s0503'), isOn: this.layerStore.equatorialJ2000Grid, onToggle: (value: boolean) => { this.onToggleLayer('actionShow_Equatorial_J2000_Grid', '', value) } })
+          LayerSwitchRow({ label: I18n.t('s0504'), isOn: this.layerStore.eclipticJ2000Grid, onToggle: (value: boolean) => { this.onToggleLayer('actionShow_Ecliptic_J2000_Grid', '', value) } })
+          LayerSwitchRow({ label: I18n.t('s0505'), isOn: this.layerStore.eclipticGrid, onToggle: (value: boolean) => { this.onToggleLayer('actionShow_Ecliptic_Grid', '', value) } })
+          LayerSwitchRow({ label: I18n.t('s0506'), isOn: this.layerStore.supergalacticGrid, onToggle: (value: boolean) => { this.onToggleLayer('actionShow_Supergalactic_Grid', '', value) } })
+          LayerSwitchRow({ label: I18n.t('s0507'), isOn: this.layerStore.fixedEquatorialGrid, onToggle: (value: boolean) => { this.onToggleLayer('actionShow_Fixed_Equatorial_Grid', '', value) } })
+        }.width('100%').padding({ left: 6, right: 6, top: 6, bottom: 2 }).backgroundColor(this.c.soft).borderRadius(UI_RADIUS_CONTROL).margin({ bottom: 6 })
+      }
+      // 抽屉 3：点标记与次方位点
+      Row() {
+        Column({ space: 2 }) {
+          Text(I18n.t('i0200') + ' / ' + I18n.t('i0287')).fontSize(12).fontColor(this.c.text).width('100%')
+          Text(this.activePointMarksCount() > 0 ? '已开启 ' + this.activePointMarksCount().toString() + ' 项' : '天极、分至点、本影圈、银心、天顶与细分方位等 20 项')
+            .fontSize(10).fontColor(this.activePointMarksCount() > 0 ? this.c.accent : this.c.sub).width('100%')
+        }.layoutWeight(1).alignItems(HorizontalAlign.Start)
+        Text(this.pointMarksExpanded ? '收起' : '展开')
+          .fontSize(10).fontColor(this.c.accent)
+          .backgroundColor(this.c.softStrong).borderRadius(UI_RADIUS_CONTROL)
+          .padding({ left: 9, right: 9, top: 6, bottom: 6 })
+      }.width('100%').padding({ left: 10, right: 8, top: 7, bottom: 7 })
+        .backgroundColor(this.c.bg).border({ width: 1, color: this.c.dividerSoft })
+        .borderRadius(UI_RADIUS_CONTROL).margin({ bottom: this.pointMarksExpanded ? 4 : 6 })
+        .onClick(() => { this.pointMarksExpanded = !this.pointMarksExpanded })
+      if (this.pointMarksExpanded) {
+        Column({ space: 0 }) {
+          LayerSwitchRow({ label: I18n.t('s0334'), isOn: this.layerStore.celestialPoles, onToggle: (value: boolean) => { this.onToggleLayer('actionShow_Celestial_Poles', '', value) } })
+          LayerSwitchRow({ label: I18n.t('s0335'), isOn: this.layerStore.eclipticPoles, onToggle: (value: boolean) => { this.onToggleLayer('actionShow_Ecliptic_Poles', '', value) } })
+          LayerSwitchRow({ label: I18n.t('s0336'), isOn: this.layerStore.galacticPoles, onToggle: (value: boolean) => { this.onToggleLayer('actionShow_Galactic_Poles', '', value) } })
+          LayerSwitchRow({ label: I18n.t('s0337'), isOn: this.layerStore.equinoxPoints, onToggle: (value: boolean) => { this.onToggleLayer('actionShow_Equinox_Points', '', value) } })
+          LayerSwitchRow({ label: I18n.t('s0338'), isOn: this.layerStore.solsticePoints, onToggle: (value: boolean) => { this.onToggleLayer('actionShow_Solstice_Points', '', value) } })
+          LayerSwitchRow({ label: I18n.t('s0339'), isOn: this.layerStore.antisolarPoint, onToggle: (value: boolean) => { this.onToggleLayer('actionShow_Antisolar_Point', '', value) } })
+          LayerSwitchRow({ label: I18n.t('s0340'), isOn: this.layerStore.umbraCircle, onToggle: (value: boolean) => { this.onToggleLayer('actionShow_Umbra_Circle', '', value) } })
+          LayerSwitchRow({ label: I18n.t('s0341'), isOn: this.layerStore.penumbraCircle, onToggle: (value: boolean) => { this.onToggleLayer('actionShow_Penumbra_Circle', '', value) } })
+          LayerSwitchRow({ label: I18n.t('s0344'), isOn: this.layerStore.intercardinalPts, onToggle: (value: boolean) => { this.onToggleLayer('actionShow_Intercardinal_Points', '', value) } })
+          LayerSwitchRow({ label: I18n.t('s0536'), isOn: this.layerStore.secondaryIntercardinalPts, onToggle: (value: boolean) => { this.onToggleLayer('actionShow_Secondary_Intercardinal_Points', '', value) } })
+          LayerSwitchRow({ label: I18n.t('s0537'), isOn: this.layerStore.tertiaryIntercardinalPts, onToggle: (value: boolean) => { this.onToggleLayer('actionShow_Tertiary_Intercardinal_Points', '', value) } })
+          LayerSwitchRow({ label: I18n.t('s0509'), isOn: this.layerStore.zenithNadir, onToggle: (value: boolean) => { this.onToggleLayer('actionShow_Zenith_Nadir', '', value) } })
+          LayerSwitchRow({ label: I18n.t('s0510'), isOn: this.layerStore.celestialJ2000Poles, onToggle: (value: boolean) => { this.onToggleLayer('actionShow_Celestial_J2000_Poles', '', value) } })
+          LayerSwitchRow({ label: I18n.t('s0511'), isOn: this.layerStore.eclipticJ2000Poles, onToggle: (value: boolean) => { this.onToggleLayer('actionShow_Ecliptic_J2000_Poles', '', value) } })
+          LayerSwitchRow({ label: I18n.t('s0512'), isOn: this.layerStore.equinoxJ2000Pts, onToggle: (value: boolean) => { this.onToggleLayer('actionShow_Equinox_J2000_Points', '', value) } })
+          LayerSwitchRow({ label: I18n.t('s0513'), isOn: this.layerStore.solsticeJ2000Pts, onToggle: (value: boolean) => { this.onToggleLayer('actionShow_Solstice_J2000_Points', '', value) } })
+          LayerSwitchRow({ label: I18n.t('s0514'), isOn: this.layerStore.galacticCenter, onToggle: (value: boolean) => { this.onToggleLayer('actionShow_Galactic_Center', '', value) } })
+          LayerSwitchRow({ label: I18n.t('s0515'), isOn: this.layerStore.supergalacticPoles, onToggle: (value: boolean) => { this.onToggleLayer('actionShow_Supergalactic_Poles', '', value) } })
+          LayerSwitchRow({ label: I18n.t('s0516'), isOn: this.layerStore.apexPoints, onToggle: (value: boolean) => { this.onToggleLayer('actionShow_Apex_Points', '', value) } })
+          LayerSwitchRow({ label: I18n.t('s0517'), isOn: this.layerStore.umbraCenter, onToggle: (value: boolean) => { this.onToggleLayer('actionShow_Umbra_Center_Point', '', value) } })
+        }.width('100%').padding({ left: 6, right: 6, top: 6, bottom: 2 }).backgroundColor(this.c.soft).borderRadius(UI_RADIUS_CONTROL).margin({ bottom: 6 })
+      }
       // 视场中心坐标（自「设置 > 设备」迁入，自带标题）。
       Row()
         .width('100%').height(0.5)

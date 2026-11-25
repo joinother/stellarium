@@ -69,11 +69,23 @@ const DSO_TYPES: Array<TypeOption> = [
 export struct DsoSettingsSection {
   @ObjectLink layerViewStore: LayerViewStore
   @State private c: ThemeSlots = DEFAULT_SLOTS
+  @State private displayOptionsExpanded: boolean = false
   onSetSetting: (setting: string, value: boolean | number) => void = () => {}
   onSetCatalogMask: (mask: number) => void = () => {}
   onSetTypeMask: (mask: number) => void = () => {}
 
   onWillApplyTheme(theme: Theme): void { this.c = slotsFromTheme(theme) }
+
+  private displayOptionsSummary(): string {
+    const enabled: Array<string> = []
+    if (this.layerViewStore.dsoDesignations) enabled.push('仅编号')
+    if (this.layerViewStore.dsoAdditionalNames) enabled.push('附加名')
+    if (this.layerViewStore.dsoShowOnlyNamed) enabled.push('仅命名')
+    if (this.layerViewStore.dsoOutlines) enabled.push('轮廓')
+    if (this.layerViewStore.dsoHintsProportional) enabled.push('按比例')
+    if (this.layerViewStore.dsoSurfaceBrightness) enabled.push('面亮度')
+    return enabled.length > 0 ? enabled.join(' · ') : '默认俗名与标记'
+  }
 
   private catalogActive(bit: number): boolean {
     return (this.layerViewStore.dsoCatalogFilters & bit) !== 0
@@ -115,12 +127,31 @@ export struct DsoSettingsSection {
     Column({ space: 0 }) {
       Text(I18n.t('dso_labels_title')).fontSize(11).fontColor(this.c.sub).width('100%').margin({ top: 2, bottom: 4 }).padding({ left: 2 })
       LayerSwitchRow({ label: I18n.t('s0321'), isOn: this.layerViewStore.dsoHintsEnabled, onToggle: (v: boolean) => { this.layerViewStore.dsoHintsEnabled = v; this.onSetSetting('hints', v) } })
-      LayerSwitchRow({ label: I18n.t('dso_designations'), isOn: this.layerViewStore.dsoDesignations, onToggle: (v: boolean) => { this.layerViewStore.dsoDesignations = v; this.onSetSetting('designations', v) } })
-      LayerSwitchRow({ label: I18n.t('dso_additional_names'), isOn: this.layerViewStore.dsoAdditionalNames, onToggle: (v: boolean) => { this.layerViewStore.dsoAdditionalNames = v; this.onSetSetting('additionalNames', v) } })
-      LayerSwitchRow({ label: I18n.t('dso_show_only_named'), isOn: this.layerViewStore.dsoShowOnlyNamed, onToggle: (v: boolean) => { this.layerViewStore.dsoShowOnlyNamed = v; this.onSetSetting('showOnlyNamed', v) } })
-      LayerSwitchRow({ label: I18n.t('dso_outlines'), isOn: this.layerViewStore.dsoOutlines, onToggle: (v: boolean) => { this.layerViewStore.dsoOutlines = v; this.onSetSetting('outlines', v) } })
-      LayerSwitchRow({ label: I18n.t('dso_proportional_hints'), isOn: this.layerViewStore.dsoHintsProportional, onToggle: (v: boolean) => { this.layerViewStore.dsoHintsProportional = v; this.onSetSetting('hintsProportional', v) } })
-      LayerSwitchRow({ label: I18n.t('dso_surface_brightness'), isOn: this.layerViewStore.dsoSurfaceBrightness, onToggle: (v: boolean) => { this.layerViewStore.dsoSurfaceBrightness = v; this.onSetSetting('surfaceBrightness', v) } })
+      Row() {
+        Column({ space: 2 }) {
+          Text('高级显示选项').fontSize(12).fontColor(this.c.text).width('100%')
+          Text(this.displayOptionsSummary()).fontSize(10).fontColor(this.c.sub).width('100%').maxLines(1).textOverflow({ overflow: TextOverflow.Ellipsis })
+        }.layoutWeight(1).alignItems(HorizontalAlign.Start)
+        Text(this.displayOptionsExpanded ? I18n.t('btn_collapse') : '展开')
+          .fontSize(10).fontColor(this.c.accent)
+          .backgroundColor(this.c.softStrong).borderRadius(UI_RADIUS_CONTROL)
+          .padding({ left: 9, right: 9, top: 6, bottom: 6 })
+      }.width('100%').padding({ left: 10, right: 8, top: 7, bottom: 7 })
+      .backgroundColor(this.c.bg)
+      .border({ width: 1, color: this.c.dividerSoft })
+      .borderRadius(UI_RADIUS_CONTROL)
+      .margin({ bottom: this.displayOptionsExpanded ? 4 : 6 })
+      .onClick(() => { this.displayOptionsExpanded = !this.displayOptionsExpanded })
+      if (this.displayOptionsExpanded) {
+        Column({ space: 0 }) {
+          LayerSwitchRow({ label: I18n.t('dso_designations'), isOn: this.layerViewStore.dsoDesignations, onToggle: (v: boolean) => { this.layerViewStore.dsoDesignations = v; this.onSetSetting('designations', v) } })
+          LayerSwitchRow({ label: I18n.t('dso_additional_names'), isOn: this.layerViewStore.dsoAdditionalNames, onToggle: (v: boolean) => { this.layerViewStore.dsoAdditionalNames = v; this.onSetSetting('additionalNames', v) } })
+          LayerSwitchRow({ label: I18n.t('dso_show_only_named'), isOn: this.layerViewStore.dsoShowOnlyNamed, onToggle: (v: boolean) => { this.layerViewStore.dsoShowOnlyNamed = v; this.onSetSetting('showOnlyNamed', v) } })
+          LayerSwitchRow({ label: I18n.t('dso_outlines'), isOn: this.layerViewStore.dsoOutlines, onToggle: (v: boolean) => { this.layerViewStore.dsoOutlines = v; this.onSetSetting('outlines', v) } })
+          LayerSwitchRow({ label: I18n.t('dso_proportional_hints'), isOn: this.layerViewStore.dsoHintsProportional, onToggle: (v: boolean) => { this.layerViewStore.dsoHintsProportional = v; this.onSetSetting('hintsProportional', v) } })
+          LayerSwitchRow({ label: I18n.t('dso_surface_brightness'), isOn: this.layerViewStore.dsoSurfaceBrightness, onToggle: (v: boolean) => { this.layerViewStore.dsoSurfaceBrightness = v; this.onSetSetting('surfaceBrightness', v) } })
+        }.width('100%').padding({ left: 6, right: 6, top: 6, bottom: 2 }).backgroundColor(this.c.soft).borderRadius(UI_RADIUS_CONTROL).margin({ bottom: 6 })
+      }
       Row() {
         Text(I18n.t('dso_labels_adjust_row')).fontSize(12).fontColor(this.c.text).layoutWeight(1)
         Button(this.layerViewStore.dsoLabelsExpanded ? I18n.t('btn_collapse') : I18n.t('dso_adjust'))

@@ -774,13 +774,83 @@ float Nebula::getVisibilityLevelByMagnitude(void) const
 	return lim;
 }
 
+namespace
+{
+// Two-pass spherical Chaikin corner-cutting turns raw hand-traced outlines.dat
+// polylines into organic curves without distorting area or breaking border hit-testing.
+void smoothOutlinePolyline(const std::vector<Vec3d>& raw, std::vector<Vec3d>& out)
+{
+	out = raw;
+	if (raw.size() < 3)
+		return;
+	const bool closed = (raw.front() - raw.back()).normSquared() < 1e-10;
+	// Remove duplicate closing endpoint during subdivision; re-close afterward.
+	if (closed && out.size() > 3)
+		out.pop_back();
+	if (out.size() < 3)
+	{
+		out = raw;
+		return;
+	}
+
+	std::vector<Vec3d> next;
+	for (int iter = 0; iter < 2; ++iter)
+	{
+		const size_t n = out.size();
+		next.clear();
+		next.reserve(n * 2 + 2);
+		if (closed)
+		{
+			for (size_t i = 0; i < n; ++i)
+			{
+				const Vec3d& a = out[i];
+				const Vec3d& b = out[(i + 1) % n];
+				Vec3d q = a * 0.75 + b * 0.25;
+				Vec3d r = a * 0.25 + b * 0.75;
+				q.normalize();
+				r.normalize();
+				next.push_back(q);
+				next.push_back(r);
+			}
+		}
+		else
+		{
+			next.push_back(out.front());
+			for (size_t i = 0; i + 1 < n; ++i)
+			{
+				const Vec3d& a = out[i];
+				const Vec3d& b = out[i + 1];
+				Vec3d q = a * 0.75 + b * 0.25;
+				Vec3d r = a * 0.25 + b * 0.75;
+				q.normalize();
+				r.normalize();
+				next.push_back(q);
+				next.push_back(r);
+			}
+			next.push_back(out.back());
+		}
+		out.swap(next);
+	}
+	if (closed && !out.empty())
+		out.push_back(out.front());
+}
+}
+
 void Nebula::drawOutlines(StelPainter &sPainter, float alpha, const Vec3d& aberration, bool useAberration) const
 {
-	sPainter.setColor(getHintColor(nType), alpha);
-	sPainter.setLineWidth(1.f * sPainter.getProjector()->getScreenScale());
+	const auto& projector = sPainter.getProjector();
+	const float fovDeg = static_cast<float>(projector->getFov());
+	// Gently soften outline opacity at wide FOV so large hand-traced regions
+	// (e.g., Pipe Nebula, Orion) don't overpower the Milky Way and stars.
+	const float wideT = std::clamp((fovDeg - 30.f) / 35.f, 0.f, 1.f);
+	const float outlineAlpha = alpha * 0.78f * (1.f - 0.42f * wideT);
+	if (outlineAlpha <= 0.01f)
+		return;
+
+	sPainter.setColor(getHintColor(nType), outlineAlpha);
+	sPainter.setLineWidth(1.15f * projector->getScreenScale());
 	sPainter.setBlending(true);
 	sPainter.setLineSmooth(true);
-	const auto& projector = sPainter.getProjector();
 	const SphericalCap& viewportHalfspace = projector->getBoundingCap();
 	QVarLengthArray<Vec3f, 256> vertices;
 	const auto flush = [&]()
@@ -802,14 +872,18 @@ void Nebula::drawOutlines(StelPainter &sPainter, float alpha, const Vec3d& aberr
 		}
 		return point;
 	};
-	for (const auto* points : outlineSegments)
+	std::vector<Vec3d> smoothed;
+	for (const auto* rawPoints : outlineSegments)
 	{
-		if (points->size() < 2)
+		if (rawPoints->size() < 2)
 			continue;
-		Vec3d point1 = apparentPosition(points->front());
-		for (size_t index = 1; index < points->size(); ++index)
+		smoothOutlinePolyline(*rawPoints, smoothed);
+		if (smoothed.size() < 2)
+			continue;
+		Vec3d point1 = apparentPosition(smoothed.front());
+		for (size_t index = 1; index < smoothed.size(); ++index)
 		{
-			const Vec3d point2 = apparentPosition(points->at(index));
+			const Vec3d point2 = apparentPosition(smoothed.at(index));
 			Vec3d screen1, screen2;
 			bool batched = false;
 			if (viewportHalfspace.contains(point1) && viewportHalfspace.contains(point2)

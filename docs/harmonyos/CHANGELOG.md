@@ -1,5 +1,18 @@
 > **身份图例**：本文件真机记录中出现的 `com.cnchensh.stellarium` 是**本机调试签名身份**（本机 DevEco 自动生成，非发布身份）；发布身份为 `com.joinother.skyinstrument`。构建脚本 `build-ohos-hap-windows.ps1 -Install` 从产物 `pack.info` 读取实际包名，仓库不写死任何签名身份（见 `docs/harmonyos/release/BUNDLE-IDENTITY-CLEANUP.md`）。
 
+## [2026-11-25] 深空轮廓柔化与俗名默认 + 太阳系与标记图层页签精修
+
+- **修改文件：** `src/core/modules/Nebula.cpp`、`src/StelMainView.cpp`、`harmonyos/ets-source/panels/layers/DsoSettingsSection.ets`、`harmonyos/ets-source/panels/layers/LayerViewTabs.ets`、`docs/harmonyos/CHANGELOG.md`。
+- **改进内容：**
+  1. **深空 `outlines.dat` 球面曲线柔化（`Nebula.cpp`）**：对星云手工折线轮廓引入 2 轮球面 Chaikin 切角平滑，线宽与透明度精调（`1.15× scale`、`0.78×` 柔和透明度并随广角 `30°→65°` 淡化至 `58%`），消除 M 42 / IC 1805 / 烟斗星云等大星云轮廓的尖锐锯齿，与天空投影矢量框视觉统一且完全保持边缘拾取精度。
+  2. **深空标签默认显示中文俗名（`StelMainView.cpp`）**：`applyDeepSkyDefaults` 增加一次性迁移 `ohos/defaults/deep_sky_v2_common_names`，将默认仅显示目录编号关掉（`flag_dso_designation_usage = false`），默认呈现「仙女座星系」「猎户座大星云」「心脏星云」「双星团」等友好俗名，用户后续手动切换仍正常保留。
+  3. **深空页签收纳（`DsoSettingsSection.ets`）**：首屏保留「深空天体 / 深空背景图 / 深空标签」，将 6 个次级桌面端开关收进带实时摘要的「高级显示选项」折叠抽屉。
+  4. **太阳系页签 Bug 修复与交互升级（`LayerViewTabs.ets`）**：修复「轨道配色」`Select` 写死 `.value('轨道配色')` 不回显当前选中模式的 Bug（现准确回显「统一颜色 / 按天体分组 / 按八大行星 / 行星与小天体分类」）；为「轨迹颜色」新增 6 色天文预设色块条，支持一键改色并保留 `#RRGGBB` 自定义输入。
+  5. **标记与网格页签瘦身（`LayerViewTabs.ets`）**：首屏保留方位、基础网格、常用天球线、视场框与视场中心坐标，将 39 项专业坐标线/网格/极点开关收纳为 3 个带已开计数提示的折叠抽屉，零功能删减。
+- **验证结果：**
+  - 主机：`check-ohos-ui-contract.mjs`、`test-ohos-pointer-surveys-ui.mjs` 5/5、`test-ohos-layer-presets.mjs` 9/9、`test-ohos-empty-sky-and-daytime-picking.mjs` 5/5、`test-ohos-vivid-rendering-gate.mjs` 15/15 全部通过。
+  - 真机（`HUAWEI MatePad Mini 悦读版`，PID `47967` 稳定无崩溃）：`getNebulaFlags` 确认 `designations: false`；实拍 M 42 / IC 1805 绿线轮廓丝滑贴合且显示中文俗名；深空「高级显示选项」抽屉、标记 3 组专业抽屉与太阳系「轨道配色 → 按八大行星」回显均渲染正常。
+
 ## [2026-11-25] 修复多光谱 / HiPS 巡天引擎并升级 9 波段离线全天 + 在线高清混合巡天
 
 - **修改文件：** `src/core/StelHips.hpp`、`src/core/StelHips.cpp`、`src/core/modules/HipsMgr.hpp`、`src/core/modules/HipsMgr.cpp`、`src/StelMainView.cpp`、`data/surveys/*_allsky.jpg`（9 个 Norder3 全天图集，合计 3.23 MB）、`harmonyos/ets-source/qability/StellariumResourceBootstrap.ets`、`harmonyos/ets-source/common/types/StellariumTypes.ets`、`harmonyos/ets-source/capability/SurveyController.ets`、`harmonyos/ets-source/capability/LayerController.ets`、`harmonyos/ets-source/panels/layers/LayerViewTabs.ets`、`harmonyos/ets-source/panels/layers/LayerSpectralSection.ets`、`docs/harmonyos/CHANGELOG.md`。
