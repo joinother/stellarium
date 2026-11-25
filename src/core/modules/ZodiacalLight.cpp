@@ -320,6 +320,9 @@ void main(void)
 	}
 
     vec4 color = texture2D(mainTex, texc)*vec4(brightness,1)*extinctionFactor;
+	highp float zlMaxC = max(max(color.r, color.g), color.b);
+	highp float zlIgn = fract(52.9829189 * fract(dot(gl_FragCoord.xy, vec2(0.06711056, 0.00583715))));
+	color.rgb = max(color.rgb + ((zlIgn - 0.5) / 255.0) * smoothstep(0.0, 0.008, zlMaxC), vec3(0.0));
 	FRAG_COLOR = color;
 }
 )";

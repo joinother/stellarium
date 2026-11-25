@@ -766,6 +766,15 @@ void main(void)
 	panoProgram->release();
 }
 
+bool HipsMgr::isSpectralLensInteracting() const
+{
+	if (lensFader.getInterstate() <= 0.001f || lensDatasetId.isEmpty())
+		return false;
+	const int flags = s_atomicLensFlags.load(std::memory_order_relaxed);
+	// Dragging(1) | Resizing(2) | Rotating(4) | Blooming(8) | Expanding(16)
+	return (flags & 31) != 0;
+}
+
 bool HipsMgr::shouldDrawLensOverAtmosphere(const StelCore* core) const
 {
 	if (!isSpectralLensActive())
@@ -793,6 +802,8 @@ bool HipsMgr::shouldDrawLensOverAtmosphere(const StelCore* core) const
 
 void HipsMgr::drawSpectralLens(StelCore* core)
 {
+	if (lensSuppressDraw)
+		return;
 	const float fade = lensFader.getInterstate();
 	if (fade <= 0.001f || lensDatasetId.isEmpty())
 		return;

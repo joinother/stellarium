@@ -99,7 +99,9 @@ public:
 	//! Pure lock-free static geometry update safe to call from any thread (ArkUI touch thread).
 	static void updateSpectralLensGeometryFast(float normX, float normY, float radiusNorm, float handleAngleDeg = -999.f, int flags = -1);
 	QJsonObject getSpectralLensState() const;
-	bool isSpectralLensActive() const { return lensFader.getInterstate() > 0.001f; }
+	bool isSpectralLensActive() const { return !lensSuppressDraw && lensFader.getInterstate() > 0.001f; }
+	bool isSpectralLensInteracting() const;
+	void setSpectralLensSuppressDraw(bool suppress) { lensSuppressDraw = suppress; }
 	bool shouldDrawLensOverAtmosphere(const StelCore* core) const;
 	void drawSpectralLens(StelCore* core);
 
@@ -175,6 +177,7 @@ private:
 
 	// Sky Guide style multi-spectral magnifying lens (circular X-ray loupe)
 	bool lensEnabled = false;
+	bool lensSuppressDraw = false;
 	LinearFader lensFader;
 	float lensCenterX = 0.5f;
 	float lensCenterY = 0.44f;

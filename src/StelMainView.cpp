@@ -25268,10 +25268,103 @@ void StelMainView::renderOhosFrameNow()
 	}
 
 	const double t2 = StelApp::getTotalRunTime();
-	ohosUpdatePointTracking();
-	ohosUpdateGyroTransition();
-	ohosUpdatePanInertia(dt);
-	ohosUpdateHorizonLeveling(dt);
+
+	// Stationary sky FBO backdrop cache during magnifying-glass interaction (drag/resize/rotate/bloom/expand):
+	// When the sky camera is stationary and time is normal, blit the cached full-resolution sky and draw
+	// only the unified GPU magnifying glass (~3ms total -> locked 60 FPS on MatePad Mini / 120 FPS on 120Hz!).
+	static GLuint s_lensBackdropFbo = 0;
+	static GLuint s_lensBackdropTex = 0;
+	static int s_lensBackdropW = 0;
+	static int s_lensBackdropH = 0;
+	static bool s_lensBackdropValid = false;
+	static bool s_lensBackdropNight = false;
+	static double s_lensBackdropFov = 0.0;
+	static Vec3d s_lensBackdropViewDir(0.0, 0.0, 1.0);
+	static double s_lensBackdropCapturedSec = 0.0;
+
+	HipsMgr* lensHipsMgr = GETSTELMODULE(HipsMgr);
+	StelCore* ohosCore = app.getCore();
+	StelMovementMgr* ohosMvMgr = ohosCore ? ohosCore->getMovementMgr() : nullptr;
+	QOpenGLExtraFunctions* backdropExtraFns = currentContext->extraFunctions();
+	const bool lensCameraStationary = !s_ohosPinchActive && !s_ohosPinchSettleActive &&
+		!s_ohosPanInertiaActive && !s_ohosHorizonLevelActive && !s_gyroViewActive.load() &&
+		s_ohosKeyboardPanKeys.isEmpty() && !s_ohosCaptureSelectedAnchorAfterPan &&
+		ohosCore && ohosMvMgr && std::abs(ohosCore->getTimeRate()) <= (2.0 / 86400.0);
+	const bool canUseLensBackdropFastPath = backdropExtraFns && lensHipsMgr &&
+		lensHipsMgr->isSpectralLensInteracting() && lensCameraStationary;
+
+	bool lensBackdropHit = false;
+	bool lensBackdropCapture = false;
+	double curBackdropFov = 0.0;
+	Vec3d curBackdropViewDir(0.0, 0.0, 1.0);
+	const bool curBackdropNight = app.getVisionModeNight();
+	if (canUseLensBackdropFastPath)
+	{
+		curBackdropFov = ohosMvMgr->getCurrentFov();
+		curBackdropViewDir = ohosMvMgr->getViewDirectionJ2000();
+		if (s_lensBackdropFbo == 0 || s_lensBackdropTex == 0 ||
+		    s_lensBackdropW != width || s_lensBackdropH != height)
+		{
+			if (s_lensBackdropFbo == 0)
+				gl->glGenFramebuffers(1, &s_lensBackdropFbo);
+			if (s_lensBackdropTex == 0)
+				gl->glGenTextures(1, &s_lensBackdropTex);
+			gl->glBindTexture(GL_TEXTURE_2D, s_lensBackdropTex);
+			gl->glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, width, height, 0, GL_RGBA, GL_UNSIGNED_BYTE, nullptr);
+			gl->glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+			gl->glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+			gl->glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+			gl->glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+			gl->glBindFramebuffer(GL_FRAMEBUFFER, s_lensBackdropFbo);
+			gl->glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, s_lensBackdropTex, 0);
+			const bool fboOk = (backdropExtraFns->glCheckFramebufferStatus(GL_FRAMEBUFFER) == GL_FRAMEBUFFER_COMPLETE);
+			gl->glBindFramebuffer(GL_FRAMEBUFFER, targetFbo);
+			gl->glBindTexture(GL_TEXTURE_2D, 0);
+			s_lensBackdropW = fboOk ? width : 0;
+			s_lensBackdropH = fboOk ? height : 0;
+			s_lensBackdropValid = false;
+		}
+		if (s_lensBackdropW == width && s_lensBackdropH == height)
+		{
+			if (s_lensBackdropValid &&
+			    s_lensBackdropNight == curBackdropNight &&
+			    std::abs(curBackdropFov - s_lensBackdropFov) < 1e-4 &&
+			    (curBackdropViewDir - s_lensBackdropViewDir).normSquared() < 1e-8 &&
+			    (t2 - s_lensBackdropCapturedSec) < 0.8)
+			{
+				lensBackdropHit = true;
+			}
+			else
+			{
+				lensBackdropCapture = true;
+			}
+		}
+	}
+	else
+	{
+		s_lensBackdropValid = false;
+	}
+
+	double t3 = t2;
+	double t4 = t2;
+	if (lensBackdropHit)
+	{
+		lensHipsMgr->update(dt);
+		t3 = StelApp::getTotalRunTime();
+		gl->glBindFramebuffer(GL_READ_FRAMEBUFFER, s_lensBackdropFbo);
+		gl->glBindFramebuffer(GL_DRAW_FRAMEBUFFER, targetFbo);
+		backdropExtraFns->glBlitFramebuffer(0, 0, width, height, 0, 0, width, height, GL_COLOR_BUFFER_BIT, GL_NEAREST);
+		gl->glBindFramebuffer(GL_FRAMEBUFFER, targetFbo);
+		gl->glViewport(0, 0, width, height);
+		lensHipsMgr->drawSpectralLens(ohosCore);
+		t4 = StelApp::getTotalRunTime();
+	}
+	else
+	{
+		ohosUpdatePointTracking();
+		ohosUpdateGyroTransition();
+		ohosUpdatePanInertia(dt);
+		ohosUpdateHorizonLeveling(dt);
 		if (s_ohosCaptureSelectedAnchorAfterPan)
 		{
 			s_ohosCaptureSelectedAnchorAfterPan = false;
@@ -25305,14 +25398,32 @@ void StelMainView::renderOhosFrameNow()
 		}
 		ohosProcessPendingPointSelect();
 		ohosUpdateSelectedScreenProjection();
-	const double t3 = StelApp::getTotalRunTime();
+		t3 = StelApp::getTotalRunTime();
+		if (lensBackdropCapture)
+			lensHipsMgr->setSpectralLensSuppressDraw(true);
 		app.draw();
 		// Keep instrument overlays on this render thread so they cannot lag behind
 		// the native sky projection while the user pans, zooms or flips the view.
 		drawOhosSelectionReticle(app.getCore());
 		drawOhosPolarScopeOverlay(app.getCore());
 		drawOhosTelescopeOverlay(app.getCore());
-		const double t4 = StelApp::getTotalRunTime();
+		if (lensBackdropCapture)
+		{
+			gl->glBindFramebuffer(GL_READ_FRAMEBUFFER, targetFbo);
+			gl->glBindFramebuffer(GL_DRAW_FRAMEBUFFER, s_lensBackdropFbo);
+			backdropExtraFns->glBlitFramebuffer(0, 0, width, height, 0, 0, width, height, GL_COLOR_BUFFER_BIT, GL_NEAREST);
+			gl->glBindFramebuffer(GL_FRAMEBUFFER, targetFbo);
+			gl->glViewport(0, 0, width, height);
+			lensHipsMgr->setSpectralLensSuppressDraw(false);
+			lensHipsMgr->drawSpectralLens(ohosCore);
+			s_lensBackdropNight = curBackdropNight;
+			s_lensBackdropFov = curBackdropFov;
+			s_lensBackdropViewDir = curBackdropViewDir;
+			s_lensBackdropCapturedSec = t2;
+			s_lensBackdropValid = true;
+		}
+		t4 = StelApp::getTotalRunTime();
+	}
 	submitOhosFramebuffer(gl);
 
 	// The per-frame texture-upload budget must be reset exactly once per rendered

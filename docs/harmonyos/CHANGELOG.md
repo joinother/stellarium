@@ -1,5 +1,19 @@
 > **身份图例**：本文件真机记录中出现的 `com.cnchensh.stellarium` 是**本机调试签名身份**（本机 DevEco 自动生成，非发布身份）；发布身份为 `com.joinother.skyinstrument`。构建脚本 `build-ohos-hap-windows.ps1 -Install` 从产物 `pack.info` 读取实际包名，仓库不写死任何签名身份（见 `docs/harmonyos/release/BUNDLE-IDENTITY-CLEANUP.md`）。
 
+## [2026-11-26] 暗空/暮光 1-LSB 防色带抖动 + 鸿蒙 60/120 FPS 渲染提速（放大镜静止星空 FBO 缓存 + 卫星管线减负）
+
+- **修改文件：** `src/core/modules/MilkyWay.cpp`、`src/core/modules/ZodiacalLight.cpp`、`src/core/modules/AtmosphereLightweight.cpp`、`src/core/modules/AtmospherePreetham.cpp`、`plugins/Satellites/src/Satellites.cpp`、`src/core/modules/HipsMgr.hpp`、`src/core/modules/HipsMgr.cpp`、`src/StelMainView.cpp`、`docs/harmonyos/CHANGELOG.md`。
+- **优化内容：**
+  1. **暗空与暮光 1-LSB 交错梯度防色带抖动（`MilkyWay.cpp`、`ZodiacalLight.cpp`、`AtmosphereLightweight.cpp`、`AtmospherePreetham.cpp`）**：在银河系、黄道光、物理轻量大气层与 Preetham 大气层片段着色器末尾加入 `smoothstep` 门控的 1-LSB Interleaved Gradient Noise 抖动（纯黑深空保持 `#000000` OLED 纯黑，暗弱渐变与黄昏/黎明暮光消除 8-bit 等高线色带），同时将 `AtmosphereLightweight` 的 `screenVertex` / `ndcPos` / `projectionMatrixInverse` 显式升级为 `highp`。
+  2. **放大镜交互静止星空 FBO 离屏缓存（`StelMainView.cpp`、`HipsMgr.hpp/cpp`）**：新增 `HipsMgr::isSpectralLensInteracting()` 与 `setSpectralLensSuppressDraw()`；当用户在静止星空下拖动放大镜、拉动边缘、旋转转柄、长按膨起或全屏扩散时，首帧将不含镜体的全分辨率星空 `glBlitFramebuffer` 缓存至 `s_lensBackdropFbo`，后续交互帧跳过 `app.update` 与全天重绘，仅做 `glBlitFramebuffer` + 单 Shader GPU 放大镜绘制 + 零拷贝提交，抬指立即无缝切回完整渲染（含恒星置顶、地景遮挡与 `<14°` 镜内在线高清瓦片）。
+  3. **卫星每帧 CPU 热点减负（`Satellites.cpp`）**：针对真机 `StelModulePerf` 实测占比近 50% 的 `Satellites` 模块，将鸿蒙 SGP4 轮询预算由 `5.0ms` 收紧至交互态 `1.2ms` / 稳态 `2.0ms`（Pass 1 选中卫星、空间站与轨道预览仍每帧必更），并在 `Satellites::draw()` 中于 `getRenderState()` 之前加入按 FOV 动态加宽的 J2000 视锥球冠 3 乘点积预剔除。
+- **验证结果：**
+  - 主机：UI 契约（123 锚点）、命令目录（449 命令）及 36 项单元测试全部通过。
+  - 真机（`HUAWEI MatePad Mini 悦读版`，PID `51730` 稳定无崩溃，全部着色器零编译报错）：
+    - 放大镜拖动/拉大/旋柄单帧总耗时由原先 `38～47 ms`（约 `21～23 FPS`）骤降至 **`1.0～2.0 ms`**，渲染泵稳定跑出 **`91～143 FPS`**（在 60Hz MatePad Mini 上全程满帧锁死 60 FPS，120Hz 机型可达 120 FPS），拖动中途实拍画面无黑帧、无错位、零闪烁；
+    - `Satellites::update` 均值由 `5.79 ms` 降至 **`2.32 ms`**（降低约 60%）；
+    - 暗夜银河与地平线暗空过渡顺滑无 8-bit 色带，地平线以下保持纯黑。
+
 ## [2026-11-26] 行星高倍 `highp` 贴图精度升级 + 多光谱放大镜内在线高清 HiPS 瓦片圆形精准叠加
 
 - **修改文件：** `data/shaders/planet.vert`、`data/shaders/planet.frag`、`src/core/StelViewportEffect.cpp`、`harmonyos/ets-source/qability/StellariumResourceBootstrap.ets`、`src/core/StelPainter.hpp`、`src/core/StelPainter.cpp`、`src/core/modules/HipsMgr.hpp`、`src/core/modules/HipsMgr.cpp`、`docs/harmonyos/CHANGELOG.md`。

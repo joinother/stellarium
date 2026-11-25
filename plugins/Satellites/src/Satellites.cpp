@@ -43,6 +43,9 @@
 #include "StelSkyDrawer.hpp"
 #include "StelMovementMgr.hpp"
 #include "StarMgr.hpp"
+#ifdef Q_OS_OHOS
+#include "StelMainView.hpp"
+#endif
 #include "MarkerVisibility.hpp"
 #include <algorithm>
 
@@ -4782,13 +4785,16 @@ void Satellites::update(double deltaTime)
 	forceFullUpdate = false;
 
 	// Hard frame-time budgeted progressive SGP4 propagation on HarmonyOS:
-	// Guarantees Satellites::update() stays <= 3-5ms even with 18k+ satellites during rapid
-	// Hour/Day/Month/Year time-wheel dragging and historical comet years (1996/1997/2006/2007).
+	// Guarantees Satellites::update() stays <= 1.2-2.0ms even with 18k+ satellites during rapid
+	// sky panning, magnifying glass interaction, or time-wheel scrubbing (Pass 1 always updates
+	// selected/ISS/orbit satellites every frame).
 	QElapsedTimer satBudgetTimer;
 	satBudgetTimer.start();
-	const qint64 budgetNs = (calendarScrub || timeScrubJump || motionTrailActivity > 0.02)
-		? 3000000LL   // 3.0 ms hard cap while actively scrubbing / fast-forwarding time
-		: 5000000LL;  // 5.0 ms cap during normal 1x viewing
+	const bool fastMotionBudget = calendarScrub || timeScrubJump || motionTrailActivity > 0.02
+		|| StelMainView::getInstance().needsMaxFPS();
+	const qint64 budgetNs = fastMotionBudget
+		? 1200000LL   // 1.2 ms cap during interactive motion / time scrubbing
+		: 2000000LL;  // 2.0 ms cap during settled 1x viewing
 
 	// Pass 1: Always update the selected satellite, ISS, previewed orbits, and orbit-displayed satellites (<0.3ms).
 	for (int i = 0; i < satellites.size(); ++i)
@@ -5080,6 +5086,13 @@ void Satellites::draw(StelCore* core)
 	if (!iconic && sd)
 		sd->preDrawPointSource(&painter);
 
+	// Precompute a generously padded J2000 viewport bounding cap so off-screen satellites
+	// are rejected with a 3-multiply dot product BEFORE calling getRenderState()/prj->project().
+	const Vec3d capN = Satellite::viewportHalfspace.n;
+	const double capHalfAngle = std::acos(qBound(-1.0, Satellite::viewportHalfspace.d, 1.0));
+	const double capPadRad = qBound(0.06, (currentFovDeg * M_PI / 180.0) * 0.35, 0.45);
+	const double paddedCapD = (capHalfAngle + capPadRad >= M_PI) ? -1.0 : std::cos(capHalfAngle + capPadRad);
+
 	for (const auto& sat : std::as_const(satellites))
 	{
 		if (!sat || !sat->initialized || !sat->displayed || !sat->orbitValid)
@@ -5090,6 +5103,16 @@ void Satellites::draw(StelCore* core)
 		{
 			sat->lastFrameOnScreen = false;
 			continue;
+		}
+
+		const bool isSelectedFast = !selectedId.isEmpty() && sat->id == selectedId;
+		if (!needsOrbit && !isSelectedFast && !sat->orbitPreview && paddedCapD > -0.999)
+		{
+			if (sat->XYZ.dot(capN) < paddedCapD)
+			{
+				sat->lastFrameOnScreen = false;
+				continue;
+			}
 		}
 
 		const SatelliteRenderState st = sat->getRenderState(core, prj.data(), true, &frameCtx);

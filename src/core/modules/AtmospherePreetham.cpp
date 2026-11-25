@@ -162,7 +162,11 @@ void main()
         transmission = mistAtmosphereTransmission(normalize(worldDirection).z);
     }
 #endif
-    FRAG_COLOR = vec4(resultSkyColor * transmission, 1.);
+    highp vec3 outCol = resultSkyColor * transmission;
+    highp float preMaxC = max(max(outCol.r, outCol.g), outCol.b);
+    highp float preIgn = fract(52.9829189 * fract(dot(gl_FragCoord.xy, vec2(0.06711056, 0.00583715))));
+    outCol = max(outCol + ((preIgn - 0.5) / 255.0) * smoothstep(0.0, 0.012, preMaxC), vec3(0.0));
+    FRAG_COLOR = vec4(outCol, 1.);
 }
 )")))
 	{

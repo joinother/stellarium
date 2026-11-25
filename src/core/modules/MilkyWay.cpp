@@ -283,6 +283,10 @@ void main(void)
     vec4 color = texture2D(mainTex, texc)*vec4(brightness,1)*extinctionFactor;
 	if(saturation != 1.0)
 		color.rgb = saturate(color.rgb, saturation);
+	// 1-LSB interleaved gradient noise dithering (gated so pure black sky stays #000000)
+	highp float mwMaxC = max(max(color.r, color.g), color.b);
+	highp float mwIgn = fract(52.9829189 * fract(dot(gl_FragCoord.xy, vec2(0.06711056, 0.00583715))));
+	color.rgb = max(color.rgb + ((mwIgn - 0.5) / 255.0) * smoothstep(0.0, 0.008, mwMaxC), vec3(0.0));
 	FRAG_COLOR = color;
 }
 )";

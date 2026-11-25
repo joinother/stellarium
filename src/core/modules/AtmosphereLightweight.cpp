@@ -333,8 +333,8 @@ void AtmosphereLightweight::releaseVAO(const int layer)
 void AtmosphereLightweight::recompileRenderShaders(const StelProjector& projector)
 {
 	const auto vSrc = R"(
-ATTRIBUTE mediump vec3 screenVertex;
-VARYING mediump vec3 ndcPos;
+ATTRIBUTE highp vec3 screenVertex;
+VARYING highp vec3 ndcPos;
 
 void main()
 {
@@ -343,8 +343,8 @@ void main()
 }
 )";
 	const auto renderFragSrc = R"(
-VARYING mediump vec3 ndcPos;
-uniform mat4 projectionMatrixInverse;
+VARYING highp vec3 ndcPos;
+uniform highp mat4 projectionMatrixInverse;
 uniform vec3 sunDir;
 uniform highp float colorScale;
 uniform sampler2D atmoTex;
@@ -377,6 +377,9 @@ void main()
 	color_RGB = vividAtmosphereColor(color_RGB, viewDir, sunDir, vividStrength);
 	color_RGB = planetaryAtmosphereColor(color_RGB, viewDir, sunDir);
 	color_RGB *= mistAtmosphereTransmission(viewDir.z);
+	highp float atmoMaxC = max(max(color_RGB.r, color_RGB.g), color_RGB.b);
+	highp float atmoIgn = fract(52.9829189 * fract(dot(gl_FragCoord.xy, vec2(0.06711056, 0.00583715))));
+	color_RGB = max(color_RGB + ((atmoIgn - 0.5) / 255.0) * smoothstep(0.0, 0.012, atmoMaxC), vec3(0.0));
 	FRAG_COLOR = vec4(color_RGB, 1);
 }
 )";
@@ -438,8 +441,8 @@ void main()
 	GL(renderShaderProgram_->release());
 
 	const auto luminanceProbeFragSrc = R"(
-VARYING mediump vec3 ndcPos;
-uniform mat4 projectionMatrixInverse;
+VARYING highp vec3 ndcPos;
+uniform highp mat4 projectionMatrixInverse;
 uniform vec3 sunDir;
 uniform bool isMoon;
 uniform sampler2D atmoTex;
