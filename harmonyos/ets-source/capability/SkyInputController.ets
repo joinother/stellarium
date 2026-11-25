@@ -137,6 +137,7 @@ export class SkyInputController {
   private static readonly TWO_FINGER_SUPPRESSED: number = 4
   // 点击防误触阈值：超长停驻、多指松手尾指回弹、屏幕边缘掌托误触均不触发点选。
   private static readonly MAX_TAP_DURATION_MS: number = 420
+  private static readonly LONG_PRESS_LENS_MS: number = 380
   private static readonly MULTI_TOUCH_TAP_COOLDOWN_MS: number = 180
   private static readonly EDGE_PALM_GUARD_VP: number = 12
   private static readonly TAP_SLOP_VP: number = 16
@@ -194,6 +195,8 @@ export class SkyInputController {
   private lastFovUiText: string = ''
   private lastTouchFeedbackPushMs: number = 0
   private touchFeedbackMultiShown: boolean = false
+  private longPressLensTimer: number = -1
+  private longPressLensOwned: boolean = false
   private nativeDragActive: boolean = false
   private lastDragCommandMs: number = 0
   private dragFilteredX: number = 0
@@ -228,9 +231,73 @@ export class SkyInputController {
     this.hooks = hooks
   }
 
+  private isSpectralLensActiveSafe(): boolean {
+    try {
+      return AppStorage.get<boolean>('stellariumSpectralLensActive') === true
+    } catch (_) {
+      return false
+    }
+  }
+
+  private hasAppStorage(): boolean {
+    try {
+      AppStorage.get<boolean>('stellariumSpectralLensActive')
+      return true
+    } catch (_) {
+      return false
+    }
+  }
+
+  private cancelLongPressLensTimer(): void {
+    if (this.longPressLensTimer >= 0) {
+      clearTimeout(this.longPressLensTimer)
+      this.longPressLensTimer = -1
+    }
+  }
+
+  private scheduleLongPressLens(downX: number, downY: number): void {
+    this.cancelLongPressLensTimer()
+    this.longPressLensOwned = false
+    if (!this.hasAppStorage()) return
+    if (this.hooks.panelVisible() || this.hooks.polarScopeVisible() || this.hooks.angleMeasureEnabled()) return
+    if (this.isSpectralLensActiveSafe()) return
+    const skyW = Math.max(1, this.hooks.skyWidth())
+    const skyH = Math.max(1, this.hooks.skyHeight())
+    if (downX < SkyInputController.EDGE_PALM_GUARD_VP || downX > skyW - SkyInputController.EDGE_PALM_GUARD_VP ||
+        downY < SkyInputController.EDGE_PALM_GUARD_VP) {
+      return
+    }
+    this.longPressLensTimer = setTimeout(() => {
+      this.longPressLensTimer = -1
+      if (this.gestureOwner !== SkyGestureOwner.Sky || this.touchMoved || this.pinchActive ||
+          this.twoFingerMode !== SkyInputController.TWO_FINGER_NONE) {
+        return
+      }
+      const nx = clamp(downX / Math.max(1, this.hooks.skyWidth()), 0.12, 0.88)
+      const ny = clamp(downY / Math.max(1, this.hooks.skyHeight()), 0.14, 0.80)
+      this.longPressLensOwned = true
+      this.touchMoved = true
+      this.nativeDragActive = false
+      this.hooks.setSkyTouchFeedback(false)
+      this.hooks.setSkyTouchFeedbackMulti(false)
+      this.resetSkyTapSequence()
+      hilog.info(0x0000, 'StellariumArkUI', '[SpectralLens] long-press bloom at ' + nx.toFixed(3) + ',' + ny.toFixed(3))
+      try {
+        AppStorage.setOrCreate('stellariumSpectralLensLaunchX', nx)
+        AppStorage.setOrCreate('stellariumSpectralLensLaunchY', ny)
+        AppStorage.setOrCreate('stellariumSpectralLensBloomToken', Date.now())
+        AppStorage.setOrCreate('stellariumSpectralLensActive', true)
+      } catch (_) {
+        // Node unit test environment without ArkUI AppStorage
+      }
+    }, SkyInputController.LONG_PRESS_LENS_MS)
+  }
+
   // ── 宿主生命周期收口 ──
   // 唯一的定时器句柄 skyInertiaTimer 仅在 stopSkyInertia() 内被 clearInterval；
   stop(): void {
+    this.cancelLongPressLensTimer()
+    this.longPressLensOwned = false
     this.finishSkyAxis(true)
     this.finishSkyMouse(true)
     this.finishTwoFingerBrightness()
@@ -802,10 +869,13 @@ export class SkyInputController {
       this.hooks.setSkyTouchFeedbackMulti(allowTouchFeedback && points.length >= 2)
       hilog.info(0x0000, 'StellariumArkUI', 'sky touch down at ' + Math.round(this.touchStartX).toString() + ',' + Math.round(this.touchStartY).toString() + ' sky=' + this.hooks.skyWidth().toString() + 'x' + this.hooks.skyHeight().toString())
       if (points.length >= 2) {
+        this.cancelLongPressLensTimer()
         const x1 = touchWindowX(points[1])
         const y1 = touchWindowY(points[1])
         this.hooks.setSkyTouchPoint2(x1, y1)
         this.beginTwoFingerGesture(downX, downY, x1, y1)
+      } else {
+        this.scheduleLongPressLens(downX, downY)
       }
       return
     }
@@ -850,6 +920,8 @@ export class SkyInputController {
       const moveNow = Date.now()
       const shouldPushFeedback = feedbackOn && (moveNow - this.lastTouchFeedbackPushMs >= 33)
       if (points.length >= 2) {
+        this.cancelLongPressLensTimer()
+        this.longPressLensOwned = false
         const x1 = touchWindowX(points[1])
         const y1 = touchWindowY(points[1])
         if (feedbackOn) {
@@ -953,7 +1025,22 @@ export class SkyInputController {
         return
       }
 
+      // 长按呼出多光谱透视镜后，手指不抬起直接滑动即实时拖动圆镜，不旋转底层星空。
+      if (this.longPressLensOwned) {
+        const nx = clamp(x / Math.max(1, this.hooks.skyWidth()), 0.12, 0.88)
+        const ny = clamp(y / Math.max(1, this.hooks.skyHeight()), 0.14, 0.80)
+        try {
+          AppStorage.setOrCreate('stellariumSpectralLensLivePos', nx.toFixed(4) + '|' + ny.toFixed(4))
+        } catch (_) {
+          // ignore in Node test
+        }
+        return
+      }
+
       const totalMove = distance(x, y, this.touchStartX, this.touchStartY)
+      if (totalMove > 12) {
+        this.cancelLongPressLensTimer()
+      }
       // 阈值放宽到 16vp:uitest/mock 注入的触摸常有几像素位移,
       // 4vp 会把"轻点"误判成"拖动",导致 selectAt 不触发。
       if (totalMove > 16) {
@@ -987,8 +1074,19 @@ export class SkyInputController {
     }
 
     if (event.type === TouchType.Up || event.type === TouchType.Cancel) {
+      this.cancelLongPressLensTimer()
+      const wasLongPressLens = this.longPressLensOwned
+      this.longPressLensOwned = false
       const owner = this.gestureOwner
       this.gestureOwner = SkyGestureOwner.None
+      if (wasLongPressLens) {
+        this.hooks.setSkyTouchActive(false)
+        this.hooks.setSkyTouchFeedback(false)
+        this.hooks.setSkyTouchFeedbackMulti(false)
+        this.hooks.setSkyDragging(false)
+        this.hooks.resumeDetailRefreshAfterSkyDrag()
+        return
+      }
       const x = touchWindowX(points[0])
       const y = touchWindowY(points[0])
       const endedOnUi = this.hooks.isUiPoint(x, y)

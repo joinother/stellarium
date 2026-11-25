@@ -2409,6 +2409,10 @@ static std::function<void()> s_pendingTimeCommand;
 // Continuous pinch zoomBy (started == 0) updates carry absolute scale from the
 // pinch start, so newer samples supersede older ones within the same frame.
 static std::function<void()> s_pendingZoomCommand;
+// Continuous spectral magnifying lens drag/resize/rotate updates supersede one
+// another; keeping a latest-value slot plus a brief FPS boost eliminates lag.
+static std::function<void()> s_pendingSpectralLensCommand;
+static std::atomic<qint64> s_spectralLensBoostUntilMs{0};
 // View-altitude-based landscape auto-fade (port feature). When the observer
 // TILTS THE VIEW DOWN toward the ground (lower view-center altitude), the
 // ground texture gradually becomes transparent so the lower-hemisphere sky is
@@ -2730,7 +2734,8 @@ static void markQtLoopRunning();
 
 static bool ohosHasActiveGestureMotion()
 {
-	return s_ohosPinchActive || s_ohosPinchSettleActive || s_ohosPanInertiaActive || s_ohosHorizonLevelActive;
+	return s_ohosPinchActive || s_ohosPinchSettleActive || s_ohosPanInertiaActive || s_ohosHorizonLevelActive ||
+		(QDateTime::currentMSecsSinceEpoch() < s_spectralLensBoostUntilMs.load(std::memory_order_relaxed));
 }
 
 static void ohosDrainCommandQueue()
@@ -2742,7 +2747,7 @@ static void ohosDrainCommandQueue()
 	QList<std::function<void()>> batch;
 	{
 		QMutexLocker lock(&s_ohosCmdQueueMutex);
-		if (s_ohosCmdQueue.isEmpty() && !s_pendingZoomCommand && !s_pendingGyroCommand && !s_pendingTimeCommand)
+		if (s_ohosCmdQueue.isEmpty() && !s_pendingZoomCommand && !s_pendingGyroCommand && !s_pendingTimeCommand && !s_pendingSpectralLensCommand)
 			return;
 		batch.swap(s_ohosCmdQueue);
 		if (s_pendingZoomCommand)
@@ -2759,6 +2764,11 @@ static void ohosDrainCommandQueue()
 		{
 			batch.append(std::move(s_pendingGyroCommand));
 			s_pendingGyroCommand = {};
+		}
+		if (s_pendingSpectralLensCommand)
+		{
+			batch.append(std::move(s_pendingSpectralLensCommand));
+			s_pendingSpectralLensCommand = {};
 		}
 	}
 	markQtLoopRunning();
@@ -3541,6 +3551,36 @@ QString runOhosCommandOnQtThread(const QString& key, const std::function<QJsonOb
 			result["error"] = "pending";
 			result["pending"] = true;
 			return QString::fromUtf8(QJsonDocument(result).toJson(QJsonDocument::Compact));
+		}
+		if (cmdName == "setSpectralLens")
+		{
+			// Pure lock-free off-thread fast path (ZERO Qt object/QTimer access from ArkUI thread!):
+			// boost render pump to max interactive FPS and update atomic geometry immediately.
+			s_spectralLensBoostUntilMs.store(QDateTime::currentMSecsSinceEpoch() + 650, std::memory_order_relaxed);
+			const QString payloadArg = key.section('|', 1);
+			if (!payloadArg.startsWith('{'))
+			{
+				const QStringList parts = payloadArg.split('|');
+				if (parts.size() >= 5 && (parts[0] == "1" || parts[0].compare("true", Qt::CaseInsensitive) == 0))
+				{
+					bool okX = false, okY = false, okR = false;
+					const float nx = parts[2].toFloat(&okX);
+					const float ny = parts[3].toFloat(&okY);
+					const float nr = parts[4].toFloat(&okR);
+					HipsMgr::updateSpectralLensGeometryFast(okX ? nx : -1.f, okY ? ny : -1.f, okR ? nr : -1.f);
+				}
+			}
+			QMutexLocker qlock(&s_ohosCmdQueueMutex);
+			s_pendingSpectralLensCommand = [command]() { command(); };
+			result["ok"] = true;
+			result["queued"] = true;
+			return QString::fromUtf8(QJsonDocument(result).toJson(QJsonDocument::Compact));
+		}
+		if (cmdName == "setSpectralView")
+		{
+			// Drop any queued spectral lens update so expanding into full-screen never fights a stale drag sample.
+			QMutexLocker qlock(&s_ohosCmdQueueMutex);
+			s_pendingSpectralLensCommand = {};
 		}
 		if (cmdName == "zoomBy")
 		{
@@ -16855,6 +16895,7 @@ extern "C" __attribute__((visibility("default"))) const char* StellariumOhos_com
 				if (parts.size() > 5 && !parts[5].isEmpty()) { const float v = parts[5].toFloat(&ok); if (ok) zoom = v; }
 			}
 			QString error;
+			markOhosInteraction();
 			result["ok"] = hips && hips->setSpectralLens(enabled, datasetId, normX, normY, radiusNorm, zoom, &error);
 			if (!error.isEmpty()) result["error"] = error;
 			if (hips) result["lens"] = hips->getSpectralLensState();

@@ -52,6 +52,10 @@ namespace
 constexpr int PANO_FS_QUAD_COORDS_PER_VERTEX = 2;
 constexpr int PANO_VERTEX_ATTRIB_INDEX = 0;
 
+std::atomic<float> s_atomicLensCenterX{0.5f};
+std::atomic<float> s_atomicLensCenterY{0.44f};
+std::atomic<float> s_atomicLensRadiusNorm{0.215f};
+
 struct SpectralDataset
 {
 	const char* id;
@@ -864,11 +868,14 @@ void main(void)
 	}
 	lensProgram->setUniformValue(lensShaderVars.texPrev, 1);
 
+	const float curCenterX = s_atomicLensCenterX.load(std::memory_order_relaxed);
+	const float curCenterY = s_atomicLensCenterY.load(std::memory_order_relaxed);
+	const float curRadiusNorm = s_atomicLensRadiusNorm.load(std::memory_order_relaxed);
 	lensProgram->setUniformValue(lensShaderVars.crossFade, static_cast<GLfloat>(cf));
 	lensProgram->setUniformValue(lensShaderVars.alpha, static_cast<GLfloat>(fade));
 	lensProgram->setUniformValue(lensShaderVars.viewportSize, QVector2D(vpW, vpH));
-	lensProgram->setUniformValue(lensShaderVars.lensCenter, QVector2D(lensCenterX, lensCenterY));
-	lensProgram->setUniformValue(lensShaderVars.lensRadiusNorm, static_cast<GLfloat>(lensRadiusNorm));
+	lensProgram->setUniformValue(lensShaderVars.lensCenter, QVector2D(curCenterX, curCenterY));
+	lensProgram->setUniformValue(lensShaderVars.lensRadiusNorm, static_cast<GLfloat>(curRadiusNorm));
 	lensProgram->setUniformValue(lensShaderVars.lensZoom, static_cast<GLfloat>(lensZoomCurrent));
 	lensProgram->setUniformValue(lensShaderVars.projectionMatrixInverse, projector->getProjectionMatrix().toQMatrix().inverted());
 	core->setAberrationUniforms(*lensProgram);
@@ -1143,15 +1150,26 @@ bool HipsMgr::setSpectralView(const QString& datasetId, const bool enabled, QStr
 	}
 
 	// Opening full-screen spectral view cleanly dismisses the circular lens.
+	const bool seamlessExpandHandoff = lensEnabled && (datasetId == lensDatasetId) &&
+		(s_atomicLensRadiusNorm.load(std::memory_order_relaxed) >= 0.44f);
 	if (lensEnabled)
 	{
 		lensEnabled = false;
-		lensFader = false;
+		if (seamlessExpandHandoff)
+		{
+			lensFader.setDuration(0);
+			lensFader = false;
+			lensFader.setDuration(260);
+		}
+		else
+		{
+			lensFader = false;
+		}
 	}
 	lastSpectralDatasetId = datasetId;
 	if (activeSpectralId != datasetId)
 	{
-		if (!activeSpectralId.isEmpty() && spectralFader.getInterstate() > 0.01f)
+		if (!seamlessExpandHandoff && !activeSpectralId.isEmpty() && spectralFader.getInterstate() > 0.01f)
 		{
 			prevSpectralId = activeSpectralId;
 			spectralCrossFade = 0.0f;
@@ -1163,7 +1181,16 @@ bool HipsMgr::setSpectralView(const QString& datasetId, const bool enabled, QStr
 		}
 		activeSpectralId = datasetId;
 	}
-	spectralFader = true;
+	if (seamlessExpandHandoff)
+	{
+		spectralFader.setDuration(0);
+		spectralFader = true;
+		spectralFader.setDuration(350);
+	}
+	else
+	{
+		spectralFader = true;
+	}
 
 	for (auto it = spectralSurveys.cbegin(); it != spectralSurveys.cend(); ++it)
 		if (it.key() != datasetId && it.value()) it.value()->setVisible(false);
@@ -1275,11 +1302,20 @@ bool HipsMgr::setSpectralLens(const bool enabled, const QString& datasetId,
 	lastSpectralDatasetId = resolvedId;
 
 	if (normX >= 0.0f && normX <= 1.0f)
+	{
 		lensCenterX = normX;
+		s_atomicLensCenterX.store(normX, std::memory_order_relaxed);
+	}
 	if (normY >= 0.0f && normY <= 1.0f)
+	{
 		lensCenterY = normY;
-	if (radiusNorm >= 0.05f && radiusNorm <= 0.49f)
+		s_atomicLensCenterY.store(normY, std::memory_order_relaxed);
+	}
+	if (radiusNorm >= 0.02f && radiusNorm <= 1.80f)
+	{
 		lensRadiusNorm = radiusNorm;
+		s_atomicLensRadiusNorm.store(radiusNorm, std::memory_order_relaxed);
+	}
 	if (zoom >= 1.0f && zoom <= 3.0f)
 	{
 		const bool wasInactive = !lensEnabled && lensFader.getInterstate() <= 0.01f;
@@ -1293,15 +1329,25 @@ bool HipsMgr::setSpectralLens(const bool enabled, const QString& datasetId,
 	return true;
 }
 
+void HipsMgr::updateSpectralLensGeometryFast(const float normX, const float normY, const float radiusNorm)
+{
+	if (normX >= 0.0f && normX <= 1.0f)
+		s_atomicLensCenterX.store(normX, std::memory_order_relaxed);
+	if (normY >= 0.0f && normY <= 1.0f)
+		s_atomicLensCenterY.store(normY, std::memory_order_relaxed);
+	if (radiusNorm >= 0.02f && radiusNorm <= 1.80f)
+		s_atomicLensRadiusNorm.store(radiusNorm, std::memory_order_relaxed);
+}
+
 QJsonObject HipsMgr::getSpectralLensState() const
 {
 	QJsonObject state;
 	state["enabled"] = lensEnabled;
 	state["active"] = isSpectralLensActive();
 	state["datasetId"] = lensDatasetId;
-	state["x"] = static_cast<double>(lensCenterX);
-	state["y"] = static_cast<double>(lensCenterY);
-	state["radius"] = static_cast<double>(lensRadiusNorm);
+	state["x"] = static_cast<double>(s_atomicLensCenterX.load(std::memory_order_relaxed));
+	state["y"] = static_cast<double>(s_atomicLensCenterY.load(std::memory_order_relaxed));
+	state["radius"] = static_cast<double>(s_atomicLensRadiusNorm.load(std::memory_order_relaxed));
 	state["zoom"] = static_cast<double>(lensZoomTarget);
 	state["currentZoom"] = static_cast<double>(lensZoomCurrent);
 	if (const SpectralDataset* desc = findSpectralDescriptor(lensDatasetId))

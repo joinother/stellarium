@@ -30,6 +30,7 @@
 #include <QJsonObject>
 #include <QMap>
 #include <QStringList>
+#include <atomic>
 #include <memory>
 
 class QOpenGLBuffer;
@@ -95,6 +96,8 @@ public:
 	float getSpectralOpacity() const { return spectralOpacity; }
 	void closeSpectralView();
 	bool setSpectralLens(bool enabled, const QString& datasetId, float normX, float normY, float radiusNorm, float zoom, QString* error = nullptr);
+	//! Pure lock-free static geometry update safe to call from any thread (ArkUI touch thread).
+	static void updateSpectralLensGeometryFast(float normX, float normY, float radiusNorm);
 	QJsonObject getSpectralLensState() const;
 	bool isSpectralLensActive() const { return lensFader.getInterstate() > 0.001f; }
 	bool shouldDrawLensOverAtmosphere(const StelCore* core) const;
@@ -173,7 +176,7 @@ private:
 	LinearFader lensFader;
 	float lensCenterX = 0.5f;
 	float lensCenterY = 0.44f;
-	float lensRadiusNorm = 0.22f;
+	float lensRadiusNorm = 0.215f;
 	float lensZoomTarget = 1.0f;
 	float lensZoomCurrent = 1.0f;
 	QString lensDatasetId;

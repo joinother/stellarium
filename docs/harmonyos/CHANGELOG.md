@@ -1,5 +1,16 @@
 > **身份图例**：本文件真机记录中出现的 `com.cnchensh.stellarium` 是**本机调试签名身份**（本机 DevEco 自动生成，非发布身份）；发布身份为 `com.joinother.skyinstrument`。构建脚本 `build-ohos-hap-windows.ps1 -Install` 从产物 `pack.info` 读取实际包名，仓库不写死任何签名身份（见 `docs/harmonyos/release/BUNDLE-IDENTITY-CLEANUP.md`）。
 
+## [2026-11-26] 多光谱放大镜 120Hz 零延迟跟手 + 长按蓝圈自动膨起 + 拖边缘拉大全屏扩散
+
+- **修改文件：** `src/core/modules/HipsMgr.hpp`、`src/core/modules/HipsMgr.cpp`、`src/StelMainView.cpp`、`harmonyos/ets-source/capability/SkyInputController.ets`、`harmonyos/ets-source/panels/overlay/SpectralLensOverlay.ets`、`docs/harmonyos/CHANGELOG.md`。
+- **修复与新增：**
+  1. **彻底消除拖动卡顿、实现零延迟满帧跟手（`HipsMgr`、`StelMainView.cpp`）**：根因是原 `setSpectralLens` 走了 consume-on-read 结果缓存队列且未唤醒交互满帧率泵，导致拖动时 OpenGL 仍停在低帧率空闲间隔。现为 `setSpectralLens` 建立专用最新值合并槽 `s_pendingSpectralLensCommand` + 线程安全纯 `std::atomic<float>` 几何快通道（`HipsMgr::updateSpectralLensGeometryFast`，ArkUI 线程零 Qt 对象调用），并联动 `ohosHasActiveGestureMotion()` 自动提速渲染泵至交互满帧率（拖动/缩放/旋切期间及结束后 650ms），镜内画面与镜圈实现逐帧严丝合缝同步。
+  2. **长按星空蓝圈自动变大为放大镜（`SkyInputController.ets`、`SpectralLensOverlay.ets`）**：在空旷星空按住 `380ms` 后，原有 `120×120`（半径 `60vp`）蓝色触摸反馈小圈自动以缓出弹性曲线膨胀为完整多光谱透视镜；手指不抬起直接滑动即可立即拖扫天空，零中断。
+  3. **拖动镜圈边缘自由缩放并拉开扩散至全屏（`SpectralLensOverlay.ets`、`HipsMgr.cpp`）**：将镜面划分为「内部平移 + 镜圈边缘缩放」双区；向外拉动镜圈可任意调整圆镜尺寸，越过 `0.44` 阈值触发触觉反馈并提示「松手扩散至全屏多光谱」，松手后圆镜水波式扩散铺满四角，并在 `HipsMgr::setSpectralView` 中以 `seamlessExpandHandoff` 零闪烁无缝移交全屏 4K 多光谱；同时优化放大镜变大时的悬浮胶囊定位，避免触碰底栏。
+- **验证结果：**
+  - 主机：`check-ohos-ui-contract.mjs`、`check-ohos-command-catalog.mjs`、`test-ohos-sky-input.mjs`、`test-ohos-quick-red-light.mjs`、`test-ohos-pointer-surveys-ui.mjs`、`test-ohos-layer-presets.mjs`、`test-ohos-vivid-rendering-gate.mjs` 共 36 项测试全部通过。
+  - 真机（`HUAWEI MatePad Mini 悦读版`，PID `27589` 稳定无崩溃、零超时）：实测长按猎户座 `(1280,720)` 自动从蓝圈膨起为 Hα 圆镜（`radius=0.215`）；拉动左侧镜圈边缘放大至 `radius=0.344` 且镜内 OpenGL 4K 画面与红框零像素错位、胶囊停靠顶部不遮底栏；继续拉过阈值松手后平滑扩散为全屏 4K Hα（`lens.enabled=false`、`spectral.enabled=true`）。
+
 ## [2026-11-25] Sky Guide 风格多光谱透视放大镜（可拖动圆镜 + 360° 旋转转柄切 9 波段 + 1×/2× 倍率）
 
 - **修改文件：** `src/core/modules/HipsMgr.hpp`、`src/core/modules/HipsMgr.cpp`、`src/core/modules/LandscapeMgr.cpp`、`src/StelOhosCommandCatalog.hpp`、`src/StelMainView.cpp`、`harmonyos/ets-source/panels/overlay/SpectralLensOverlay.ets`（新增）、`harmonyos/ets-source/panels/shell/HarmonyShell.ets`、`harmonyos/ets-source/panels/panels/QuickPanel.ets`、`harmonyos/ets-source/panels/quick/QuickActionGrid.ets`、`harmonyos/ets-source/panels/quick/QuickActionCell.ets`、`harmonyos/ets-source/panels/layers/LayerSpectralSection.ets`、`harmonyos/ets-source/common/derive/quickActions.ets`、`harmonyos/ets-source/common/ui/ShellIcons.ets`、`harmonyos/ets-source/resources/base/media/ic_spectral_lens.svg`（新增）、`scripts/test-ohos-quick-red-light.mjs`、`docs/harmonyos/json/ui-contract-baseline.json`、`docs/harmonyos/CHANGELOG.md`。
