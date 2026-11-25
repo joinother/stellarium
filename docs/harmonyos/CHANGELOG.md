@@ -1,5 +1,23 @@
 > **身份图例**：本文件真机记录中出现的 `com.cnchensh.stellarium` 是**本机调试签名身份**（本机 DevEco 自动生成，非发布身份）；发布身份为 `com.joinother.skyinstrument`。构建脚本 `build-ohos-hap-windows.ps1 -Install` 从产物 `pack.info` 读取实际包名，仓库不写死任何签名身份（见 `docs/harmonyos/release/BUNDLE-IDENTITY-CLEANUP.md`）。
 
+## [2026-11-26] 放大镜置于动态雾山前方 + 拖动期间流星实时划过 + 划破天幕的掠地长流星
+
+- **修改文件：** `src/core/modules/HipsMgr.hpp`、`src/core/modules/HipsMgr.cpp`、`src/core/modules/LandscapeMgr.hpp`、`src/core/modules/LandscapeMgr.cpp`、`src/core/modules/SporadicMeteorMgr.hpp`、`src/core/modules/SporadicMeteorMgr.cpp`、`plugins/MeteorShowers/src/MeteorShowersMgr.hpp`、`plugins/MeteorShowers/src/MeteorShowersMgr.cpp`、`src/core/modules/Meteor.cpp`、`src/core/modules/SporadicMeteor.cpp`、`src/StelMainView.cpp`、`docs/harmonyos/CHANGELOG.md`。
+- **修复与增强内容：**
+  1. **放大镜始终位于动态雾山地景之前（静止与拖动零跳变，镜内恒星/深空圈/标签完整保留）**：
+     - 将 `HipsMgr::drawSpectralLens` 拆分为 `Full / GlassOnly / ChromeOnly / StencilMask` 四个绘制 Pass，并新增 `writeSpectralLensStencilMask` 与 `getSpectralLensPixelCircle`。
+     - 静止态下，夜间 `1×` 放大镜先在 `CallOrder=7` 绘制镜面玻璃（让恒星、深空天体标注圈、星云轮廓与中文标签自然绘于镜内顶层），随后在 `LandscapeMgr::draw` 绘制地景与动态雾山前对镜圈写入模板镂空（`GL_STENCIL_TEST`），使动态雾山自动避让镜圈，并在雾山与方位标之后再叠加镜圈金属边框、9 色波段点、十字准星与钛金属转柄；白天或 `2×` 放大态同样在雾山之后绘制完整放大镜，确保任何状态下放大镜都清晰悬于动态雾山前方。
+     - 拖动/缩放/旋柄 60/120 FPS FBO 快速路径同步升级：Pass 0 捕获含动态雾山的完整外部底图 `s_lensBackFbo`；夜间 `1×` 额外以 `LandscapeMgr::setGroundDrawSuppressed(true)` 捕获不含雾山的 `Front(Emit, White)` 恒星/深空圈/标签层，并由 `s_lensSplitProg` 严格按镜圈半径 `u_lensCircle` 仅在镜内合成，拖动与抬指静止画面逐像素一致、零跳变。
+  2. **拖动放大镜期间流星实时动画不冻结**：
+     - 新增 `SporadicMeteorMgr::setDrawSuppressed` 与 `MeteorShowersMgr::setDrawSuppressed`，在 FBO 首帧捕获时屏蔽流星避免把静止流星烘进底图；后续每个拖动帧（`lensBackdropHit`）保持调用 `sporadicMeteorMgr->update(dt)` / `meteorShowersMgr->update(dt)` 并在 `targetFbo` 上实时绘制流星后再覆盖放大镜金属边框（`ChromeOnly`），在维持 `~3–4 ms / 帧`（真机实测 `99.6 FPS` 渲染泵）的同时流星照常丝滑划过天幕。
+  3. **新增划破大天幕的掠地长流星（Earth-grazer / Bolide）**：
+     - Vivid 模式下 `SporadicMeteor` 约 `24%` 偶发流星改为浅仰角掠地辐射点（`2°～13.2°`，`34～66 km/s`）；`Meteor::init` 不再按 70% 概率丢弃浅掠地流星，并允许其烧蚀至 `66～74 km` 划出 `135～290 km`（横跨天幕 `35°～75°`、持续 `1.45～3.8 s`）的长轨迹，附带 `1.18～1.90 s` 明亮电离尾迹、末端爆亮与持久余辉；预览流星雨齐射首颗火流星亦调整为横跨大半天幕的对角长轨（Classic 模式保持上游原样不变）。
+- **验证结果：**
+  - 主机：UI 契约（123 锚点）、命令目录（449 命令）、`test-ohos-vivid-rendering-gate.mjs`（15/15）全部通过。
+  - 真机（`HUAWEI MatePad Mini 悦读版`，PID `3615` 全程无崩溃、着色器零报错）：
+    - 暗夜及黄昏暮光下将放大镜拖至动态雾山正前方，拖动中与松手静止两帧逐像素一致，镜体、金属边框、9 色点、转柄及镜内恒星/星云轮廓/标签全部清晰位于动态雾山之前；
+    - 拖动放大镜期间渲染耗时仅 `3.99 ms`（`P50 8.0 ms`，窗口 `99.6 FPS`），划破天幕的翠绿长火流星在拖动前后两帧间持续前进直至燃尽，无冻结停滞。
+
 ## [2026-11-26] 屏内可见卫星独立每帧优先推演（消除放大后卫星移动一卡一卡跳步）
 
 - **修改文件：** `plugins/Satellites/src/Satellites.cpp`、`docs/harmonyos/CHANGELOG.md`。

@@ -209,39 +209,44 @@ void Meteor::init(const float& radiantAlpha, const float& radiantDelta,
 	}
 
 	// determine the final z-component and the min distance between meteor and observer
-	if (radiantAlt < 0.0262f) // (<1.5 degrees) earth grazing meteor ?
+	// Vivid mode welcomes shallow earth-grazers (<14 deg radiant) so dramatic long sky-sweeping
+	// meteors streak 35..75 deg across the celestial dome over 1.4..2.8s!
+	const bool isLongGrazer = (radiantAlt < 0.24f);
+	if (radiantAlt < 0.0262f) // (<1.5 degrees) deep earth-grazing meteor
 	{
-		// earth-grazers are rare!
-		float prob = StelApp::getInstance().getRandF();
-		if (prob > 0.3f) {
-			m_rejectionReason = QStringLiteral("earth-grazer-probability");
-			return;
-		}
-
 		// limit lifetime to 12sec
 		m_finalZ = -static_cast<float>(m_position[2]);
 		m_finalZ = qMax(static_cast<float>(m_position[2]) - static_cast<float>(m_speed) * 12.f, m_finalZ);
-
 		m_minDist = xyDist;
+	}
+	else if (isLongGrazer)
+	{
+		// Shallow sky-sweeping grazer: allow deeper ablation (66..74 km) for long majestic arc across the sky
+		const float grazerMinAlt = 66.f + 8.f * StelApp::getInstance().getRandF();
+		m_finalZ = meteorZ(M_PI_2f - meteorAlt, grazerMinAlt);
+		// Ensure a genuinely long sweeping path (135..290 km, ~1.5..3.0s burn)
+		const float minSweepKm = static_cast<float>(m_speed) * (1.45f + 1.15f * StelApp::getInstance().getRandF());
+		m_finalZ = qMin(m_finalZ, static_cast<float>(m_position[2]) - minSweepKm);
+		m_finalZ = qMax(static_cast<float>(m_position[2]) - static_cast<float>(m_speed) * 3.8f, m_finalZ);
+		m_minDist = sqrt(m_finalZ * m_finalZ + xyDist * xyDist);
 	}
 	else
 	{
 		// limit lifetime to 12sec
 		m_finalZ = meteorZ(M_PI_2f - meteorAlt, MIN_ALTITUDE);
 		m_finalZ = qMax(static_cast<float>(m_position[2]) - static_cast<float>(m_speed) * 12.0f, m_finalZ);
-
 		m_minDist = sqrt(m_finalZ * m_finalZ + xyDist * xyDist);
 	}
 
 	// a meteor cannot hit the observer!
-	if (m_minDist < MIN_ALTITUDE) {
+	if (m_minDist < 62.f) {
 		m_rejectionReason = QStringLiteral("observer-distance");
 		return;
 	}
 
 	// select random magnitude [-4.5; 4.0] with slightly richer distribution of vivid bright meteors
 	const float uMag = StelApp::getInstance().getRandF();
-	float Mag = uMag * 8.5f - 4.5f;
+	float Mag = isLongGrazer ? (uMag * 5.0f - 4.8f) : (uMag * 8.5f - 4.5f);
 	// compute RMag and CMag
 	RCMag rcMag;
 	if (m_core->getSkyDrawer()->computeRCMag(Mag, &rcMag) && rcMag.luminance > 0.f)
@@ -250,13 +255,26 @@ void Meteor::init(const float& radiantAlpha, const float& radiantDelta,
 		m_absMag = qBound(0.18f, std::pow(10.f, -0.4f * (Mag + 4.5f)), 1.f);
 
 	// most visible meteors are under about 220km distant
-	// scale max mag down gently if outside this range
-	float scale = std::pow(210.0f / m_minDist, 1.65f);
-	m_absMag = qBound(0.16f, m_absMag * qMin(scale, 1.0f), 1.0f);
+	// scale max mag down gently if outside this range (grazers stay luminous across wider range)
+	const float refDist = isLongGrazer ? 280.0f : 210.0f;
+	float scale = std::pow(refDist / m_minDist, isLongGrazer ? 1.25f : 1.65f);
+	m_absMag = qBound(isLongGrazer ? 0.42f : 0.16f, m_absMag * qMin(scale, 1.0f), 1.0f);
 	m_peakAbsMag = m_absMag;
 	m_aptMag = m_absMag;
 
-	configureMorphology(false, speed, colors);
+	configureMorphology(isLongGrazer && (m_absMag >= 0.62f), speed, colors);
+	if (isLongGrazer)
+	{
+		// Long luminous ionized wake sweeping across the sky dome
+		m_trainSeconds = qMax(m_trainSeconds, 1.18f + 0.72f * StelApp::getInstance().getRandF());
+		m_hasTerminalFlare = true;
+		if (m_afterglowDuration < 0.8f)
+		{
+			m_hasAfterglow = true;
+			m_afterglowDuration = 1.15f + 1.10f * StelApp::getInstance().getRandF();
+			m_afterglowRemaining = m_afterglowDuration;
+		}
+	}
 
 	// build the color vector
 	buildColorVectors(colors);
@@ -336,9 +354,9 @@ void Meteor::initInViewport(const Vec3d& centerAltAz, float offsetRightRad, floa
 	m_posTrain = posRad;
 	m_initialZ = static_cast<float>(m_position[2]);
 
-	// Burn duration ~0.65..1.15 seconds for crisp, satisfying angular sweep
-	const double burnSeconds = isFireball ? (0.95 + 0.30 * StelApp::getInstance().getRandF())
-	                                      : (0.62 + 0.32 * StelApp::getInstance().getRandF());
+	// Burn duration: fireballs sweep dramatically across the whole sky dome (~1.55..2.10s)
+	const double burnSeconds = isFireball ? (1.55 + 0.55 * StelApp::getInstance().getRandF())
+	                                      : (0.72 + 0.42 * StelApp::getInstance().getRandF());
 	m_finalZ = m_initialZ - static_cast<float>(m_speed * burnSeconds);
 	m_minDist = static_cast<float>(qMax(90.0, startPosKm.norm() * 0.85));
 
@@ -347,6 +365,8 @@ void Meteor::initInViewport(const Vec3d& centerAltAz, float offsetRightRad, floa
 	m_aptMag = m_absMag;
 
 	configureMorphology(isFireball, static_cast<float>(m_speed), colors);
+	if (isFireball)
+		m_trainSeconds = qMax(m_trainSeconds, 1.25f + 0.50f * StelApp::getInstance().getRandF());
 	buildColorVectors(colors);
 
 	m_alive = true;

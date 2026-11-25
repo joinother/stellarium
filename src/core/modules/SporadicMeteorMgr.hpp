@@ -74,6 +74,7 @@ public slots:
 	//! Get flag for enable activity of meteors when atmosphere is disabled.
 	//! @note option for planetariums
 	bool getFlagForcedMeteorsActivity() const {return m_flagForcedShow;}
+	void setDrawSuppressed(bool suppress) { m_drawSuppressed = suppress; }
 
 signals:
 	void zhrChanged(int);
@@ -85,6 +86,7 @@ private:
 	int m_maxVelocity;
 	bool m_flagShow;
 	bool m_flagForcedShow;
+	bool m_drawSuppressed = false;
 	quint64 m_diagnosticElapsedFrames;
 	quint64 m_diagnosticCandidateCount;
 	quint64 m_diagnosticRequestedCount;

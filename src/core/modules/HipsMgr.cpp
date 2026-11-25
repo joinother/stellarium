@@ -800,9 +800,59 @@ bool HipsMgr::shouldDrawLensOverAtmosphere(const StelCore* core) const
 	return false;
 }
 
-void HipsMgr::drawSpectralLens(StelCore* core)
+void HipsMgr::getSpectralLensPixelCircle(const StelCore* core, float& cx, float& cy, float& radiusPx, float& aaPx, float& alphaOut) const
 {
-	if (lensCaptureHook)
+	cx = 0.f;
+	cy = 0.f;
+	radiusPx = 0.f;
+	aaPx = 1.f;
+	alphaOut = lensFader.getInterstate();
+	if (!core)
+		return;
+	const auto projector = core->getProjection(core->getJ2000ModelViewTransform());
+	if (!projector)
+		return;
+	const float vpW = static_cast<float>(qMax(1, projector->getViewportWidth()));
+	const float vpH = static_cast<float>(qMax(1, projector->getViewportHeight()));
+	const float dprVal = qMax(1.0f, static_cast<float>(StelApp::getInstance().getScreenScale()));
+	const float curCenterX = s_atomicLensCenterX.load(std::memory_order_relaxed);
+	const float curCenterY = s_atomicLensCenterY.load(std::memory_order_relaxed);
+	const float curRadiusNorm = s_atomicLensRadiusNorm.load(std::memory_order_relaxed);
+	cx = curCenterX * vpW;
+	cy = (1.0f - curCenterY) * vpH;
+	radiusPx = curRadiusNorm * qMin(vpW, vpH);
+	aaPx = qMax(1.0f, 1.15f * dprVal);
+}
+
+void HipsMgr::writeSpectralLensStencilMask(StelCore* core)
+{
+	auto* ctx = QOpenGLContext::currentContext();
+	if (!ctx || !core)
+		return;
+	auto& gl = *ctx->functions();
+	GLboolean cmWas[4] = {GL_TRUE, GL_TRUE, GL_TRUE, GL_TRUE};
+	gl.glGetBooleanv(GL_COLOR_WRITEMASK, cmWas);
+	GLboolean dmWas = GL_TRUE;
+	gl.glGetBooleanv(GL_DEPTH_WRITEMASK, &dmWas);
+	gl.glEnable(GL_STENCIL_TEST);
+	gl.glStencilMask(0xFF);
+	gl.glClearStencil(0);
+	gl.glClear(GL_STENCIL_BUFFER_BIT);
+	gl.glColorMask(GL_FALSE, GL_FALSE, GL_FALSE, GL_FALSE);
+	gl.glDepthMask(GL_FALSE);
+	gl.glStencilFunc(GL_ALWAYS, 1, 0xFF);
+	gl.glStencilOp(GL_KEEP, GL_KEEP, GL_REPLACE);
+	drawSpectralLens(core, LensDrawPass::StencilMask);
+	gl.glColorMask(cmWas[0], cmWas[1], cmWas[2], cmWas[3]);
+	gl.glDepthMask(dmWas);
+	gl.glStencilFunc(GL_NOTEQUAL, 1, 0xFF);
+	gl.glStencilOp(GL_KEEP, GL_KEEP, GL_KEEP);
+	gl.glStencilMask(0x00);
+}
+
+void HipsMgr::drawSpectralLens(StelCore* core, LensDrawPass pass)
+{
+	if (lensCaptureHook && (pass == LensDrawPass::Full || pass == LensDrawPass::GlassOnly))
 	{
 		lensCaptureHook();
 		return;
@@ -865,6 +915,7 @@ uniform mediump vec4 lensFlags;
 uniform int activeBandIdx;
 uniform highp float dpr;
 uniform mediump float bicubicBlend;
+uniform int lensPassMode;
 uniform highp mat4 projectionMatrixInverse;
 
 highp vec3 sampleSpectralSmooth(sampler2D tex, highp vec2 uv)
@@ -941,6 +992,17 @@ void main(void)
 	{
 		discard;
 	}
+	if (lensPassMode == 3)
+	{
+		if (dist > radiusPx)
+		{
+			discard;
+		}
+		FRAG_COLOR = vec4(0.0);
+		return;
+	}
+	bool drawGlass = (lensPassMode == 0 || lensPassMode == 1);
+	bool drawChrome = (lensPassMode == 0 || lensPassMode == 2);
 
 	float isResizing = lensFlags.x;
 	float isRotating = lensFlags.y;
@@ -950,7 +1012,7 @@ void main(void)
 	vec4 pm = vec4(0.0);
 
 	// 1. Soft drop shadow outside glass rim
-	if (dist > radiusPx - 2.0 && chromeAlpha > 0.01)
+	if (drawChrome && dist > radiusPx - 2.0 && chromeAlpha > 0.01)
 	{
 		float shDist = max(0.0, dist - radiusPx);
 		float sh = exp(-shDist / (11.0 * dpr)) * 0.42 * chromeAlpha;
@@ -958,7 +1020,7 @@ void main(void)
 	}
 
 	// 2. Rotatable anodized titanium knurled handle (exact GPU lock-step with rim!)
-	if (chromeAlpha > 0.01 && dist > radiusPx - 4.0 * dpr)
+	if (drawChrome && chromeAlpha > 0.01 && dist > radiusPx - 4.0 * dpr)
 	{
 		vec2 hDir = vec2(cos(handleAngleRad), -sin(handleAngleRad));
 		vec2 hPerp = vec2(-hDir.y, hDir.x);
@@ -1015,7 +1077,7 @@ void main(void)
 	}
 
 	// 3. 4K Multi-Spectral Glass Interior
-	if (dist <= radiusPx + aa)
+	if (drawGlass && dist <= radiusPx + aa)
 	{
 		highp float zoom = max(1.0, lensZoom);
 		highp vec2 samplePx = centerPx + deltaPx / zoom;
@@ -1043,19 +1105,19 @@ void main(void)
 			float glassMask = 1.0 - smoothstep(radiusPx - aa * 0.6, radiusPx + aa * 0.6, dist);
 			overLayer(pm, col * rimShade, glassMask);
 		}
+	}
 
-		// Subtle center optical crosshair during drag or 2x magnification
-		if (showCrosshair > 0.5 && dist < 8.5 * dpr)
-		{
-			float dH = sdRoundBox(deltaPx, vec2(7.0 * dpr, 0.65 * dpr), 0.5 * dpr);
-			float dV = sdRoundBox(deltaPx, vec2(0.65 * dpr, 7.0 * dpr), 0.5 * dpr);
-			float crossA = (1.0 - smoothstep(-aa * 0.4, aa * 0.4, min(dH, dV))) * 0.58 * chromeAlpha;
-			overLayer(pm, accentColor, crossA);
-		}
+	// Subtle center optical crosshair during drag or 2x magnification
+	if (drawChrome && showCrosshair > 0.5 && dist < 8.5 * dpr)
+	{
+		float dH = sdRoundBox(deltaPx, vec2(7.0 * dpr, 0.65 * dpr), 0.5 * dpr);
+		float dV = sdRoundBox(deltaPx, vec2(0.65 * dpr, 7.0 * dpr), 0.5 * dpr);
+		float crossA = (1.0 - smoothstep(-aa * 0.4, aa * 0.4, min(dH, dV))) * 0.58 * chromeAlpha;
+		overLayer(pm, accentColor, crossA);
 	}
 
 	// 4. Precision Inner Glass Highlight + Glowing Metallic Bezel Ring + Expand Halo
-	if (chromeAlpha > 0.01)
+	if (drawChrome && chromeAlpha > 0.01)
 	{
 		float innerDist = abs(dist - (radiusPx - 2.2 * dpr));
 		float innerRing = (1.0 - smoothstep(0.55 * dpr - aa * 0.4, 0.55 * dpr + aa * 0.4, innerDist)) * chromeAlpha;
@@ -1132,6 +1194,7 @@ void main(void)
 		lensShaderVars.activeBandIdx = lensProgram->uniformLocation("activeBandIdx");
 		lensShaderVars.dpr = lensProgram->uniformLocation("dpr");
 		lensShaderVars.bicubicBlend = lensProgram->uniformLocation("bicubicBlend");
+		lensShaderVars.lensPassMode = lensProgram->uniformLocation("lensPassMode");
 		lensShaderVars.projectionMatrixInverse = lensProgram->uniformLocation("projectionMatrixInverse");
 		lensProgram->release();
 	}
@@ -1215,6 +1278,7 @@ void main(void)
 	const float bicubicFactor = static_cast<float>(qBound(0.0, (24.0 - effectiveLensFov) / 14.0, 1.0));
 	lensProgram->setUniformValue(lensShaderVars.dpr, static_cast<GLfloat>(dprVal));
 	lensProgram->setUniformValue(lensShaderVars.bicubicBlend, static_cast<GLfloat>(bicubicFactor));
+	lensProgram->setUniformValue(lensShaderVars.lensPassMode, static_cast<int>(pass));
 	lensProgram->setUniformValue(lensShaderVars.projectionMatrixInverse, projector->getProjectionMatrix().toQMatrix().inverted());
 	core->setAberrationUniforms(*lensProgram);
 	projector->setUnProjectUniforms(*lensProgram);
@@ -1237,7 +1301,8 @@ void main(void)
 	// When stationary at 1x optical alignment and zoomed inside 14 deg, smoothly overlay
 	// deep online HiPS tiles strictly clipped inside the inner glass bezel (0.00px spill).
 	const bool lensStationary = !flagDragging && !flagResizing && !flagRotating && !flagBlooming && !flagExpanding;
-	if (lensStationary && fovDeg < 14.0 && lensZoomCurrent < 1.15f && cf > 0.90f)
+	const bool allowHdOverlay = (pass == LensDrawPass::Full || pass == LensDrawPass::GlassOnly);
+	if (allowHdOverlay && lensStationary && fovDeg < 14.0 && lensZoomCurrent < 1.15f && cf > 0.90f)
 	{
 		const SpectralDataset* desc = findSpectralDescriptor(lensDatasetId);
 		const HipsSurveyP survey = spectralSurveys.value(lensDatasetId);
@@ -1279,11 +1344,12 @@ void HipsMgr::draw(StelCore* core)
 	if (hasSpectralPano)
 		drawSpectralPanorama(core);
 
-	// Nighttime 1x spectral lens draws at CallOrder=7 so optical stars & constellation lines
-	// sit crisply on top of the lens; daytime or 2x lens draws inside LandscapeMgr::draw
-	// (right after atmosphere and right before landscape ground).
+	// Nighttime 1x spectral lens draws its glass interior at CallOrder=7 so optical stars,
+	// DSO circles, and labels sit crisply inside it; LandscapeMgr::draw punches a circular
+	// stencil cutout in Mist Mountain and draws the metallic chrome on top so the magnifying
+	// glass always sits cleanly IN FRONT OF landscape and Dynamic Mist Mountain.
 	if (isSpectralLensActive() && !shouldDrawLensOverAtmosphere(core))
-		drawSpectralLens(core);
+		drawSpectralLens(core, LensDrawPass::GlassOnly);
 
 	if (!visible)
 		return;

@@ -838,6 +838,10 @@ private slots:
 	void createAtmosphere();
 	void resetToFallbackAtmosphere();
 
+public:
+	void setGroundDrawSuppressed(bool suppress) { groundDrawSuppressed = suppress; }
+	bool isGroundDrawSuppressed() const { return groundDrawSuppressed; }
+
 private:
 	//! Get light pollution luminance level in cd/m².
 	float getAtmosphereLightPollutionLuminance() const;
@@ -940,6 +944,7 @@ private:
 
 	QString atmosphereShowMySkyStatusText;
 	bool atmosphereShowMySkyStoppedWithError=false;
+	bool groundDrawSuppressed=false;
 };
 
 #endif // LANDSCAPEMGR_HPP

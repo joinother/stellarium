@@ -745,13 +745,17 @@ void LandscapeMgr::draw(StelCore* core)
 	if (auroraRenderer.effectiveOpacity() > 0.002f)
 		auroraRenderer.draw(core);
 
-	// Daytime X-ray / 2x magnifying spectral lens draws over atmosphere scattering
-	// so it punches through blue daytime sky while staying occluded by landscape ground.
-	if (HipsMgr* hipsMut = GETSTELMODULE(HipsMgr))
-	{
-		if (hipsMut->isSpectralLensActive() && hipsMut->shouldDrawLensOverAtmosphere(core))
-			hipsMut->drawSpectralLens(core);
-	}
+	// The spectral magnifying glass always sits IN FRONT OF ground and Dynamic Mist Mountain.
+	// For nighttime 1x lens (whose glass interior was drawn at CallOrder=7 so optical stars,
+	// DSO circles, and labels sit crisply inside it), punch a circular stencil cutout before
+	// drawing ground/mistHorizon, then draw the metallic bezel & handle on top afterwards.
+	HipsMgr* hipsMut = GETSTELMODULE(HipsMgr);
+	const bool lensActiveNoHook = hipsMut && hipsMut->isSpectralLensActive() && !hipsMut->hasSpectralLensCaptureHook();
+	const bool lensOverAtmo = lensActiveNoHook && hipsMut->shouldDrawLensOverAtmosphere(core);
+	const bool punchLensStencil = !groundDrawSuppressed && lensActiveNoHook && !lensOverAtmo &&
+	                              (hipsMut->getSpectralLensFade() > 0.35f);
+	if (punchLensStencil)
+		hipsMut->writeSpectralLensStencilMask(core);
 
 	// Draw the landscape
 	const double currentFov = core->getMovementMgr() ? core->getMovementMgr()->getCurrentFov() : 60.0;
@@ -759,7 +763,7 @@ void LandscapeMgr::draw(StelCore* core)
 	const double baseTransparency = getFlagLandscapeUseTransparency() ? landscapeTransparency : 0.0;
 	const double pushed = EnvironmentZoomFade::combinedLandscapeTransparency(baseTransparency, envZoom);
 	Landscape::setTransparency(pushed);
-	const bool drawGround = pushed < 0.999;
+	const bool drawGround = !groundDrawSuppressed && (pushed < 0.999);
 	if (drawGround)
 	{
 		if (oldLandscape && getFlagLandscape())
@@ -769,7 +773,7 @@ void LandscapeMgr::draw(StelCore* core)
 		if (getFlagLandscape())
 			landscape->draw(core, flagPolyLineDisplayedOnly);
 	}
-	if (mistHorizon.effectiveOpacity() > 0.001f)
+	if (!groundDrawSuppressed && mistHorizon.effectiveOpacity() > 0.001f)
 	{
 		Vec3d sunDirection = GETSTELMODULE(SolarSystem)->getSun()->getAltAzPosApparent(core);
 		sunDirection.normalize();
@@ -778,9 +782,27 @@ void LandscapeMgr::draw(StelCore* core)
 		mistHorizon.setBrightness(daylight * daylight * (3.0 - 2.0 * daylight));
 		mistHorizon.draw(core, flagPolyLineDisplayedOnly);
 	}
+	if (punchLensStencil)
+	{
+		if (auto* glCtx = QOpenGLContext::currentContext())
+		{
+			auto& gl = *glCtx->functions();
+			gl.glDisable(GL_STENCIL_TEST);
+			gl.glStencilMask(0xFF);
+		}
+	}
 
 	// Draw the cardinal points
 	cardinalPoints->draw(core, static_cast<double>(StelApp::getInstance().getCore()->getCurrentLocation().getLatitude()));
+
+	// Draw magnifying glass chrome (or full daytime/2x lens) in front of landscape, Mist Mountain, and cardinals.
+	if (lensActiveNoHook)
+	{
+		if (lensOverAtmo)
+			hipsMut->drawSpectralLens(core, HipsMgr::LensDrawPass::Full);
+		else
+			hipsMut->drawSpectralLens(core, HipsMgr::LensDrawPass::ChromeOnly);
+	}
 
 	if(messageFader.getInterstate())
 	{

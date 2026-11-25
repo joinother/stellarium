@@ -210,6 +210,8 @@ QJsonObject SporadicMeteorMgr::getDiagnostics() const
 
 void SporadicMeteorMgr::draw(StelCore* core)
 {
+	if (m_drawSuppressed)
+		return;
 	if (!m_flagShow || (!core->getSkyDrawer()->getFlagHasAtmosphere() && !getFlagForcedMeteorsActivity()))
 	{
 		return;
@@ -275,7 +277,7 @@ void SporadicMeteorMgr::triggerPreviewSalvo()
 		float delay;
 	};
 	const QVector<SalvoSpec> specs = {
-		{ -0.14f * span,  0.54f * span,  0.44f, 60.f, emeraldFireball, true,  0.00f },
+		{ -0.62f * span,  0.56f * span,  0.88f, 64.f, emeraldFireball, true,  0.00f },
 		{  0.64f * span,  0.44f * span,  0.48f, 38.f, sodiumAmber,     false, 0.14f },
 		{ -0.68f * span,  0.38f * span,  0.40f, 62.f, calciumViolet,   false, 0.26f },
 		{  0.24f * span,  0.58f * span,  0.45f, 54.f, emeraldClassic,  true,  0.40f },

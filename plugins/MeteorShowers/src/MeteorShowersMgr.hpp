@@ -127,6 +127,7 @@ public:
 	void deinit() override;
 	void update(double deltaTime) override;
 	void draw(StelCore* core) override;
+	void setDrawSuppressed(bool suppress) { m_drawSuppressed = suppress; }
 	double getCallOrder(StelModuleActionName actionName) const override;
 	bool configureGui(bool show=true) override;
 
@@ -309,6 +310,7 @@ private:
 	QString m_catalogPath;
 
 	bool m_onEarth;
+	bool m_drawSuppressed = false;
 	bool m_enablePlugin;
 	bool m_activeRadiantOnly;
 	bool m_enableAtStartup;

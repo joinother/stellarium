@@ -312,6 +312,8 @@ void MeteorShowersMgr::update(double deltaTime)
 
 void MeteorShowersMgr::draw(StelCore* core)
 {
+	if (m_drawSuppressed)
+		return;
 	if (m_enablePlugin && m_onEarth)
 	{
 		m_meteorShowers->draw(core);

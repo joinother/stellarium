@@ -100,11 +100,22 @@ public:
 	//! Pure lock-free static geometry update safe to call from any thread (ArkUI touch thread).
 	static void updateSpectralLensGeometryFast(float normX, float normY, float radiusNorm, float handleAngleDeg = -999.f, int flags = -1);
 	QJsonObject getSpectralLensState() const;
+	enum class LensDrawPass
+	{
+		Full = 0,
+		GlassOnly = 1,
+		ChromeOnly = 2,
+		StencilMask = 3
+	};
 	bool isSpectralLensActive() const { return lensFader.getInterstate() > 0.001f; }
+	float getSpectralLensFade() const { return lensFader.getInterstate(); }
 	bool isSpectralLensInteracting() const;
 	void setSpectralLensCaptureHook(std::function<void()> hook) { lensCaptureHook = std::move(hook); }
+	bool hasSpectralLensCaptureHook() const { return static_cast<bool>(lensCaptureHook); }
 	bool shouldDrawLensOverAtmosphere(const StelCore* core) const;
-	void drawSpectralLens(StelCore* core);
+	void getSpectralLensPixelCircle(const StelCore* core, float& cx, float& cy, float& radiusPx, float& aaPx, float& alphaOut) const;
+	void writeSpectralLensStencilMask(StelCore* core);
+	void drawSpectralLens(StelCore* core, LensDrawPass pass = LensDrawPass::Full);
 
 	State getState() const {return state;}
 	bool isLoaded() const {return state == Loaded;}
@@ -207,6 +218,7 @@ private:
 		int activeBandIdx = -1;
 		int dpr = -1;
 		int bicubicBlend = -1;
+		int lensPassMode = -1;
 		int projectionMatrixInverse = -1;
 	} lensShaderVars;
 };

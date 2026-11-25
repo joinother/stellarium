@@ -26,10 +26,18 @@ SporadicMeteor::SporadicMeteor(const StelCore* core, const float& maxVel, const 
 	: Meteor(core, bolideTexture)
 {
 	// meteor velocity [11, maxVel] km/s
-	float speed = 11.f + (maxVel - 11.f) * static_cast<float>(StelApp::getInstance().getRandF());
+	const bool vivid = StelApp::getInstance().getFlagVividRendering();
+	// In vivid mode, ~24% of sporadic meteors enter at a shallow earth-grazing radiant (2°..13°)
+	// so dramatic long sky-sweeping bolides regularly streak across the celestial dome.
+	const bool longSkySweeper = vivid && (StelApp::getInstance().getRandF() < 0.24f);
+	float speed = longSkySweeper
+		? (34.f + qMax(1.f, qMin(maxVel, 66.f) - 34.f) * static_cast<float>(StelApp::getInstance().getRandF()))
+		: (11.f + (maxVel - 11.f) * static_cast<float>(StelApp::getInstance().getRandF()));
 
 	// select a random radiant in a visible area
-	double rAlt = M_PI_2  * static_cast<double>(StelApp::getInstance().getRandF());  // [0, pi/2]
+	double rAlt = longSkySweeper
+		? (0.035 + 0.195 * static_cast<double>(StelApp::getInstance().getRandF())) // [2°, 13.2°] shallow grazer
+		: (M_PI_2 * static_cast<double>(StelApp::getInstance().getRandF()));       // [0°, 90°]
 	double rAz = 2 * M_PI * static_cast<double>(StelApp::getInstance().getRandF());  // [0, 2pi]
 	Vec3d pos;
 	StelUtils::spheToRect(rAz, rAlt, pos);
