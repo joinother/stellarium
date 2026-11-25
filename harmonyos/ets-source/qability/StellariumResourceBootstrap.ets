@@ -1197,6 +1197,11 @@ export async function prepareStellariumResources(appContext: common.ApplicationC
   // no constellations. Keep it in the app sandbox on every supported API.
   const userDirSet: boolean = setEnv('STEL_USERDIR', userDir);
   hilog.info(LOG_DOMAIN, LOG_TAG, `STEL_USERDIR=${userDir}, setEnv=${userDirSet}`);
+  const cacheDir = `${appContext.cacheDir}/stellarium_http_cache`;
+  ensureDir(cacheDir);
+  const cacheDirSet: boolean = setEnv('STELLARIUM_CACHE_DIR', cacheDir);
+  const xdgCacheSet: boolean = setEnv('XDG_CACHE_HOME', appContext.cacheDir);
+  hilog.info(LOG_DOMAIN, LOG_TAG, `STELLARIUM_CACHE_DIR=${cacheDir}, setEnv=${cacheDirSet}, XDG_CACHE_HOME=${xdgCacheSet}`);
   const frameDirSet: boolean = setEnv('STELLARIUM_OHOS_FRAME_DIR', appContext.filesDir);
   hilog.info(LOG_DOMAIN, LOG_TAG, `STELLARIUM_OHOS_FRAME_DIR=${appContext.filesDir}, setEnv=${frameDirSet}`);
   const locale = stellariumSystemLocale();

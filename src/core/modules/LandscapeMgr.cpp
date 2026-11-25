@@ -30,6 +30,7 @@
 # include "AtmosphereShowMySky.hpp"
 #endif
 #include "StelApp.hpp"
+#include "HipsMgr.hpp"
 #include "SolarSystem.hpp"
 #include "StelCore.hpp"
 #include "StelMovementMgr.hpp"
@@ -575,7 +576,10 @@ void LandscapeMgr::update(double deltaTime)
 		resetToFallbackAtmosphere();
 	}
 
-	core->getSkyDrawer()->reportLuminanceInFov(3.75f+atmosphere->getAverageLuminance()*3.5f, true);
+	const HipsMgr* hips = GETSTELMODULE(HipsMgr);
+	const float spectralPenetration = hips ? hips->getNonVisibleSpectralFade() : 0.f;
+	const float effectiveAtmoLum = atmosphere->getAverageLuminance() * (1.f - spectralPenetration);
+	core->getSkyDrawer()->reportLuminanceInFov(3.75f + effectiveAtmoLum * 3.5f, true);
 
 	// NOTE: Simple workaround for brightness of landscape when observing from the Sun.
 	if (currentPlanet->getID() == sun->getID())
@@ -718,7 +722,12 @@ void LandscapeMgr::draw(StelCore* core)
 	const bool sceneActive = scenery && scenery->property("enableScene").toBool();
 	atmosphere->setMistUndergroundStrength(AtmosphereMist::displayStrength(
 		core->getCurrentPlanet()->getEnglishName() == "Earth", getFlagLandscape(), sceneActive, mistHorizon.opacity) * mistHorizon.zoomOpacity);
-	if (!getFlagAtmosphereNoScatter() && core->getFlagClearSky())
+	// Non-visible spectral bands (IR/H-alpha/Microwave/Radio/UV/X-ray/Gamma)
+	// temporarily penetrate optical daytime atmosphere scattering without
+	// mutating the user's persisted atmosphere toggle.
+	const HipsMgr* hips = GETSTELMODULE(HipsMgr);
+	const bool penetrateAtmosphere = hips && hips->getNonVisibleSpectralFade() > 0.05f;
+	if (!getFlagAtmosphereNoScatter() && core->getFlagClearSky() && !penetrateAtmosphere)
 	    atmosphere->draw(core);
 
 	// GZ 2016-01: When we draw the atmosphere with a low sun, it is possible that the glaring red ball is overpainted and thus invisible.

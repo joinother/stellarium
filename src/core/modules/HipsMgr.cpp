@@ -18,7 +18,9 @@
  */
 
 #include "HipsMgr.hpp"
+#include "ToastMgr.hpp"
 #include "StelHips.hpp"
+#include "StelModuleMgr.hpp"
 #include "StelPainter.hpp"
 #include "StelCore.hpp"
 #include "StelApp.hpp"
@@ -436,11 +438,42 @@ HipsSurveyP HipsMgr::getSurveyByUrl(const QString &url)
 
 int HipsMgr::getVisibleSurveyCount() const
 {
+	if (!visible)
+		return 0;
 	int count = 0;
 	for (const auto& survey : surveys)
 		if (survey->isVisible() && !survey->isPlanetarySurvey())
 			++count;
 	return count;
+}
+
+float HipsMgr::getActiveSurveyFade() const
+{
+	if (!visible)
+		return 0.f;
+	float maxFade = 0.f;
+	for (const auto& survey : activeSurveys)
+	{
+		if (survey && survey->planet.isEmpty())
+			maxFade = qMax(maxFade, survey->getInterstate());
+	}
+	return maxFade;
+}
+
+float HipsMgr::getNonVisibleSpectralFade() const
+{
+	if (!visible)
+		return 0.f;
+	float maxFade = 0.f;
+	for (auto it = spectralSurveys.cbegin(); it != spectralSurveys.cend(); ++it)
+	{
+		if (it.key() == QLatin1String("dss2-color"))
+			continue;
+		const HipsSurveyP& survey = it.value();
+		if (survey && (survey->isVisible() || survey->getInterstate() > 0.f))
+			maxFade = qMax(maxFade, survey->getInterstate());
+	}
+	return maxFade;
 }
 
 QJsonArray HipsMgr::getSpectralDatasets() const
@@ -573,6 +606,11 @@ bool HipsMgr::setSpectralView(const QString& datasetId, const bool enabled, QStr
 	}
 	visible = true;
 	emit showChanged(true);
+	if (auto* toast = GETSTELMODULE(ToastMgr))
+	{
+		if (toast->getFlagShow())
+			toast->setFlagShow(false);
+	}
 	survey->setVisible(true);
 	updateActiveSurveys();
 	emit surveysChanged();
@@ -622,14 +660,22 @@ void HipsMgr::setFlagShow(bool b)
 				survey->hideProgressBar();
 		}
 	}
-	else if (initialized && getVisibleSurveyCount() == 0)
+	else
 	{
-		// Turning on the HiPS master switch with no active survey should
-		// immediately show the last selected (or default optical DSS2) survey.
-		const QString fallbackId = lastSpectralDatasetId.isEmpty()
-			? QStringLiteral("dss2-color")
-			: lastSpectralDatasetId;
-		setSpectralView(fallbackId, true);
+		if (auto* toast = GETSTELMODULE(ToastMgr))
+		{
+			if (toast->getFlagShow())
+				toast->setFlagShow(false);
+		}
+		if (initialized && getVisibleSurveyCount() == 0)
+		{
+			// Turning on the HiPS master switch with no active survey should
+			// immediately show the last selected (or default optical DSS2) survey.
+			const QString fallbackId = lastSpectralDatasetId.isEmpty()
+				? QStringLiteral("dss2-color")
+				: lastSpectralDatasetId;
+			setSpectralView(fallbackId, true);
+		}
 	}
 }
 

@@ -24,6 +24,8 @@
 #include "StelSkyImageTile.hpp"
 #include "StelModuleMgr.hpp"
 #include "StelPainter.hpp"
+#include "HipsMgr.hpp"
+#include "ToastMgr.hpp"
 #include "MilkyWay.hpp"
 #include "StelTranslator.hpp"
 #include "StelProgressController.hpp"
@@ -199,6 +201,18 @@ void StelSkyLayerMgr::draw(StelCore* core)
 	if (!flagShow)
 		return;
 
+	// Automatically suppress visible-light DSO image stickers while an all-sky
+	// HiPS/spectral or TOAST survey is active so optical PNGs don't clash with
+	// X-ray/infrared/microwave/gamma sky maps.
+	float dsoOpacity = 1.f;
+	if (const auto* hips = GETSTELMODULE(HipsMgr))
+		dsoOpacity = qMin(dsoOpacity, 1.f - hips->getActiveSurveyFade());
+	if (const auto* toast = GETSTELMODULE(ToastMgr))
+		if (toast->getFlagShow())
+			dsoOpacity = 0.f;
+	if (dsoOpacity <= 0.005f)
+		return;
+
 	StelPainter sPainter(core->getProjection(StelCore::FrameJ2000));
 	sPainter.setBlending(true, GL_ONE, GL_ONE); //additive blending
 	for (auto* s : std::as_const(allSkyLayers))
@@ -206,7 +220,7 @@ void StelSkyLayerMgr::draw(StelCore* core)
 		if (s->show) 
 		{
 			sPainter.setProjector(core->getProjection(s->layer->getFrameType()));
-			s->layer->draw(core, sPainter, 1.);
+			s->layer->draw(core, sPainter, dsoOpacity);
 		}
 	}
 }

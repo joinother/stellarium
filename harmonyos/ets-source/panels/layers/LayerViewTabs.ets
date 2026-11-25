@@ -1531,6 +1531,7 @@ export struct LayerSurveysTab {
       LayerSwitchRow({ label: I18n.t('s0601'), isOn: this.layerStore.toastSurvey, onToggle: (value: boolean) => { this.onToggleLayer('actionShow_Toast_Survey', '', value) } })
       LayerSpectralSection({
         surveyStore: this.surveyStore,
+        hipsEnabled: this.layerStore.hipsSurveys,
         onRefreshSurvey: () => { this.onRefreshSurvey() },
         onSelectSpectral: (id: string) => { this.onSelectSpectral(id) },
         onCloseSpectral: () => { this.onCloseSpectral() }

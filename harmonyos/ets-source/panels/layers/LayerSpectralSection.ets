@@ -12,12 +12,18 @@ import { SpectralDataset } from '../../common/types/StellariumTypes'
 export struct LayerSpectralSection {
   @StorageProp('stellariumReadableUi') readableUi: boolean = false
   @ObjectLink surveyStore: SurveyStore
+  @Prop @Watch('onHipsEnabledChanged') hipsEnabled: boolean = false
   @State private c: ThemeSlots = DEFAULT_SLOTS
   onRefreshSurvey: () => void = () => {}
   onSelectSpectral: (id: string) => void = () => {}
   onCloseSpectral: () => void = () => {}
 
   onWillApplyTheme(theme: Theme) { this.c = slotsFromTheme(theme) }
+
+  private onHipsEnabledChanged(): void {
+    // 顶部预设切换、快捷键或 TOAST 互斥关闭 HiPS 开关时，自动同步下方多波段选中态。
+    this.onRefreshSurvey()
+  }
 
   private bandColor(id: string): string {
     if (this.c.isNight) return '#C44536'

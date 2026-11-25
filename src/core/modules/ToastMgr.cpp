@@ -20,8 +20,10 @@
 #include <QDebug>
 
 #include "ToastMgr.hpp"
+#include "HipsMgr.hpp"
 #include "StelToast.hpp"
 #include "StelFader.hpp"
+#include "StelModuleMgr.hpp"
 #include "StelPainter.hpp"
 #include "StelCore.hpp"
 #include "StelApp.hpp"
@@ -98,6 +100,14 @@ void ToastMgr::setFlagShow(const bool displayed)
 		*fader = displayed;
 		StelApp::immediateSave("astro/flag_toast_survey", displayed);
 		emit surveyDisplayedChanged(displayed);
+	}
+	if (displayed)
+	{
+		if (auto* hips = GETSTELMODULE(HipsMgr))
+		{
+			if (hips->getFlagShow())
+				hips->setFlagShow(false);
+		}
 	}
 }
 

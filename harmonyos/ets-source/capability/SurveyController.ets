@@ -43,23 +43,24 @@ export class SurveyController {
   private buildStateText(datasets: Array<SpectralDataset>, active: SpectralDataset | undefined): string {
     if (datasets.length === 0) return '多光谱目录暂不可用。'
     if (active !== undefined) {
+      const nonVisibleNote = active.id !== 'dss2-color' ? '，已自动穿透大气与可见光星云贴图' : ''
       if (active.hdReady === true) {
-        return '已开启「' + active.title + '」· 在线高清瓦片就绪，放大自动加载细节。'
+        return '已开启「' + active.title + '」· 在线高清瓦片就绪' + nonVisibleNote + '。'
       }
       if (active.loading === true) {
         return active.offlineReady === true
-          ? '已显示「' + active.title + '」内置全天视图，正在连接高清巡天瓦片…'
+          ? '已显示「' + active.title + '」内置全天视图' + nonVisibleNote + '，正在连接高清瓦片…'
           : '正在加载「' + active.title + '」可见天区瓦片…'
       }
       if (active.offlineReady === true) {
-        return '已显示「' + active.title + '」内置全天视图（离线可用，联网后可加载高清瓦片）。'
+        return '已显示「' + active.title + '」内置全天视图' + nonVisibleNote + '（离线可用）。'
       }
       if ((active.error ?? '').length > 0) {
         return '数据源暂不可用：' + (active.error ?? '')
       }
       return '已开启「' + active.title + '」。'
     }
-    return '内置 9 波段全天全景可离线秒切；联网放大时自动从 China-VO / ESA / MPE 加载高清瓦片。'
+    return '内置 9 波段全天全景可离线秒切；联网放大时自动加载高清瓦片并持久化缓存。'
   }
 
   // 读取巡天状态，写回 store，并继续加载多波段数据集列表。
@@ -103,7 +104,8 @@ export class SurveyController {
       }
       const state = r.spectral as SpectralState | undefined
       this.store.spectralActiveId = state?.datasetId ?? id
-      this.hooks.applySurveyFlags(true, this.lastToastEnabled)
+      this.lastToastEnabled = false
+      this.hooks.applySurveyFlags(true, false)
       this.store.surveyStateText = I18n.t('survey_selected') + ': 1'
       if (state?.hdReady === true) {
         this.store.spectralStateText = '多光谱图层已打开（高清瓦片就绪）。'

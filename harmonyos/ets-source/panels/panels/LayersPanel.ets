@@ -233,8 +233,14 @@ export struct LayersPanel {
               surveyStore: this.surveyStore,
               onToggleLayer: (actionId: string, cmd: string, value: boolean) => { this.onToggleLayer(actionId, cmd, value) },
               onRefreshSurvey: () => { this.onRefreshSurvey() },
-              onSelectSpectral: (id: string) => { this.onSelectSpectral(id) },
-              onCloseSpectral: () => { this.onCloseSpectral() }
+              onSelectSpectral: (id: string) => {
+                this.presetStore.noteManualChange()
+                this.onSelectSpectral(id)
+              },
+              onCloseSpectral: () => {
+                this.presetStore.noteManualChange()
+                this.onCloseSpectral()
+              }
             })
           } else if (this.viewTab === 7) {
             LayerPresetTab({ presetStore: this.presetStore })

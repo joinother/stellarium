@@ -75,6 +75,10 @@ public:
 
 	int getSurveyCount() const { return surveys.size(); }
 	int getVisibleSurveyCount() const;
+	//! Return max fade factor (0..1) of any visible sky HiPS survey.
+	float getActiveSurveyFade() const;
+	//! Return fade factor (0..1) when a non-visible spectral band (IR/H-alpha/Radio/MW/UV/X-ray/Gamma) is active.
+	float getNonVisibleSpectralFade() const;
 	QJsonArray getSpectralDatasets() const;
 	QJsonObject getSpectralState() const;
 	bool setSpectralView(const QString& datasetId, bool enabled, QString* error = nullptr);

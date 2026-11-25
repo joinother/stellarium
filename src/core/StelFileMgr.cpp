@@ -482,7 +482,26 @@ QString StelFileMgr::getLocaleDir()
 // Returns the path to the cache directory. Note that subdirectories may need to be created for specific caches.
 QString StelFileMgr::getCacheDir()
 {
-	return (QStandardPaths::standardLocations(QStandardPaths::CacheLocation) << getUserDir() + "/cache")[0];
+	const QString envCache = qEnvironmentVariable("STELLARIUM_CACHE_DIR");
+	if (!envCache.isEmpty())
+	{
+		QDir().mkpath(envCache);
+		if (QFileInfo(envCache).isWritable())
+			return envCache;
+	}
+	QStringList candidates = QStandardPaths::standardLocations(QStandardPaths::CacheLocation);
+	candidates << (getUserDir() + "/cache");
+	for (const QString& dir : std::as_const(candidates))
+	{
+		if (dir.isEmpty())
+			continue;
+		QDir().mkpath(dir);
+		if (QFileInfo(dir).isWritable())
+			return dir;
+	}
+	const QString fallback = getUserDir() + "/cache";
+	QDir().mkpath(fallback);
+	return fallback;
 }
 
 

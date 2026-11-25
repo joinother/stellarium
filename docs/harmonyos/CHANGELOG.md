@@ -1,5 +1,18 @@
 > **身份图例**：本文件真机记录中出现的 `com.cnchensh.stellarium` 是**本机调试签名身份**（本机 DevEco 自动生成，非发布身份）；发布身份为 `com.joinother.skyinstrument`。构建脚本 `build-ohos-hap-windows.ps1 -Install` 从产物 `pack.info` 读取实际包名，仓库不写死任何签名身份（见 `docs/harmonyos/release/BUNDLE-IDENTITY-CLEANUP.md`）。
 
+## [2026-11-25] 巡天持久化磁盘缓存加固 + 5 处图层逻辑冲突全量清理（含非可见光自动穿透大气）
+
+- **修改文件：** `src/core/StelFileMgr.cpp`、`src/core/StelApp.cpp`、`src/core/modules/HipsMgr.hpp`、`src/core/modules/HipsMgr.cpp`、`src/core/modules/ToastMgr.cpp`、`src/core/StelSkyLayerMgr.cpp`、`src/core/modules/LandscapeMgr.cpp`、`harmonyos/ets-source/qability/StellariumResourceBootstrap.ets`、`harmonyos/ets-source/panels/panels/LayersPanel.ets`、`harmonyos/ets-source/panels/layers/LayerViewTabs.ets`、`harmonyos/ets-source/panels/layers/LayerSpectralSection.ets`、`harmonyos/ets-source/capability/SurveyController.ets`、`docs/harmonyos/CHANGELOG.md`。
+- **修复与改进：**
+  1. **跨重启磁盘缓存加固（`StellariumResourceBootstrap.ets`、`StelFileMgr.cpp`、`StelApp.cpp`）**：启动期显式创建 `${appContext.cacheDir}/stellarium_http_cache` 并注入 `STELLARIUM_CACHE_DIR` / `XDG_CACHE_HOME`；`StelFileMgr::getCacheDir()` 优先选用可写的环境变量目录并自动 `mkpath`，确保 300 MB `QNetworkDiskCache` 在鸿蒙沙箱内真实落盘，冷重启后命中本地缓存。
+  2. **HiPS 与 TOAST 巡天互斥（`HipsMgr.cpp`、`ToastMgr.cpp`、`SurveyController.ets`）**：打开任意 HiPS / 多波段时自动关闭 `TOAST 巡天`，打开 `TOAST 巡天` 时自动关闭 HiPS，避免两套同绘制序（`CallOrder = 7`）不透明全天图互相抢画面与重复下载。
+  3. **巡天期间自动临时压隐可见光深空贴图（`StelSkyLayerMgr.cpp`）**：`HipsMgr` 新增 `getActiveSurveyFade()`，任意 HiPS / TOAST 全天巡天激活时平滑淡出 640 张可见光实拍星云 PNG，消除可见光贴图串台到 X 射线 / 微波 / 红外 / 伽马图上的问题；关闭巡天即刻恢复且不改用户开关。
+  4. **非可见光波段自动临时穿透大气层（`HipsMgr.cpp`、`LandscapeMgr.cpp`）**：`HipsMgr::getNonVisibleSpectralFade()` 在 Hα / 近中红外 / 微波 / 射电 / 紫外 / X 射线 / 伽马等非可见光波段激活时，自动临时压低白天大气天光适应亮度并跳过光学蓝天散射绘制（保留地景地平线与用户「大气层」持久化开关），切回可见光或关闭巡天即刻恢复蓝天。
+  5. **计数与顶部预设双向同步（`HipsMgr.cpp`、`LayersPanel.ets`、`LayerViewTabs.ets`、`LayerSpectralSection.ets`）**：`HipsMgr::getVisibleSurveyCount()` 增加 `if (!visible) return 0;` 修复关闭总开关后仍显示 `1` 的问题；`LayerSpectralSection` 通过 `@Watch` 监听 `hipsEnabled` 自动同步顶部预设切换后的选中高亮；在 `LayersPanel` 点击/关闭多波段时同步调用 `presetStore.noteManualChange()`。
+- **验证结果：**
+  - 主机：`check-ohos-ui-contract.mjs`、`test-ohos-pointer-surveys-ui.mjs` 5/5、`test-ohos-layer-presets.mjs` 9/9、`test-ohos-vivid-rendering-gate.mjs` 15/15 全部通过。
+  - 真机（`HUAWEI MatePad Mini 悦读版`，PID `57126` 稳定无崩溃）：日志确认 `Cache directory: /data/storage/el2/base/cache/stellarium_http_cache`；实测 HiPS ↔ TOAST 自动互斥、关总开关 `hipsVisibleCount=0`；正午 12:00 开启大气与地景实拍：蓝天 → 切 Planck 微波 / AllWISE 中红外自动穿透大气（`actionShow_Atmosphere` 保持 `true`）且无可见光 DSO 贴图串台 → 关闭巡天蓝天瞬间恢复。
+
 ## [2026-11-25] 深空轮廓柔化与俗名默认 + 太阳系与标记图层页签精修
 
 - **修改文件：** `src/core/modules/Nebula.cpp`、`src/StelMainView.cpp`、`harmonyos/ets-source/panels/layers/DsoSettingsSection.ets`、`harmonyos/ets-source/panels/layers/LayerViewTabs.ets`、`docs/harmonyos/CHANGELOG.md`。
