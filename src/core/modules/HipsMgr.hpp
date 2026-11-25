@@ -22,10 +22,19 @@
 
 #include "StelModule.hpp"
 #include "StelHips.hpp"
+#include "StelFader.hpp"
+#include "StelProjectorType.hpp"
+#include "StelTextureTypes.hpp"
 #include <QLoggingCategory>
 #include <QJsonArray>
 #include <QJsonObject>
 #include <QMap>
+#include <QStringList>
+#include <memory>
+
+class QOpenGLBuffer;
+class QOpenGLShaderProgram;
+class QOpenGLVertexArrayObject;
 
 
 //! @class HipsMgr
@@ -116,6 +125,13 @@ private slots:
 	void updateActiveSurveys();
 
 private:
+	void setupPanoramaVAO();
+	void bindPanoramaVAO();
+	void releasePanoramaVAO();
+	void ensurePanoramaGL();
+	StelTextureSP getSpectralPanoramaTexture(const QString& datasetId);
+	void drawSpectralPanorama(StelCore* core);
+
 	QList<HipsSurveyP> surveys;
 	QList<HipsSurveyP> activeSurveys;
 	bool visible = true;
@@ -125,8 +141,27 @@ private:
 	//! Used internally to keep track of the loading state.
 	int nbSourcesLoaded = 0;
 	QMap<QString, HipsSurveyP> spectralSurveys;
+	QString activeSpectralId;
+	QString prevSpectralId;
 	QString lastSpectralDatasetId;
 	float spectralOpacity = 1.0f;
+	float spectralCrossFade = 1.0f;
+	LinearFader spectralFader;
+	QMap<QString, StelTextureSP> spectralPanoramaTextures;
+	QStringList spectralTextureLru;
+
+	std::unique_ptr<QOpenGLVertexArrayObject> panoVao;
+	std::unique_ptr<QOpenGLBuffer> panoVbo;
+	std::unique_ptr<QOpenGLShaderProgram> panoProgram;
+	StelProjectorP prevPanoProjector;
+	struct
+	{
+		int texCurrent = -1;
+		int texPrev = -1;
+		int crossFade = -1;
+		int alpha = -1;
+		int projectionMatrixInverse = -1;
+	} panoShaderVars;
 };
 
 #endif // HIPSMGR_HPP

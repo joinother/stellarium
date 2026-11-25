@@ -21,15 +21,25 @@
 #include "ToastMgr.hpp"
 #include "StelHips.hpp"
 #include "StelModuleMgr.hpp"
+#include "StelMovementMgr.hpp"
+#include "StelOpenGL.hpp"
 #include "StelPainter.hpp"
+#include "StelProjector.hpp"
 #include "StelCore.hpp"
 #include "StelApp.hpp"
 #include "StelFileMgr.hpp"
+#include "StelTexture.hpp"
+#include "StelTextureMgr.hpp"
 #include "StelTranslator.hpp"
 #include "StelUtils.hpp"
 
 #include <QFileInfo>
 #include <QNetworkReply>
+#include <QOpenGLBuffer>
+#include <QOpenGLContext>
+#include <QOpenGLFunctions>
+#include <QOpenGLShaderProgram>
+#include <QOpenGLVertexArrayObject>
 #include <QSettings>
 #include <QSignalBlocker>
 #include <QTimer>
@@ -38,6 +48,9 @@ Q_LOGGING_CATEGORY(HiPS,"stel.HiPS", QtInfoMsg)
 
 namespace
 {
+constexpr int PANO_FS_QUAD_COORDS_PER_VERTEX = 2;
+constexpr int PANO_VERTEX_ATTRIB_INDEX = 0;
+
 struct SpectralDataset
 {
 	const char* id;
@@ -45,7 +58,8 @@ struct SpectralDataset
 	const char* band;
 	const char* surveyUrl;
 	const char* frame;
-	const char* offlineAllskyFile;
+	const char* offlinePanoramaFile;
+	bool hasDeepOnlineHd;
 	const char* source;
 	const char* coverage;
 	const char* license;
@@ -56,82 +70,92 @@ const QList<SpectralDataset>& spectralDatasetCatalog()
 {
 	static const QList<SpectralDataset> catalog = {
 		{
-			"dss2-color", "DSS2 光学彩色巡天", "可见光",
+			"dss2-color", "光学全天高清巡天", "可见光",
 			"https://hips.china-vo.org/m/CDS_P_DSS2_color",
-			"equatorial", "data/surveys/dss2-color_allsky.jpg",
-			"China-VO · DSS2 Color",
-			"全天光学深度底片合成，缩放自动加载高清瓦片",
-			"科研公开巡天数据（署名使用）", "STScI / DSS2 / China-VO"
+			"equatorial", "data/surveys/dss2-color_4k.jpg", true,
+			"ESA Gaia DR3 · China-VO DSS2",
+			"全天 4K 无缝光学全景，放大至 14° 以内在线自动叠加 DSS2 超清底片",
+			"科研公开巡天数据（署名使用）", "ESA Gaia / STScI DSS2 / China-VO"
 		},
 		{
 			"finkbeiner-ha", "Finkbeiner 氢阿尔法", "Hα 发射线",
 			"https://skies.esac.esa.int/FinkbeinerHa",
-			"galactic", "data/surveys/finkbeiner-ha_allsky.jpg",
-			"ESA Sky · Hα All-Sky",
-			"全天 Hα 氢发射星云分布，突出巴纳德环与银道星云",
-			"科研公开巡天数据（署名使用）", "Finkbeiner (2003) / ESA"
+			"galactic", "data/surveys/finkbeiner-ha_4k.jpg", false,
+			"WWT · Finkbeiner Hα 4K",
+			"全天 4K 离线 Hα 氢发射星云（巴纳德环、船底座、天鹅座），深红宝石色阶",
+			"科研公开巡天数据（署名使用）", "Finkbeiner (2003) / AAS WWT"
 		},
 		{
 			"2mass-color", "2MASS 近红外彩色", "近红外",
 			"https://hips.china-vo.org/m/CDS_P_2MASS_color",
-			"equatorial", "data/surveys/2mass-color_allsky.jpg",
+			"equatorial", "data/surveys/2mass-color_4k.jpg", true,
 			"China-VO · 2MASS J/H/K",
-			"近红外 J/H/K 合成，穿透星际尘埃呈现银河系核心",
+			"全天 4K 离线近红外全景，穿透星际尘埃直视银河系核心，缩放叠加高清瓦片",
 			"科研公开巡天数据（署名使用）", "UMass / IPAC / Caltech / China-VO"
 		},
 		{
 			"allwise-color", "AllWISE 中红外尘埃", "中红外",
 			"https://hips.china-vo.org/m/CDS_P_allWISE_color",
-			"equatorial", "data/surveys/allwise-color_allsky.jpg",
+			"equatorial", "data/surveys/allwise-color_4k.jpg", true,
 			"China-VO · AllWISE W1/W2/W4",
-			"中红外全天尘埃与恒星形成区，色彩层次极其丰富",
+			"全天 4K 无缝中红外尘埃与恒星形成区，放大在线自动叠加高清瓦片",
 			"科研公开巡天数据（署名使用）", "NASA / JPL-Caltech / UCLA / China-VO"
 		},
 		{
 			"planck-lfi", "Planck 微波全天", "微波",
 			"https://hips.china-vo.org/m/CDS_P_PLANCK_R2_LFI_color",
-			"galactic", "data/surveys/planck-lfi_allsky.jpg",
-			"China-VO · Planck LFI",
-			"全天微波辐射与宇宙微波背景、银道面冷尘埃分布",
+			"galactic", "data/surveys/planck-lfi_4k.jpg", false,
+			"China-VO · Planck LFI 4K",
+			"全天 4K 离线微波全景，呈现宇宙微波背景与银道面冷尘埃分布",
 			"ESA 公开巡天数据（署名使用）", "ESA / Planck / China-VO"
 		},
 		{
 			"haslam-radio", "Haslam 408 MHz 射电", "射电",
 			"https://skies.esac.esa.int/Haslam/Haslam408_dsds_Remazeilles2014_mod_HiPS",
-			"galactic", "data/surveys/haslam-radio_allsky.jpg",
-			"ESA Sky · Haslam 408 MHz",
-			"全天 408 MHz 射电连续谱，展示银盘同步辐射与北极支",
+			"galactic", "data/surveys/haslam-radio_4k.jpg", false,
+			"ESA Sky · Haslam 408 MHz 4K",
+			"全天 4K 离线 408 MHz 射电连续谱，展示银盘同步辐射与北极支",
 			"科研公开巡天数据（署名使用）", "Haslam et al. / Remazeilles / ESA"
 		},
 		{
 			"galex-nuv", "GALEX 紫外全天", "紫外",
 			"https://hips.china-vo.org/m/CDS_P_GALEXGR6_AIS_color",
-			"equatorial", "data/surveys/galex-nuv_allsky.jpg",
+			"equatorial", "data/surveys/galex-nuv_4k.jpg", true,
 			"China-VO · GALEX GR6/7",
-			"紫外全天巡天（约 78% 覆盖），突出年轻炽热恒星",
+			"全天 4K 离线紫外全景，突出年轻炽热恒星与星系紫外核心，缩放叠加高清",
 			"NASA 公开巡天数据（署名使用）", "NASA / Caltech / STScI / China-VO"
 		},
 		{
-			"rass-xray", "eROSITA 软 X 射线", "X 射线",
+			"rass-xray", "ROSAT / eROSITA X 射线", "X 射线",
 			"https://erosita.mpe.mpg.de/erodat/static/hips/eRASS1_RGB_Rate_c010",
-			"equatorial", "data/surveys/rass-xray_allsky.jpg",
-			"MPE · SRG/eROSITA DR1",
-			"0.2–2.0 keV 软 X 射线西银半球巡天，可见超新星遗迹与 eROSITA 泡",
-			"MPE 公开数据释放 DR1（署名使用）", "MPE / eROSITA-DE"
+			"equatorial", "data/surveys/rass-xray_4k.jpg", true,
+			"WWT ROSAT · MPE eROSITA DR1",
+			"100% 全天 4K 离线软 X 射线全景（船帆座与天鹅座遗迹清晰可见），西银半球缩放叠加 eROSITA 高清",
+			"科研公开巡天数据（署名使用）", "MPE / ROSAT / eROSITA-DE / AAS WWT"
 		},
 		{
 			"fermi-gamma", "Fermi 伽马射线全天", "伽马射线",
 			"https://skies.esac.esa.int/FermiColor",
-			"equatorial", "data/surveys/fermi-gamma_allsky.jpg",
-			"ESA Sky · Fermi LAT Color",
-			"全天高能伽马射线分布，展示脉冲星、活动星系核与银盘辐射",
+			"equatorial", "data/surveys/fermi-gamma_4k.jpg", false,
+			"ESA Sky · Fermi LAT 4K",
+			"全天 4K 离线高能伽马射线全景，展示脉冲星、活动星系核与银盘辐射",
 			"NASA/ESA 公开巡天数据（署名使用）", "NASA / Fermi-LAT / ESA"
 		}
 	};
 	return catalog;
 }
 
-QString resolveOfflineAllskyPath(const char* relativePath)
+const SpectralDataset* findSpectralDescriptor(const QString& datasetId)
+{
+	for (const SpectralDataset& candidate : spectralDatasetCatalog())
+	{
+		if (datasetId == QString::fromUtf8(candidate.id))
+			return &candidate;
+	}
+	return nullptr;
+}
+
+QString resolveOfflinePanoramaPath(const char* relativePath)
 {
 	if (!relativePath || !relativePath[0])
 		return QString();
@@ -162,6 +186,7 @@ bool isSpectralSurveyUrl(const QString& url)
 HipsMgr::HipsMgr()
 {
 	setObjectName("HipsMgr");
+	spectralFader.setDuration(350);
 	connect(this, &HipsMgr::surveysChanged, this, &HipsMgr::restoreVisibleSurveys);
 }
 
@@ -392,15 +417,310 @@ void HipsMgr::saveSurveySettings() const
 
 void HipsMgr::deinit()
 {
+	panoProgram.reset();
+	panoVao.reset();
+	panoVbo.reset();
+	prevPanoProjector.reset();
+	spectralPanoramaTextures.clear();
+	spectralTextureLru.clear();
+}
+
+void HipsMgr::setupPanoramaVAO()
+{
+	auto& gl = *QOpenGLContext::currentContext()->functions();
+	panoVbo->bind();
+	gl.glVertexAttribPointer(PANO_VERTEX_ATTRIB_INDEX, PANO_FS_QUAD_COORDS_PER_VERTEX, GL_FLOAT, GL_FALSE, 0, nullptr);
+	panoVbo->release();
+	gl.glEnableVertexAttribArray(PANO_VERTEX_ATTRIB_INDEX);
+}
+
+void HipsMgr::bindPanoramaVAO()
+{
+	if (panoVao && panoVao->isCreated())
+		panoVao->bind();
+	else
+		setupPanoramaVAO();
+}
+
+void HipsMgr::releasePanoramaVAO()
+{
+	if (panoVao && panoVao->isCreated())
+	{
+		panoVao->release();
+	}
+	else
+	{
+		auto& gl = *QOpenGLContext::currentContext()->functions();
+		gl.glDisableVertexAttribArray(PANO_VERTEX_ATTRIB_INDEX);
+	}
+}
+
+void HipsMgr::ensurePanoramaGL()
+{
+	if (panoVbo && panoVbo->isCreated())
+		return;
+	auto* ctx = QOpenGLContext::currentContext();
+	if (!ctx)
+		return;
+	auto& gl = *ctx->functions();
+
+	panoVbo.reset(new QOpenGLBuffer(QOpenGLBuffer::VertexBuffer));
+	panoVbo->create();
+	panoVbo->bind();
+	const GLfloat vertices[] = {
+		-1.f, -1.f,
+		 1.f, -1.f,
+		-1.f,  1.f,
+		 1.f,  1.f,
+	};
+	gl.glBufferData(GL_ARRAY_BUFFER, sizeof(vertices), vertices, GL_STATIC_DRAW);
+	panoVbo->release();
+
+	panoVao.reset(new QOpenGLVertexArrayObject);
+	panoVao->create();
+	bindPanoramaVAO();
+	setupPanoramaVAO();
+	releasePanoramaVAO();
+}
+
+StelTextureSP HipsMgr::getSpectralPanoramaTexture(const QString& datasetId)
+{
+	if (datasetId.isEmpty())
+		return StelTextureSP();
+
+	auto it = spectralPanoramaTextures.find(datasetId);
+	if (it != spectralPanoramaTextures.end() && it.value())
+	{
+		spectralTextureLru.removeAll(datasetId);
+		spectralTextureLru.append(datasetId);
+		return it.value();
+	}
+
+	const SpectralDataset* descriptor = findSpectralDescriptor(datasetId);
+	if (!descriptor)
+		return StelTextureSP();
+
+	const QString fullPath = resolveOfflinePanoramaPath(descriptor->offlinePanoramaFile);
+	if (fullPath.isEmpty())
+		return StelTextureSP();
+
+	// No mipmaps -> zero dFdx/dFdy wrap seam at RA=0h and 33% less VRAM.
+	const StelTexture::StelTextureParams params(false, GL_LINEAR, GL_CLAMP_TO_EDGE);
+	StelTextureSP tex = StelApp::getInstance().getTextureManager().createTexture(fullPath, params);
+	if (!tex)
+		return StelTextureSP();
+
+	spectralPanoramaTextures.insert(datasetId, tex);
+	spectralTextureLru.removeAll(datasetId);
+	spectralTextureLru.append(datasetId);
+
+	// Cap resident 4K textures at 3 (~96 MB peak VRAM) while keeping active & prev textures resident.
+	while (spectralTextureLru.size() > 3)
+	{
+		const QString victim = spectralTextureLru.first();
+		if (victim == activeSpectralId || victim == prevSpectralId)
+		{
+			spectralTextureLru.move(0, spectralTextureLru.size() - 1);
+			if (spectralTextureLru.size() <= 2)
+				break;
+			continue;
+		}
+		spectralTextureLru.removeFirst();
+		spectralPanoramaTextures.remove(victim);
+	}
+	return tex;
+}
+
+void HipsMgr::drawSpectralPanorama(StelCore* core)
+{
+	const float fade = spectralFader.getInterstate();
+	if (fade <= 0.001f || activeSpectralId.isEmpty())
+		return;
+
+	StelTextureSP texCur = getSpectralPanoramaTexture(activeSpectralId);
+	if (!texCur || !texCur->canBind())
+		return;
+
+	ensurePanoramaGL();
+	if (!panoVbo || !panoVbo->isCreated())
+		return;
+
+	const auto modelView = core->getJ2000ModelViewTransform();
+	const auto projector = core->getProjection(modelView);
+
+	if (!panoProgram || !prevPanoProjector || !projector->isSameProjection(*prevPanoProjector))
+	{
+		panoProgram.reset(new QOpenGLShaderProgram);
+		prevPanoProjector = projector;
+
+		const auto vert =
+			StelOpenGL::globalShaderPrefix(StelOpenGL::VERTEX_SHADER) +
+			R"(
+ATTRIBUTE highp vec3 vertex;
+VARYING highp vec3 ndcPos;
+void main()
+{
+	gl_Position = vec4(vertex, 1.0);
+	ndcPos = vertex;
+}
+)";
+		if (!panoProgram->addShaderFromSourceCode(QOpenGLShader::Vertex, vert))
+		{
+			qWarning().noquote() << "HipsMgr panorama vertex shader error:\n" << panoProgram->log();
+			return;
+		}
+
+		const auto frag =
+			StelOpenGL::globalShaderPrefix(StelOpenGL::FRAGMENT_SHADER) +
+			projector->getUnProjectShader() +
+			core->getAberrationShader() +
+			R"(
+VARYING highp vec3 ndcPos;
+uniform sampler2D texCurrent;
+uniform sampler2D texPrev;
+uniform mediump float crossFade;
+uniform mediump float alpha;
+uniform mat4 projectionMatrixInverse;
+void main(void)
+{
+	const float PI = 3.14159265359;
+	vec4 winPos = projectionMatrixInverse * vec4(ndcPos, 1.0);
+	bool ok = false;
+	vec3 modelPos = unProject(winPos.x, winPos.y, ok).xyz;
+	if (!ok)
+	{
+		FRAG_COLOR = vec4(0.0);
+		return;
+	}
+	modelPos = normalize(modelPos);
+	modelPos = applyAberrationToViewDir(modelPos);
+	float ra = atan(modelPos.y, modelPos.x);
+	float dec = asin(clamp(modelPos.z, -1.0, 1.0));
+	vec2 texc = vec2(fract(ra / (2.0 * PI)), 0.5 + dec / PI);
+	vec3 col = texture2D(texCurrent, texc).rgb;
+	if (crossFade < 0.999)
+	{
+		vec3 colPrev = texture2D(texPrev, texc).rgb;
+		col = mix(colPrev, col, crossFade);
+	}
+	FRAG_COLOR = vec4(col, alpha);
+}
+)";
+		if (!panoProgram->addShaderFromSourceCode(QOpenGLShader::Fragment, frag))
+		{
+			qWarning().noquote() << "HipsMgr panorama fragment shader error:\n" << panoProgram->log();
+			return;
+		}
+
+		panoProgram->bindAttributeLocation("vertex", PANO_VERTEX_ATTRIB_INDEX);
+		if (!StelPainter::linkProg(panoProgram.get(), "HipsMgr 4K spectral panorama program"))
+			return;
+
+		panoProgram->bind();
+		panoShaderVars.texCurrent = panoProgram->uniformLocation("texCurrent");
+		panoShaderVars.texPrev = panoProgram->uniformLocation("texPrev");
+		panoShaderVars.crossFade = panoProgram->uniformLocation("crossFade");
+		panoShaderVars.alpha = panoProgram->uniformLocation("alpha");
+		panoShaderVars.projectionMatrixInverse = panoProgram->uniformLocation("projectionMatrixInverse");
+		panoProgram->release();
+	}
+
+	if (!panoProgram || !panoProgram->isLinked())
+		return;
+
+	StelTextureSP texPrev;
+	float cf = 1.0f;
+	if (spectralCrossFade < 0.999f && !prevSpectralId.isEmpty() && prevSpectralId != activeSpectralId)
+	{
+		texPrev = getSpectralPanoramaTexture(prevSpectralId);
+		if (texPrev && texPrev->canBind())
+			cf = spectralCrossFade * spectralCrossFade * (3.0f - 2.0f * spectralCrossFade);
+	}
+
+	auto& gl = *QOpenGLContext::currentContext()->functions();
+	panoProgram->bind();
+
+	texCur->bind(0);
+	gl.glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT);
+	gl.glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+	panoProgram->setUniformValue(panoShaderVars.texCurrent, 0);
+
+	if (texPrev && cf < 0.999f)
+	{
+		texPrev->bind(1);
+		gl.glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT);
+		gl.glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+	}
+	else
+	{
+		texCur->bind(1);
+	}
+	panoProgram->setUniformValue(panoShaderVars.texPrev, 1);
+
+	panoProgram->setUniformValue(panoShaderVars.crossFade, static_cast<GLfloat>(cf));
+	panoProgram->setUniformValue(panoShaderVars.alpha, static_cast<GLfloat>(fade * spectralOpacity));
+	panoProgram->setUniformValue(panoShaderVars.projectionMatrixInverse, projector->getProjectionMatrix().toQMatrix().inverted());
+	core->setAberrationUniforms(*panoProgram);
+	projector->setUnProjectUniforms(*panoProgram);
+
+	gl.glDisable(GL_DEPTH_TEST);
+	gl.glDisable(GL_CULL_FACE);
+	gl.glEnable(GL_BLEND);
+	gl.glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+	bindPanoramaVAO();
+	gl.glDrawArrays(GL_TRIANGLE_STRIP, 0, 4);
+	releasePanoramaVAO();
+	gl.glDisable(GL_BLEND);
+
+	if (texPrev && cf < 0.999f)
+		texPrev->release();
+	texCur->release();
+	panoProgram->release();
 }
 
 void HipsMgr::draw(StelCore* core)
 {
-	if (!visible) return;
+	const float panoFade = spectralFader.getInterstate();
+	const bool hasSpectralPano = !activeSpectralId.isEmpty() && panoFade > 0.001f;
+	if (hasSpectralPano)
+		drawSpectralPanorama(core);
+
+	if (!visible)
+		return;
+
 	StelPainter sPainter(core->getProjection(StelCore::FrameJ2000));
+	const double fovDeg = core->getMovementMgr() ? core->getMovementMgr()->getCurrentFov() : 60.0;
+
+	// Hybrid online HD zoom: for bands with ultra-deep online HiPS (Order 6-9),
+	// smoothly fade live remote tiles in over the 4K panorama when zoomed inside 14 deg.
+	if (hasSpectralPano && fovDeg < 14.0)
+	{
+		const SpectralDataset* desc = findSpectralDescriptor(activeSpectralId);
+		const HipsSurveyP survey = spectralSurveys.value(activeSpectralId);
+		if (desc && desc->hasDeepOnlineHd && survey && survey->isVisible() &&
+		    survey->isRemotePropertiesLoaded() && survey->hasValidProperties())
+		{
+			const float hdZoomFactor = static_cast<float>(qBound(0.0, (14.0 - fovDeg) / 6.0, 1.0));
+			if (hdZoomFactor > 0.01f)
+			{
+				const float savedOpacity = survey->getOpacity();
+				{
+					const QSignalBlocker blocker(survey.data());
+					survey->setOpacity(spectralOpacity * panoFade * hdZoomFactor);
+				}
+				survey->draw(&sPainter, 2.0 * M_PI, Q_NULLPTR, flagShowAtmosphericExtinction);
+				{
+					const QSignalBlocker blocker(survey.data());
+					survey->setOpacity(savedOpacity);
+				}
+			}
+		}
+	}
+
+	// Draw any standard non-spectral HiPS surveys normally.
 	for (auto &survey: activeSurveys)
 	{
-		if (survey->isVisible() && survey->planet.isEmpty())
+		if (survey->isVisible() && survey->planet.isEmpty() && !isSpectralSurveyUrl(survey->getUrl()))
 		{
 			survey->draw(&sPainter, 2.0 * M_PI, Q_NULLPTR, flagShowAtmosphericExtinction);
 		}
@@ -409,6 +729,19 @@ void HipsMgr::draw(StelCore* core)
 
 void HipsMgr::update(double deltaTime)
 {
+	spectralFader.update(static_cast<int>(deltaTime * 1000));
+	if (spectralCrossFade < 1.0f)
+	{
+		spectralCrossFade = qMin(1.0f, spectralCrossFade + static_cast<float>(deltaTime / 0.45));
+		if (spectralCrossFade >= 1.0f)
+			prevSpectralId.clear();
+	}
+	if (!spectralFader && spectralFader.getInterstate() <= 0.f && !activeSpectralId.isEmpty())
+	{
+		activeSpectralId.clear();
+		prevSpectralId.clear();
+	}
+
 	for (auto it = activeSurveys.begin(); it != activeSurveys.end();)
 	{
 		const auto &survey = *it;
@@ -440,21 +773,23 @@ int HipsMgr::getVisibleSurveyCount() const
 {
 	if (!visible)
 		return 0;
-	int count = 0;
+	int count = (!activeSpectralId.isEmpty() && spectralFader) ? 1 : 0;
 	for (const auto& survey : surveys)
-		if (survey->isVisible() && !survey->isPlanetarySurvey())
+	{
+		if (survey->isVisible() && !survey->isPlanetarySurvey() && !isSpectralSurveyUrl(survey->getUrl()))
 			++count;
+	}
 	return count;
 }
 
 float HipsMgr::getActiveSurveyFade() const
 {
+	float maxFade = spectralFader.getInterstate();
 	if (!visible)
-		return 0.f;
-	float maxFade = 0.f;
+		return maxFade;
 	for (const auto& survey : activeSurveys)
 	{
-		if (survey && survey->planet.isEmpty())
+		if (survey && survey->planet.isEmpty() && !isSpectralSurveyUrl(survey->getUrl()))
 			maxFade = qMax(maxFade, survey->getInterstate());
 	}
 	return maxFade;
@@ -462,18 +797,20 @@ float HipsMgr::getActiveSurveyFade() const
 
 float HipsMgr::getNonVisibleSpectralFade() const
 {
-	if (!visible)
+	const float fade = spectralFader.getInterstate();
+	if (fade <= 0.f || activeSpectralId.isEmpty())
 		return 0.f;
-	float maxFade = 0.f;
-	for (auto it = spectralSurveys.cbegin(); it != spectralSurveys.cend(); ++it)
+	const bool curNonVis = (activeSpectralId != QLatin1String("dss2-color"));
+	if (spectralCrossFade < 0.999f && !prevSpectralId.isEmpty())
 	{
-		if (it.key() == QLatin1String("dss2-color"))
-			continue;
-		const HipsSurveyP& survey = it.value();
-		if (survey && (survey->isVisible() || survey->getInterstate() > 0.f))
-			maxFade = qMax(maxFade, survey->getInterstate());
+		const bool prevNonVis = (prevSpectralId != QLatin1String("dss2-color"));
+		if (curNonVis != prevNonVis)
+		{
+			const float cf = spectralCrossFade * spectralCrossFade * (3.0f - 2.0f * spectralCrossFade);
+			return fade * (curNonVis ? cf : (1.0f - cf));
+		}
 	}
-	return maxFade;
+	return curNonVis ? fade : 0.f;
 }
 
 QJsonArray HipsMgr::getSpectralDatasets() const
@@ -484,11 +821,12 @@ QJsonArray HipsMgr::getSpectralDatasets() const
 		QJsonObject item;
 		const QString id = QString::fromUtf8(descriptor.id);
 		const HipsSurveyP survey = spectralSurveys.value(id);
-		const bool hasLocalAllsky = survey
-			? survey->hasOfflineAllsky()
-			: !resolveOfflineAllskyPath(descriptor.offlineAllskyFile).isEmpty();
-		const bool hdReady = survey && survey->isRemotePropertiesLoaded() && survey->hasValidProperties();
-		const bool enabled = visible && survey && survey->isVisible();
+		const bool hasLocalPano = spectralPanoramaTextures.contains(id) ||
+			!resolveOfflinePanoramaPath(descriptor.offlinePanoramaFile).isEmpty();
+		const bool hdReady = descriptor.hasDeepOnlineHd
+			? (survey && survey->isRemotePropertiesLoaded() && survey->hasValidProperties())
+			: hasLocalPano;
+		const bool enabled = visible && spectralFader && (activeSpectralId == id);
 		item["id"] = id;
 		item["title"] = QString::fromUtf8(descriptor.title);
 		item["band"] = QString::fromUtf8(descriptor.band);
@@ -497,17 +835,19 @@ QJsonArray HipsMgr::getSpectralDatasets() const
 		item["license"] = QString::fromUtf8(descriptor.license);
 		item["attribution"] = QString::fromUtf8(descriptor.attribution);
 		item["licenseReviewRequired"] = false;
-		item["networkPolicy"] = hasLocalAllsky ? QStringLiteral("offline-first-hd-online") : QStringLiteral("user-initiated");
+		item["networkPolicy"] = descriptor.hasDeepOnlineHd
+			? QStringLiteral("offline-4k-hybrid-hd")
+			: QStringLiteral("offline-4k-complete");
 		item["timeoutSeconds"] = 12;
 		item["surveyUrl"] = QString::fromUtf8(descriptor.surveyUrl);
 		item["available"] = true;
 		item["enabled"] = enabled;
-		item["loading"] = survey && survey->isLoading();
-		item["offlineReady"] = hasLocalAllsky;
+		item["loading"] = descriptor.hasDeepOnlineHd && survey && survey->isLoading();
+		item["offlineReady"] = hasLocalPano;
 		item["hdReady"] = hdReady;
-		item["ready"] = hdReady || hasLocalAllsky;
-		item["opacity"] = survey ? static_cast<double>(survey->getOpacity()) : static_cast<double>(spectralOpacity);
-		item["error"] = (survey && !hdReady) ? survey->getLastError() : QString();
+		item["ready"] = hasLocalPano || hdReady;
+		item["opacity"] = static_cast<double>(spectralOpacity);
+		item["error"] = (descriptor.hasDeepOnlineHd && survey && !hdReady && !hasLocalPano) ? survey->getLastError() : QString();
 		datasets.append(item);
 	}
 	return datasets;
@@ -526,41 +866,34 @@ QJsonObject HipsMgr::getSpectralState() const
 	state["visibleTiles"] = 0;
 	state["loadedTiles"] = 0;
 	state["error"] = QString();
-	if (!visible)
+	if (!visible || !spectralFader || activeSpectralId.isEmpty())
 		return state;
-	for (const SpectralDataset& descriptor : spectralDatasetCatalog())
-	{
-		const QString id = QString::fromUtf8(descriptor.id);
-		const HipsSurveyP survey = spectralSurveys.value(id);
-		if (!survey || !survey->isVisible()) continue;
-		const bool hdReady = survey->isRemotePropertiesLoaded() && survey->hasValidProperties();
-		const bool offlineReady = survey->hasOfflineAllsky();
-		state["enabled"] = true;
-		state["datasetId"] = id;
-		state["loading"] = survey->isLoading();
-		state["hdReady"] = hdReady;
-		state["offlineReady"] = offlineReady;
-		state["ready"] = hdReady || offlineReady;
-		state["opacity"] = static_cast<double>(survey->getOpacity());
-		state["visibleTiles"] = survey->getVisibleTileCount();
-		state["loadedTiles"] = survey->getLoadedTileCount();
-		state["error"] = hdReady ? QString() : survey->getLastError();
-		break;
-	}
+
+	const SpectralDataset* descriptor = findSpectralDescriptor(activeSpectralId);
+	if (!descriptor)
+		return state;
+	const HipsSurveyP survey = spectralSurveys.value(activeSpectralId);
+	const bool offlineReady = spectralPanoramaTextures.contains(activeSpectralId) ||
+		!resolveOfflinePanoramaPath(descriptor->offlinePanoramaFile).isEmpty();
+	const bool hdReady = descriptor->hasDeepOnlineHd
+		? (survey && survey->isRemotePropertiesLoaded() && survey->hasValidProperties())
+		: offlineReady;
+	state["enabled"] = true;
+	state["datasetId"] = activeSpectralId;
+	state["loading"] = descriptor->hasDeepOnlineHd && survey && survey->isLoading();
+	state["hdReady"] = hdReady;
+	state["offlineReady"] = offlineReady;
+	state["ready"] = offlineReady || hdReady;
+	state["opacity"] = static_cast<double>(spectralOpacity);
+	state["visibleTiles"] = survey ? survey->getVisibleTileCount() : 0;
+	state["loadedTiles"] = survey ? survey->getLoadedTileCount() : 0;
+	state["error"] = (descriptor->hasDeepOnlineHd && survey && !hdReady && !offlineReady) ? survey->getLastError() : QString();
 	return state;
 }
 
 bool HipsMgr::setSpectralView(const QString& datasetId, const bool enabled, QString* error)
 {
-	const SpectralDataset* descriptor = nullptr;
-	for (const SpectralDataset& candidate : spectralDatasetCatalog())
-	{
-		if (datasetId == QString::fromUtf8(candidate.id))
-		{
-			descriptor = &candidate;
-			break;
-		}
-	}
+	const SpectralDataset* descriptor = findSpectralDescriptor(datasetId);
 	if (!descriptor)
 	{
 		if (error) *error = QStringLiteral("unknown spectral dataset: %1").arg(datasetId);
@@ -569,41 +902,62 @@ bool HipsMgr::setSpectralView(const QString& datasetId, const bool enabled, QStr
 
 	if (!enabled)
 	{
-		if (spectralSurveys.contains(datasetId)) spectralSurveys.value(datasetId)->setVisible(false);
+		if (activeSpectralId == datasetId)
+			spectralFader = false;
+		if (spectralSurveys.contains(datasetId))
+			spectralSurveys.value(datasetId)->setVisible(false);
 		emit surveysChanged();
 		return true;
 	}
 
 	lastSpectralDatasetId = datasetId;
+	if (activeSpectralId != datasetId)
+	{
+		if (!activeSpectralId.isEmpty() && spectralFader.getInterstate() > 0.01f)
+		{
+			prevSpectralId = activeSpectralId;
+			spectralCrossFade = 0.0f;
+		}
+		else
+		{
+			prevSpectralId.clear();
+			spectralCrossFade = 1.0f;
+		}
+		activeSpectralId = datasetId;
+	}
+	spectralFader = true;
+
 	for (auto it = spectralSurveys.cbegin(); it != spectralSurveys.cend(); ++it)
 		if (it.key() != datasetId && it.value()) it.value()->setVisible(false);
 
-	HipsSurveyP survey = spectralSurveys.value(datasetId);
-	if (!survey)
+	if (descriptor->hasDeepOnlineHd)
 	{
-		const QString frame = QString::fromUtf8(descriptor->frame);
-		QMap<QString, QString> initialProperties;
-		initialProperties.insert(QStringLiteral("obs_title"), QString::fromUtf8(descriptor->title));
-		initialProperties.insert(QStringLiteral("hips_frame"), frame);
-		initialProperties.insert(QStringLiteral("hips_status"), QStringLiteral("public master clonableOnce"));
-		survey = HipsSurveyP(new HipsSurvey(QString::fromUtf8(descriptor->surveyUrl), QStringLiteral("spectral"), frame, QStringLiteral("image"), initialProperties));
-		const QString offlinePath = resolveOfflineAllskyPath(descriptor->offlineAllskyFile);
-		if (!offlinePath.isEmpty())
-			survey->setOfflineAllskyPath(offlinePath, 3);
-		survey->setOpacity(spectralOpacity);
-		connect(survey.data(), &HipsSurvey::propertiesChanged, this, &HipsMgr::surveysChanged);
-		connect(survey.data(), &HipsSurvey::visibleChanged, this, &HipsMgr::updateActiveSurveys);
-		connect(survey.data(), &HipsSurvey::displaySettingsChanged, this, &HipsMgr::saveSurveySettings);
-		spectralSurveys.insert(datasetId, survey);
-		surveys.append(survey);
-		emit gotNewSurvey(survey);
+		HipsSurveyP survey = spectralSurveys.value(datasetId);
+		if (!survey)
+		{
+			const QString frame = QString::fromUtf8(descriptor->frame);
+			QMap<QString, QString> initialProperties;
+			initialProperties.insert(QStringLiteral("obs_title"), QString::fromUtf8(descriptor->title));
+			initialProperties.insert(QStringLiteral("hips_frame"), frame);
+			initialProperties.insert(QStringLiteral("hips_status"), QStringLiteral("public master clonableOnce"));
+			survey = HipsSurveyP(new HipsSurvey(QString::fromUtf8(descriptor->surveyUrl), QStringLiteral("spectral"), frame, QStringLiteral("image"), initialProperties));
+			survey->setOpacity(spectralOpacity);
+			connect(survey.data(), &HipsSurvey::propertiesChanged, this, &HipsMgr::surveysChanged);
+			connect(survey.data(), &HipsSurvey::visibleChanged, this, &HipsMgr::updateActiveSurveys);
+			connect(survey.data(), &HipsSurvey::displaySettingsChanged, this, &HipsMgr::saveSurveySettings);
+			spectralSurveys.insert(datasetId, survey);
+			surveys.append(survey);
+			emit gotNewSurvey(survey);
+		}
+		else
+		{
+			survey->setOpacity(spectralOpacity);
+			if (!survey->isRemotePropertiesLoaded() && !survey->isLoading())
+				survey->retryProperties();
+		}
+		survey->setVisible(true);
 	}
-	else
-	{
-		survey->setOpacity(spectralOpacity);
-		if (!survey->isRemotePropertiesLoaded() && !survey->isLoading())
-			survey->retryProperties();
-	}
+
 	visible = true;
 	emit showChanged(true);
 	if (auto* toast = GETSTELMODULE(ToastMgr))
@@ -611,7 +965,6 @@ bool HipsMgr::setSpectralView(const QString& datasetId, const bool enabled, QStr
 		if (toast->getFlagShow())
 			toast->setFlagShow(false);
 	}
-	survey->setVisible(true);
 	updateActiveSurveys();
 	emit surveysChanged();
 	return true;
@@ -629,6 +982,7 @@ void HipsMgr::setSpectralOpacity(float opacity)
 
 void HipsMgr::closeSpectralView()
 {
+	spectralFader = false;
 	for (auto it = spectralSurveys.cbegin(); it != spectralSurveys.cend(); ++it)
 		if (it.value()) it.value()->setVisible(false);
 	if (getVisibleSurveyCount() == 0 && visible)
@@ -654,6 +1008,7 @@ void HipsMgr::setFlagShow(bool b)
 	}
 	if (!b)
 	{
+		spectralFader = false;
 		for (auto &survey: surveys)
 		{
 			if (survey->isVisible())
@@ -670,11 +1025,15 @@ void HipsMgr::setFlagShow(bool b)
 		if (initialized && getVisibleSurveyCount() == 0)
 		{
 			// Turning on the HiPS master switch with no active survey should
-			// immediately show the last selected (or default optical DSS2) survey.
+			// immediately show the last selected (or default optical) survey.
 			const QString fallbackId = lastSpectralDatasetId.isEmpty()
 				? QStringLiteral("dss2-color")
 				: lastSpectralDatasetId;
 			setSpectralView(fallbackId, true);
+		}
+		else if (!activeSpectralId.isEmpty())
+		{
+			spectralFader = true;
 		}
 	}
 }

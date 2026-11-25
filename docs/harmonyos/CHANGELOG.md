@@ -1,5 +1,24 @@
 > **身份图例**：本文件真机记录中出现的 `com.cnchensh.stellarium` 是**本机调试签名身份**（本机 DevEco 自动生成，非发布身份）；发布身份为 `com.joinother.skyinstrument`。构建脚本 `build-ohos-hap-windows.ps1 -Install` 从产物 `pack.info` 读取实际包名，仓库不写死任何签名身份（见 `docs/harmonyos/release/BUNDLE-IDENTITY-CLEANUP.md`）。
 
+## [2026-11-25] Sky Guide 级无缝离线 4K 多光谱全天全景 + GPU 丝滑交叉淡入与混合高清缩放
+
+- **修改文件：** `src/core/modules/HipsMgr.hpp`、`src/core/modules/HipsMgr.cpp`、`src/core/modules/StarMgr.cpp`、`data/surveys/*_4k.jpg`（9 张 `4096×2048` J2000 无缝等距圆柱离线全景，合计 `9.6 MB`，替换旧 `*_allsky.jpg`）、`harmonyos/ets-source/qability/StellariumResourceBootstrap.ets`、`harmonyos/ets-source/panels/layers/LayerSpectralSection.ets`、`docs/harmonyos/CHANGELOG.md`。
+- **升级内容：**
+  1. **9 波段零拼缝 4K（`4096×2048`）离线全景资产（`data/surveys/*_4k.jpg`，合计 9.6 MB）**：使用精确匹配 Stellarium HEALPix 与 WWT TOAST 球面数学的重投影器离线重采样并经过科研级天文调色，彻底消除旧 `Norder3/Allsky` 的方格拼接与半天黑洞：
+     - **可见光**（`dss2-color_4k.jpg`）：ESA Gaia DR3 无缝全天光学底图（零施密特底片方格）；
+     - **Hα 发射线**（`finkbeiner-ha_4k.jpg`）：AAS WWT Level 4 Finkbeiner Hα + Sky Guide 红宝石色阶（巴纳德环、玫瑰星云、船底座、天鹅座深邃立体）；
+     - **中红外**（`allwise-color_4k.jpg`）：AAS WWT Level 4 NASA/IPAC WISE 全天无拼缝拼接（彻底告别 CDS AllWISE 原始瓦片马赛克格纹）；
+     - **软 X 射线**（`rass-xray_4k.jpg`）：AAS WWT Level 4 ROSAT 100% 全天软 X 射线 + 电光蓝青超新星遗迹色阶（覆盖东西双银半球，船帆座与天鹅座面纱遗迹清晰可见，西银半球放大仍自动叠加 MPE eROSITA DR1 高清）；
+     - **射电**（`haslam-radio_4k.jpg`）：ESA Haslam 408 MHz + 深夜靛蓝至青白同步辐射色阶；
+     - **近红外 / 微波 / 紫外 / 伽马**（`2mass-color_4k.jpg`、`planck-lfi_4k.jpg`、`galex-nuv_4k.jpg`、`fermi-gamma_4k.jpg`）：高阶真实瓦片无缝重投影与去偏色清理。
+  2. **单次 Draw Call GPU 全屏光线投射渲染 + 450ms 丝滑交叉淡入（`HipsMgr.hpp/cpp`）**：沿用 `MilkyWay.cpp` 的全屏四边形 + `StelProjector::unProject` + 光行差着色器架构（单 Draw Call 60 FPS，无极点扭曲与赤经 `0h` mipmap 缝），内置最多 3 张 4K 纹理 LRU 显存封顶（≤96 MB VRAM），切换波段时在 GPU 内直接以 `smoothstep` 450ms 丝滑过渡，开合多光谱 350ms 柔和平滑淡入淡出。
+  3. **混合在线高清无缝接管（`FOV < 14°`）**：广角与中焦（`≥ 14°`）纯享零拼缝 4K 全景且对 Hα / 微波 / 射电 / 伽马 4 个原生满分辨波段零网络请求；仅对具备 Order 6–9 深度瓦片的 5 个波段（光学 DSS2、2MASS、AllWISE、GALEX、eROSITA）在缩放入 `14°` 以内且联网就绪时平滑叠加在线超清瓦片。
+  4. **非可见光星点柔和退让（`StarMgr.cpp`）**：非可见光波段激活时将可见光星点亮度轻柔下调 `38%`、半径 `16%`（仍保留亮星定位锚点与点击拾取），使星云、尘埃与 X 射线超新星遗迹成为视觉主角；同时保持经典/生动模式门控零变更。
+  5. **增量资源替换与状态文案（`StellariumResourceBootstrap.ets`、`LayerSpectralSection.ets`）**：升级 `.ohos_spectral_4k_v3` 标记自动释放 9 份 4K 全景并清理旧版 `*_allsky.jpg` 释放机身空间；状态徽章清晰区分 `4K 全景 / 4K·高清 / 4K·连高清 / 4K 离线`。
+- **验证结果：**
+  - 主机：`check-ohos-ui-contract.mjs`、`test-ohos-pointer-surveys-ui.mjs` 5/5、`test-ohos-layer-presets.mjs` 9/9、`test-ohos-vivid-rendering-gate.mjs` 15/15、`check-ohos-resource-dirs.mjs` 全部通过。
+  - 真机（`HUAWEI MatePad Mini 悦读版`，PID `2567` / `5508` 稳定无崩溃、零着色器报错）：实拍验证银心（M 8，`65°`）WWT WISE 中红外零马赛克拼缝、Gaia DR3 光学零底片格纹、Haslam 408 MHz 射电银盘精确对齐；猎户座（M 42，`55°`）Finkbeiner Hα 红宝石巴纳德环与玫瑰星云像素级贴合；天鹅座（东银半球）与船帆座（西银半球）ROSAT 软 X 射线 100% 全天覆盖且天鹅座环状遗迹清晰耀眼；M 42 放大至 `2.0°` 自动无缝叠加载入 China-VO AllWISE Order 8 高清瓦片（`79` 瓦片命中缓存）。
+
 ## [2026-11-25] 巡天持久化磁盘缓存加固 + 5 处图层逻辑冲突全量清理（含非可见光自动穿透大气）
 
 - **修改文件：** `src/core/StelFileMgr.cpp`、`src/core/StelApp.cpp`、`src/core/modules/HipsMgr.hpp`、`src/core/modules/HipsMgr.cpp`、`src/core/modules/ToastMgr.cpp`、`src/core/StelSkyLayerMgr.cpp`、`src/core/modules/LandscapeMgr.cpp`、`harmonyos/ets-source/qability/StellariumResourceBootstrap.ets`、`harmonyos/ets-source/panels/panels/LayersPanel.ets`、`harmonyos/ets-source/panels/layers/LayerViewTabs.ets`、`harmonyos/ets-source/panels/layers/LayerSpectralSection.ets`、`harmonyos/ets-source/capability/SurveyController.ets`、`docs/harmonyos/CHANGELOG.md`。

@@ -43,6 +43,7 @@
 #include "StelSkyDrawer.hpp"
 #include "StelModuleMgr.hpp"
 #include "ConstellationMgr.hpp"
+#include "HipsMgr.hpp"
 #include "Planet.hpp"
 #include "StelUtils.hpp"
 #include "StelHealpix.hpp"
@@ -1418,6 +1419,10 @@ void StarMgr::draw(StelCore* core)
 	}
 	const float pointRadiusAtten = 1.0f - 0.58f * trailPointCrossfade;
 	const float pointLumAtten = 1.0f - 0.72f * trailPointCrossfade;
+	static HipsMgr* hipsMgr = GETSTELMODULE(HipsMgr);
+	const float nonVisSpectralFade = hipsMgr ? hipsMgr->getNonVisibleSpectralFade() : 0.0f;
+	const float spectralRadiusScale = 1.0f - 0.16f * nonVisSpectralFade;
+	const float spectralLumScale = 1.0f - 0.38f * nonVisSpectralFade;
 	for (const auto* z : std::as_const(gridLevels))
 	{
 		int limitMagIndex=RCMAG_TABLE_SIZE;
@@ -1444,8 +1449,8 @@ void StarMgr::draw(StelCore* core)
 				}
 				break;
 			}
-			rcmag_table[i].radius *= starsFader.getInterstate() * starStreakScale * (fadePointsForTrails ? pointRadiusAtten : 1.0f);
-			rcmag_table[i].luminance *= starStreakScale * (fadePointsForTrails ? pointLumAtten : 1.0f);
+			rcmag_table[i].radius *= starsFader.getInterstate() * starStreakScale * (fadePointsForTrails ? pointRadiusAtten : 1.0f) * spectralRadiusScale;
+			rcmag_table[i].luminance *= starStreakScale * (fadePointsForTrails ? pointLumAtten : 1.0f) * spectralLumScale;
 		}
 		lastMaxSearchLevel = z->level;
 

@@ -42,9 +42,10 @@ export struct LayerSpectralSection {
   private statusLabel(dataset: SpectralDataset): string {
     const active = this.surveyStore.spectralActiveId === dataset.id
     if (active) {
-      if (dataset.hdReady === true) return '高清在线'
-      if (dataset.loading === true) return dataset.offlineReady === true ? '全天·连高清' : '加载中'
-      return dataset.offlineReady === true ? '已显示·离线' : '已显示'
+      if (dataset.networkPolicy === 'offline-4k-complete') return '4K 全景'
+      if (dataset.hdReady === true) return '4K·高清'
+      if (dataset.loading === true) return dataset.offlineReady === true ? '4K·连高清' : '加载中'
+      return dataset.offlineReady === true ? '4K 离线' : '已显示'
     }
     if (dataset.loading === true) return '加载中'
     return '打开'

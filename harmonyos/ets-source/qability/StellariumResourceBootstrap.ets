@@ -40,8 +40,19 @@ const DETAIL_MEDIA_IMAGE_EXTENSION = /\.(?:png|jpe?g|webp)$/i;
 const TEXTURE_COMPAT_MARKER = '.ohos_texture_compat_v1';
 const TEXTURE_COMPAT_FILES: Array<string> = ['charon.png', 'neptune.png', 'sedna.png', 'uranus.png'];
 const MILKYWAY_TEXTURE_MARKER = '.ohos_milkyway_ai_4k_v3';
-const SPECTRAL_ALLSKY_MARKER = '.ohos_spectral_allsky_v1';
-const SPECTRAL_ALLSKY_FILES: Array<string> = [
+const SPECTRAL_4K_MARKER = '.ohos_spectral_4k_v3';
+const SPECTRAL_4K_FILES: Array<string> = [
+  'dss2-color_4k.jpg',
+  'finkbeiner-ha_4k.jpg',
+  '2mass-color_4k.jpg',
+  'allwise-color_4k.jpg',
+  'planck-lfi_4k.jpg',
+  'haslam-radio_4k.jpg',
+  'galex-nuv_4k.jpg',
+  'rass-xray_4k.jpg',
+  'fermi-gamma_4k.jpg',
+];
+const LEGACY_SPECTRAL_ALLSKY_FILES: Array<string> = [
   'dss2-color_allsky.jpg',
   'finkbeiner-ha_allsky.jpg',
   '2mass-color_allsky.jpg',
@@ -51,6 +62,8 @@ const SPECTRAL_ALLSKY_FILES: Array<string> = [
   'galex-nuv_allsky.jpg',
   'rass-xray_allsky.jpg',
   'fermi-gamma_allsky.jpg',
+  '.ohos_spectral_allsky_v1',
+  '.ohos_spectral_4k_v2',
 ];
 const STARTUP_CORE_REFRESH_MARKER = '.ohos_startup_core_v2';
 const DETAIL_MODEL_TEXTURE_MARKER = '.ohos_detail_model_rgba_v2';
@@ -312,27 +325,37 @@ async function refreshSpectralAllskyAssets(
   installRoot: string,
 ): Promise<void> {
   const surveyRoot = `${installRoot}/data/surveys`;
-  const markerPath = `${surveyRoot}/${SPECTRAL_ALLSKY_MARKER}`;
+  const markerPath = `${surveyRoot}/${SPECTRAL_4K_MARKER}`;
   if (exists(markerPath) &&
-    SPECTRAL_ALLSKY_FILES.every((name: string) => fileSize(`${surveyRoot}/${name}`) > 0)) {
+    SPECTRAL_4K_FILES.every((name: string) => fileSize(`${surveyRoot}/${name}`) > 0)) {
     return;
   }
   const startedAt = Date.now();
   ensureDir(surveyRoot);
   let copied = 0;
-  for (const name of SPECTRAL_ALLSKY_FILES) {
+  for (const name of SPECTRAL_4K_FILES) {
     try {
       await writeRawFileAsync(appContext, `${RAW_ROOT}/data/surveys/${name}`, `${surveyRoot}/${name}`);
       copied += 1;
     } catch (err) {
-      hilog.warn(LOG_DOMAIN, LOG_TAG, `[startup] skip spectral allsky ${name}: ${JSON.stringify(err)}`);
+      hilog.warn(LOG_DOMAIN, LOG_TAG, `[startup] skip spectral 4K panorama ${name}: ${JSON.stringify(err)}`);
     }
   }
-  if (copied === SPECTRAL_ALLSKY_FILES.length) {
+  for (const oldName of LEGACY_SPECTRAL_ALLSKY_FILES) {
+    const oldPath = `${surveyRoot}/${oldName}`;
+    if (exists(oldPath)) {
+      try {
+        fs.unlinkSync(oldPath);
+      } catch (_) {
+        // ignore cleanup failure
+      }
+    }
+  }
+  if (copied === SPECTRAL_4K_FILES.length) {
     writeMarker(markerPath);
   }
   hilog.info(LOG_DOMAIN, LOG_TAG,
-    `[startup] refreshed ${copied}/${SPECTRAL_ALLSKY_FILES.length} spectral allsky atlases in ${Date.now() - startedAt} ms`);
+    `[startup] refreshed ${copied}/${SPECTRAL_4K_FILES.length} seamless 4K spectral panoramas in ${Date.now() - startedAt} ms`);
 }
 
 async function refreshObjectTypeTranslations(appContext: common.ApplicationContext, installRoot: string): Promise<void> {
