@@ -802,8 +802,11 @@ bool HipsMgr::shouldDrawLensOverAtmosphere(const StelCore* core) const
 
 void HipsMgr::drawSpectralLens(StelCore* core)
 {
-	if (lensSuppressDraw)
+	if (lensCaptureHook)
+	{
+		lensCaptureHook();
 		return;
+	}
 	const float fade = lensFader.getInterstate();
 	if (fade <= 0.001f || lensDatasetId.isEmpty())
 		return;
@@ -1647,6 +1650,7 @@ bool HipsMgr::setSpectralLens(const bool enabled, const QString& datasetId,
 	{
 		lensEnabled = false;
 		lensFader = false;
+		s_atomicLensFlags.store(0, std::memory_order_relaxed);
 		if (!spectralFader)
 		{
 			for (auto it = spectralSurveys.cbegin(); it != spectralSurveys.cend(); ++it)

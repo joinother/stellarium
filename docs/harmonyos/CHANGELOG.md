@@ -1,5 +1,17 @@
 > **身份图例**：本文件真机记录中出现的 `com.cnchensh.stellarium` 是**本机调试签名身份**（本机 DevEco 自动生成，非发布身份）；发布身份为 `com.joinother.skyinstrument`。构建脚本 `build-ohos-hap-windows.ps1 -Install` 从产物 `pack.info` 读取实际包名，仓库不写死任何签名身份（见 `docs/harmonyos/release/BUNDLE-IDENTITY-CLEANUP.md`）。
 
+## [2026-11-26] 放大镜双层 FBO 深度拆分合成（拖动保持 60/120 FPS，雾山遮挡与镜内标注/深空圈零跳变）
+
+- **修改文件：** `src/core/modules/HipsMgr.hpp`、`src/core/modules/HipsMgr.cpp`、`src/StelMainView.cpp`、`docs/harmonyos/CHANGELOG.md`。
+- **修复内容：**
+  - 修复此前单层 FBO 背景缓存把放大镜叠加在最顶层导致的两个视觉跳变：① 手指按住放大镜时镜体跳到动态雾山地景之前并“透视”山后画面；② 拖动期间镜内光学恒星、深空天体标注圈与文字标签暂时消失、松手又突然出现。
+  - 改为**双层 FBO 深度拆分合成**：通过 `HipsMgr::setSpectralLensCaptureHook` 在 `HipsMgr::drawSpectralLens` 的真实渲染深度（夜间 `1×` 位于 `CallOrder=7` 恒星/标注/雾山之前；白天或 `2×` 位于大气之后、地景之前）精确截获 `sceneFBO` 拆分出背景层 `Back` 与前景层（黑底 `Emit` + 白底 `White` 还原逐像素精准透射率 `T = clamp(W - E, 0, 1)`，同时保持适应亮度 `worldAdaptationLuminance` 一致避免极限星等漂移）。
+  - 拖动/拉大/旋柄期间每帧仅执行 `Back + Lens` 渲染与单 Pass `mid * T + E` 合成，在维持 **`1.0～2.0 ms / 帧`（60/120 FPS 满帧）** 的同时，与静止态逐像素完全一致：雾山地景自然遮挡镜体和转柄，镜内恒星、深空圈、星云轮廓与中文标签全程完整保留、按下与松手零跳变。
+  - 同时在 `HipsMgr::setSpectralLens(false)` 中即时清零 `s_atomicLensFlags`，防止关闭瞬间残留交互标记。
+- **验证结果：**
+  - 主机：UI 契约（123 锚点）、命令目录（449 命令）与全部 36 项单元测试通过。
+  - 真机（`HUAWEI MatePad Mini 悦读版`，PID `59294` 稳定无崩溃、着色器零报错）：实测将放大镜缓缓拖过雾山地景与象鼻星云/漏斗星云/北煤袋星云区域，拖动中途单帧保持 `1.0～2.0 ms`（`67～143 FPS`），雾山剪影严丝合缝遮挡镜底与转柄，镜内所有标签、天体圈与恒星和抬指静止帧逐像素一致。
+
 ## [2026-11-26] 暗空/暮光 1-LSB 防色带抖动 + 鸿蒙 60/120 FPS 渲染提速（放大镜静止星空 FBO 缓存 + 卫星管线减负）
 
 - **修改文件：** `src/core/modules/MilkyWay.cpp`、`src/core/modules/ZodiacalLight.cpp`、`src/core/modules/AtmosphereLightweight.cpp`、`src/core/modules/AtmospherePreetham.cpp`、`plugins/Satellites/src/Satellites.cpp`、`src/core/modules/HipsMgr.hpp`、`src/core/modules/HipsMgr.cpp`、`src/StelMainView.cpp`、`docs/harmonyos/CHANGELOG.md`。

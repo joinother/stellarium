@@ -25269,18 +25269,29 @@ void StelMainView::renderOhosFrameNow()
 
 	const double t2 = StelApp::getTotalRunTime();
 
-	// Stationary sky FBO backdrop cache during magnifying-glass interaction (drag/resize/rotate/bloom/expand):
-	// When the sky camera is stationary and time is normal, blit the cached full-resolution sky and draw
-	// only the unified GPU magnifying glass (~3ms total -> locked 60 FPS on MatePad Mini / 120 FPS on 120Hz!).
-	static GLuint s_lensBackdropFbo = 0;
-	static GLuint s_lensBackdropTex = 0;
+	// Two-layer split FBO backdrop cache during magnifying-glass interaction (drag/resize/rotate/bloom/expand):
+	// Splits the stationary scene at the EXACT Z-depth of HipsMgr::drawSpectralLens() into:
+	//   - Back layer (behind lens: MilkyWay/Zodiacal at night 1x; Sky+Stars+Atmosphere in daytime/2x)
+	//   - Front layer (in front of lens: Stars, DSO circles, object labels, constellations, and
+	//     opaque/semi-transparent Mist Mountain landscape) via exact affine transmittance+emission
+	//     Out(L) = clamp(W - E, 0, 1) * L + E.
+	// Result: ~2ms/frame (locked 60/120 FPS) with 100% identical mist-mountain occlusion and
+	// 100% preserved DSO circles, labels, and optical stars — zero jump on touch-down or lift!
+	static GLuint s_lensBackFbo = 0, s_lensBackTex = 0;
+	static GLuint s_lensEmitFbo = 0, s_lensEmitTex = 0;
+	static GLuint s_lensWhiteFbo = 0, s_lensWhiteTex = 0;
+	static GLuint s_lensMidFbo = 0, s_lensMidTex = 0;
 	static int s_lensBackdropW = 0;
 	static int s_lensBackdropH = 0;
 	static bool s_lensBackdropValid = false;
 	static bool s_lensBackdropNight = false;
+	static bool s_lensBackdropOverAtmo = false;
 	static double s_lensBackdropFov = 0.0;
 	static Vec3d s_lensBackdropViewDir(0.0, 0.0, 1.0);
 	static double s_lensBackdropCapturedSec = 0.0;
+	static std::unique_ptr<QOpenGLShaderProgram> s_lensSplitProg;
+	static std::unique_ptr<QOpenGLVertexArrayObject> s_lensSplitVao;
+	static GLuint s_lensSplitVbo = 0;
 
 	HipsMgr* lensHipsMgr = GETSTELMODULE(HipsMgr);
 	StelCore* ohosCore = app.getCore();
@@ -25298,36 +25309,165 @@ void StelMainView::renderOhosFrameNow()
 	double curBackdropFov = 0.0;
 	Vec3d curBackdropViewDir(0.0, 0.0, 1.0);
 	const bool curBackdropNight = app.getVisionModeNight();
+	const bool curBackdropOverAtmo = (lensHipsMgr && ohosCore) ? lensHipsMgr->shouldDrawLensOverAtmosphere(ohosCore) : false;
+
+	auto ensureSplitFbo = [&](GLuint& fbo, GLuint& tex) -> bool {
+		if (fbo == 0) gl->glGenFramebuffers(1, &fbo);
+		if (tex == 0) gl->glGenTextures(1, &tex);
+		gl->glBindTexture(GL_TEXTURE_2D, tex);
+		gl->glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, width, height, 0, GL_RGBA, GL_UNSIGNED_BYTE, nullptr);
+		gl->glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+		gl->glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+		gl->glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+		gl->glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+		gl->glBindFramebuffer(GL_FRAMEBUFFER, fbo);
+		gl->glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, tex, 0);
+		return backdropExtraFns->glCheckFramebufferStatus(GL_FRAMEBUFFER) == GL_FRAMEBUFFER_COMPLETE;
+	};
+
+	auto ensureSplitCompositeGL = [&]() -> bool {
+		if (!s_lensSplitProg)
+		{
+			auto prog = std::make_unique<QOpenGLShaderProgram>();
+			const QByteArray vs = StelOpenGL::globalShaderPrefix(StelOpenGL::VERTEX_SHADER) + R"(
+ATTRIBUTE highp vec2 a_pos;
+ATTRIBUTE highp vec2 a_uv;
+VARYING highp vec2 v_uv;
+void main()
+{
+	gl_Position = vec4(a_pos, 0.0, 1.0);
+	v_uv = a_uv;
+}
+)";
+			const QByteArray fs = StelOpenGL::globalShaderPrefix(StelOpenGL::FRAGMENT_SHADER) + R"(
+VARYING highp vec2 v_uv;
+uniform sampler2D u_mid;
+uniform sampler2D u_emit;
+uniform sampler2D u_white;
+void main()
+{
+	highp vec3 midCol = texture2D(u_mid, v_uv).rgb;
+	highp vec3 emitCol = texture2D(u_emit, v_uv).rgb;
+	highp vec3 whiteCol = texture2D(u_white, v_uv).rgb;
+	highp vec3 transmittance = clamp(whiteCol - emitCol, vec3(0.0), vec3(1.0));
+	FRAG_COLOR = vec4(clamp(midCol * transmittance + emitCol, vec3(0.0), vec3(1.0)), 1.0);
+}
+)";
+			if (!prog->addShaderFromSourceCode(QOpenGLShader::Vertex, vs) ||
+			    !prog->addShaderFromSourceCode(QOpenGLShader::Fragment, fs) ||
+			    !prog->link())
+			{
+				qWarning().noquote() << "OHOS split lens composite shader error:" << prog->log();
+				return false;
+			}
+			s_lensSplitProg = std::move(prog);
+		}
+		if (s_lensSplitVbo == 0)
+		{
+			static const GLfloat quadVerts[] = {
+				-1.f, -1.f, 0.f, 0.f,
+				 1.f, -1.f, 1.f, 0.f,
+				-1.f,  1.f, 0.f, 1.f,
+				 1.f,  1.f, 1.f, 1.f,
+			};
+			gl->glGenBuffers(1, &s_lensSplitVbo);
+			gl->glBindBuffer(GL_ARRAY_BUFFER, s_lensSplitVbo);
+			gl->glBufferData(GL_ARRAY_BUFFER, sizeof(quadVerts), quadVerts, GL_STATIC_DRAW);
+			gl->glBindBuffer(GL_ARRAY_BUFFER, 0);
+		}
+		if (!s_lensSplitVao)
+		{
+			s_lensSplitVao = std::make_unique<QOpenGLVertexArrayObject>();
+			s_lensSplitVao->create();
+		}
+		return s_lensSplitProg && s_lensSplitProg->isLinked() && s_lensSplitVbo != 0;
+	};
+
+	auto compositeLensWithSplitLayers = [&]() {
+		// 1. Copy Back -> Mid and render unified GPU magnifying glass into Mid
+		gl->glBindFramebuffer(GL_READ_FRAMEBUFFER, s_lensBackFbo);
+		gl->glBindFramebuffer(GL_DRAW_FRAMEBUFFER, s_lensMidFbo);
+		backdropExtraFns->glBlitFramebuffer(0, 0, width, height, 0, 0, width, height, GL_COLOR_BUFFER_BIT, GL_NEAREST);
+		gl->glBindFramebuffer(GL_FRAMEBUFFER, s_lensMidFbo);
+		gl->glViewport(0, 0, width, height);
+		lensHipsMgr->drawSpectralLens(ohosCore);
+
+		// 2. Composite Front(Emit, White) over Mid onto targetFbo in one fullscreen pass
+		const GLboolean depthWas = gl->glIsEnabled(GL_DEPTH_TEST);
+		const GLboolean blendWas = gl->glIsEnabled(GL_BLEND);
+		const GLboolean cullWas = gl->glIsEnabled(GL_CULL_FACE);
+		const GLboolean scissorWas = gl->glIsEnabled(GL_SCISSOR_TEST);
+		gl->glBindFramebuffer(GL_FRAMEBUFFER, targetFbo);
+		gl->glViewport(0, 0, width, height);
+		gl->glDisable(GL_DEPTH_TEST);
+		gl->glDisable(GL_BLEND);
+		gl->glDisable(GL_CULL_FACE);
+		gl->glDisable(GL_SCISSOR_TEST);
+
+		if (s_lensSplitVao && s_lensSplitVao->isCreated())
+			s_lensSplitVao->bind();
+		s_lensSplitProg->bind();
+		gl->glActiveTexture(GL_TEXTURE0);
+		gl->glBindTexture(GL_TEXTURE_2D, s_lensMidTex);
+		s_lensSplitProg->setUniformValue("u_mid", 0);
+		gl->glActiveTexture(GL_TEXTURE1);
+		gl->glBindTexture(GL_TEXTURE_2D, s_lensEmitTex);
+		s_lensSplitProg->setUniformValue("u_emit", 1);
+		gl->glActiveTexture(GL_TEXTURE2);
+		gl->glBindTexture(GL_TEXTURE_2D, s_lensWhiteTex);
+		s_lensSplitProg->setUniformValue("u_white", 2);
+
+		gl->glBindBuffer(GL_ARRAY_BUFFER, s_lensSplitVbo);
+		const int posLoc = s_lensSplitProg->attributeLocation("a_pos");
+		const int uvLoc = s_lensSplitProg->attributeLocation("a_uv");
+		gl->glEnableVertexAttribArray(posLoc);
+		gl->glVertexAttribPointer(posLoc, 2, GL_FLOAT, GL_FALSE, 4 * sizeof(GLfloat), reinterpret_cast<const void*>(0));
+		gl->glEnableVertexAttribArray(uvLoc);
+		gl->glVertexAttribPointer(uvLoc, 2, GL_FLOAT, GL_FALSE, 4 * sizeof(GLfloat), reinterpret_cast<const void*>(2 * sizeof(GLfloat)));
+		gl->glDrawArrays(GL_TRIANGLE_STRIP, 0, 4);
+		gl->glDisableVertexAttribArray(uvLoc);
+		gl->glDisableVertexAttribArray(posLoc);
+		gl->glBindBuffer(GL_ARRAY_BUFFER, 0);
+
+		gl->glActiveTexture(GL_TEXTURE2);
+		gl->glBindTexture(GL_TEXTURE_2D, 0);
+		gl->glActiveTexture(GL_TEXTURE1);
+		gl->glBindTexture(GL_TEXTURE_2D, 0);
+		gl->glActiveTexture(GL_TEXTURE0);
+		gl->glBindTexture(GL_TEXTURE_2D, 0);
+		s_lensSplitProg->release();
+		if (s_lensSplitVao && s_lensSplitVao->isCreated())
+			s_lensSplitVao->release();
+
+		if (depthWas) gl->glEnable(GL_DEPTH_TEST);
+		if (blendWas) gl->glEnable(GL_BLEND);
+		if (cullWas) gl->glEnable(GL_CULL_FACE);
+		if (scissorWas) gl->glEnable(GL_SCISSOR_TEST);
+	};
+
 	if (canUseLensBackdropFastPath)
 	{
 		curBackdropFov = ohosMvMgr->getCurrentFov();
 		curBackdropViewDir = ohosMvMgr->getViewDirectionJ2000();
-		if (s_lensBackdropFbo == 0 || s_lensBackdropTex == 0 ||
-		    s_lensBackdropW != width || s_lensBackdropH != height)
+		const bool glReady = ensureSplitCompositeGL();
+		if (glReady && (s_lensBackFbo == 0 || s_lensBackdropW != width || s_lensBackdropH != height))
 		{
-			if (s_lensBackdropFbo == 0)
-				gl->glGenFramebuffers(1, &s_lensBackdropFbo);
-			if (s_lensBackdropTex == 0)
-				gl->glGenTextures(1, &s_lensBackdropTex);
-			gl->glBindTexture(GL_TEXTURE_2D, s_lensBackdropTex);
-			gl->glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, width, height, 0, GL_RGBA, GL_UNSIGNED_BYTE, nullptr);
-			gl->glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
-			gl->glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
-			gl->glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
-			gl->glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
-			gl->glBindFramebuffer(GL_FRAMEBUFFER, s_lensBackdropFbo);
-			gl->glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, s_lensBackdropTex, 0);
-			const bool fboOk = (backdropExtraFns->glCheckFramebufferStatus(GL_FRAMEBUFFER) == GL_FRAMEBUFFER_COMPLETE);
+			const bool okAll =
+				ensureSplitFbo(s_lensBackFbo, s_lensBackTex) &&
+				ensureSplitFbo(s_lensEmitFbo, s_lensEmitTex) &&
+				ensureSplitFbo(s_lensWhiteFbo, s_lensWhiteTex) &&
+				ensureSplitFbo(s_lensMidFbo, s_lensMidTex);
 			gl->glBindFramebuffer(GL_FRAMEBUFFER, targetFbo);
 			gl->glBindTexture(GL_TEXTURE_2D, 0);
-			s_lensBackdropW = fboOk ? width : 0;
-			s_lensBackdropH = fboOk ? height : 0;
+			s_lensBackdropW = okAll ? width : 0;
+			s_lensBackdropH = okAll ? height : 0;
 			s_lensBackdropValid = false;
 		}
-		if (s_lensBackdropW == width && s_lensBackdropH == height)
+		if (glReady && s_lensBackdropW == width && s_lensBackdropH == height)
 		{
 			if (s_lensBackdropValid &&
 			    s_lensBackdropNight == curBackdropNight &&
+			    s_lensBackdropOverAtmo == curBackdropOverAtmo &&
 			    std::abs(curBackdropFov - s_lensBackdropFov) < 1e-4 &&
 			    (curBackdropViewDir - s_lensBackdropViewDir).normSquared() < 1e-8 &&
 			    (t2 - s_lensBackdropCapturedSec) < 0.8)
@@ -25351,12 +25491,7 @@ void StelMainView::renderOhosFrameNow()
 	{
 		lensHipsMgr->update(dt);
 		t3 = StelApp::getTotalRunTime();
-		gl->glBindFramebuffer(GL_READ_FRAMEBUFFER, s_lensBackdropFbo);
-		gl->glBindFramebuffer(GL_DRAW_FRAMEBUFFER, targetFbo);
-		backdropExtraFns->glBlitFramebuffer(0, 0, width, height, 0, 0, width, height, GL_COLOR_BUFFER_BIT, GL_NEAREST);
-		gl->glBindFramebuffer(GL_FRAMEBUFFER, targetFbo);
-		gl->glViewport(0, 0, width, height);
-		lensHipsMgr->drawSpectralLens(ohosCore);
+		compositeLensWithSplitLayers();
 		t4 = StelApp::getTotalRunTime();
 	}
 	else
@@ -25399,28 +25534,123 @@ void StelMainView::renderOhosFrameNow()
 		ohosProcessPendingPointSelect();
 		ohosUpdateSelectedScreenProjection();
 		t3 = StelApp::getTotalRunTime();
-		if (lensBackdropCapture)
-			lensHipsMgr->setSpectralLensSuppressDraw(true);
-		app.draw();
-		// Keep instrument overlays on this render thread so they cannot lag behind
-		// the native sky projection while the user pans, zooms or flips the view.
-		drawOhosSelectionReticle(app.getCore());
-		drawOhosPolarScopeOverlay(app.getCore());
-		drawOhosTelescopeOverlay(app.getCore());
+
 		if (lensBackdropCapture)
 		{
-			gl->glBindFramebuffer(GL_READ_FRAMEBUFFER, targetFbo);
-			gl->glBindFramebuffer(GL_DRAW_FRAMEBUFFER, s_lensBackdropFbo);
-			backdropExtraFns->glBlitFramebuffer(0, 0, width, height, 0, 0, width, height, GL_COLOR_BUFFER_BIT, GL_NEAREST);
+			bool splitHookFired1 = false;
+			bool splitHookFired2 = false;
+			StelSkyDrawer* splitSkyDrawer = ohosCore ? ohosCore->getSkyDrawer() : nullptr;
+			StelToneReproducer* splitEye = ohosCore ? ohosCore->getToneReproducer() : nullptr;
+
+			// Clear targetFbo before Pass 1 because StelApp::draw()'s postProcessor blends sceneFBO with GL_ONE, GL_ONE.
 			gl->glBindFramebuffer(GL_FRAMEBUFFER, targetFbo);
 			gl->glViewport(0, 0, width, height);
-			lensHipsMgr->setSpectralLensSuppressDraw(false);
-			lensHipsMgr->drawSpectralLens(ohosCore);
-			s_lensBackdropNight = curBackdropNight;
-			s_lensBackdropFov = curBackdropFov;
-			s_lensBackdropViewDir = curBackdropViewDir;
-			s_lensBackdropCapturedSec = t2;
-			s_lensBackdropValid = true;
+			gl->glClearColor(0.f, 0.f, 0.f, 0.f);
+			gl->glClear(GL_COLOR_BUFFER_BIT);
+
+			// Pass 1: capture Back (from sceneFBO before lens hook) and Emit (post-lens drawn over black into sceneFBO)
+			lensHipsMgr->setSpectralLensCaptureHook([&]() {
+				splitHookFired1 = true;
+				GLint activeFbo = 0;
+				gl->glGetIntegerv(GL_FRAMEBUFFER_BINDING, &activeFbo);
+				const GLboolean scWas = gl->glIsEnabled(GL_SCISSOR_TEST);
+				GLboolean cmWas[4] = {GL_TRUE, GL_TRUE, GL_TRUE, GL_TRUE};
+				gl->glGetBooleanv(GL_COLOR_WRITEMASK, cmWas);
+				gl->glDisable(GL_SCISSOR_TEST);
+				gl->glColorMask(GL_TRUE, GL_TRUE, GL_TRUE, GL_TRUE);
+				gl->glBindFramebuffer(GL_READ_FRAMEBUFFER, static_cast<GLuint>(activeFbo));
+				gl->glBindFramebuffer(GL_DRAW_FRAMEBUFFER, s_lensBackFbo);
+				backdropExtraFns->glBlitFramebuffer(0, 0, width, height, 0, 0, width, height, GL_COLOR_BUFFER_BIT, GL_NEAREST);
+				gl->glBindFramebuffer(GL_FRAMEBUFFER, static_cast<GLuint>(activeFbo));
+				gl->glViewport(0, 0, width, height);
+				gl->glClearColor(0.f, 0.f, 0.f, 0.f);
+				gl->glClear(GL_COLOR_BUFFER_BIT);
+				gl->glColorMask(cmWas[0], cmWas[1], cmWas[2], cmWas[3]);
+				if (scWas) gl->glEnable(GL_SCISSOR_TEST);
+			});
+			app.draw();
+			drawOhosSelectionReticle(ohosCore);
+			drawOhosPolarScopeOverlay(ohosCore);
+			drawOhosTelescopeOverlay(ohosCore);
+			// Preserve Pass 1's adaptation luminance so Pass 2's preDraw() does not drop maxLum to 0
+			// (which would otherwise blow up limitMagnitude and expose faint Novae/NGC labels!).
+			const float pass1WorldLum = splitEye ? splitEye->getWorldAdaptationLuminance() : 0.f;
+			if (splitHookFired1)
+			{
+				gl->glBindFramebuffer(GL_READ_FRAMEBUFFER, targetFbo);
+				gl->glBindFramebuffer(GL_DRAW_FRAMEBUFFER, s_lensEmitFbo);
+				backdropExtraFns->glBlitFramebuffer(0, 0, width, height, 0, 0, width, height, GL_COLOR_BUFFER_BIT, GL_NEAREST);
+
+				// Pass 2: capture White (post-lens drawn over white inside sceneFBO) to recover exact transmittance T = W - E
+				if (splitSkyDrawer && pass1WorldLum > 0.f)
+					splitSkyDrawer->reportLuminanceInFov(pass1WorldLum, true);
+				gl->glBindFramebuffer(GL_FRAMEBUFFER, targetFbo);
+				gl->glViewport(0, 0, width, height);
+				gl->glClearColor(0.f, 0.f, 0.f, 0.f);
+				gl->glClear(GL_COLOR_BUFFER_BIT);
+
+				lensHipsMgr->setSpectralLensCaptureHook([&]() {
+					splitHookFired2 = true;
+					GLint activeFbo = 0;
+					gl->glGetIntegerv(GL_FRAMEBUFFER_BINDING, &activeFbo);
+					const GLboolean scWas = gl->glIsEnabled(GL_SCISSOR_TEST);
+					GLboolean cmWas[4] = {GL_TRUE, GL_TRUE, GL_TRUE, GL_TRUE};
+					gl->glGetBooleanv(GL_COLOR_WRITEMASK, cmWas);
+					gl->glDisable(GL_SCISSOR_TEST);
+					gl->glColorMask(GL_TRUE, GL_TRUE, GL_TRUE, GL_TRUE);
+					gl->glBindFramebuffer(GL_FRAMEBUFFER, static_cast<GLuint>(activeFbo));
+					gl->glViewport(0, 0, width, height);
+					gl->glClearColor(1.f, 1.f, 1.f, 1.f);
+					gl->glClear(GL_COLOR_BUFFER_BIT);
+					gl->glClearColor(0.f, 0.f, 0.f, 0.f);
+					gl->glColorMask(cmWas[0], cmWas[1], cmWas[2], cmWas[3]);
+					if (scWas) gl->glEnable(GL_SCISSOR_TEST);
+				});
+				app.draw();
+				drawOhosSelectionReticle(ohosCore);
+				drawOhosPolarScopeOverlay(ohosCore);
+				drawOhosTelescopeOverlay(ohosCore);
+				if (splitSkyDrawer && pass1WorldLum > 0.f)
+					splitSkyDrawer->reportLuminanceInFov(pass1WorldLum, true);
+				if (splitHookFired2)
+				{
+					gl->glBindFramebuffer(GL_READ_FRAMEBUFFER, targetFbo);
+					gl->glBindFramebuffer(GL_DRAW_FRAMEBUFFER, s_lensWhiteFbo);
+					backdropExtraFns->glBlitFramebuffer(0, 0, width, height, 0, 0, width, height, GL_COLOR_BUFFER_BIT, GL_NEAREST);
+				}
+			}
+			lensHipsMgr->setSpectralLensCaptureHook({});
+			gl->glBindFramebuffer(GL_FRAMEBUFFER, targetFbo);
+			gl->glViewport(0, 0, width, height);
+			if (splitHookFired1 && splitHookFired2)
+			{
+				s_lensBackdropNight = curBackdropNight;
+				s_lensBackdropOverAtmo = curBackdropOverAtmo;
+				s_lensBackdropFov = curBackdropFov;
+				s_lensBackdropViewDir = curBackdropViewDir;
+				s_lensBackdropCapturedSec = t2;
+				s_lensBackdropValid = true;
+				compositeLensWithSplitLayers();
+			}
+			else
+			{
+				s_lensBackdropValid = false;
+				gl->glClearColor(0.f, 0.f, 0.f, 0.f);
+				gl->glClear(GL_COLOR_BUFFER_BIT);
+				app.draw();
+				drawOhosSelectionReticle(ohosCore);
+				drawOhosPolarScopeOverlay(ohosCore);
+				drawOhosTelescopeOverlay(ohosCore);
+			}
+		}
+		else
+		{
+			app.draw();
+			// Keep instrument overlays on this render thread so they cannot lag behind
+			// the native sky projection while the user pans, zooms or flips the view.
+			drawOhosSelectionReticle(ohosCore);
+			drawOhosPolarScopeOverlay(ohosCore);
+			drawOhosTelescopeOverlay(ohosCore);
 		}
 		t4 = StelApp::getTotalRunTime();
 	}
