@@ -1080,6 +1080,11 @@ export class SkyInputController {
       const owner = this.gestureOwner
       this.gestureOwner = SkyGestureOwner.None
       if (wasLongPressLens) {
+        try {
+          AppStorage.setOrCreate('stellariumSpectralLensLivePos', 'END|' + Date.now().toString())
+        } catch (_) {
+          // ignore in Node test
+        }
         this.hooks.setSkyTouchActive(false)
         this.hooks.setSkyTouchFeedback(false)
         this.hooks.setSkyTouchFeedbackMulti(false)

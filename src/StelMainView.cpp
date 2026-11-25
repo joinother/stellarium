@@ -7902,9 +7902,31 @@ extern "C" __attribute__((visibility("default"))) const char* StellariumOhos_com
 	static QByteArray response;
 	const QString commandName = QString::fromUtf8(command ? command : "");
 	const QString arg = QString::fromUtf8(payload ? payload : "");
-	// 高频命令（dragView/zoomBy/panBy/setTimeToJD）不打日志，避免每秒数十条 qInfo 造成 CPU/IO 开销
-	if (commandName != "dragView" && commandName != "zoomBy" && commandName != "panBy" && commandName != "setGyroView" && commandName != "getGyroGuidePosition" && commandName != "setTimeToJD")
+	// 高频命令（dragView/zoomBy/panBy/setTimeToJD/setSpectralLens）不打日志，避免每秒数十条 qInfo 造成 CPU/IO 开销
+	if (commandName != "dragView" && commandName != "zoomBy" && commandName != "panBy" && commandName != "setGyroView" && commandName != "getGyroGuidePosition" && commandName != "setTimeToJD" && commandName != "setSpectralLens")
 		qInfo() << "[StellariumOhos] command received:" << commandName << arg;
+
+	if (commandName == "setSpectralLens")
+	{
+		// Always boost render pump to full interactive FPS on BOTH main & off-thread paths.
+		s_spectralLensBoostUntilMs.store(QDateTime::currentMSecsSinceEpoch() + 800, std::memory_order_relaxed);
+		// Mode "2|x|y|r|handleDeg|flags": zero-allocation pure geometry move/resize/rotate fast path!
+		if (arg.startsWith(QLatin1String("2|")))
+		{
+			const QStringList parts = arg.split('|');
+			bool okX = false, okY = false, okR = false, okA = false, okF = false;
+			const float nx = (parts.size() > 1 && !parts[1].isEmpty()) ? parts[1].toFloat(&okX) : -1.f;
+			const float ny = (parts.size() > 2 && !parts[2].isEmpty()) ? parts[2].toFloat(&okY) : -1.f;
+			const float nr = (parts.size() > 3 && !parts[3].isEmpty()) ? parts[3].toFloat(&okR) : -1.f;
+			const float ang = (parts.size() > 4 && !parts[4].isEmpty()) ? parts[4].toFloat(&okA) : -999.f;
+			const int fl = (parts.size() > 5 && !parts[5].isEmpty()) ? parts[5].toInt(&okF) : -1;
+			HipsMgr::updateSpectralLensGeometryFast(okX ? nx : -1.f, okY ? ny : -1.f, okR ? nr : -1.f,
+				okA ? ang : -999.f, okF ? fl : -1);
+			if (qApp && QThread::currentThread() == qApp->thread())
+				markOhosInteraction();
+			return "{\"ok\":true}";
+		}
+	}
 
 	if (commandName == "getFPS")
 	{
@@ -16893,6 +16915,12 @@ extern "C" __attribute__((visibility("default"))) const char* StellariumOhos_com
 				if (parts.size() > 3 && !parts[3].isEmpty()) { const float v = parts[3].toFloat(&ok); if (ok) normY = v; }
 				if (parts.size() > 4 && !parts[4].isEmpty()) { const float v = parts[4].toFloat(&ok); if (ok) radiusNorm = v; }
 				if (parts.size() > 5 && !parts[5].isEmpty()) { const float v = parts[5].toFloat(&ok); if (ok) zoom = v; }
+				float handleDeg = -999.f;
+				int lensFlags = -1;
+				if (parts.size() > 6 && !parts[6].isEmpty()) { const float v = parts[6].toFloat(&ok); if (ok) handleDeg = v; }
+				if (parts.size() > 7 && !parts[7].isEmpty()) { const int v = parts[7].toInt(&ok); if (ok) lensFlags = v; }
+				if (handleDeg > -900.f || lensFlags >= 0)
+					HipsMgr::updateSpectralLensGeometryFast(-1.f, -1.f, -1.f, handleDeg, lensFlags);
 			}
 			QString error;
 			markOhosInteraction();

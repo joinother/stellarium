@@ -97,7 +97,7 @@ public:
 	void closeSpectralView();
 	bool setSpectralLens(bool enabled, const QString& datasetId, float normX, float normY, float radiusNorm, float zoom, QString* error = nullptr);
 	//! Pure lock-free static geometry update safe to call from any thread (ArkUI touch thread).
-	static void updateSpectralLensGeometryFast(float normX, float normY, float radiusNorm);
+	static void updateSpectralLensGeometryFast(float normX, float normY, float radiusNorm, float handleAngleDeg = -999.f, int flags = -1);
 	QJsonObject getSpectralLensState() const;
 	bool isSpectralLensActive() const { return lensFader.getInterstate() > 0.001f; }
 	bool shouldDrawLensOverAtmosphere(const StelCore* core) const;
@@ -194,6 +194,12 @@ private:
 		int lensCenter = -1;
 		int lensRadiusNorm = -1;
 		int lensZoom = -1;
+		int handleAngleRad = -1;
+		int accentColor = -1;
+		int chromeAlpha = -1;
+		int lensFlags = -1;
+		int activeBandIdx = -1;
+		int dpr = -1;
 		int projectionMatrixInverse = -1;
 	} lensShaderVars;
 };

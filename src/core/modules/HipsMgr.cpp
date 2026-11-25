@@ -55,6 +55,41 @@ constexpr int PANO_VERTEX_ATTRIB_INDEX = 0;
 std::atomic<float> s_atomicLensCenterX{0.5f};
 std::atomic<float> s_atomicLensCenterY{0.44f};
 std::atomic<float> s_atomicLensRadiusNorm{0.215f};
+std::atomic<float> s_atomicLensHandleAngleDeg{45.0f};
+std::atomic<int> s_atomicLensFlags{0};
+
+int lensBandIndexForId(const QString& id)
+{
+	if (id == QLatin1String("finkbeiner-ha")) return 0;
+	if (id == QLatin1String("allwise-color")) return 1;
+	if (id == QLatin1String("2mass-color")) return 2;
+	if (id == QLatin1String("planck-lfi")) return 3;
+	if (id == QLatin1String("haslam-radio")) return 4;
+	if (id == QLatin1String("dss2-color")) return 5;
+	if (id == QLatin1String("galex-nuv")) return 6;
+	if (id == QLatin1String("rass-xray")) return 7;
+	if (id == QLatin1String("fermi-gamma")) return 8;
+	return 0;
+}
+
+QVector3D lensBandColorRgb(int idx, bool nightMode)
+{
+	if (nightMode)
+		return QVector3D(0.769f, 0.271f, 0.212f); // #C44536
+	switch (idx)
+	{
+		case 0: return QVector3D(0.949f, 0.420f, 0.420f); // #F26B6B H-alpha
+		case 1: return QVector3D(1.000f, 0.588f, 0.310f); // #FF964F AllWISE
+		case 2: return QVector3D(0.961f, 0.725f, 0.357f); // #F5B95B 2MASS
+		case 3: return QVector3D(0.298f, 0.765f, 0.851f); // #4CC3D9 Planck
+		case 4: return QVector3D(0.494f, 0.612f, 0.902f); // #7E9CE6 Radio
+		case 5: return QVector3D(0.604f, 0.761f, 1.000f); // #9AC2FF Optical
+		case 6: return QVector3D(0.659f, 0.545f, 1.000f); // #A88BFF UV
+		case 7: return QVector3D(0.310f, 0.820f, 0.773f); // #4FD1C5 X-ray
+		case 8: return QVector3D(0.949f, 0.788f, 0.298f); // #F2C94C Gamma
+		default: return QVector3D(0.949f, 0.420f, 0.420f);
+	}
+}
 
 struct SpectralDataset
 {
@@ -766,7 +801,40 @@ uniform highp vec2 viewportSize;
 uniform highp vec2 lensCenter;
 uniform highp float lensRadiusNorm;
 uniform highp float lensZoom;
+uniform highp float handleAngleRad;
+uniform mediump vec3 accentColor;
+uniform mediump float chromeAlpha;
+uniform mediump vec4 lensFlags;
+uniform int activeBandIdx;
+uniform highp float dpr;
 uniform mat4 projectionMatrixInverse;
+
+float sdRoundBox(vec2 p, vec2 b, float r)
+{
+	vec2 q = abs(p) - b + vec2(r);
+	return length(max(q, 0.0)) + min(max(q.x, q.y), 0.0) - r;
+}
+
+vec3 bandColorAt(int idx, float isNight)
+{
+	if (isNight > 0.5) return vec3(0.769, 0.271, 0.212);
+	if (idx == 0) return vec3(0.949, 0.420, 0.420);
+	if (idx == 1) return vec3(1.000, 0.588, 0.310);
+	if (idx == 2) return vec3(0.961, 0.725, 0.357);
+	if (idx == 3) return vec3(0.298, 0.765, 0.851);
+	if (idx == 4) return vec3(0.494, 0.612, 0.902);
+	if (idx == 5) return vec3(0.604, 0.761, 1.000);
+	if (idx == 6) return vec3(0.659, 0.545, 1.000);
+	if (idx == 7) return vec3(0.310, 0.820, 0.773);
+	return vec3(0.949, 0.788, 0.298);
+}
+
+void overLayer(inout vec4 pm, vec3 rgb, float a)
+{
+	float ca = clamp(a, 0.0, 1.0);
+	pm = vec4(rgb * ca, ca) + pm * (1.0 - ca);
+}
+
 void main(void)
 {
 	const float PI = 3.14159265359;
@@ -776,38 +844,172 @@ void main(void)
 	float radiusPx = lensRadiusNorm * min(viewportSize.x, viewportSize.y);
 	vec2 deltaPx = px - centerPx;
 	float dist = length(deltaPx);
-	if (dist > radiusPx + 2.5)
+	float maxReach = radiusPx + 96.0 * dpr;
+	if (dist > maxReach)
 	{
 		discard;
 	}
 
-	float zoom = max(1.0, lensZoom);
-	vec2 samplePx = centerPx + deltaPx / zoom;
-	vec2 sampleNdc = (samplePx / viewportSize) * 2.0 - 1.0;
-	vec4 winPos = projectionMatrixInverse * vec4(sampleNdc.x, sampleNdc.y, 0.0, 1.0);
-	bool ok = false;
-	vec3 modelPos = unProject(winPos.x, winPos.y, ok).xyz;
-	if (!ok)
+	float isResizing = lensFlags.x;
+	float isRotating = lensFlags.y;
+	float showCrosshair = lensFlags.z;
+	float isNight = lensFlags.w;
+	float aa = max(1.0, 1.15 * dpr);
+	vec4 pm = vec4(0.0);
+
+	// 1. Soft drop shadow outside glass rim
+	if (dist > radiusPx - 2.0 && chromeAlpha > 0.01)
+	{
+		float shDist = max(0.0, dist - radiusPx);
+		float sh = exp(-shDist / (11.0 * dpr)) * 0.42 * chromeAlpha;
+		overLayer(pm, vec3(0.0), sh);
+	}
+
+	// 2. Rotatable anodized titanium knurled handle (exact GPU lock-step with rim!)
+	if (chromeAlpha > 0.01 && dist > radiusPx - 4.0 * dpr)
+	{
+		vec2 hDir = vec2(cos(handleAngleRad), -sin(handleAngleRad));
+		vec2 hPerp = vec2(-hDir.y, hDir.x);
+		float hx = dot(deltaPx, hDir) - radiusPx;
+		float hy = dot(deltaPx, hPerp);
+		if (hx > -4.0 * dpr && hx < 92.0 * dpr && abs(hy) < 28.0 * dpr)
+		{
+			vec2 hLocal = vec2(hx - 41.0 * dpr, hy);
+			float dHandle = sdRoundBox(hLocal, vec2(38.0 * dpr, 13.5 * dpr), 13.0 * dpr);
+			// Handle drop shadow
+			vec2 hShadowLocal = vec2(hx - 41.0 * dpr, hy + 3.0 * dpr);
+			float dSh = sdRoundBox(hShadowLocal, vec2(38.0 * dpr, 13.5 * dpr), 13.0 * dpr);
+			float hShMask = exp(-max(0.0, dSh) / (6.5 * dpr)) * 0.48 * chromeAlpha;
+			overLayer(pm, vec3(0.0), hShMask);
+
+			// Handle metallic body fill
+			float hFill = (1.0 - smoothstep(-aa * 0.5, aa * 0.5, dHandle)) * chromeAlpha;
+			if (hFill > 0.002)
+			{
+				vec3 baseCol = (isNight > 0.5) ? vec3(0.165, 0.067, 0.067) : vec3(0.106, 0.133, 0.188);
+				float sheen = 1.0 + 0.22 * exp(-abs(hy / (6.0 * dpr)));
+				overLayer(pm, baseCol * sheen, hFill);
+
+				// Glowing collar bar near bezel junction
+				float dCollar = sdRoundBox(vec2(hx - 12.0 * dpr, hy), vec2(4.0 * dpr, 7.5 * dpr), 3.5 * dpr);
+				float collarMask = (1.0 - smoothstep(-aa * 0.5, aa * 0.5, dCollar)) * 0.94 * chromeAlpha;
+				overLayer(pm, accentColor, collarMask);
+
+				// 4 precision knurled grip ridges
+				for (int g = 0; g < 4; ++g)
+				{
+					float gx = (28.0 + float(g) * 6.5) * dpr;
+					float gHalfH = (g == 1 || g == 2) ? (6.4 * dpr) : (5.3 * dpr);
+					float dGrip = sdRoundBox(vec2(hx - gx, hy), vec2(1.0 * dpr, gHalfH), 0.9 * dpr);
+					float gripA = (1.0 - smoothstep(-aa * 0.4, aa * 0.4, dGrip)) * 0.40 * chromeAlpha;
+					overLayer(pm, vec3(1.0), gripA);
+				}
+
+				// Tip indicator glowing dot + white outline
+				float tipDist = length(vec2(hx - 66.0 * dpr, hy));
+				float tipRing = (1.0 - smoothstep(3.8 * dpr - aa * 0.5, 3.8 * dpr + aa * 0.5, tipDist)) * 0.80 * chromeAlpha;
+				float tipFill = (1.0 - smoothstep(2.9 * dpr - aa * 0.5, 2.9 * dpr + aa * 0.5, tipDist)) * chromeAlpha;
+				overLayer(pm, vec3(1.0), tipRing);
+				overLayer(pm, accentColor, tipFill);
+			}
+
+			// Handle metallic border stroke
+			float borderW = (isRotating > 0.5 ? 1.8 : 1.2) * dpr;
+			float borderMask = (1.0 - smoothstep(borderW * 0.5 - aa * 0.5, borderW * 0.5 + aa * 0.5, abs(dHandle))) * chromeAlpha;
+			vec3 borderCol = (isRotating > 0.5) ? accentColor : vec3(1.0);
+			float borderAlpha = (isRotating > 0.5) ? 0.96 : 0.36;
+			overLayer(pm, borderCol, borderMask * borderAlpha);
+		}
+	}
+
+	// 3. 4K Multi-Spectral Glass Interior
+	if (dist <= radiusPx + aa)
+	{
+		float zoom = max(1.0, lensZoom);
+		vec2 samplePx = centerPx + deltaPx / zoom;
+		vec2 sampleNdc = (samplePx / viewportSize) * 2.0 - 1.0;
+		vec4 winPos = projectionMatrixInverse * vec4(sampleNdc.x, sampleNdc.y, 0.0, 1.0);
+		bool ok = false;
+		vec3 modelPos = unProject(winPos.x, winPos.y, ok).xyz;
+		if (ok)
+		{
+			modelPos = normalize(modelPos);
+			modelPos = applyAberrationToViewDir(modelPos);
+			float ra = atan(modelPos.y, modelPos.x);
+			float dec = asin(clamp(modelPos.z, -1.0, 1.0));
+			vec2 texc = vec2(fract(ra / (2.0 * PI)), 0.5 + dec / PI);
+			vec3 col = texture2D(texCurrent, texc).rgb;
+			if (crossFade < 0.999)
+			{
+				vec3 colPrev = texture2D(texPrev, texc).rgb;
+				col = mix(colPrev, col, crossFade);
+			}
+			float normR = dist / max(1.0, radiusPx);
+			float rimShade = 1.0 - 0.14 * smoothstep(0.84, 1.0, normR);
+			float glassMask = 1.0 - smoothstep(radiusPx - aa * 0.6, radiusPx + aa * 0.6, dist);
+			overLayer(pm, col * rimShade, glassMask);
+		}
+
+		// Subtle center optical crosshair during drag or 2x magnification
+		if (showCrosshair > 0.5 && dist < 8.5 * dpr)
+		{
+			float dH = sdRoundBox(deltaPx, vec2(7.0 * dpr, 0.65 * dpr), 0.5 * dpr);
+			float dV = sdRoundBox(deltaPx, vec2(0.65 * dpr, 7.0 * dpr), 0.5 * dpr);
+			float crossA = (1.0 - smoothstep(-aa * 0.4, aa * 0.4, min(dH, dV))) * 0.58 * chromeAlpha;
+			overLayer(pm, accentColor, crossA);
+		}
+	}
+
+	// 4. Precision Inner Glass Highlight + Glowing Metallic Bezel Ring + Expand Halo
+	if (chromeAlpha > 0.01)
+	{
+		float innerDist = abs(dist - (radiusPx - 2.2 * dpr));
+		float innerRing = (1.0 - smoothstep(0.55 * dpr - aa * 0.4, 0.55 * dpr + aa * 0.4, innerDist)) * chromeAlpha;
+		vec3 innerCol = (isNight > 0.5) ? vec3(0.769, 0.271, 0.212) : vec3(1.0);
+		overLayer(pm, innerCol, innerRing * 0.30);
+
+		float rimHalfW = (isResizing > 0.5 ? 2.0 : (isRotating > 0.5 ? 1.7 : 1.35)) * dpr;
+		float rimDist = abs(dist - (radiusPx + 0.5 * dpr));
+		float rimMask = (1.0 - smoothstep(rimHalfW - aa * 0.5, rimHalfW + aa * 0.5, rimDist)) * chromeAlpha;
+		float rimOp = (isResizing > 0.5 || isRotating > 0.5) ? 0.98 : 0.88;
+		overLayer(pm, accentColor, rimMask * rimOp);
+
+		// Outer expansion halo when pulled past full-screen threshold
+		if (isResizing > 0.5 && lensRadiusNorm >= 0.44)
+		{
+			float haloDist = abs(dist - (radiusPx + 8.5 * dpr));
+			float haloMask = (1.0 - smoothstep(0.8 * dpr - aa * 0.5, 0.8 * dpr + aa * 0.5, haloDist)) * 0.62 * chromeAlpha;
+			overLayer(pm, accentColor, haloMask);
+		}
+
+		// 5. 9 Glowing Wavelength Detent Dots Around Bezel
+		if (abs(dist - (radiusPx + 1.0 * dpr)) < 8.0 * dpr)
+		{
+			for (int i = 0; i < 9; ++i)
+			{
+				float deg = 45.0 + float(i) * 40.0;
+				float rad = deg * PI / 180.0;
+				vec2 dotPos = vec2(cos(rad), -sin(rad)) * (radiusPx + 1.0 * dpr);
+				float dd = length(deltaPx - dotPos);
+				bool isAct = (i == activeBandIdx);
+				float dotR = (isAct ? 4.8 : 2.9) * dpr;
+				float borderR = dotR + (isAct ? 1.4 : 0.8) * dpr;
+				if (dd < borderR + aa)
+				{
+					float bA = (1.0 - smoothstep(borderR - aa * 0.5, borderR + aa * 0.5, dd)) * (isAct ? 0.95 : 0.48) * chromeAlpha;
+					float fA = (1.0 - smoothstep(dotR - aa * 0.5, dotR + aa * 0.5, dd)) * (isAct ? 1.0 : 0.78) * chromeAlpha;
+					overLayer(pm, vec3(1.0), bA);
+					overLayer(pm, bandColorAt(i, isNight), fA);
+				}
+			}
+		}
+	}
+
+	if (pm.a < 0.002)
 	{
 		discard;
 	}
-	modelPos = normalize(modelPos);
-	modelPos = applyAberrationToViewDir(modelPos);
-	float ra = atan(modelPos.y, modelPos.x);
-	float dec = asin(clamp(modelPos.z, -1.0, 1.0));
-	vec2 texc = vec2(fract(ra / (2.0 * PI)), 0.5 + dec / PI);
-	vec3 col = texture2D(texCurrent, texc).rgb;
-	if (crossFade < 0.999)
-	{
-		vec3 colPrev = texture2D(texPrev, texc).rgb;
-		col = mix(colPrev, col, crossFade);
-	}
-
-	float edgeMask = 1.0 - smoothstep(radiusPx - 2.0, radiusPx + 1.0, dist);
-	float normR = dist / max(1.0, radiusPx);
-	// Subtle optical loupe inner rim shading + crisp glass rim sheen
-	float rimShade = 1.0 - 0.16 * smoothstep(0.82, 1.0, normR);
-	FRAG_COLOR = vec4(col * rimShade, alpha * edgeMask);
+	FRAG_COLOR = vec4(pm.rgb / pm.a, pm.a * alpha);
 }
 )";
 		if (!lensProgram->addShaderFromSourceCode(QOpenGLShader::Fragment, frag))
@@ -829,6 +1031,12 @@ void main(void)
 		lensShaderVars.lensCenter = lensProgram->uniformLocation("lensCenter");
 		lensShaderVars.lensRadiusNorm = lensProgram->uniformLocation("lensRadiusNorm");
 		lensShaderVars.lensZoom = lensProgram->uniformLocation("lensZoom");
+		lensShaderVars.handleAngleRad = lensProgram->uniformLocation("handleAngleRad");
+		lensShaderVars.accentColor = lensProgram->uniformLocation("accentColor");
+		lensShaderVars.chromeAlpha = lensProgram->uniformLocation("chromeAlpha");
+		lensShaderVars.lensFlags = lensProgram->uniformLocation("lensFlags");
+		lensShaderVars.activeBandIdx = lensProgram->uniformLocation("activeBandIdx");
+		lensShaderVars.dpr = lensProgram->uniformLocation("dpr");
 		lensShaderVars.projectionMatrixInverse = lensProgram->uniformLocation("projectionMatrixInverse");
 		lensProgram->release();
 	}
@@ -847,6 +1055,8 @@ void main(void)
 
 	const float vpW = static_cast<float>(qMax(1, projector->getViewportWidth()));
 	const float vpH = static_cast<float>(qMax(1, projector->getViewportHeight()));
+	const float dprVal = qMax(1.0f, static_cast<float>(StelApp::getInstance().getScreenScale()));
+	const bool isNight = StelApp::getInstance().getVisionModeNight();
 
 	auto& gl = *QOpenGLContext::currentContext()->functions();
 	lensProgram->bind();
@@ -871,12 +1081,41 @@ void main(void)
 	const float curCenterX = s_atomicLensCenterX.load(std::memory_order_relaxed);
 	const float curCenterY = s_atomicLensCenterY.load(std::memory_order_relaxed);
 	const float curRadiusNorm = s_atomicLensRadiusNorm.load(std::memory_order_relaxed);
+	const float curHandleRad = s_atomicLensHandleAngleDeg.load(std::memory_order_relaxed) * static_cast<float>(M_PI / 180.0);
+	const int flags = s_atomicLensFlags.load(std::memory_order_relaxed);
+	const bool flagDragging = (flags & 1) != 0;
+	const bool flagResizing = (flags & 2) != 0;
+	const bool flagRotating = (flags & 4) != 0;
+	const bool flagBlooming = (flags & 8) != 0;
+	const bool flagExpanding = (flags & 16) != 0;
+
+	const int bandIdx = lensBandIndexForId(lensDatasetId);
+	QVector3D accent = lensBandColorRgb(bandIdx, isNight);
+	if (flagBlooming && curRadiusNorm < 0.11f && !isNight)
+		accent = QVector3D(0.388f, 0.702f, 1.0f); // #63B3FF blue ring morph
+
+	float chromeA = 1.0f;
+	if (flagExpanding)
+		chromeA = qBound(0.0f, 1.0f - (curRadiusNorm - 0.38f) / 0.34f, 1.0f);
+	else if (flagBlooming)
+		chromeA = qBound(0.0f, (curRadiusNorm - 0.08f) / 0.12f, 1.0f);
+	else if (curRadiusNorm > 0.42f)
+		chromeA = qBound(0.25f, 1.0f - (curRadiusNorm - 0.42f) / 0.45f, 1.0f);
+
+	const float showCrosshair = ((flagDragging || lensZoomCurrent > 1.5f) && !flagExpanding) ? 1.0f : 0.0f;
+
 	lensProgram->setUniformValue(lensShaderVars.crossFade, static_cast<GLfloat>(cf));
 	lensProgram->setUniformValue(lensShaderVars.alpha, static_cast<GLfloat>(fade));
 	lensProgram->setUniformValue(lensShaderVars.viewportSize, QVector2D(vpW, vpH));
 	lensProgram->setUniformValue(lensShaderVars.lensCenter, QVector2D(curCenterX, curCenterY));
 	lensProgram->setUniformValue(lensShaderVars.lensRadiusNorm, static_cast<GLfloat>(curRadiusNorm));
 	lensProgram->setUniformValue(lensShaderVars.lensZoom, static_cast<GLfloat>(lensZoomCurrent));
+	lensProgram->setUniformValue(lensShaderVars.handleAngleRad, static_cast<GLfloat>(curHandleRad));
+	lensProgram->setUniformValue(lensShaderVars.accentColor, accent);
+	lensProgram->setUniformValue(lensShaderVars.chromeAlpha, static_cast<GLfloat>(chromeA));
+	lensProgram->setUniformValue(lensShaderVars.lensFlags, QVector4D(flagResizing ? 1.f : 0.f, flagRotating ? 1.f : 0.f, showCrosshair, isNight ? 1.f : 0.f));
+	lensProgram->setUniformValue(lensShaderVars.activeBandIdx, bandIdx);
+	lensProgram->setUniformValue(lensShaderVars.dpr, static_cast<GLfloat>(dprVal));
 	lensProgram->setUniformValue(lensShaderVars.projectionMatrixInverse, projector->getProjectionMatrix().toQMatrix().inverted());
 	core->setAberrationUniforms(*lensProgram);
 	projector->setUnProjectUniforms(*lensProgram);
@@ -1329,7 +1568,8 @@ bool HipsMgr::setSpectralLens(const bool enabled, const QString& datasetId,
 	return true;
 }
 
-void HipsMgr::updateSpectralLensGeometryFast(const float normX, const float normY, const float radiusNorm)
+void HipsMgr::updateSpectralLensGeometryFast(const float normX, const float normY, const float radiusNorm,
+                                             const float handleAngleDeg, const int flags)
 {
 	if (normX >= 0.0f && normX <= 1.0f)
 		s_atomicLensCenterX.store(normX, std::memory_order_relaxed);
@@ -1337,6 +1577,10 @@ void HipsMgr::updateSpectralLensGeometryFast(const float normX, const float norm
 		s_atomicLensCenterY.store(normY, std::memory_order_relaxed);
 	if (radiusNorm >= 0.02f && radiusNorm <= 1.80f)
 		s_atomicLensRadiusNorm.store(radiusNorm, std::memory_order_relaxed);
+	if (handleAngleDeg > -900.0f)
+		s_atomicLensHandleAngleDeg.store(handleAngleDeg, std::memory_order_relaxed);
+	if (flags >= 0)
+		s_atomicLensFlags.store(flags, std::memory_order_relaxed);
 }
 
 QJsonObject HipsMgr::getSpectralLensState() const

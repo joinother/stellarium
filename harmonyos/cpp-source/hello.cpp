@@ -1100,7 +1100,8 @@ static napi_value Command(napi_env env, napi_callback_info info)
             // Continuous view commands are intentionally silent. Logging each
             // drag sample can contend with the UI thread during a gesture.
             const bool continuous = commandName == "dragView" || commandName == "zoomBy" ||
-                                    commandName == "panBy" || commandName == "setGyroView";
+                                    commandName == "panBy" || commandName == "setGyroView" ||
+                                    commandName == "setSpectralLens";
             if (!continuous) {
                 OH_LOG_Print(LOG_APP, LOG_INFO, STEL_ENTRY_LOG_DOMAIN, STEL_ENTRY_LOG_TAG,
                              "Stellarium command %{public}s", commandName.c_str());

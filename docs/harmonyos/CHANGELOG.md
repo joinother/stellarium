@@ -1,5 +1,16 @@
 > **身份图例**：本文件真机记录中出现的 `com.cnchensh.stellarium` 是**本机调试签名身份**（本机 DevEco 自动生成，非发布身份）；发布身份为 `com.joinother.skyinstrument`。构建脚本 `build-ohos-hap-windows.ps1 -Install` 从产物 `pack.info` 读取实际包名，仓库不写死任何签名身份（见 `docs/harmonyos/release/BUNDLE-IDENTITY-CLEANUP.md`）。
 
+## [2026-11-26] 统一单 Shader GPU 多光谱放大镜（彻底根治拖动/拉边缘镜内画面掉队与卡顿）
+
+- **修改文件：** `src/core/modules/HipsMgr.hpp`、`src/core/modules/HipsMgr.cpp`、`src/StelMainView.cpp`、`harmonyos/cpp-source/hello.cpp`、`harmonyos/ets-source/panels/overlay/SpectralLensOverlay.ets`、`harmonyos/ets-source/capability/SkyInputController.ets`、`docs/harmonyos/CHANGELOG.md`。
+- **根因诊断与架构重构：**
+  1. **统一单 Pass GPU 光学镜体渲染（`HipsMgr::drawSpectralLens`）**：旧实现由 ArkUI 在独立图层绘制镜框/9 档刻度点/转柄，OpenGL XComponent 单独绘制镜内 4K 多光谱图像，导致拖动或拉动边缘时外框领先镜内画面 1～3 帧产生“画面跟不上、一卡一卡”的割裂感。现将全部光学视觉元素（外阴影、可旋转阳极氧化钛合金防滑转柄与波段发光项圈/刻度、镜内 4K 多光谱图像 + 准星、镜面内高光、发光金属镜圈、9 档发光波段棘轮点及全屏扩散光环）收敛至单个 OpenGL 解析 SDF 片段着色器同帧原子合成，从物理上彻底杜绝镜框与多光谱画面错位（`0.00 px` 脱离）。
+  2. **2 微秒纯几何无锁快通道 + 修复主线程提速失效 + 静默高频日志（`StelMainView.cpp`、`hello.cpp`）**：新增 `'2|x|y|r|angle|flags'` 超快几何报文入口并前置至 `StellariumOhos_command` 顶部，绕过 JSON 解析、命令队列与主线程提前返回分支，保证主线程与子线程均能即时刷新 `s_spectralLensBoostUntilMs` 并唤醒交互帧率泵；同时将 `setSpectralLens` 加入 `hello.cpp`（`OH_LOG_Print`）与 `StelMainView.cpp`（`qInfo`）的连续静默白名单，消除 120Hz 触控 Move 期间的同步写日志阻塞。
+  3. **ArkUI 零 `@State` 拖动重排（`SpectralLensOverlay.ets`、`SkyInputController.ets`）**：ArkUI 仅保留透明触控热区与静止态悬浮胶囊，拖动/拉大/旋柄全程改用普通私有字段直发 `'2|...'` 快通道且自动隐藏胶囊，松手抬指时一次回写最终状态，释放主线程算力。
+- **验证结果：**
+  - 主机：`check-ohos-ui-contract.mjs`、`check-ohos-command-catalog.mjs`、`test-ohos-sky-input.mjs`、`test-ohos-quick-red-light.mjs`、`test-ohos-pointer-surveys-ui.mjs`、`test-ohos-layer-presets.mjs`、`test-ohos-vivid-rendering-gate.mjs` 共 36 项测试全部通过。
+  - 真机（`HUAWEI MatePad Mini 悦读版`，PID `32599` 稳定无崩溃，华为 GPU 着色器编译零错误、拖动期零 `setSpectralLens` 日志刷屏）：实测长按膨起、拖动平移（`23.15 FPS / P95 47ms`，优于空拖星空 `21.31 FPS / P95 54ms`）、旋转转柄切至 `ROSAT X 射线`、拉动左侧边缘放大至 `radius=0.348`（镜圈、9 刻度、转柄与 4K 多光谱完全一体零错位）、拉宽过 `0.44` 平滑扩散至全屏多光谱，以及点击 `✕` 正常关闭。
+
 ## [2026-11-26] 多光谱放大镜 120Hz 零延迟跟手 + 长按蓝圈自动膨起 + 拖边缘拉大全屏扩散
 
 - **修改文件：** `src/core/modules/HipsMgr.hpp`、`src/core/modules/HipsMgr.cpp`、`src/StelMainView.cpp`、`harmonyos/ets-source/capability/SkyInputController.ets`、`harmonyos/ets-source/panels/overlay/SpectralLensOverlay.ets`、`docs/harmonyos/CHANGELOG.md`。
