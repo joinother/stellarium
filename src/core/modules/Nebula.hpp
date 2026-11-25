@@ -252,6 +252,7 @@ public:
 	static QString getTypeStringI18n(Nebula::NebulaType nType);
 
 	NebulaType getDSOType() const {return nType;}
+	const std::vector<std::vector<Vec3d>*>& getOutlineSegments() const {return outlineSegments;}
 
 	//! Get the printable morphological nebula Type.
 	//! @return the nebula morphological type string.

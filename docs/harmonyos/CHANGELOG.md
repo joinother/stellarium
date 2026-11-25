@@ -1,5 +1,16 @@
 > **身份图例**：本文件真机记录中出现的 `com.cnchensh.stellarium` 是**本机调试签名身份**（本机 DevEco 自动生成，非发布身份）；发布身份为 `com.joinother.skyinstrument`。构建脚本 `build-ohos-hap-windows.ps1 -Install` 从产物 `pack.info` 读取实际包名，仓库不写死任何签名身份（见 `docs/harmonyos/release/BUNDLE-IDENTITY-CLEANUP.md`）。
 
+## [2026-11-25] 虚线圆环倍频缝隙生长、标签外缘锁定与空心圈/绿线边缘精细拾取
+
+- **修改文件：** `src/core/modules/Nebula.hpp`、`src/core/modules/Nebula.cpp`、`src/core/modules/NebulaMgr.cpp`、`src/core/TouchPicker.cpp`、`docs/harmonyos/CHANGELOG.md`。
+- **改进：**
+  1. **倍频中点缝隙生长虚线（`renderMarkerPointedCircle`）**：将疏散星团黄虚线改为 `N = 2^level` 固定角锚点主虚线 + 缝隙正中央子虚线对称淡入生长；放大时主虚线原地保持恒定像素长度，所有间隙正中同步平滑浮现新虚线并无痕衔接下一倍频，彻底消除从单一端点吐线的观感。
+  2. **深空标签外缘像素级锁定（`NebulaMgr.cpp`）**：修复原先 `labelShift` 混用逻辑像素与设备像素导致放大后标签滑入圈内与随视角漂移的问题，统一按 `rimDev * 0.7071 + 6 * scale`（上限视口短边 36%）锁紧在符号圈 45° 右上外缘，并在 `TouchPicker` 同步完全一致的标签命中框。
+  3. **空心圈内选星 + 绿线/黄线边缘精确命中（`TouchPicker.cpp`）**：大型空心圈（疏散星团、绿线多边形星云、暗星云 `angularVp > 26 vp`）不再以实体面 `tier 0` 吞噬内部恒星点击；新增 `outlineSegments` 真实绿线折线与黄虚线环边缘 ±18 vp 的 `borderHit`（`tier 1`）检测，实现“圈内点恒星选恒星、点黄线/绿线/标签稳选深空、星系本体全域稳选”。
+- **验证结果：**
+  - 主机：`test-ohos-empty-sky-and-daytime-picking.mjs` 5/5、`test-ohos-realistic-star-visibility.mjs` 15/15、`test-ohos-selection-reticle-and-pill.mjs` 5/5、`test-ohos-vivid-rendering-gate.mjs` 15/5、`test-visual-extinction.py` PASS。
+  - 真机（`HUAWEI MatePad Mini 悦读版`，PID `21673` 连续无崩溃）：M44 在 `6.0° → 4.2° → 3.0°` 缩放下每条缝隙正中央对称长出新虚线，`"M 44"` 标签全程纹丝不动锁紧在右上外缘；实测 M44 圈内点星体选中恒星、点黄线环与标签命中 M44；IC 1795 中心/绿线边缘/标签 100% 命中 IC 1795；NGC 5218 在 `0.08°` 视场 `0/+40/+80 vp` 持续 100% 命中。
+
 ## [2026-11-25] 疏散星团符号升级连续弧长虚线椭圆 + 修复小 FOV 深空天体触控难选中
 
 - **修改文件：** `src/core/modules/Nebula.cpp`、`src/core/TouchPicker.cpp`、`docs/harmonyos/CHANGELOG.md`。

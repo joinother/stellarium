@@ -1123,97 +1123,94 @@ void Nebula::renderMarkerPointedCircle(StelPainter& sPainter, const Vec3d& direc
 		f.majorPx = static_cast<float>(f.majorPx * shrink);
 	}
 
-	// Continuous screen arc-length dashed ellipse projected on the celestial sphere:
-	// crisp vector dashes with constant screen pitch during pinch-zoom (zero power-of-2 dot jumping).
+	// Octave binary-subdivision sky-projected dashed ellipse:
+	// N = 2^level primary dashes stay anchored at fixed angles with constant screen length;
+	// as the user zooms in (t: 0 -> 1), N midpoint child dashes fade in and bloom symmetrically
+	// right out of the center of every gap, handing off seamlessly to 2N dashes at t = 1.
 	const auto& prj = sPainter.getProjector();
-	const int numSamples = std::clamp(int(std::lround(f.majorPx / 2.2f)), 48, 180);
-	const float* const cossin = StelUtils::ComputeCosSinTheta(numSamples);
+	const double aPx = static_cast<double>(f.majorPx);
+	const double bPx = aPx * (f.majorRad > 1e-12 ? (f.minorRad / f.majorRad) : 1.0);
+	const double h = ((aPx - bPx) * (aPx - bPx)) / std::max(1.0, (aPx + bPx) * (aPx + bPx));
+	const double perimPx = M_PI * (aPx + bPx) * (1.0 + (3.0 * h) / (10.0 + std::sqrt(std::max(0.0, 4.0 - 3.0 * h))));
 
-	QVarLengthArray<Vec2f, 192> scrPts;
-	QVarLengthArray<bool, 192> segBreak;
-	scrPts.reserve(numSamples + 1);
-	segBreak.reserve(numSamples + 1);
+	const double targetPitchPx = 13.5 * static_cast<double>(f.scale);
+	const double rawN = std::clamp(perimPx / std::max(4.0, targetPitchPx), 8.0, 256.0);
+	const double fLevel = std::log2(rawN);
+	const int level = std::clamp(static_cast<int>(std::floor(fLevel)), 3, 7); // N in {8, 16, 32, 64, 128} -> up to 256 dashes
+	const float t = static_cast<float>(std::clamp(fLevel - static_cast<double>(level), 0.0, 1.0));
+	const int baseN = 1 << level;
 
-	Vec3d prevSky(0.0);
-	bool hasPrev = false;
-	float totalLen = 0.f;
-	for (int n = 0; n <= numSamples; ++n)
+	const double sectorRad = (2.0 * M_PI) / static_cast<double>(baseN);
+	// Smoothly narrow primary angular half-width by 2^(-t) so its screen pixel length stays constant!
+	const double primaryHalfRad = 0.25 * sectorRad * std::pow(2.0, -static_cast<double>(t));
+	const float smoothLen = std::clamp((t - 0.06f) / 0.88f, 0.f, 1.f);
+	const float childLenFactor = smoothLen * smoothLen * (3.f - 2.f * smoothLen);
+	const double childHalfRad = 0.125 * sectorRad * static_cast<double>(childLenFactor);
+	const float smoothAlpha = std::clamp((t - 0.08f) / 0.68f, 0.f, 1.f);
+	const float childAlphaFactor = smoothAlpha * smoothAlpha * (3.f - 2.f * smoothAlpha);
+
+	const int subSegs = (f.majorPx > 90.f * f.scale) ? 3 : 2;
+	auto appendArcSegments = [&](QVarLengthArray<float, 1024>& verts, double centerAngle, double halfAngle)
 	{
-		const int idx = n % numSamples;
-		Vec3d sky, scr;
-		if (!projectSkyMarkerPoint(prj, f, static_cast<double>(cossin[2 * idx]), static_cast<double>(cossin[2 * idx + 1]), sky, scr))
+		if (halfAngle <= 1e-5)
+			return;
+		Vec3d prevSky(0.0), prevScr(0.0);
+		bool hasPrev = false;
+		for (int s = 0; s <= subSegs; ++s)
 		{
-			hasPrev = false;
-			continue;
-		}
-		const bool broke = !hasPrev || prj->intersectViewportDiscontinuity(prevSky, sky);
-		const Vec2f pt(static_cast<float>(scr[0]), static_cast<float>(scr[1]));
-		if (!broke && !scrPts.isEmpty())
-			totalLen += std::hypot(pt[0] - scrPts.last()[0], pt[1] - scrPts.last()[1]);
-		scrPts.append(pt);
-		segBreak.append(broke);
-		prevSky = sky;
-		hasPrev = true;
-	}
-	if (scrPts.size() < 2 || totalLen < 1.f)
-		return;
-
-	// Scale dash rhythm gently down for tiny zoomed-out rings, constant crisp pitch when zoomed in.
-	const bool tinyRing = f.majorPx < 14.f * f.scale;
-	const float dashLen = std::max(1.5f, (tinyRing ? 3.8f : 5.8f) * f.scale);
-	const float gapLen  = std::max(1.5f, (tinyRing ? 3.4f : 4.6f) * f.scale);
-	const float period  = dashLen + gapLen;
-	const float seamCutoff = std::max(dashLen, totalLen - gapLen * 0.85f);
-
-	QVarLengthArray<float, 1024> lineVerts;
-	lineVerts.reserve(scrPts.size() * 4);
-	float accum = 0.f;
-	for (int i = 1; i < scrPts.size(); ++i)
-	{
-		if (segBreak[i])
-			continue;
-		const Vec2f& a = scrPts[i - 1];
-		const Vec2f& b = scrPts[i];
-		const float dx = b[0] - a[0];
-		const float dy = b[1] - a[1];
-		const float segLen = std::hypot(dx, dy);
-		if (segLen < 1e-4f || segLen > 20000.f)
-			continue;
-
-		const float segStart = accum;
-		const float segEnd = std::min(accum + segLen, seamCutoff);
-		if (segEnd > segStart + 1e-3f)
-		{
-			const int kStart = static_cast<int>(std::floor(segStart / period));
-			const int kEnd = std::min(kStart + 256, static_cast<int>(std::floor(segEnd / period)));
-			for (int k = kStart; k <= kEnd; ++k)
+			const double ang = centerAngle - halfAngle + (2.0 * halfAngle) * (static_cast<double>(s) / static_cast<double>(subSegs));
+			Vec3d sky, scr;
+			if (!projectSkyMarkerPoint(prj, f, std::cos(ang), std::sin(ang), sky, scr))
 			{
-				const float d0 = std::max(segStart, static_cast<float>(k) * period);
-				const float d1 = std::min(segEnd, static_cast<float>(k) * period + dashLen);
-				if (d1 > d0 + 1e-3f)
-				{
-					const float t0 = (d0 - segStart) / segLen;
-					const float t1 = (d1 - segStart) / segLen;
-					lineVerts.push_back(a[0] + dx * t0);
-					lineVerts.push_back(a[1] + dy * t0);
-					lineVerts.push_back(a[0] + dx * t1);
-					lineVerts.push_back(a[1] + dy * t1);
-				}
+				hasPrev = false;
+				continue;
 			}
+			if (hasPrev && !prj->intersectViewportDiscontinuity(prevSky, sky))
+			{
+				verts.push_back(static_cast<float>(prevScr[0]));
+				verts.push_back(static_cast<float>(prevScr[1]));
+				verts.push_back(static_cast<float>(scr[0]));
+				verts.push_back(static_cast<float>(scr[1]));
+			}
+			prevSky = sky;
+			prevScr = scr;
+			hasPrev = true;
 		}
-		accum += segLen;
-	}
-	if (lineVerts.size() < 4)
+	};
+
+	QVarLengthArray<float, 1024> primaryVerts;
+	primaryVerts.reserve(baseN * subSegs * 4);
+	for (int k = 0; k < baseN; ++k)
+		appendArcSegments(primaryVerts, static_cast<double>(k) * sectorRad, primaryHalfRad);
+
+	if (primaryVerts.size() < 4)
 		return;
 
 	sPainter.setBlending(true);
 	sPainter.setLineSmooth(true);
 	sPainter.setLineWidth(f.scale * std::clamp(f.majorPx / 55.f, 0.9f, 1.6f));
 	const float drawAlpha = (f.majorPx > 40.f * f.scale) ? (alpha * 0.85f) : alpha;
-	sPainter.setColor(color, drawAlpha);
 	sPainter.enableClientStates(true);
-	sPainter.setVertexPointer(2, GL_FLOAT, lineVerts.constData());
-	sPainter.drawFromArray(StelPainter::Lines, lineVerts.size() / 2, 0, false);
+
+	sPainter.setColor(color, drawAlpha);
+	sPainter.setVertexPointer(2, GL_FLOAT, primaryVerts.constData());
+	sPainter.drawFromArray(StelPainter::Lines, primaryVerts.size() / 2, 0, false);
+
+	if (childAlphaFactor > 0.01f && childHalfRad > 1e-5)
+	{
+		QVarLengthArray<float, 1024> childVerts;
+		childVerts.reserve(baseN * subSegs * 4);
+		for (int k = 0; k < baseN; ++k)
+			appendArcSegments(childVerts, (static_cast<double>(k) + 0.5) * sectorRad, childHalfRad);
+
+		if (childVerts.size() >= 4)
+		{
+			sPainter.setColor(color, drawAlpha * childAlphaFactor);
+			sPainter.setVertexPointer(2, GL_FLOAT, childVerts.constData());
+			sPainter.drawFromArray(StelPainter::Lines, childVerts.size() / 2, 0, false);
+		}
+	}
+
 	sPainter.enableClientStates(false);
 }
 

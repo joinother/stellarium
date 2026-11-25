@@ -722,7 +722,10 @@ struct DrawNebulaFuncObject
 				candidate.label = n->getScreenLabel();
 				if (candidate.label.isEmpty() || n->designationUsage)
 					candidate.label = n->getDSODesignation();
-				candidate.labelShift = 15.f + (n->drawHintProportional ? std::min(n->getHintSize(*sPainter), 96.f) : 0.f);
+				const float lblScale = projector->getScreenScale();
+				const float rimDev = n->drawHintProportional ? (n->getHintSize(*sPainter) * lblScale) : (6.f * lblScale);
+				const float maxShiftDev = 0.36f * static_cast<float>(std::min(vp[2], vp[3]));
+				candidate.labelShift = std::min(rimDev * 0.7071f + 6.f * lblScale, maxShiftDev);
 				const auto rect = sPainter->skyLabelRect(n->XY[0], n->XY[1], candidate.label,
 					candidate.labelShift, candidate.labelShift);
 				if (!candidate.label.isEmpty() && rect.intersects(viewport))

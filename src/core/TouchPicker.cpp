@@ -73,6 +73,7 @@ struct LabelTarget
 {
 	bool present = false;
 	bool lineHit = false;
+	bool borderHit = false;
 	bool modelHit = false;
 	QRectF rect;
 };
@@ -282,11 +283,11 @@ void addCandidate(QList<PickCandidate>& candidates, const ViewContext& ctx, cons
 		|| candidate.type == QLatin1String("Asterism");
 	candidate.lineHit = label.lineHit;
 	candidate.modelHit = label.modelHit;
-	candidate.labelHit = label.lineHit || labelTextHit;
+	candidate.labelHit = label.lineHit || labelTextHit || label.borderHit;
 	candidate.directHit = candidate.labelHit || footprintHit || label.modelHit;
 	if (footprintHit)
 		candidate.directRank = 0;
-	else if (labelTextHit)
+	else if (labelTextHit || label.borderHit)
 		candidate.directRank = isConstellation ? 2 : 1;
 	else if (label.lineHit)
 		candidate.directRank = 3;
@@ -605,11 +606,14 @@ PickResult TouchPicker::pickAt(const StelCore* core, int xVp, int yVp, int skyW,
 			const float maxMagLabels = core->getSkyDrawer()->getSkyObjectLimitMagnitude() - 2.f
 				+ static_cast<float>(nebulaMgr->getLabelsAmount() * 1.2) - 2.f - wideFovLabelPenalty;
 			// Expand DSO center search radius at small FOV so tapping anywhere on a zoomed-in
-			// galaxy/cluster body or its offset label still discovers the object center.
-			const double dsoSearchDeg = qMax(fovRadiusDeg, qMin(ctx.fov * 0.65, 6.0));
+			// galaxy/cluster body, green outline edge, or offset label still discovers the object.
+			const double dsoSearchDeg = qMax(fovRadiusDeg, qMin(ctx.fov * 0.85, 8.0));
 			const QList<StelObjectP> nebulae = nebulaMgr->searchAround(tapDirection, dsoSearchDeg, core);
 			const bool hintsProportional = nebulaMgr->getHintsProportional();
 			const double screenScale = static_cast<double>(StelApp::getInstance().getScreenScale());
+			const double borderTolVp = profile.touch ? 18.0 : 8.0;
+			const bool useAberration = core->getUseAberration() && core->getCurrentPlanet();
+			const Vec3d aberration = useAberration ? core->getAberrationVec(core->getJDE()) : Vec3d(0.);
 			for (const StelObjectP& nebula : nebulae)
 			{
 				const NebulaP nebulaObject = qSharedPointerCast<Nebula>(nebula);
@@ -624,31 +628,100 @@ PickResult TouchPicker::pickAt(const StelCore* core, int xVp, int yVp, int skyW,
 
 				QPointF screenVp;
 				Vec3d screenDevice;
-				if (!projectToVp(ctx, nebula->getJ2000EquatorialPos(core), screenVp, screenDevice))
-					continue;
-				const bool isDarkOrRegion = (nebulaObject->getDSOType() == Nebula::NebDn
-					|| nebulaObject->getDSOType() == Nebula::NebRegion);
+				const bool centerProjected = projectToVp(ctx, nebula->getJ2000EquatorialPos(core), screenVp, screenDevice);
+				const auto dsoType = nebulaObject->getDSOType();
+				const bool isDarkOrRegion = (dsoType == Nebula::NebDn || dsoType == Nebula::NebRegion);
+				const bool isOpenCluster = (dsoType == Nebula::NebOc || dsoType == Nebula::NebSA
+					|| dsoType == Nebula::NebSC || dsoType == Nebula::NebCl
+					|| dsoType == Nebula::NebPartOfGx || dsoType == Nebula::NebCn);
 				const double angularVp = angularRadiusToVp(core, ctx, nebula->getAngularRadius(core));
-				double rVp = 3.0;
+				// Hollow large rings (open clusters / green polygon outlines / dark nebulae) must NOT
+				// swallow interior star taps with a giant tier-0 footprint; instead, tapping their
+				// perimeter ring or green outline segment directly yields a crisp borderHit (tier 1),
+				// while interior stars remain effortlessly selectable!
+				const bool isHollowLarge = (render.outlineDrawn || isOpenCluster || isDarkOrRegion) && angularVp > 26.0;
+
+				// 1. Check direct border hit on drawn green outline segments or yellow/superellipse perimeter rim.
+				bool borderHit = false;
+				double bestBorderDistVp = 1e9;
 				if (render.outlineDrawn)
-					rVp = qBound(3.0, angularVp, qMax(3.0, 0.35 * minViewportVp));
-				else if (render.hintDrawn && hintsProportional)
-					rVp = isDarkOrRegion
-						? qBound(6.0, angularVp, 24.0)
-						: qBound(6.0, angularVp, qMax(6.0, 0.35 * minViewportVp));
+				{
+					const auto& segs = nebulaObject->getOutlineSegments();
+					for (const auto* poly : segs)
+					{
+						if (!poly || poly->size() < 2)
+							continue;
+						QPointF prevVp;
+						Vec3d prevDev;
+						bool hasPrev = false;
+						for (const Vec3d& rawPt : *poly)
+						{
+							Vec3d pt = rawPt;
+							if (useAberration)
+							{
+								pt += aberration;
+								pt.normalize();
+							}
+							QPointF curVp;
+							Vec3d curDev;
+							if (!projectToVp(ctx, pt, curVp, curDev))
+							{
+								hasPrev = false;
+								continue;
+							}
+							if (hasPrev)
+							{
+								const double d = pointSegmentDistance(ctx.tapVp, prevVp, curVp);
+								if (d < bestBorderDistVp)
+									bestBorderDistVp = d;
+							}
+							prevVp = curVp;
+							prevDev = curDev;
+							hasPrev = true;
+						}
+					}
+					if (bestBorderDistVp <= borderTolVp)
+						borderHit = true;
+				}
+				if (!borderHit && centerProjected && render.hintDrawn && hintsProportional && angularVp > 18.0)
+				{
+					const double dsoDistTmp = std::hypot(screenVp.x() - ctx.tapVp.x(), screenVp.y() - ctx.tapVp.y());
+					const double rimDist = std::abs(dsoDistTmp - angularVp);
+					if (rimDist <= borderTolVp)
+					{
+						borderHit = true;
+						bestBorderDistVp = rimDist;
+					}
+				}
+
+				if (!centerProjected && !borderHit)
+					continue;
+				if (!centerProjected)
+					screenVp = ctx.tapVp;
+
+				double rVp = 3.0;
+				if (!isHollowLarge)
+				{
+					if (render.outlineDrawn)
+						rVp = qBound(3.0, angularVp, qMax(3.0, 0.35 * minViewportVp));
+					else if (render.hintDrawn && hintsProportional)
+						rVp = isDarkOrRegion
+							? qBound(6.0, angularVp, 24.0)
+							: qBound(6.0, angularVp, qMax(6.0, 0.35 * minViewportVp));
+				}
 
 				LabelTarget label;
-				if (render.labelDrawn)
+				label.borderHit = borderHit;
+				if (render.labelDrawn && centerProjected)
 				{
 					const QString text = objectName(nebula);
 					if (!text.isEmpty())
 					{
 						label.present = true;
-						const double hintLogical = hintsProportional
-							? qMin(qMax(6.0, angularVp * ctx.dpr / qMax(1.0, screenScale)), 96.0)
-							: 0.0;
-						const double labelOffsetVp = (15.0 + hintLogical) / ctx.dpr;
-						label.rect = labelRectUpRight(labelMetrics, text, screenVp, labelOffsetVp, ctx.dpr);
+						const double rimDev = hintsProportional ? qMax(6.0 * screenScale, angularVp * ctx.dpr) : (6.0 * screenScale);
+						const double maxShiftDev = 0.36 * static_cast<double>(qMin(ctx.viewport[2], ctx.viewport[3]));
+						const double shiftDev = qMin(rimDev * 0.7071 + 6.0 * screenScale, maxShiftDev);
+						label.rect = labelRectUpRight(labelMetrics, text, screenVp, shiftDev / ctx.dpr, ctx.dpr);
 					}
 				}
 				const bool labelHit = label.present && label.rect.contains(ctx.tapVp);
@@ -657,13 +730,18 @@ PickResult TouchPicker::pickAt(const StelCore* core, int xVp, int yVp, int skyW,
 				const double dsoAcceptVp = profile.touch
 					? qMin(effectiveRadiusVp, 28.0)
 					: effectiveRadiusVp;
-				if (!labelHit && dsoDistVp > dsoAcceptVp + rVp)
+				// Hollow large nebulae/clusters stay selectable on empty interior space too
+				// (using soft radius check, without tier-0 footprint stealing stars).
+				const double softInteriorVp = isHollowLarge ? qMin(angularVp, 0.40 * minViewportVp) : rVp;
+				if (!labelHit && !borderHit && dsoDistVp > dsoAcceptVp + softInteriorVp)
 					continue;
 
 				bool hasMagnitude = false;
 				const double magnitude = magnitudeForObject(core, nebula, hasMagnitude);
 				addCandidate(candidates, ctx, core, nebula, screenVp, rVp, magnitude, hasMagnitude,
 					typePriorForObject(nebula, nebulaHints), label, false, SatellitePickDiagnostics());
+				if (borderHit && !candidates.isEmpty() && candidates.last().object == nebula)
+					candidates.last().distanceVp = bestBorderDistVp;
 			}
 		}
 	}
