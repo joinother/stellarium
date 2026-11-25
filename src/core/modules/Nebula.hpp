@@ -362,11 +362,11 @@ private:
 	void drawLabel(StelPainter& sPainter, float alpha, const QString& text, float shift) const;
 	void drawHints(StelPainter& sPainter, float alpha, const Vec3d& direction) const;
 	void drawOutlines(StelPainter& sPainter, float alpha, const Vec3d& aberration, bool useAberration) const;
-	void renderDarkNebulaMarker(StelPainter& sPainter, float x, float y, float size, Vec3f color, float alpha) const;
-	void renderRoundMarker(StelPainter& sPainter, float x, float y, float size, Vec3f color, bool crossed, float alpha) const;
-	void renderEllipticMarker(StelPainter& sPainter, float x, float y, float size, float aspectRatio, float angle, Vec3f color, float alpha) const;
-	void renderMarkerRoundedRect(StelPainter& sPainter, float x, float y, float size, Vec3f color, float alpha) const;
-	void renderMarkerPointedCircle(StelPainter& sPainter, float x, float y, float size, Vec3f color, bool insideRect, float alpha) const;
+	void renderDarkNebulaMarker(StelPainter& sPainter, const Vec3d& direction, float size, Vec3f color, float alpha) const;
+	void renderRoundMarker(StelPainter& sPainter, const Vec3d& direction, float size, Vec3f color, bool crossed, float alpha) const;
+	void renderEllipticMarker(StelPainter& sPainter, const Vec3d& direction, float size, float aspectRatio, Vec3f color, float alpha) const;
+	void renderMarkerRoundedRect(StelPainter& sPainter, const Vec3d& direction, float size, Vec3f color, float alpha) const;
+	void renderMarkerPointedCircle(StelPainter& sPainter, const Vec3d& direction, float size, Vec3f color, bool insideRect, float alpha) const;
 
 	bool objectInDisplayedType() const;
 

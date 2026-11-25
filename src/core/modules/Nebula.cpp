@@ -837,231 +837,309 @@ void Nebula::drawOutlines(StelPainter &sPainter, float alpha, const Vec3d& aberr
 	sPainter.setLineSmooth(false);
 }
 
-void Nebula::renderDarkNebulaMarker(StelPainter& sPainter, const float x, const float y,
+namespace
+{
+struct SkyMarkerFrame
+{
+	Vec3d center;
+	Vec3d majorAxis;
+	Vec3d minorAxis;
+	double majorRad = 0.0;
+	double minorRad = 0.0;
+	float majorPx = 0.f;
+	float scale = 1.f;
+	bool valid = false;
+};
+
+SkyMarkerFrame buildSkyMarkerFrame(StelPainter& sPainter, const Vec3d& direction,
+                                   float sizeLogical, float majorAxisDeg, float minorAxisDeg,
+                                   int orientationAngleDeg, bool proportional, float defaultMinorRatio)
+{
+	SkyMarkerFrame f;
+	const auto& prj = sPainter.getProjector();
+	f.scale = prj->getScreenScale();
+	const double pixPerRad = static_cast<double>(prj->getPixelPerRadAtCenter());
+	if (pixPerRad <= 1e-6 || direction.normSquared() <= 1e-12)
+		return f;
+
+	f.center = direction;
+	f.center.normalize();
+
+	// Exact J2000 orthonormal tangent basis: celestial North and East (N x d).
+	Vec3d north(0.0, 0.0, 1.0);
+	north -= f.center * f.center[2];
+	if (north.normSquared() < 1e-10)
+		north = Vec3d(1.0, 0.0, 0.0);
+	else
+		north.normalize();
+	Vec3d east = north ^ f.center;
+	east.normalize();
+
+	// Astronomical Position Angle (PA): degrees East of North.
+	const double paRad = static_cast<double>(orientationAngleDeg) * M_PI_180;
+	f.majorAxis = north * std::cos(paRad) + east * std::sin(paRad);
+	f.minorAxis = north * (-std::sin(paRad)) + east * std::cos(paRad);
+
+	const double iconRad = (static_cast<double>(sizeLogical) * static_cast<double>(f.scale)) / pixPerRad;
+	const bool hasRealSize = proportional && majorAxisDeg > 0.f;
+	const double realMajorRad = hasRealSize ? (0.5 * static_cast<double>(majorAxisDeg) * M_PI_180) : iconRad;
+	f.majorRad = std::max(realMajorRad, iconRad);
+
+	double ratio = static_cast<double>(defaultMinorRatio);
+	if (majorAxisDeg > 0.f && minorAxisDeg > 0.f)
+		ratio = std::clamp(static_cast<double>(minorAxisDeg) / static_cast<double>(majorAxisDeg), 0.14, 1.0);
+
+	// Keep zoomed-out elongated markers legible while preserving true ratios when zoomed in.
+	const double minMinorRad = (2.5 * static_cast<double>(f.scale)) / pixPerRad;
+	f.minorRad = std::max(f.majorRad * ratio, std::min(f.majorRad, minMinorRad));
+	f.majorPx = static_cast<float>(f.majorRad * pixPerRad);
+	f.valid = true;
+	return f;
+}
+
+inline bool projectSkyMarkerPoint(const StelProjectorP& prj, const SkyMarkerFrame& f,
+                                  double u, double v, Vec3d& skyOut, Vec3d& screenOut)
+{
+	const double du = u * f.majorRad;
+	const double dv = v * f.minorRad;
+	const double r = std::hypot(du, dv);
+	if (r > 1e-10)
+	{
+		const double rClamped = std::min(r, 1.35);
+		const double cr = std::cos(rClamped);
+		const double sr = std::sin(rClamped) / r;
+		skyOut = f.center * cr + (f.majorAxis * du + f.minorAxis * dv) * sr;
+	}
+	else
+	{
+		skyOut = f.center;
+	}
+	return prj->project(skyOut, screenOut);
+}
+
+void drawSkyMarkerPolyline(StelPainter& sPainter, const SkyMarkerFrame& f,
+                           const QVarLengthArray<Vec2f, 256>& normPts, bool closed)
+{
+	const auto& prj = sPainter.getProjector();
+	const int count = normPts.size();
+	if (count < 2)
+		return;
+
+	QVarLengthArray<float, 512> seg;
+	seg.reserve((count + 1) * 2);
+	Vec3d prevSky(0.0);
+	bool hasPrev = false;
+
+	auto flushSeg = [&]()
+	{
+		if (seg.size() >= 4)
+		{
+			sPainter.setVertexPointer(2, GL_FLOAT, seg.constData());
+			sPainter.drawFromArray(StelPainter::LineStrip, seg.size() / 2, 0, false);
+		}
+		seg.clear();
+		hasPrev = false;
+	};
+
+	const int total = closed ? (count + 1) : count;
+	for (int i = 0; i < total; ++i)
+	{
+		const Vec2f& p = normPts[i % count];
+		Vec3d sky, scr;
+		if (!projectSkyMarkerPoint(prj, f, static_cast<double>(p[0]), static_cast<double>(p[1]), sky, scr))
+		{
+			flushSeg();
+			continue;
+		}
+		if (hasPrev && prj->intersectViewportDiscontinuity(prevSky, sky))
+		{
+			flushSeg();
+		}
+		seg.push_back(static_cast<float>(scr[0]));
+		seg.push_back(static_cast<float>(scr[1]));
+		prevSky = sky;
+		hasPrev = true;
+	}
+	flushSeg();
+}
+} // anonymous namespace
+
+void Nebula::renderDarkNebulaMarker(StelPainter& sPainter, const Vec3d& direction,
                                     float size, const Vec3f color, float alpha) const
 {
-	// Take into account device pixel density and global scale ratio, as we are drawing 2D stuff.
-	const float scale = sPainter.getProjector()->getScreenScale();
-	size *= scale;
+	const SkyMarkerFrame f = buildSkyMarkerFrame(sPainter, direction, size,
+	                                             majorAxisSize, minorAxisSize, orientationAngle,
+	                                             drawHintProportional, 1.0f);
+	if (!f.valid)
+		return;
 
-	const float roundRadius = 0.35 * size;
-	const int numPointsInArc = std::lround(std::clamp(5*size/35, 5.f, 16.f));
-	QVarLengthArray<float, 128> vertexData;
-	vertexData.reserve(numPointsInArc*2*4);
-	const float leftOuterX = x - size;
-	const float leftInnerX = leftOuterX + roundRadius;
-	const float bottomOuterY = y - size;
-	const float bottomInnerY = bottomOuterY + roundRadius;
-	const float rightOuterX = x + size;
-	const float rightInnerX = rightOuterX - roundRadius;
-	const float topOuterY = y + size;
-	const float topInnerY = topOuterY - roundRadius;
-	const float gap = 0.15*size;
-	const float*const cossin = StelUtils::ComputeCosSinRhoZone((M_PIf/2)/(numPointsInArc-1),
-	                                                           numPointsInArc-1, 0);
+	// 4 sky-projected superellipse corner arcs leaving clean cardinal gaps.
+	const int ptsPerArc = std::clamp(int(std::lround(f.majorPx / 8.f)), 8, 24);
+	constexpr float gapRad = 0.22f; // ~12.6 deg gap on each side of the 4 cardinal midpoints
+	constexpr float superExp = 0.625f; // superellipse p = 3.2 (sleek rounded rectangle)
+
 	sPainter.setBlending(true);
 	sPainter.setLineSmooth(true);
-	sPainter.setLineWidth(scale * std::clamp(2*size/35, 1.f, 2.5f));
-	sPainter.setColor(color, alpha);
+	sPainter.setLineWidth(f.scale * std::clamp(f.majorPx / 52.f, 0.95f, 1.75f));
+	const float drawAlpha = (f.majorPx > 40.f * f.scale) ? (alpha * 0.88f) : alpha;
+	sPainter.setColor(color, drawAlpha);
 	sPainter.enableClientStates(true);
 
-	vertexData.clear();
-	vertexData.push_back(x-gap);
-	vertexData.push_back(bottomOuterY);
-	for(int n = 0; n < numPointsInArc; ++n)
+	QVarLengthArray<Vec2f, 256> arcPts;
+	arcPts.reserve(ptsPerArc);
+	for (int q = 0; q < 4; ++q)
 	{
-		const auto cosa = cossin[2*n], sina = cossin[2*n+1];
-		vertexData.push_back(leftInnerX   - roundRadius*sina);
-		vertexData.push_back(bottomInnerY - roundRadius*cosa);
+		arcPts.clear();
+		const float startAngle = q * (M_PIf * 0.5f) + gapRad;
+		const float endAngle = (q + 1) * (M_PIf * 0.5f) - gapRad;
+		for (int i = 0; i < ptsPerArc; ++i)
+		{
+			const float t = startAngle + (endAngle - startAngle) * (static_cast<float>(i) / static_cast<float>(ptsPerArc - 1));
+			const float ct = std::cos(t);
+			const float st = std::sin(t);
+			const float u = std::copysign(std::pow(std::abs(ct), superExp), ct);
+			const float v = std::copysign(std::pow(std::abs(st), superExp), st);
+			arcPts.append(Vec2f(u, v));
+		}
+		drawSkyMarkerPolyline(sPainter, f, arcPts, false);
 	}
-	vertexData.push_back(leftOuterX);
-	vertexData.push_back(y-gap);
-	sPainter.setVertexPointer(2, GL_FLOAT, vertexData.data());
-	sPainter.drawFromArray(StelPainter::LineStrip, vertexData.size() / 2, 0, false);
-
-	vertexData.clear();
-	vertexData.push_back(leftOuterX);
-	vertexData.push_back(y+gap);
-	for(int n = 0; n < numPointsInArc; ++n)
-	{
-		const auto cosa = cossin[2*n], sina = cossin[2*n+1];
-		vertexData.push_back(leftInnerX - roundRadius*cosa);
-		vertexData.push_back(topInnerY  + roundRadius*sina);
-	}
-	vertexData.push_back(x-gap);
-	vertexData.push_back(topOuterY);
-	sPainter.setVertexPointer(2, GL_FLOAT, vertexData.data());
-	sPainter.drawFromArray(StelPainter::LineStrip, vertexData.size() / 2, 0, false);
-
-	vertexData.clear();
-	vertexData.push_back(x+gap);
-	vertexData.push_back(topOuterY);
-	for(int n = 0; n < numPointsInArc; ++n)
-	{
-		const auto cosa = cossin[2*n], sina = cossin[2*n+1];
-		vertexData.push_back(rightInnerX + roundRadius*sina);
-		vertexData.push_back(topInnerY   + roundRadius*cosa);
-	}
-	vertexData.push_back(rightOuterX);
-	vertexData.push_back(y+gap);
-	sPainter.setVertexPointer(2, GL_FLOAT, vertexData.data());
-	sPainter.drawFromArray(StelPainter::LineStrip, vertexData.size() / 2, 0, false);
-
-	vertexData.clear();
-	vertexData.push_back(rightOuterX);
-	vertexData.push_back(y-gap);
-	for(int n = 0; n < numPointsInArc; ++n)
-	{
-		const auto cosa = cossin[2*n], sina = cossin[2*n+1];
-		vertexData.push_back(rightInnerX  + roundRadius*cosa);
-		vertexData.push_back(bottomInnerY - roundRadius*sina);
-	}
-	vertexData.push_back(x+gap);
-	vertexData.push_back(bottomOuterY);
-	sPainter.setVertexPointer(2, GL_FLOAT, vertexData.data());
-	sPainter.drawFromArray(StelPainter::LineStrip, vertexData.size() / 2, 0, false);
-
 	sPainter.enableClientStates(false);
 }
 
-void Nebula::renderMarkerRoundedRect(StelPainter& sPainter, const float x, const float y,
+void Nebula::renderMarkerRoundedRect(StelPainter& sPainter, const Vec3d& direction,
                                      float size, const Vec3f color, float alpha) const
 {
-	// Take into account device pixel density and global scale ratio, as we are drawing 2D stuff.
-	const float scale = sPainter.getProjector()->getScreenScale();
-	size *= scale;
+	const SkyMarkerFrame f = buildSkyMarkerFrame(sPainter, direction, size,
+	                                             majorAxisSize, minorAxisSize, orientationAngle,
+	                                             drawHintProportional, 1.0f);
+	if (!f.valid)
+		return;
 
-	const float roundRadius = 0.35 * size;
-	const int numPointsInArc = std::lround(std::clamp(5*size/35, 5.f, 16.f));
-	QVarLengthArray<float, 128> vertexData;
-	vertexData.reserve(numPointsInArc*2*4);
-	const float leftOuterX = x - size;
-	const float leftInnerX = leftOuterX + roundRadius;
-	const float bottomOuterY = y - size;
-	const float bottomInnerY = bottomOuterY + roundRadius;
-	const float rightOuterX = x + size;
-	const float rightInnerX = rightOuterX - roundRadius;
-	const float topOuterY = y + size;
-	const float topInnerY = topOuterY - roundRadius;
-	const float*const cossin = StelUtils::ComputeCosSinRhoZone((M_PIf/2)/(numPointsInArc-1),
-	                                                           numPointsInArc-1, 0);
-	for(int n = 0; n < numPointsInArc; ++n)
+	// Sky-projected superellipse (p = 3.2): keeps Stellarium's rounded-rect nebula identity
+	// while accurately matching real major/minor axes and astronomical position angle.
+	const int numPoints = std::clamp(int(std::lround(f.majorPx / 2.5f)), 36, 160);
+	const float* const cossin = StelUtils::ComputeCosSinTheta(numPoints);
+	constexpr float superExp = 0.625f;
+	QVarLengthArray<Vec2f, 256> normPts;
+	normPts.reserve(numPoints);
+	for (int n = 0; n < numPoints; ++n)
 	{
-		const auto cosa = cossin[2*n], sina = cossin[2*n+1];
-		vertexData.push_back(leftInnerX   - roundRadius*sina);
-		vertexData.push_back(bottomInnerY - roundRadius*cosa);
+		const float ct = cossin[2 * n];
+		const float st = cossin[2 * n + 1];
+		const float u = std::copysign(std::pow(std::abs(ct), superExp), ct);
+		const float v = std::copysign(std::pow(std::abs(st), superExp), st);
+		normPts.append(Vec2f(u, v));
 	}
-	for(int n = 0; n < numPointsInArc; ++n)
-	{
-		const auto cosa = cossin[2*n], sina = cossin[2*n+1];
-		vertexData.push_back(leftInnerX - roundRadius*cosa);
-		vertexData.push_back(topInnerY  + roundRadius*sina);
-	}
-	for(int n = 0; n < numPointsInArc; ++n)
-	{
-		const auto cosa = cossin[2*n], sina = cossin[2*n+1];
-		vertexData.push_back(rightInnerX + roundRadius*sina);
-		vertexData.push_back(topInnerY   + roundRadius*cosa);
-	}
-	for(int n = 0; n < numPointsInArc; ++n)
-	{
-		const auto cosa = cossin[2*n], sina = cossin[2*n+1];
-		vertexData.push_back(rightInnerX  + roundRadius*cosa);
-		vertexData.push_back(bottomInnerY - roundRadius*sina);
-	}
-	const auto vertCount = vertexData.size() / 2;
+
 	sPainter.setBlending(true);
 	sPainter.setLineSmooth(true);
-	sPainter.setLineWidth(scale * std::clamp(2*size/35, 1.f, 2.5f));
-	sPainter.setColor(color, alpha);
+	sPainter.setLineWidth(f.scale * std::clamp(f.majorPx / 52.f, 0.95f, 1.75f));
+	const float drawAlpha = (f.majorPx > 40.f * f.scale) ? (alpha * 0.88f) : alpha;
+	sPainter.setColor(color, drawAlpha);
 	sPainter.enableClientStates(true);
-	sPainter.setVertexPointer(2, GL_FLOAT, vertexData.data());
-	sPainter.drawFromArray(StelPainter::LineLoop, vertCount, 0, false);
+	drawSkyMarkerPolyline(sPainter, f, normPts, true);
 	sPainter.enableClientStates(false);
 }
 
-void Nebula::renderRoundMarker(StelPainter& sPainter, const float x, const float y,
+void Nebula::renderRoundMarker(StelPainter& sPainter, const Vec3d& direction,
                                float size, const Vec3f color, const bool crossed, float alpha) const
 {
-	// Take into account device pixel density and global scale ratio, as we are drawing 2D stuff.
-	const float scale = sPainter.getProjector()->getScreenScale();
-	size *= scale;
+	const SkyMarkerFrame f = buildSkyMarkerFrame(sPainter, direction, size,
+	                                             majorAxisSize, minorAxisSize, orientationAngle,
+	                                             drawHintProportional, 1.0f);
+	if (!f.valid)
+		return;
+
+	const int numPoints = std::clamp(int(std::lround(f.majorPx / 2.5f)), 32, 160);
+	const float* const cossin = StelUtils::ComputeCosSinTheta(numPoints);
+	QVarLengthArray<Vec2f, 256> normPts;
+	normPts.reserve(numPoints);
+	for (int n = 0; n < numPoints; ++n)
+		normPts.append(Vec2f(cossin[2 * n], cossin[2 * n + 1]));
 
 	sPainter.setBlending(true);
 	sPainter.setLineSmooth(true);
-	sPainter.setLineWidth(scale * std::clamp(size/7, 1.f, 2.5f));
-	sPainter.setColor(color, alpha);
-
-	sPainter.drawCircle(x, y, size);
-	if(!crossed) return;
-
+	sPainter.setLineWidth(f.scale * std::clamp(f.majorPx / 45.f, 0.95f, 1.7f));
+	const float drawAlpha = (f.majorPx > 40.f * f.scale) ? (alpha * 0.88f) : alpha;
+	sPainter.setColor(color, drawAlpha);
 	sPainter.enableClientStates(true);
-	const float vertexData[] = {x-size, y,
-	                            x+size, y,
-	                            x, y-size,
-	                            x, y+size};
-	const auto vertCount = std::size(vertexData) / 2;
-	sPainter.setVertexPointer(2, GL_FLOAT, vertexData);
-	sPainter.drawFromArray(StelPainter::Lines, vertCount, 0, false);
-	sPainter.enableClientStates(false);
-}
-
-void Nebula::renderEllipticMarker(StelPainter& sPainter, const float x, const float y, float size,
-                                  const float aspectRatio, const float angle, const Vec3f color, float alpha) const
-{
-	// Take into account device pixel density and global scale ratio, as we are drawing 2D stuff.
-	const float scale = sPainter.getProjector()->getScreenScale();
-	size *= scale;
-
-	const float radiusY = 0.35 * size;
-	const float radiusX = aspectRatio * radiusY;
-	const int numPoints = std::lround(std::clamp(size/3, 32.f, 4096.f));
-	QVarLengthArray<float, 256> vertexData;
-	vertexData.reserve(numPoints*2);
-	const float*const cossin = StelUtils::ComputeCosSinTheta(numPoints);
-	const auto cosa = std::cos(angle);
-	const auto sina = std::sin(angle);
-	for(int n = 0; n < numPoints; ++n)
+	drawSkyMarkerPolyline(sPainter, f, normPts, true);
+	if (crossed)
 	{
-		const auto cosb = cossin[2*n], sinb = cossin[2*n+1];
-		const auto pointX = radiusX*sinb;
-		const auto pointY = radiusY*cosb;
-		vertexData.push_back(x + pointX*cosa - pointY*sina);
-		vertexData.push_back(y + pointY*cosa + pointX*sina);
+		QVarLengthArray<Vec2f, 256> crossU;
+		crossU.append(Vec2f(-1.f, 0.f));
+		crossU.append(Vec2f( 1.f, 0.f));
+		drawSkyMarkerPolyline(sPainter, f, crossU, false);
+
+		QVarLengthArray<Vec2f, 256> crossV;
+		crossV.append(Vec2f(0.f, -1.f));
+		crossV.append(Vec2f(0.f,  1.f));
+		drawSkyMarkerPolyline(sPainter, f, crossV, false);
 	}
-	const auto vertCount = vertexData.size() / 2;
-	sPainter.setBlending(true);
-	sPainter.setLineSmooth(true);
-	sPainter.setLineWidth(scale * std::clamp(size/40, 1.f, 2.f));
-	sPainter.setColor(color, alpha);
-	sPainter.enableClientStates(true);
-	sPainter.setVertexPointer(2, GL_FLOAT, vertexData.data());
-	sPainter.drawFromArray(StelPainter::LineLoop, vertCount, 0, false);
 	sPainter.enableClientStates(false);
 }
 
-void Nebula::renderMarkerPointedCircle(StelPainter& sPainter, const float x, const float y,
+void Nebula::renderEllipticMarker(StelPainter& sPainter, const Vec3d& direction, float size,
+                                  const float aspectRatio, const Vec3f color, float alpha) const
+{
+	const float defaultMinorRatio = (aspectRatio > 0.f) ? std::clamp(1.f / aspectRatio, 0.14f, 1.0f) : 0.5f;
+	const SkyMarkerFrame f = buildSkyMarkerFrame(sPainter, direction, size,
+	                                             majorAxisSize, minorAxisSize, orientationAngle,
+	                                             drawHintProportional, defaultMinorRatio);
+	if (!f.valid)
+		return;
+
+	const int numPoints = std::clamp(int(std::lround(f.majorPx / 2.5f)), 36, 160);
+	const float* const cossin = StelUtils::ComputeCosSinTheta(numPoints);
+	QVarLengthArray<Vec2f, 256> normPts;
+	normPts.reserve(numPoints);
+	for (int n = 0; n < numPoints; ++n)
+		normPts.append(Vec2f(cossin[2 * n], cossin[2 * n + 1]));
+
+	sPainter.setBlending(true);
+	sPainter.setLineSmooth(true);
+	sPainter.setLineWidth(f.scale * std::clamp(f.majorPx / 55.f, 0.9f, 1.65f));
+	const float drawAlpha = (f.majorPx > 40.f * f.scale) ? (alpha * 0.85f) : alpha;
+	sPainter.setColor(color, drawAlpha);
+	sPainter.enableClientStates(true);
+	drawSkyMarkerPolyline(sPainter, f, normPts, true);
+	sPainter.enableClientStates(false);
+}
+
+void Nebula::renderMarkerPointedCircle(StelPainter& sPainter, const Vec3d& direction,
                                        float size, const Vec3f color, const bool insideRect, float alpha) const
 {
-	// Take into account device pixel density and global scale ratio, as we are drawing 2D stuff.
-	const float scale = sPainter.getProjector()->getScreenScale();
-	size *= scale;
+	SkyMarkerFrame f = buildSkyMarkerFrame(sPainter, direction, size,
+	                                       majorAxisSize, minorAxisSize, orientationAngle,
+	                                       drawHintProportional, 1.0f);
+	if (!f.valid)
+		return;
 
-	texPointElement->bind();
-	sPainter.setColor(color, alpha);
-	sPainter.setBlending(true, GL_SRC_ALPHA, GL_ONE);
-	const auto numPoints = StelUtils::getSmallerPowerOfTwo(std::clamp(int(0.4f*size/scale), 8, 4096));
-	const auto spriteSize = std::min(0.25f * 2*M_PIf*size / numPoints, 5.f * scale);
-	if(insideRect)
-		size -= spriteSize*2;
-	const float*const cossin = StelUtils::ComputeCosSinRhoZone((2*M_PIf)/numPoints, numPoints, 0);
+	const auto& prj = sPainter.getProjector();
+	const auto numPoints = StelUtils::getSmallerPowerOfTwo(std::clamp(int(0.4f * f.majorPx / f.scale), 8, 128));
+	const auto spriteSize = std::min(0.24f * 2.f * M_PIf * f.majorPx / numPoints, 4.0f * f.scale);
+	if (insideRect && f.majorPx > 4.f * spriteSize)
+	{
+		const double shrink = std::max(0.5, 1.0 - (2.0 * static_cast<double>(spriteSize)) / static_cast<double>(f.majorPx));
+		f.majorRad *= shrink;
+		f.minorRad *= shrink;
+	}
+
+	const float* const cossin = StelUtils::ComputeCosSinRhoZone((2.f * M_PIf) / numPoints, numPoints, 0);
 	std::vector<Vec2f> points;
 	points.reserve(numPoints);
 	for (int n = 0; n < numPoints; ++n)
 	{
-		const auto cosa = cossin[2 * n], sina = cossin[2 * n + 1];
-		points.emplace_back(x - size * sina, y - size * cosa);
+		Vec3d sky, scr;
+		if (projectSkyMarkerPoint(prj, f, static_cast<double>(cossin[2 * n]), static_cast<double>(cossin[2 * n + 1]), sky, scr))
+			points.emplace_back(static_cast<float>(scr[0]), static_cast<float>(scr[1]));
 	}
+	if (points.empty())
+		return;
+
+	texPointElement->bind();
+	sPainter.setColor(color, alpha);
+	sPainter.setBlending(true, GL_SRC_ALPHA, GL_ONE);
 	sPainter.drawSprite2dModeNoDeviceScale(points, spriteSize);
 }
 
@@ -1101,14 +1179,7 @@ void Nebula::drawHints(StelPainter& sPainter, float alpha, const Vec3d& directio
 		case NebRGx:
 		case NebGxCl:
 		{
-			// The rotation angle in renderEllipticMarker() is relative to screen. Make sure to compute correct angle from 90+orientationAngle.
-			// Find an on-screen direction vector from a point offset somewhat in declination from our object.
-			Vec3d XYZrel(direction);
-			XYZrel[2]*=0.95; XYZrel.normalize();
-			Vec3d XYrel;
-			sPainter.getProjector()->project(XYZrel, XYrel);
-			const auto screenAngle = atan2(XYrel[1]-XY[1], XYrel[0]-XY[0]);
-			renderEllipticMarker(sPainter, XY[0], XY[1], finalSize, 2, screenAngle + orientationAngle*M_PI_180f, color, alpha);
+			renderEllipticMarker(sPainter, direction, finalSize, 2.f, color, alpha);
 			return;
 		}
 		case NebOc:
@@ -1116,10 +1187,10 @@ void Nebula::drawHints(StelPainter& sPainter, float alpha, const Vec3d& directio
 		case NebSC:
 		case NebCl:
 		case NebPartOfGx:
-			renderMarkerPointedCircle(sPainter, XY[0], XY[1], finalSize, color, false, alpha);
+			renderMarkerPointedCircle(sPainter, direction, finalSize, color, false, alpha);
 			return;
 		case NebGc:
-			renderRoundMarker(sPainter, XY[0], XY[1], finalSize, color, true, alpha);
+			renderRoundMarker(sPainter, direction, finalSize, color, true, alpha);
 			return;
 		case NebN:
 		case NebHII:
@@ -1132,7 +1203,7 @@ void Nebula::drawHints(StelPainter& sPainter, float alpha, const Vec3d& directio
 		case NebEn:
 		case NebSNC:
 		case NebSNRC:
-			renderMarkerRoundedRect(sPainter, XY[0], XY[1], finalSize, color, alpha);
+			renderMarkerRoundedRect(sPainter, direction, finalSize, color, alpha);
 			return;
 		case NebPn:
 		case NebPossPN:
@@ -1140,12 +1211,12 @@ void Nebula::drawHints(StelPainter& sPainter, float alpha, const Vec3d& directio
 			Nebula::texPlanetaryNebula->bind();
 			break;
 		case NebDn:
-			renderDarkNebulaMarker(sPainter, XY[0], XY[1], finalSize, color, alpha);
+			renderDarkNebulaMarker(sPainter, direction, finalSize, color, alpha);
 			return;
 		case NebCn:
 		{
-			renderMarkerRoundedRect(sPainter, XY[0], XY[1], finalSize, getHintColor(NebN), alpha);
-			renderMarkerPointedCircle(sPainter, XY[0], XY[1], finalSize, getHintColor(NebCl), true, alpha);
+			renderMarkerRoundedRect(sPainter, direction, finalSize, getHintColor(NebN), alpha);
+			renderMarkerPointedCircle(sPainter, direction, finalSize, getHintColor(NebCl), true, alpha);
 			return;
 		}
 		case NebRegion:
@@ -1157,7 +1228,7 @@ void Nebula::drawHints(StelPainter& sPainter, float alpha, const Vec3d& directio
 		case NebEmissionLineStar:
 		case NebUnknown:
 		//default: // keep this commented out to let clangd warn us of unhandled cases!
-			renderRoundMarker(sPainter, XY[0], XY[1], finalSize, color, false, alpha);
+			renderRoundMarker(sPainter, direction, finalSize, color, false, alpha);
 			return;
 	}
 

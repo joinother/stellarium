@@ -1,5 +1,17 @@
 > **身份图例**：本文件真机记录中出现的 `com.cnchensh.stellarium` 是**本机调试签名身份**（本机 DevEco 自动生成，非发布身份）；发布身份为 `com.joinother.skyinstrument`。构建脚本 `build-ohos-hap-windows.ps1 -Install` 从产物 `pack.info` 读取实际包名，仓库不写死任何签名身份（见 `docs/harmonyos/release/BUNDLE-IDENTITY-CLEANUP.md`）。
 
+## [2026-11-25] 深空天体符号圈球面精确贴合（真实长短轴与位置角 PA）
+
+- **修改文件：** `src/core/modules/Nebula.hpp`、`src/core/modules/Nebula.cpp`、`src/core/modules/NebulaMgr.cpp`、`docs/harmonyos/CHANGELOG.md`。
+- **问题根因：** 上游 `Nebula::drawHints()` 对星系硬编码 `aspectRatio = 2` 并把长轴缩水至 `0.70×`，导致正面星系被拉扁、侧向星系过胖、M31 两端旋臂被腰斩；同时用 `XYZrel[2] *= 0.95` 近似天北方向，在南半球反相 180°、天赤道附近失准，且星云/暗星云只画不随天球旋转的水平方框。
+- **修复：**
+  1. 在 `Nebula.cpp` 新增 `buildSkyMarkerFrame` 与球面指数映射投影：在 J2000 单位球面严格构造天北 `N` 与天东 `E = N × d` 正交切基，按星表真实 `majorAxisSize`、`minorAxisSize` 与天文位置角 `orientationAngle`（PA，北偏东）直接在天球上采样并投影，同时处理任意投影的视口不连续边界。
+  2. 星系（`renderEllipticMarker`）按真实长短轴比绘制精致细线椭圆；发射/反射星云（`renderMarkerRoundedRect`）升级为可按真实长短轴与 PA 旋转的球面超椭圆（`p = 3.2`）；暗星云（`renderDarkNebulaMarker`）升级为球面四段圆弧缺口超椭圆；球状/疏散星团（`renderRoundMarker` / `renderMarkerPointedCircle`）统一走球面投影。
+  3. 放宽 `NebulaMgr::drawPointer()` 选中框尺寸上限至视口短边 42%，特写选中大型深空天体时四角框不再缩在天体中心内部。
+- **验证结果：**
+  - 主机：`test-ohos-realistic-star-visibility.mjs` 15/15、`test-visual-extinction.py` PASS、`check-ohos-ui-contract.mjs` 通过。
+  - 真机（`HUAWEI MatePad Mini 悦读版`，PID `2863` 连续无崩溃）：实机截图对比通过——M31 椭圆完整贴合左右旋臂与真实倾角（彻底修复旧版斜角反向与 30% 短缺），M51 正面圆椭圆贴合自然，NGC 4565 针状侧向星系像素级紧贴两端与尘埃带，M104 南天近赤道（Dec `-11.6°`）星系倾角与光晕轮廓严丝合缝。
+
 ## [2026-11-25] 深空贴图全量去星清洗、暗星云透明尘埃遮挡、AI 银河去底噪与广角视觉统筹
 
 - **修改文件：** `nebulae/default/`（640 张去星/无缝拼接/暗尘埃清洗贴图，移除 34 张疏散星团假星贴图）、`nebulae/default/textures.json`、`textures/milkyway.png`、`src/core/StelSkyImageTile.hpp`、`src/core/StelSkyImageTile.cpp`、`src/core/modules/NebulaMgr.cpp`、`harmonyos/ets-source/qability/StellariumResourceBootstrap.ets`、`docs/harmonyos/CHANGELOG.md`。

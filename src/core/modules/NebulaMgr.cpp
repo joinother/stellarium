@@ -1208,11 +1208,13 @@ void NebulaMgr::drawPointer(const StelCore* core, StelPainter& sPainter)
 
 		sPainter.setBlending(true);
 
-		// Size on screen
-		float screenRd = static_cast<float>(obj->getAngularRadius(core))*M_PI_180f*prj->getPixelPerRadAtCenter();
+		// Size on screen: scale with the real object angular size up to ~42% of the viewport
 		const float scale = StelApp::getInstance().getScreenScale();
-		if (screenRd > 120 * scale) // avoid oversized marker
-			screenRd = 120 * scale;
+		const float maxPointerRd = std::max(120.f * scale,
+			0.42f * static_cast<float>(std::min(prj->getViewportWidth(), prj->getViewportHeight())));
+		float screenRd = static_cast<float>(obj->getAngularRadius(core)) * M_PI_180f * prj->getPixelPerRadAtCenter();
+		if (screenRd > maxPointerRd)
+			screenRd = maxPointerRd;
 
 		if (Nebula::drawHintProportional)
 			screenRd*=1.2f;
