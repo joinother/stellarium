@@ -1,5 +1,15 @@
 > **身份图例**：本文件真机记录中出现的 `com.cnchensh.stellarium` 是**本机调试签名身份**（本机 DevEco 自动生成，非发布身份）；发布身份为 `com.joinother.skyinstrument`。构建脚本 `build-ohos-hap-windows.ps1 -Install` 从产物 `pack.info` 读取实际包名，仓库不写死任何签名身份（见 `docs/harmonyos/release/BUNDLE-IDENTITY-CLEANUP.md`）。
 
+## [2026-11-26] 屏内可见卫星独立每帧优先推演（消除放大后卫星移动一卡一卡跳步）
+
+- **修改文件：** `plugins/Satellites/src/Satellites.cpp`、`docs/harmonyos/CHANGELOG.md`。
+- **修复内容：**
+  - 根因是此前鸿蒙 `Satellites::update()` 的 Pass 2 将当前屏内可见卫星（`sat->lastFrameOnScreen`）与上半球及地平线下 `15°` 内的 11,000+ 颗屏外卫星混在同一个轮询队列里，收紧预算后放大场景中的可见卫星每 ~20 帧（约 0.7 秒）才轮到更新一次位置，造成明显步进跳动。
+  - 现将 `sat->lastFrameOnScreen` 拆出为独立高优先级 **Pass 1.5**（`1.6 ms` 独立子预算，放大时几十颗屏内可见卫星仅耗 `0.1～0.3 ms` 即可 **100% 每帧更新**），剩余预算再由 Pass 2 / Pass 3 轮询屏外上半球与地平线下卫星，兼顾流畅位移与低 CPU 占用。
+- **验证结果：**
+  - 主机：UI 契约（123 锚点）、命令目录（449 命令）及 36 项单元测试全部通过。
+  - 真机（`HUAWEI MatePad Mini 悦读版`，PID `62139` 稳定无崩溃）：放大视场下所有屏内可见卫星连续每帧顺滑推演，无跳步卡顿，且 `Satellites` 不再位列缩放绘制最慢模块。
+
 ## [2026-11-26] 放大镜双层 FBO 深度拆分合成（拖动保持 60/120 FPS，雾山遮挡与镜内标注/深空圈零跳变）
 
 - **修改文件：** `src/core/modules/HipsMgr.hpp`、`src/core/modules/HipsMgr.cpp`、`src/StelMainView.cpp`、`docs/harmonyos/CHANGELOG.md`。

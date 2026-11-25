@@ -4793,10 +4793,11 @@ void Satellites::update(double deltaTime)
 	const bool fastMotionBudget = calendarScrub || timeScrubJump || motionTrailActivity > 0.02
 		|| StelMainView::getInstance().needsMaxFPS();
 	const qint64 budgetNs = fastMotionBudget
-		? 1200000LL   // 1.2 ms cap during interactive motion / time scrubbing
-		: 2000000LL;  // 2.0 ms cap during settled 1x viewing
+		? 1500000LL   // 1.5 ms cap during interactive motion / time scrubbing
+		: 2200000LL;  // 2.2 ms cap during settled 1x viewing
+	const qint64 onScreenBudgetNs = calendarScrub ? 1000000LL : 1600000LL;
 
-	// Pass 1: Always update the selected satellite, ISS, previewed orbits, and orbit-displayed satellites (<0.3ms).
+	// Pass 1: Always update the selected satellite, ISS, previewed orbits, and orbit-displayed satellites (<0.2ms).
 	for (int i = 0; i < satellites.size(); ++i)
 	{
 		Satellite* sat = satellites.at(i).data();
@@ -4808,10 +4809,34 @@ void Satellites::update(double deltaTime)
 		}
 	}
 
-	// Pass 2: Update on-screen and near-horizon rising satellites (within strict budget) so moving satellites
-	// and fast-time streaks glide smoothly across the sky during Minute/Hour time-travel scrubbing.
-	static int s_ohosScreenCursor = 0;
+	// Pass 1.5: Dedicated EVERY-FRAME propagation for satellites currently visible on screen
+	// (sat->lastFrameOnScreen). Keeps zoomed-in visible satellites gliding smoothly every frame
+	// instead of waiting behind 11,000+ off-screen upper-hemisphere satellites in Pass 2!
+	static int s_ohosOnScreenCursor = 0;
 	const int totalSats = satellites.size();
+	if (totalSats > 0 && !calendarScrub && satBudgetTimer.nsecsElapsed() < onScreenBudgetNs)
+	{
+		int startIdx = s_ohosOnScreenCursor % totalSats;
+		int checked = 0;
+		int updated = 0;
+		for (; checked < totalSats; ++checked)
+		{
+			const int idx = (startIdx + checked) % totalSats;
+			Satellite* sat = satellites.at(idx).data();
+			if (!sat || !sat->initialized || !sat->displayed || !sat->lastFrameOnScreen)
+				continue;
+			if (sat == selectedSat || sat->isISS || sat->orbitPreview || sat->orbitDisplayed)
+				continue;
+			sat->update(core, JD, false);
+			if ((++updated & 3) == 0 && satBudgetTimer.nsecsElapsed() >= onScreenBudgetNs)
+				break;
+		}
+		s_ohosOnScreenCursor = (checked >= totalSats) ? 0 : ((startIdx + checked + 1) % totalSats);
+	}
+
+	// Pass 2: Round-robin update of off-screen upper-hemisphere / rising satellites (elAz >= -0.25)
+	// using remaining frame budget so satellites panning or rising into view stay fresh.
+	static int s_ohosScreenCursor = 0;
 	if (totalSats > 0 && !calendarScrub && satBudgetTimer.nsecsElapsed() < budgetNs)
 	{
 		int startIdx = s_ohosScreenCursor % totalSats;
@@ -4823,7 +4848,7 @@ void Satellites::update(double deltaTime)
 			Satellite* sat = satellites.at(idx).data();
 			if (!sat || !sat->initialized || !sat->displayed)
 				continue;
-			if (!sat->lastFrameOnScreen && sat->elAzPosition[2] < -0.25)
+			if (sat->lastFrameOnScreen || sat->elAzPosition[2] < -0.25)
 				continue;
 			if (sat == selectedSat || sat->isISS || sat->orbitPreview || sat->orbitDisplayed)
 				continue;
