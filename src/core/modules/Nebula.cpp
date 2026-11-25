@@ -757,6 +757,15 @@ float Nebula::getVisibilityLevelByMagnitude(void) const
 			// artificially increase visibility of (most) Sharpless and LBN objects. No magnitude recorded:-(
 			lim=qMin(lim, 10.0f);
 		}
+		if (hasBuiltInTexture)
+		{
+			// Built-in photographed DSOs with missing or dim catalog magnitude (e.g. Sh 2-216,
+			// Sh 2-240, vdB, Abell PN) stay quiet at wide FOV and reveal cleanly once zoomed in.
+			const float texLim = (majorAxisSize > 0.f)
+				? (11.2f - 2.0f * qMin(majorAxisSize, 1.5f))
+				: 11.2f;
+			lim = qMin(lim, texLim);
+		}
 	}
 
 	if (nType==NebRegion) // special case for regions
@@ -1044,8 +1053,10 @@ void Nebula::renderMarkerRoundedRect(StelPainter& sPainter, const Vec3d& directi
 void Nebula::renderRoundMarker(StelPainter& sPainter, const Vec3d& direction,
                                float size, const Vec3f color, const bool crossed, float alpha) const
 {
+	// Round markers (globular clusters, planetary nebulae) stay circular so bogus minorAxis
+	// entries in PN catalogs (e.g. Sh 2-216) don't squash a round nebula ring into a narrow oval.
 	const SkyMarkerFrame f = buildSkyMarkerFrame(sPainter, direction, size,
-	                                             majorAxisSize, minorAxisSize, orientationAngle,
+	                                             majorAxisSize, 0.f, orientationAngle,
 	                                             drawHintProportional, 1.0f);
 	if (!f.valid)
 		return;
@@ -1075,6 +1086,19 @@ void Nebula::renderRoundMarker(StelPainter& sPainter, const Vec3d& direction,
 		crossV.append(Vec2f(0.f, -1.f));
 		crossV.append(Vec2f(0.f,  1.f));
 		drawSkyMarkerPolyline(sPainter, f, crossV, false);
+	}
+	else if (nType == NebPn || nType == NebPossPN || nType == NebPPN)
+	{
+		// Classic astronomical planetary nebula symbol: crisp circle + 4 short outward ticks.
+		const float tickExt = 1.f + std::clamp(8.f * f.scale / std::max(1.f, f.majorPx), 0.14f, 0.45f);
+		const Vec2f dirs[4] = {Vec2f(1.f, 0.f), Vec2f(-1.f, 0.f), Vec2f(0.f, 1.f), Vec2f(0.f, -1.f)};
+		for (const Vec2f& dir : dirs)
+		{
+			QVarLengthArray<Vec2f, 256> tick;
+			tick.append(dir);
+			tick.append(dir * tickExt);
+			drawSkyMarkerPolyline(sPainter, f, tick, false);
+		}
 	}
 	sPainter.enableClientStates(false);
 }
@@ -1279,8 +1303,8 @@ void Nebula::drawHints(StelPainter& sPainter, float alpha, const Vec3d& directio
 		case NebPn:
 		case NebPossPN:
 		case NebPPN:
-			Nebula::texPlanetaryNebula->bind();
-			break;
+			renderRoundMarker(sPainter, direction, finalSize, color, false, alpha);
+			return;
 		case NebDn:
 			renderDarkNebulaMarker(sPainter, direction, finalSize, color, alpha);
 			return;
@@ -1377,6 +1401,9 @@ QString Nebula::getDSODesignation() const
 		str = QString("Ru %1").arg(Ru_nb);
 	else if (catalogFilters&CatVdBHa && VdBHa_nb > 0)
 		str = QString("vdB-Ha %1").arg(VdBHa_nb);
+
+	if (str.isEmpty() && hasBuiltInTexture && !designations.isEmpty())
+		str = designations.constFirst();
 
 	return str;
 }
@@ -1531,6 +1558,8 @@ bool Nebula::objectInDisplayedType() const
 
 bool Nebula::objectInDisplayedCatalog() const
 {
+	if (hasBuiltInTexture && catalogFilters != CatNone)
+		return true;
 	bool r = ( ((catalogFilters&CatM)     && (M_nb>0))
 		|| ((catalogFilters&CatC)     && (C_nb>0))
 		|| ((catalogFilters&CatNGC)   && (NGC_nb>0))
@@ -1584,7 +1613,7 @@ Nebula::RenderState Nebula::getRenderState(float maxMagHints, float maxMagLabels
 	state.catalogVisible = objectInDisplayedCatalog();
 	state.typeVisible = objectInDisplayedType();
 	state.sizeAllowed = objectInAllowedSizeRangeLimits();
-	state.namedPass = !flagShowOnlyNamedDSO || !(getEnglishName().isEmpty() && culturalNames.isEmpty());
+	state.namedPass = !flagShowOnlyNamedDSO || hasBuiltInTexture || !(getEnglishName().isEmpty() && culturalNames.isEmpty());
 
 	const StelCore* core = StelApp::getInstance().getCore();
 	const StelSkyDrawer* drawer = core ? core->getSkyDrawer() : nullptr;

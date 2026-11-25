@@ -253,6 +253,7 @@ public:
 
 	NebulaType getDSOType() const {return nType;}
 	const std::vector<std::vector<Vec3d>*>& getOutlineSegments() const {return outlineSegments;}
+	bool getHasBuiltInTexture() const {return hasBuiltInTexture;}
 
 	//! Get the printable morphological nebula Type.
 	//! @return the nebula morphological type string.
@@ -413,6 +414,7 @@ private:
 	QString ESO_nb;             //!< ESO number (ESO/Uppsala Survey of the ESO(B) Atlas (Lauberts, 1982))
 	QString VdBH_nb;            //!< VdBH number (Southern Stars embedded in nebulosity (van den Bergh+, 1975))
 	bool withoutID;
+	bool hasBuiltInTexture = false;
 	QString englishName;        //!< English (preferred) name
 	QStringList englishAliases; //!< English aliases
 	QString nameI18;            //!< Nebula (preferred) name in user language

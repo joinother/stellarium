@@ -49,6 +49,9 @@
 #include <QStringList>
 #include <QRegularExpression>
 #include <QDir>
+#include <QJsonArray>
+#include <QJsonDocument>
+#include <QJsonObject>
 #include <QMessageBox>
 #if defined(__OHOS__)
 #include <QElapsedTimer>
@@ -666,7 +669,7 @@ struct DrawNebulaFuncObject
 		if (!n->objectInDisplayedCatalog())
 			return;
 
-		if (n->flagShowOnlyNamedDSO && n->getEnglishName().isEmpty() && n->culturalNames.isEmpty())
+		if (n->flagShowOnlyNamedDSO && !n->hasBuiltInTexture && n->getEnglishName().isEmpty() && n->culturalNames.isEmpty())
 			return;
 
 		if (!n->objectInAllowedSizeRangeLimits() || !n->objectInDisplayedType())
@@ -1289,7 +1292,193 @@ void NebulaMgr::loadNebulaSet(const QString& setName)
 	if (!dsoDiscoveryPath.isEmpty())
 		loadDSODiscoveryData(dsoDiscoveryPath);
 
+	markBuiltInTexturedDSOs(setName);
 	rebuildDrawIndex();
+}
+
+void NebulaMgr::markBuiltInTexturedDSOs(const QString& setName)
+{
+	const QString texJsonPath = StelFileMgr::findFile("nebulae/" + setName + "/textures.json", StelFileMgr::File);
+	if (texJsonPath.isEmpty() || dsoArray.isEmpty())
+		return;
+
+	QFile file(texJsonPath);
+	if (!file.open(QIODevice::ReadOnly))
+		return;
+	QByteArray raw = file.readAll();
+	raw.replace('\t', ' ');
+	QJsonParseError err;
+	const QJsonDocument doc = QJsonDocument::fromJson(raw, &err);
+	if (err.error != QJsonParseError::NoError || !doc.isObject())
+		return;
+
+	const QJsonArray subTiles = doc.object().value(QStringLiteral("subTiles")).toArray();
+	if (subTiles.isEmpty())
+		return;
+
+	static const QRegularExpression reSh2(QStringLiteral("^sh2[-_]?(\\d+)"), QRegularExpression::CaseInsensitiveOption);
+	static const QRegularExpression reBarnard(QStringLiteral("^(?:barnard|b)[-_]?(\\d+)"), QRegularExpression::CaseInsensitiveOption);
+	static const QRegularExpression reLdn(QStringLiteral("^ldn[-_]?(\\d+)"), QRegularExpression::CaseInsensitiveOption);
+	static const QRegularExpression reLbn(QStringLiteral("^lbn[-_]?(\\d+)"), QRegularExpression::CaseInsensitiveOption);
+	static const QRegularExpression reVdb(QStringLiteral("^vdb[-_]?(\\d+)"), QRegularExpression::CaseInsensitiveOption);
+	static const QRegularExpression reRcw(QStringLiteral("^rcw[-_]?(\\d+)"), QRegularExpression::CaseInsensitiveOption);
+	static const QRegularExpression reCed(QStringLiteral("^ced[-_]?(\\d+[a-z]?)"), QRegularExpression::CaseInsensitiveOption);
+	static const QRegularExpression reDwb(QStringLiteral("^dwb[-_]?(\\d+)"), QRegularExpression::CaseInsensitiveOption);
+	static const QRegularExpression reIc(QStringLiteral("^ic[-_]?(\\d+)"), QRegularExpression::CaseInsensitiveOption);
+	static const QRegularExpression reMessier(QStringLiteral("^m(\\d+)(?:[^0-9]|$)"), QRegularExpression::CaseInsensitiveOption);
+	static const QRegularExpression reNgc(QStringLiteral("^(?:ngc|n)[-_]?(\\d+)"), QRegularExpression::CaseInsensitiveOption);
+	static const QRegularExpression reUgc(QStringLiteral("^(?:ugc|u)[-_]?(\\d+)"), QRegularExpression::CaseInsensitiveOption);
+	static const QRegularExpression rePgc(QStringLiteral("^(?:pgc|p)[-_]?(\\d+)"), QRegularExpression::CaseInsensitiveOption);
+	static const QRegularExpression reArp(QStringLiteral("^arp[-_]?(\\d+)"), QRegularExpression::CaseInsensitiveOption);
+	static const QRegularExpression reCr(QStringLiteral("^cr[-_]?(\\d+)"), QRegularExpression::CaseInsensitiveOption);
+	static const QRegularExpression reMel(QStringLiteral("^mel[-_]?(\\d+)"), QRegularExpression::CaseInsensitiveOption);
+	static const QRegularExpression reCaldwell(QStringLiteral("^c(\\d+)(?:[^0-9]|$)"), QRegularExpression::CaseInsensitiveOption);
+
+	auto extractCandidateDesignation = [&](const QString& imageUrl) -> QString
+	{
+		QString stem = imageUrl;
+		const int dotIdx = stem.lastIndexOf('.');
+		if (dotIdx > 0)
+			stem = stem.left(dotIdx);
+		QRegularExpressionMatch m;
+		if ((m = reSh2.match(stem)).hasMatch()) return QStringLiteral("SH 2-%1").arg(m.captured(1));
+		if ((m = reBarnard.match(stem)).hasMatch()) return QStringLiteral("B %1").arg(m.captured(1));
+		if ((m = reLdn.match(stem)).hasMatch()) return QStringLiteral("LDN %1").arg(m.captured(1));
+		if ((m = reLbn.match(stem)).hasMatch()) return QStringLiteral("LBN %1").arg(m.captured(1));
+		if ((m = reVdb.match(stem)).hasMatch()) return QStringLiteral("VDB %1").arg(m.captured(1));
+		if ((m = reRcw.match(stem)).hasMatch()) return QStringLiteral("RCW %1").arg(m.captured(1));
+		if ((m = reCed.match(stem)).hasMatch()) return QStringLiteral("CED %1").arg(m.captured(1).toUpper());
+		if ((m = reDwb.match(stem)).hasMatch()) return QStringLiteral("DWB %1").arg(m.captured(1));
+		if ((m = reIc.match(stem)).hasMatch()) return QStringLiteral("IC %1").arg(m.captured(1));
+		if ((m = reMessier.match(stem)).hasMatch()) return QStringLiteral("M %1").arg(m.captured(1));
+		if ((m = reNgc.match(stem)).hasMatch()) return QStringLiteral("NGC %1").arg(m.captured(1));
+		if ((m = reUgc.match(stem)).hasMatch()) return QStringLiteral("UGC %1").arg(m.captured(1));
+		if ((m = rePgc.match(stem)).hasMatch()) return QStringLiteral("PGC %1").arg(m.captured(1));
+		if ((m = reArp.match(stem)).hasMatch()) return QStringLiteral("ARP %1").arg(m.captured(1));
+		if ((m = reCr.match(stem)).hasMatch()) return QStringLiteral("CR %1").arg(m.captured(1));
+		if ((m = reMel.match(stem)).hasMatch()) return QStringLiteral("MEL %1").arg(m.captured(1));
+		if ((m = reCaldwell.match(stem)).hasMatch()) return QStringLiteral("C %1").arg(m.captured(1));
+		return QString();
+	};
+
+	struct UnmatchedTile
+	{
+		Vec3d centerDir;
+		double halfRad;
+	};
+	QVector<UnmatchedTile> unmatchedTiles;
+	int markedCount = 0;
+
+	for (const QJsonValue& val : subTiles)
+	{
+		if (!val.isObject())
+			continue;
+		const QJsonObject obj = val.toObject();
+		const QString imageUrl = obj.value(QStringLiteral("imageUrl")).toString().trimmed();
+		if (imageUrl.isEmpty())
+			continue;
+
+		QVector<Vec3d> corners;
+		const QJsonArray polys = obj.value(QStringLiteral("worldCoords")).toArray();
+		for (const QJsonValue& polyVal : polys)
+		{
+			const QJsonArray ring = polyVal.toArray();
+			for (const QJsonValue& ptVal : ring)
+			{
+				const QJsonArray pt = ptVal.toArray();
+				if (pt.size() < 2)
+					continue;
+				const double raRad = pt.at(0).toDouble() * M_PI_180;
+				const double decRad = pt.at(1).toDouble() * M_PI_180;
+				const double cosDec = std::cos(decRad);
+				corners.append(Vec3d(cosDec * std::cos(raRad), cosDec * std::sin(raRad), std::sin(decRad)));
+			}
+		}
+		if (corners.isEmpty())
+			continue;
+
+		Vec3d centerDir(0.0, 0.0, 0.0);
+		for (const Vec3d& c : corners)
+			centerDir += c;
+		if (centerDir.normSquared() < 1e-12)
+			continue;
+		centerDir.normalize();
+
+		double halfRad = 0.0;
+		for (const Vec3d& c : corners)
+			halfRad = std::max(halfRad, std::acos(qBound(-1.0, centerDir.dot(c), 1.0)));
+		if (halfRad < 1e-6)
+			continue;
+
+		bool matched = false;
+		const QString cand = extractCandidateDesignation(imageUrl);
+		if (!cand.isEmpty())
+		{
+			const NebulaP hit = searchByDesignation(cand);
+			const double maxMatchRad = std::max(halfRad * 1.6, 0.5 * M_PI_180);
+			if (hit && hit->XYZ.dot(centerDir) >= std::cos(maxMatchRad))
+			{
+				if (!hit->hasBuiltInTexture)
+				{
+					hit->hasBuiltInTexture = true;
+					++markedCount;
+				}
+				matched = true;
+			}
+		}
+
+		if (!matched)
+			unmatchedTiles.append(UnmatchedTile{centerDir, halfRad});
+	}
+
+	// Pass 2: spatial fallback for descriptive-named tiles (e.g. abell31.png, darkshark-vasey.png,
+	// Medusa-vasey.png, necklace.png, cassiopeia_a.png) — pick the best-matching catalog DSO near tile center.
+	if (!unmatchedTiles.isEmpty())
+	{
+		for (const UnmatchedTile& tile : unmatchedTiles)
+		{
+			const double searchRad = std::clamp(tile.halfRad * 0.65, 0.08 * M_PI_180, 0.55 * M_PI_180);
+			const double cosSearch = std::cos(searchRad);
+			NebulaP best;
+			double bestScore = -1e9;
+			for (const auto& n : std::as_const(dsoArray))
+			{
+				if (!n)
+					continue;
+				const double dot = n->XYZ.dot(tile.centerDir);
+				if (dot < cosSearch)
+					continue;
+				const double ang = std::acos(qBound(-1.0, dot, 1.0));
+				// Prefer non-tiny objects near tile center whose angular size resembles the tile;
+				// avoid tagging random 0.01 deg background PGC galaxies inside large nebula frames.
+				const double objRad = 0.5 * static_cast<double>(n->majorAxisSize) * M_PI_180;
+				const bool named = !n->getEnglishName().isEmpty() || !n->culturalNames.isEmpty();
+				const bool isTinyBgGx = (n->nType == Nebula::NebGx && tile.halfRad > 0.25 * M_PI_180 && objRad < 0.04 * tile.halfRad);
+				if (isTinyBgGx)
+					continue;
+				double score = -ang / std::max(1e-4, searchRad);
+				if (named)
+					score += 0.65;
+				if (objRad > 0.0)
+				{
+					const double sizeRatio = std::min(objRad, tile.halfRad) / std::max(objRad, tile.halfRad);
+					score += 0.8 * sizeRatio;
+				}
+				if (score > bestScore)
+				{
+					bestScore = score;
+					best = n;
+				}
+			}
+			if (best && !best->hasBuiltInTexture)
+			{
+				best->hasBuiltInTexture = true;
+				++markedCount;
+			}
+		}
+	}
+
+	qInfo() << "[dso-textures] marked" << markedCount << "catalog DSOs with built-in textures";
 }
 
 void NebulaMgr::rebuildDrawIndex()
@@ -1314,6 +1503,13 @@ void NebulaMgr::rebuildDrawIndex()
 		else if (n->nType == Nebula::NebHII)
 		{
 			lim = qMin(lim, 10.0f);
+		}
+		if (n->hasBuiltInTexture)
+		{
+			const float texLim = (n->majorAxisSize > 0.f)
+				? (11.2f - 2.0f * qMin(n->majorAxisSize, 1.5f))
+				: 11.2f;
+			lim = qMin(lim, texLim);
 		}
 		if (n->nType == Nebula::NebRegion)
 			lim = 3.0f;

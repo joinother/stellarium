@@ -1,5 +1,17 @@
 > **身份图例**：本文件真机记录中出现的 `com.cnchensh.stellarium` 是**本机调试签名身份**（本机 DevEco 自动生成，非发布身份）；发布身份为 `com.joinother.skyinstrument`。构建脚本 `build-ohos-hap-windows.ps1 -Install` 从产物 `pack.info` 读取实际包名，仓库不写死任何签名身份（见 `docs/harmonyos/release/BUNDLE-IDENTITY-CLEANUP.md`）。
 
+## [2026-11-25] 内置实拍深空天体自动标注与可点击（豁免冷门目录与仅命名过滤）
+
+- **修改文件：** `src/core/modules/Nebula.hpp`、`src/core/modules/Nebula.cpp`、`src/core/modules/NebulaMgr.hpp`、`src/core/modules/NebulaMgr.cpp`、`docs/harmonyos/CHANGELOG.md`。
+- **问题根因：** 默认星表过滤器仅开启 `M/NGC/IC/PGC/Other`，且用户开启「仅显示有名称深空天体」时，内置了高清实拍照片的非 NGC/IC/M 目标（如英仙座巨型行星状星云 `Sh 2-216`、巴纳德暗星云 `B 142`、面条星云 `Sh 2-240`、幽灵星云 `vdB 141` 等）画面上虽有鲜艳照片，却无符号圈、无标签且无法点击选中。
+- **修复：**
+  1. `NebulaMgr::markBuiltInTexturedDSOs()` 在加载深空目录时解析 `textures.json`，通过编号精确匹配 + 空间校验及描述性文件名中心兜底，自动为 627 个内置实拍深空天体打上 `hasBuiltInTexture = true`。
+  2. `Nebula` 对 `hasBuiltInTexture` 天体在 `objectInDisplayedCatalog()`、`getDSODesignation()`、`getRenderState()`、`DrawNebulaFuncObject` 中自动豁免目录与 `showOnlyNamed` 过滤，并在 `getVisibilityLevelByMagnitude()` 与 `rebuildDrawIndex()` 中补充按角尺寸平滑释放的可见度门槛（广角依然隐藏不杂乱，放大看到照片时即刻显现并可点击）。
+  3. 行星状星云（`NebPn`）符号从拉伸糊贴图升级为高清球面矢量正圆 + 四向短刻度线，且 `renderRoundMarker` 固定保持正圆，避免个别目录异常 `minorAxisSize`（如 `Sh 2-216`）把圆泡泡压扁。
+- **验证结果：**
+  - 主机：5 套拾取与渲染契约测试全部通过。
+  - 真机（`HUAWEI MatePad Mini 悦读版`，PID `29204` 稳定无报错，保持 `catalogFilters = 0x20001007` 与 `showOnlyNamed = true` 不变）：启动标记 `627` 个内置实拍天体；`Sh 2-216`（`FOV = 8°`）自动显示正圆行星状星云符号与 `SH 2-216` 标签，中心与边缘均 100% 命中 `次近行星状星云`；`B 142`（`FOV = 2.6°`）自动显示四段暗星云弧框与 `B 142` 标签并 100% 命中 `E星云`。
+
 ## [2026-11-25] 虚线圆环倍频缝隙生长、标签外缘锁定与空心圈/绿线边缘精细拾取
 
 - **修改文件：** `src/core/modules/Nebula.hpp`、`src/core/modules/Nebula.cpp`、`src/core/modules/NebulaMgr.cpp`、`src/core/TouchPicker.cpp`、`docs/harmonyos/CHANGELOG.md`。

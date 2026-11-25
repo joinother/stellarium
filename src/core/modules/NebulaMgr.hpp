@@ -1069,6 +1069,7 @@ private:
 	//! This function loads a set of textures.
 	//! @param setName a string which corresponds to the directory where the set resides
 	void loadNebulaSet(const QString& setName);
+	void markBuiltInTexturedDSOs(const QString& setName);
 
 	//! Draw a nice animated pointer around the object
 	void drawPointer(const StelCore* core, StelPainter& sPainter);
