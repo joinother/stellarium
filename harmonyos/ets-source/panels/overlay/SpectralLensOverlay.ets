@@ -26,7 +26,8 @@ const LENS_BANDS: Array<LensBandSpec> = [
 ]
 
 const DEFAULT_LENS_RADIUS_NORM: number = 0.215
-const MIN_LENS_RADIUS_NORM: number = 0.13
+const MIN_LENS_RADIUS_NORM: number = 0.095
+const CLOSE_SHRINK_THRESHOLD: number = 0.118
 const FULLSCREEN_EXPAND_THRESHOLD: number = 0.44
 const FULLSCREEN_TARGET_RADIUS: number = 1.42
 const RIM_OUTER_HIT_SLOP_VP: number = 16
@@ -61,7 +62,7 @@ function bandIndexFromAngle(angleDeg: number): number {
 //   - 圆镜主体（4K 光谱玻璃 + 金属发光镜圈 + 9 波段刻度点 + 可旋转防滑金属转柄）全部由 C++ HipsMgr
 //     在单次 OpenGL 着色器内原子绘制，彻底消除 ArkUI 与 OpenGL 跨层错位与跟手延迟；
 //   - 拖动/拉大/旋柄过程中本组件零 @State 重排，仅通过微秒级无锁快通道推送坐标与转角；
-//   - 本组件只负责精准的透明触控热区与静止态悬浮控制胶囊（波段名 + 1×/2× + 全屏 + 关闭）。
+//   - 极简无胶囊设计：镜内拖动平移、旋转转柄或点镜圈色点切波段、拉大边缘扩散全屏、缩拢边缘关闭。
 @Component
 export struct SpectralLensOverlay {
   @StorageLink('stellariumSpectralLensActive') @Watch('onActiveChanged') active: boolean = false
@@ -80,6 +81,7 @@ export struct SpectralLensOverlay {
   @State private handleAngleDeg: number = 45
   @State private chromeHidden: boolean = false
   @State private expandPromptVisible: boolean = false
+  @State private shrinkClosePromptVisible: boolean = false
   @State private rotatePromptVisible: boolean = false
   @State private showInitialTip: boolean = true
 
@@ -101,7 +103,9 @@ export struct SpectralLensOverlay {
   private resizeStartDist: number = 100
   private resizeStartRadiusNorm: number = DEFAULT_LENS_RADIUS_NORM
   private passedFullScreenThreshold: boolean = false
+  private passedCloseShrinkThreshold: boolean = false
   private tipTimerId: number = -1
+  private bandToastTimerId: number = -1
   private animTimerId: number = -1
   private lastBloomTokenHandled: number = 0
 
@@ -129,6 +133,10 @@ export struct SpectralLensOverlay {
       clearTimeout(this.tipTimerId)
       this.tipTimerId = -1
     }
+    if (this.bandToastTimerId >= 0) {
+      clearTimeout(this.bandToastTimerId)
+      this.bandToastTimerId = -1
+    }
     if (this.animTimerId >= 0) {
       clearInterval(this.animTimerId)
       this.animTimerId = -1
@@ -140,6 +148,15 @@ export struct SpectralLensOverlay {
       clearInterval(this.animTimerId)
       this.animTimerId = -1
     }
+  }
+
+  private flashBandToast(): void {
+    this.rotatePromptVisible = true
+    if (this.bandToastTimerId >= 0) clearTimeout(this.bandToastTimerId)
+    this.bandToastTimerId = setTimeout(() => {
+      if (!this.isRotatingHandle) this.rotatePromptVisible = false
+      this.bandToastTimerId = -1
+    }, 1300)
   }
 
   private scheduleTipFade(): void {
@@ -166,6 +183,7 @@ export struct SpectralLensOverlay {
       this.liveHandleAngleDeg = this.handleAngleDeg
       this.isExpandingFullScreen = false
       this.expandPromptVisible = false
+      this.shrinkClosePromptVisible = false
       this.rotatePromptVisible = false
       if (this.bloomToken > 0 && this.bloomToken !== this.lastBloomTokenHandled) {
         this.startBloomFromBlueCircle()
@@ -186,6 +204,7 @@ export struct SpectralLensOverlay {
       this.liveFlags = 0
       this.chromeHidden = false
       this.expandPromptVisible = false
+      this.shrinkClosePromptVisible = false
       this.rotatePromptVisible = false
       BridgeClient.send('setSpectralLens', '0')
     }
@@ -341,16 +360,11 @@ export struct SpectralLensOverlay {
     if (changed) {
       this.triggerDetentHaptic()
       this.syncFullNativeLens()
+      if (snapAngle) this.flashBandToast()
     }
   }
 
-  private toggleZoom(): void {
-    this.zoomFactor = this.zoomFactor > 1.5 ? 1.0 : 2.0
-    this.triggerDetentHaptic()
-    this.syncFullNativeLens()
-  }
-
-  // 拉大圆镜至阈值或点「全屏」：纯 GPU 水波扩散铺满整屏后零闪烁无缝移交全屏 4K 多光谱
+  // 拉大圆镜至阈值：纯 GPU 水波扩散铺满整屏后零闪烁无缝移交全屏 4K 多光谱
   private expandToFullScreenAnimated(): void {
     if (this.isExpandingFullScreen) return
     this.clearAnimTimer()
@@ -418,9 +432,11 @@ export struct SpectralLensOverlay {
         this.resizeStartDist = Math.max(12, dist)
         this.resizeStartRadiusNorm = this.liveRadiusNorm
         this.passedFullScreenThreshold = this.liveRadiusNorm >= FULLSCREEN_EXPAND_THRESHOLD
+        this.passedCloseShrinkThreshold = this.liveRadiusNorm <= CLOSE_SHRINK_THRESHOLD
         this.liveFlags = FLAG_RESIZING
         this.chromeHidden = true
         this.expandPromptVisible = this.passedFullScreenThreshold
+        this.shrinkClosePromptVisible = this.passedCloseShrinkThreshold
       } else {
         this.isDraggingLens = true
         this.isResizingLens = false
@@ -446,6 +462,14 @@ export struct SpectralLensOverlay {
           this.passedFullScreenThreshold = false
           this.expandPromptVisible = false
         }
+        if (nextR <= CLOSE_SHRINK_THRESHOLD && !this.passedCloseShrinkThreshold) {
+          this.passedCloseShrinkThreshold = true
+          this.shrinkClosePromptVisible = true
+          this.triggerDetentHaptic()
+        } else if (nextR > CLOSE_SHRINK_THRESHOLD && this.passedCloseShrinkThreshold) {
+          this.passedCloseShrinkThreshold = false
+          this.shrinkClosePromptVisible = false
+        }
         this.syncFastGeometry()
       } else if (this.isDraggingLens) {
         const dx = t.windowX - this.dragStartWinX
@@ -459,8 +483,13 @@ export struct SpectralLensOverlay {
       this.isResizingLens = false
       this.isDraggingLens = false
       this.expandPromptVisible = false
+      this.shrinkClosePromptVisible = false
       if (wasResizing && this.liveRadiusNorm >= FULLSCREEN_EXPAND_THRESHOLD) {
         this.expandToFullScreenAnimated()
+        return
+      }
+      if (wasResizing && this.liveRadiusNorm <= CLOSE_SHRINK_THRESHOLD) {
+        this.closeLens()
         return
       }
       this.liveFlags = 0
@@ -502,15 +531,6 @@ export struct SpectralLensOverlay {
       this.syncFastGeometry()
       this.commitLiveToState()
     }
-  }
-
-  private pillTop(): number {
-    const r = this.radiusVp()
-    const above = this.centerY() - r - 48
-    if (above >= 48) return above
-    const below = this.centerY() + r + 14
-    if (below <= this.screenH - 148) return below
-    return 44
   }
 
   private handleCenterOffset(distFromCenter: number): number[] {
@@ -564,75 +584,8 @@ export struct SpectralLensOverlay {
             .hitTestBehavior(HitTestMode.Block)
             .onTouch((event: TouchEvent) => { this.handleRotateTouch(event) })
 
-          // 4. 紧凑悬浮控制胶囊（波段名 + 1×/2× 放大倍率 + 全屏 + 关闭）
-          Row({ space: 6 }) {
-            Row({ space: 5 }) {
-              Row()
-                .width(8)
-                .height(8)
-                .borderRadius(4)
-                .backgroundColor(this.bandAccent(this.currentBand()))
-              Text(this.currentBand().shortName)
-                .fontSize(12)
-                .fontWeight(FontWeight.Medium)
-                .fontColor(this.c.text)
-                .maxLines(1)
-            }
-              .padding({ left: 4, right: 4 })
-              .alignItems(VerticalAlign.Center)
-              .onClick(() => { this.selectBandIndex(this.bandIndex + 1, true) })
-
-            Row().width(1).height(14).backgroundColor(this.c.border)
-
-            Text(this.zoomFactor > 1.5 ? '2×' : '1×')
-              .id('spectral-lens-zoom-toggle')
-              .fontSize(11.5)
-              .fontWeight(FontWeight.Bold)
-              .fontColor(this.zoomFactor > 1.5 ? this.c.onAccent : this.c.text)
-              .padding({ left: 8, right: 8, top: 4, bottom: 4 })
-              .borderRadius(UI_RADIUS_PILL)
-              .backgroundColor(this.zoomFactor > 1.5 ? this.c.accent : this.c.soft)
-              .clickEffect({ level: ClickEffectLevel.LIGHT })
-              .onClick(() => { this.toggleZoom() })
-
-            Text('全屏')
-              .id('spectral-lens-fullscreen')
-              .fontSize(11)
-              .fontWeight(FontWeight.Medium)
-              .fontColor(this.c.text)
-              .padding({ left: 8, right: 8, top: 4, bottom: 4 })
-              .borderRadius(UI_RADIUS_PILL)
-              .backgroundColor(this.c.soft)
-              .clickEffect({ level: ClickEffectLevel.LIGHT })
-              .onClick(() => { this.expandToFullScreenAnimated() })
-
-            Text('✕')
-              .id('spectral-lens-close')
-              .fontSize(12)
-              .fontWeight(FontWeight.Medium)
-              .fontColor(this.c.sub)
-              .padding({ left: 6, right: 6, top: 4, bottom: 4 })
-              .borderRadius(UI_RADIUS_PILL)
-              .clickEffect({ level: ClickEffectLevel.LIGHT })
-              .onClick(() => { this.closeLens() })
-          }
-            .id('spectral-lens-pill')
-            .height(36)
-            .padding({ left: 10, right: 8 })
-            .backgroundColor(this.c.hintPillBg)
-            .borderRadius(UI_RADIUS_PILL)
-            .border({ width: 1, color: this.c.border })
-            .shadow({ radius: 18, color: this.c.shadowSoft, offsetX: 0, offsetY: 6 })
-            .alignItems(VerticalAlign.Center)
-            .position({
-              x: Math.max(12, Math.min(this.screenW - 240, this.centerX() - 114)),
-              y: this.pillTop()
-            })
-            .hitTestBehavior(HitTestMode.Default)
-            .onClick(() => {})
-
           if (this.showInitialTip) {
-            Text('转动转柄切波段 · 拉动边缘可全屏')
+            Text('转动转柄切波段 · 拉大进全屏 · 缩拢关闭')
               .fontSize(11)
               .fontWeight(FontWeight.Medium)
               .fontColor('#FFFFFF')
@@ -641,19 +594,21 @@ export struct SpectralLensOverlay {
               .borderRadius(UI_RADIUS_PILL)
               .border({ width: 0.8, color: this.bandAccent(this.currentBand()) })
               .position({
-                x: Math.max(12, Math.min(this.screenW - 210, this.centerX() - 98)),
+                x: Math.max(12, Math.min(this.screenW - 230, this.centerX() - 108)),
                 y: Math.min(this.screenH - 132, this.centerY() + this.radiusVp() - 32)
               })
               .hitTestBehavior(HitTestMode.None)
           }
         }
 
-        // 顶部状态浮标（仅在拉大过阈值或转动转柄跨档时展示，零拖动重排）
-        if (this.expandPromptVisible || this.rotatePromptVisible) {
+        // 顶部瞬态状态浮标（仅在拉大/缩拢过阈值或切波段时短暂展示，静止零遮挡）
+        if (this.expandPromptVisible || this.shrinkClosePromptVisible || this.rotatePromptVisible) {
           Row() {
             Text(this.expandPromptVisible
               ? '松手扩散至全屏多光谱'
-              : (this.currentBand().shortName + ' · ' + (this.bandIndex + 1).toString() + '/9'))
+              : (this.shrinkClosePromptVisible
+                ? '松手关闭透视镜'
+                : (this.currentBand().shortName + ' · ' + (this.bandIndex + 1).toString() + '/9')))
               .fontSize(12)
               .fontWeight(FontWeight.Medium)
               .fontColor('#FFFFFF')

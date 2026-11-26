@@ -39,7 +39,7 @@ const DETAIL_MEDIA_NEBULA_PATH = /^nebulae\/default\/[a-z][a-z0-9_-]*\.png$/i;
 const DETAIL_MEDIA_IMAGE_EXTENSION = /\.(?:png|jpe?g|webp)$/i;
 const TEXTURE_COMPAT_MARKER = '.ohos_texture_compat_v1';
 const TEXTURE_COMPAT_FILES: Array<string> = ['charon.png', 'neptune.png', 'sedna.png', 'uranus.png'];
-const MILKYWAY_TEXTURE_MARKER = '.ohos_milkyway_ai_4k_v3';
+const MILKYWAY_TEXTURE_MARKER = '.ohos_milkyway_gaia_4k_v4';
 const SPECTRAL_4K_MARKER = '.ohos_spectral_4k_v3';
 const SPECTRAL_4K_FILES: Array<string> = [
   'dss2-color_4k.jpg',

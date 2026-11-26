@@ -1,5 +1,19 @@
 > **身份图例**：本文件真机记录中出现的 `com.cnchensh.stellarium` 是**本机调试签名身份**（本机 DevEco 自动生成，非发布身份）；发布身份为 `com.joinother.skyinstrument`。构建脚本 `build-ohos-hap-windows.ps1 -Install` 从产物 `pack.info` 读取实际包名，仓库不写死任何签名身份（见 `docs/harmonyos/release/BUNDLE-IDENTITY-CLEANUP.md`）。
 
+## [2026-11-26] 校准 4K AI 银河底图 J2000 银道对齐 + 放大镜去顶置胶囊极简化
+
+- **修改文件：** `textures/milkyway.png`、`harmonyos/ets-source/qability/StellariumResourceBootstrap.ets`、`harmonyos/ets-source/panels/overlay/SpectralLensOverlay.ets`、`docs/harmonyos/json/ui-contract-baseline.json`、`docs/harmonyos/CHANGELOG.md`。
+- **修复与优化内容：**
+  1. **保留用户原版 AI 4K 银河质感并完成 360° 球面天文校准（`textures/milkyway.png`、`StellariumResourceBootstrap.ets`）**：
+     - 排查确认放大镜多光谱（伽马射线/红外/DSS2）与橙色「银道」线及深空天体为 `0°` 精确对齐，偏移来源于原 AI 处理的 4K `textures/milkyway.png` 存在约 `4°～7°` 的银道面球面倾角与局部银纬偏移。
+     - 以用户原版 AI `textures/milkyway.png` 为底图，先做刚性 `SO(3)` 球面旋转（`dl=+4.25°、rx=+2.00°、ry=+3.25°`），再叠加 5 阶平滑傅里叶银纬校准与 Catmull-Rom 双三次球面重采样，全天 360° 银道中心平均残差由 `~4.8°` 收敛至 **`0.47°`**（天鹰座 `l=35°` 残差仅 `-0.07°`），完整保留原有暗空纯黑底与尘埃质感；同步将 `MILKYWAY_TEXTURE_MARKER` 升级至 `.ohos_milkyway_gaia_4k_v4` 使已安装设备启动自动刷新。
+  2. **移除放大镜上方悬浮控制胶囊（`SpectralLensOverlay.ets`、`ui-contract-baseline.json`）**：
+     - 去掉镜圈上方常驻的波段名 / `1×` / `全屏` / `×` 悬浮胶囊，保持纯粹的光学圆镜、9 色刻度点与可旋钛金属转柄；
+     - 补充对称手势：**向内缩拢镜圈边缘至阈值松手即可直接关闭透视镜**（向外拉大松手进全屏），点击镜圈 9 个色点或旋转转柄时仅在屏幕顶部短暂浮现波段提示（1.3 秒自动消失）。
+- **验证结果：**
+  - 主机：UI 契约（41 面板 / 81 静态 id / 119 锚点）与命令目录（449 命令）全部通过；debug HAP 构建成功（23.98s）。
+  - 真机（`HUAWEI MatePad Mini 悦读版`，PID `46941` 全程稳定）：启动日志确认 22 ms 自动刷新新版 4K 银河底图；开启橙色「银道」线与伽马射线放大镜实拍确认，镜外天鹰座/人马座/天蝎座银河与镜内伽马射线银盘及橙色「银道」线上下贯通、无缝对齐，放大镜上方胶囊已彻底移除。
+
 ## [2026-11-26] 放大镜置于动态雾山前方 + 拖动期间流星实时划过 + 划破天幕的掠地长流星
 
 - **修改文件：** `src/core/modules/HipsMgr.hpp`、`src/core/modules/HipsMgr.cpp`、`src/core/modules/LandscapeMgr.hpp`、`src/core/modules/LandscapeMgr.cpp`、`src/core/modules/SporadicMeteorMgr.hpp`、`src/core/modules/SporadicMeteorMgr.cpp`、`plugins/MeteorShowers/src/MeteorShowersMgr.hpp`、`plugins/MeteorShowers/src/MeteorShowersMgr.cpp`、`src/core/modules/Meteor.cpp`、`src/core/modules/SporadicMeteor.cpp`、`src/StelMainView.cpp`、`docs/harmonyos/CHANGELOG.md`。

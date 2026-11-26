@@ -484,12 +484,8 @@
     "skyZoomOutButton",
     "skyculture-art-models-toggle",
     "skyculture-line-center-anim-toggle",
-    "spectral-lens-close",
-    "spectral-lens-fullscreen",
     "spectral-lens-handle",
-    "spectral-lens-pill",
     "spectral-lens-ring",
-    "spectral-lens-zoom-toggle",
     "video-frames-share"
   ],
   "dynamicIdPrefixes": [
@@ -529,11 +525,11 @@
     "satellites-",
     "search-category-"
   ],
-  "totalIdAnchors": 123,
+  "totalIdAnchors": 119,
   "count": {
     "panels": 41,
-    "staticIds": 85,
+    "staticIds": 81,
     "dynamicIdPrefixes": 35,
-    "totalIdAnchors": 123
+    "totalIdAnchors": 119
   }
 }
