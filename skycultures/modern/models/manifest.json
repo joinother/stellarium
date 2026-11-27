@@ -6,10 +6,6 @@
   "triangleBudget": 8000,
   "excluded": [
     {
-      "source": "23_circinus.glb",
-      "status": "done_shaky"
-    },
-    {
       "source": "24_columba_dove.glb",
       "status": "done_part"
     },
@@ -785,6 +781,70 @@
       ]
     },
     {
+      "id": "Car",
+      "source": "parts/argo/argo_carina.glb",
+      "sourceSha256": "68a96727294e0d3d84578cb49c440aaf01db1eeb02544a69503f130c856c2268",
+      "mesh": "Car.scm",
+      "sha256": "ebe0e3ff80ccc86e0ccca88602b57ba7ead368b1060b9e859250ab404eadc5e1",
+      "vertices": 3984,
+      "triangles": 8000,
+      "sourceTriangles": 24000,
+      "bytes": 191628,
+      "illustration": "illustrations/argonavis.png",
+      "illustrationSha256": "6445e77a9e878e1fcedf738ac85d9b3162708defe37113dfd4f41879cb1d519f",
+      "imageSize": [
+        512,
+        512
+      ],
+      "foregroundBoundsPixels": [
+        11,
+        1,
+        501,
+        512
+      ],
+      "fitBoundsPixels": [
+        10,
+        0,
+        502,
+        512
+      ],
+      "foregroundMask": "rgb-positive-black-background",
+      "foregroundThreshold": 0,
+      "foregroundPaddingPixels": 1,
+      "boundsConvention": "bottom-left, exclusive right/top",
+      "sourceMeshBounds": [
+        [
+          -0.4666597843170166,
+          -0.4904525876045227,
+          -0.18139638006687164
+        ],
+        [
+          0.24586349725723267,
+          -0.07032441347837448,
+          0.15945319831371307
+        ]
+      ],
+      "sharedIllustrationGroup": "argonavis",
+      "sharedSourceMeshBounds": [
+        [
+          -0.4666597843170166,
+          -0.4904525876045227,
+          -0.18139638006687164
+        ],
+        [
+          0.46604567766189575,
+          0.49008557200431824,
+          0.18233397603034973
+        ]
+      ],
+      "imageBounds": [
+        0.01953125,
+        0.0,
+        0.98046875,
+        1.0
+      ]
+    },
+    {
       "id": "Cas",
       "source": "18_cassiopeia.glb",
       "sourceSha256": "4d6c3528601781309c0bc9619021c62931df5d7fd7c44481ef152a877c453663",
@@ -1040,6 +1100,57 @@
       ]
     },
     {
+      "id": "Cir",
+      "source": "23_circinus.glb",
+      "sourceSha256": "ad09f3830ee2a76eac5e3c3ada7492b509bb659a8f4260bb99e301efe7eedad5",
+      "mesh": "Cir.scm",
+      "sha256": "9152a471e5a2687c756ccb4d75e04ec593c8f179c1cdc4087e55f1301e0b403d",
+      "vertices": 4172,
+      "triangles": 8000,
+      "sourceTriangles": 10432,
+      "bytes": 196140,
+      "illustration": "illustrations/circinus.png",
+      "illustrationSha256": "40aa1396ce2cbc2b6009fd088b04256ea807081d7d37ffda5f815c2fb8002709",
+      "imageSize": [
+        256,
+        256
+      ],
+      "foregroundBoundsPixels": [
+        2,
+        7,
+        252,
+        252
+      ],
+      "fitBoundsPixels": [
+        1,
+        6,
+        253,
+        253
+      ],
+      "foregroundMask": "rgb-positive-black-background",
+      "foregroundThreshold": 0,
+      "foregroundPaddingPixels": 1,
+      "boundsConvention": "bottom-left, exclusive right/top",
+      "sourceMeshBounds": [
+        [
+          -0.44811949133872986,
+          -0.44762811064720154,
+          -0.037800002843141556
+        ],
+        [
+          0.4481099247932434,
+          0.44764629006385803,
+          0.03770570084452629
+        ]
+      ],
+      "imageBounds": [
+        0.00390625,
+        0.0234375,
+        0.98828125,
+        0.98828125
+      ]
+    },
+    {
       "id": "Cnc",
       "source": "13_cancer.glb",
       "sourceSha256": "d6973b67b3ab2be4ca5a5d22be72cf48f9bf74c5031c432630b0ec2a69397f51",
@@ -1088,6 +1199,57 @@
         0.01171875,
         0.90234375,
         0.9921875
+      ]
+    },
+    {
+      "id": "Col",
+      "source": "24_columba.glb",
+      "sourceSha256": "c6e3f9a86e44318af673e0dff1e11bdf18015b82fa78d8d41a0969946ad89635",
+      "mesh": "Col.scm",
+      "sha256": "68327d26009c016908de077594bab5e7eda2ef820c986be1e7acffc6985db63b",
+      "vertices": 4004,
+      "triangles": 8000,
+      "sourceTriangles": 30000,
+      "bytes": 192108,
+      "illustration": "illustrations/columba.png",
+      "illustrationSha256": "6cc00cc6477dc19843c7c994c0a587f024f17b9786f6ad3c5023f5539c4a9665",
+      "imageSize": [
+        256,
+        256
+      ],
+      "foregroundBoundsPixels": [
+        1,
+        9,
+        256,
+        256
+      ],
+      "fitBoundsPixels": [
+        0,
+        8,
+        256,
+        256
+      ],
+      "foregroundMask": "rgb-positive-black-background",
+      "foregroundThreshold": 0,
+      "foregroundPaddingPixels": 1,
+      "boundsConvention": "bottom-left, exclusive right/top",
+      "sourceMeshBounds": [
+        [
+          -0.4419947564601898,
+          0.0003010426589753479,
+          -0.39993050694465637
+        ],
+        [
+          0.6891593337059021,
+          0.9793870449066162,
+          0.40007659792900085
+        ]
+      ],
+      "imageBounds": [
+        0.0,
+        0.03125,
+        1.0,
+        1.0
       ]
     },
     {
@@ -3284,6 +3446,70 @@
       ]
     },
     {
+      "id": "Pup",
+      "source": "parts/argo/argo_puppis.glb",
+      "sourceSha256": "02879ebfb47242eb996710a2b0f211d6626ece439adfdebfee9e7c755fdf77ee",
+      "mesh": "Pup.scm",
+      "sha256": "c98635bed7f69b2680b1df9269cc8bfe799321ce8cc5661dbf643a6388db4665",
+      "vertices": 3994,
+      "triangles": 8000,
+      "sourceTriangles": 24000,
+      "bytes": 191868,
+      "illustration": "illustrations/argonavis.png",
+      "illustrationSha256": "6445e77a9e878e1fcedf738ac85d9b3162708defe37113dfd4f41879cb1d519f",
+      "imageSize": [
+        512,
+        512
+      ],
+      "foregroundBoundsPixels": [
+        11,
+        1,
+        501,
+        512
+      ],
+      "fitBoundsPixels": [
+        10,
+        0,
+        502,
+        512
+      ],
+      "foregroundMask": "rgb-positive-black-background",
+      "foregroundThreshold": 0,
+      "foregroundPaddingPixels": 1,
+      "boundsConvention": "bottom-left, exclusive right/top",
+      "sourceMeshBounds": [
+        [
+          -0.00865949783474207,
+          -0.2317999005317688,
+          -0.15652388334274292
+        ],
+        [
+          0.46604567766189575,
+          0.49008557200431824,
+          0.0903114452958107
+        ]
+      ],
+      "sharedIllustrationGroup": "argonavis",
+      "sharedSourceMeshBounds": [
+        [
+          -0.4666597843170166,
+          -0.4904525876045227,
+          -0.18139638006687164
+        ],
+        [
+          0.46604567766189575,
+          0.49008557200431824,
+          0.18233397603034973
+        ]
+      ],
+      "imageBounds": [
+        0.01953125,
+        0.0,
+        0.98046875,
+        1.0
+      ]
+    },
+    {
       "id": "Pyx",
       "source": "68_pyxis.glb",
       "sourceSha256": "4e0ca59c53d3f85241553284fc552a5348c367d2918cdf052ba165a4052338bb",
@@ -4046,6 +4272,70 @@
         0.00390625,
         0.984375,
         0.984375
+      ]
+    },
+    {
+      "id": "Vel",
+      "source": "parts/argo/argo_vela.glb",
+      "sourceSha256": "efcd9f268cda3dd08814dee04692cd5a90b2733c252f58cfced07bc554494762",
+      "mesh": "Vel.scm",
+      "sha256": "77f95ca7276232b6e41df034e6adf2dc3f8c98a0d138502aa06f9e68fd3cfed6",
+      "vertices": 3990,
+      "triangles": 8000,
+      "sourceTriangles": 18466,
+      "bytes": 191772,
+      "illustration": "illustrations/argonavis.png",
+      "illustrationSha256": "6445e77a9e878e1fcedf738ac85d9b3162708defe37113dfd4f41879cb1d519f",
+      "imageSize": [
+        512,
+        512
+      ],
+      "foregroundBoundsPixels": [
+        11,
+        1,
+        501,
+        512
+      ],
+      "fitBoundsPixels": [
+        10,
+        0,
+        502,
+        512
+      ],
+      "foregroundMask": "rgb-positive-black-background",
+      "foregroundThreshold": 0,
+      "foregroundPaddingPixels": 1,
+      "boundsConvention": "bottom-left, exclusive right/top",
+      "sourceMeshBounds": [
+        [
+          -0.4407781660556793,
+          -0.20987999439239502,
+          -0.1565447449684143
+        ],
+        [
+          -0.02490280754864216,
+          0.170017272233963,
+          0.18233397603034973
+        ]
+      ],
+      "sharedIllustrationGroup": "argonavis",
+      "sharedSourceMeshBounds": [
+        [
+          -0.4666597843170166,
+          -0.4904525876045227,
+          -0.18139638006687164
+        ],
+        [
+          0.46604567766189575,
+          0.49008557200431824,
+          0.18233397603034973
+        ]
+      ],
+      "imageBounds": [
+        0.01953125,
+        0.0,
+        0.98046875,
+        1.0
       ]
     },
     {

@@ -388,6 +388,7 @@ private:
 		int projectionMatrixInverse;
 		int sideTexN[SIDES_BATCH_SIZE];
 		int perSideTexCoords[SIDES_BATCH_SIZE];
+		int startupLift;
 	} shaderVars;
 };
 
@@ -455,6 +456,7 @@ private:
 		int mapTex;
 		int brightness;
 		int projectionMatrixInverse;
+		int startupLift;
 	} shaderVars;
 };
 
@@ -521,6 +523,7 @@ private:
 		int mapTexBottom;
 		int bottomCapColor;
 		int projectionMatrixInverse;
+		int startupLift;
 	} shaderVars;
 };
 

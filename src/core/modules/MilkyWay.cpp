@@ -20,6 +20,7 @@
  */
 
 #include "MilkyWay.hpp"
+#include "OhosStartupChoreography.hpp"
 #include "StelFader.hpp"
 #include "StelTexture.hpp"
 #include "StelUtils.hpp"
@@ -310,7 +311,7 @@ void main(void)
 		shaderVars.projectionMatrixInverse = renderProgram->uniformLocation("projectionMatrixInverse");
 		renderProgram->release();
 	}
-	if(!renderProgram || !renderProgram->isLinked())
+	if(!renderProgram || !renderProgram->isLinked() || OhosStartupChoreography::milkyWayScale() <= 0.001f)
 		return;
 
 	Q_ASSERT(mainTex);	// A texture must be loaded before calling this
@@ -335,7 +336,7 @@ void main(void)
 	const float lum = drawer->surfaceBrightnessToLuminance(12.f+0.15f*bortleIntensity); // was 11.5; Source? How to calibrate the new texture?
 
 	// Get the luminance scaled between 0 and 1
-	float aLum = drawer->adaptSkyObjectLuminanceScaled(lum*fader->getInterstate());
+	float aLum = drawer->adaptSkyObjectLuminanceScaled(lum*fader->getInterstate()) * OhosStartupChoreography::milkyWayScale();
 
 	// Bound a maximum luminance. GZ: Is there any reference/reason, or just trial and error?
 	aLum = qMin(0.38f, aLum*2.f);

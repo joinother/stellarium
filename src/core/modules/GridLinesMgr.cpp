@@ -18,6 +18,7 @@
  */
 
 #include "GridLinesMgr.hpp"
+#include "OhosStartupChoreography.hpp"
 #include "StelApp.hpp"
 #include "StelLocaleMgr.hpp"
 #include "StelUtils.hpp"
@@ -2162,7 +2163,7 @@ void GridLinesMgr::update(double deltaTime)
 
 void GridLinesMgr::draw(StelCore* core)
 {
-	if (!core->getFlagClearSky())
+	if (!core->getFlagClearSky() || OhosStartupChoreography::constellationScale() <= 0.02f)
 		return;
 	if (!gridlinesDisplayed)
 		return;

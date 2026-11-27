@@ -4,6 +4,8 @@ import { AstronomyCalendarStore } from '../../state/AstronomyCalendarStore'
 import { AstronomyCalendarEvent, CalendarDay, calendarEventTime, calendarDayEvents } from '../../state/AstronomyCalendarEvent'
 import { calendarText, calendarMonthTitle, calendarEclipseScienceNote, calendarSolarEclipseSafetyNote } from '../../state/AstronomyCalendarText'
 import { CalendarEclipseMapCard, CalendarElongationOrbitCard } from '../calendar/CalendarEventVisuals'
+import { RocketLaunchSimHost, RocketLaunchSimModal } from '../calendar/RocketLaunchSimModal'
+import { CalendarRocketDetailCard } from '../calendar/CalendarRocketDetailCard'
 import {
   CALENDAR_QUICK_PRESETS,
   CalendarFilterCategoryMeta,
@@ -54,6 +56,7 @@ export interface AstronomyCalendarPanelHost {
   startLiveView?(event: AstronomyCalendarEvent): void
   stopLiveView?(): void
   syncRemoteFeed?(): void
+  rocketSimHost?: RocketLaunchSimHost
 }
 
 interface SatelliteSubOption {
@@ -102,6 +105,22 @@ export struct AstronomyCalendarPanel {
   @State private transitionDir: number = 1
   @State private filterDrawerOpen: boolean = false
   @State private showPastEvents: boolean = false
+  @State private rocketSimOpen: boolean = false
+
+  @Builder
+  private rocketSimModalBuilder() {
+    RocketLaunchSimModal({
+      language: this.language,
+      earthMapUri: this.earthMapUri,
+      onlineMapAllowed: this.onlineMapAllowed,
+      host: this.host.rocketSimHost ?? {
+        loadCatalog: () => {},
+        runSimulation: () => {},
+        previewInSky: () => {}
+      },
+      onClose: () => { this.rocketSimOpen = false }
+    })
+  }
 
   private startOfTodayMs(): number {
     const now = new Date()
@@ -640,7 +659,7 @@ export struct AstronomyCalendarPanel {
       if (event.phaseIndex === 3) return detail ? $r('app.media.calendar_moon_3_detail') : $r('app.media.calendar_moon_3')
       return detail ? $r('app.media.calendar_moon_2_detail') : $r('app.media.calendar_moon_2')
     }
-    if (event.kind === 'meteor-peak') return detail ? $r('app.media.calendar_meteor_detail') : $r('app.media.calendar_meteor')
+    if (event.kind === 'meteor-peak' || event.kind === 'rocket-launch') return detail ? $r('app.media.calendar_meteor_detail') : $r('app.media.calendar_meteor')
     if (event.kind === 'solar-term' || event.kind === 'planetary-season' || event.kind === 'companion-eclipse') {
       return detail ? $r('app.media.calendar_solar_detail') : $r('app.media.calendar_solar')
     }
@@ -660,7 +679,7 @@ export struct AstronomyCalendarPanel {
     const d = date.getDate()
     const prefixZh = y !== this.calendarStore.year ? `${y}年` : ''
     const prefixEn = y !== this.calendarStore.year ? `${y}-` : ''
-    if (event.kind === 'satellite-pass') {
+    if (event.kind === 'satellite-pass' || event.kind === 'rocket-launch') {
       const hh = String(date.getHours()).padStart(2, '0')
       const mm = String(date.getMinutes()).padStart(2, '0')
       return this.t(`${prefixZh}${m}月${d}日 ${hh}:${mm}`, `${prefixEn}${m}/${d} ${hh}:${mm}`)
@@ -908,6 +927,43 @@ export struct AstronomyCalendarPanel {
               .backgroundColor(this.c.soft)
               .border({ width: 0.6, color: this.c.border })
               .borderRadius(UI_RADIUS_CONTROL)
+
+            // 自定义火箭弹道 / 粘贴 NOTAM 仿真快捷入口（具体发射任务已作为一等卡片直接融入下方日历流）
+            if (this.host.rocketSimHost !== undefined) {
+              Row({ space: 10 }) {
+                Column({ space: 2 }) {
+                  Row({ space: 6 }) {
+                    Text(this.t('自定义火箭弹道 / 粘贴 NOTAM 仿真', 'Custom Rocket Trajectory / NOTAM Sim'))
+                      .fontSize(this.panelFontSize - 2)
+                      .fontWeight(FontWeight.Medium)
+                      .fontColor(this.c.textStrong)
+                    Text(this.t('3D 地球', '3D Globe'))
+                      .fontSize(9)
+                      .fontWeight(FontWeight.Medium)
+                      .fontColor(this.c.onAccent)
+                      .padding({ left: 6, right: 6, top: 2, bottom: 2 })
+                      .backgroundColor(this.c.accent)
+                      .borderRadius(UI_RADIUS_PILL)
+                  }.alignItems(VerticalAlign.Center)
+                  Text(this.t('支持 16 发射场 · 22 箭型 · 粘贴航警自动反演落区与火箭云', '16 Pads · 22 Vehicles · Paste NOTAM to Invert Drop Zone & Plume'))
+                    .fontSize(this.panelFontSize - 3)
+                    .fontColor(this.c.sub)
+                    .maxLines(1)
+                    .textOverflow({ overflow: TextOverflow.Ellipsis })
+                }.layoutWeight(1).alignItems(HorizontalAlign.Start)
+                Text('↗')
+                  .fontSize(14)
+                  .fontWeight(FontWeight.Bold)
+                  .fontColor(this.c.accent)
+              }
+                .width('100%')
+                .padding({ left: 12, right: 12, top: 8, bottom: 8 })
+                .backgroundColor(this.c.soft)
+                .border({ width: 0.8, color: this.c.border })
+                .borderRadius(UI_RADIUS_CONTROL)
+                .clickEffect({ level: ClickEffectLevel.LIGHT })
+                .onClick(() => { this.rocketSimOpen = true })
+            }
           }
 
           // 天象分类与条件筛选栏（自动适配地球 / 外星视角，实时同步列表与月历圆点）
@@ -1142,6 +1198,15 @@ export struct AstronomyCalendarPanel {
                 language: this.language
               })
             }
+            if (event.kind === 'rocket-launch' && this.host.rocketSimHost !== undefined) {
+              CalendarRocketDetailCard({
+                event: event,
+                language: this.language,
+                earthMapUri: this.earthMapUri,
+                onlineMapAllowed: this.onlineMapAllowed,
+                host: this.host.rocketSimHost
+              })
+            }
           }, (event: AstronomyCalendarEvent) => `${event.id}:${event.title}:${this.isEventReminded(event.id) ? 1 : 0}:${this.calendarStore.regionId}`)
         }.width('100%').alignItems(HorizontalAlign.Start).transition(uiEnterSlideTransition(1))
       }
@@ -1156,5 +1221,8 @@ export struct AstronomyCalendarPanel {
           .width('100%')
       }
     }.width('100%').padding({ top: 4, bottom: 16 })
+      .bindContentCover($$this.rocketSimOpen, this.rocketSimModalBuilder(), {
+        modalTransition: ModalTransition.DEFAULT
+      })
   }
 }

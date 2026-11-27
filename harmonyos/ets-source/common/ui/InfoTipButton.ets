@@ -16,10 +16,63 @@ export struct InfoTipButton {
   @Prop tip: ResourceStr = ''
   @Prop iconSize: number = 15
   @State private open: boolean = false
+  @State private hovered: boolean = false
   @State private c: ThemeSlots = DEFAULT_SLOTS
+  private pinned: boolean = false
+  private triggerHover: boolean = false
+  private popupHover: boolean = false
+  private openTimer: number = -1
+  private closeTimer: number = -1
 
   onWillApplyTheme(theme: Theme): void {
     this.c = slotsFromTheme(theme)
+  }
+
+  aboutToDisappear(): void {
+    this.clearTimers()
+  }
+
+  private clearTimers(): void {
+    if (this.openTimer >= 0) {
+      clearTimeout(this.openTimer)
+      this.openTimer = -1
+    }
+    if (this.closeTimer >= 0) {
+      clearTimeout(this.closeTimer)
+      this.closeTimer = -1
+    }
+  }
+
+  private scheduleHoverOpen(): void {
+    if (this.closeTimer >= 0) {
+      clearTimeout(this.closeTimer)
+      this.closeTimer = -1
+    }
+    if (this.open || this.openTimer >= 0) return
+    this.openTimer = setTimeout(() => {
+      this.openTimer = -1
+      if (this.triggerHover && !this.open) {
+        this.pinned = false
+        this.open = true
+      }
+    }, 180) as number
+  }
+
+  private scheduleHoverClose(delayMs: number): void {
+    if (this.openTimer >= 0) {
+      clearTimeout(this.openTimer)
+      this.openTimer = -1
+    }
+    if (!this.open || this.pinned) return
+    if (this.closeTimer >= 0) {
+      clearTimeout(this.closeTimer)
+    }
+    this.closeTimer = setTimeout(() => {
+      this.closeTimer = -1
+      if (!this.triggerHover && !this.popupHover && !this.pinned) {
+        this.open = false
+      }
+    }, delayMs) as number
   }
 
   private hasTitle(): boolean {
@@ -54,13 +107,24 @@ export struct InfoTipButton {
     .border({ width: 1, color: this.c.border })
     .borderRadius(UI_RADIUS_CARD)
     .alignItems(HorizontalAlign.Start)
+    .onHover((isHover: boolean) => {
+      this.popupHover = isHover
+      if (isHover) {
+        if (this.closeTimer >= 0) {
+          clearTimeout(this.closeTimer)
+          this.closeTimer = -1
+        }
+      } else {
+        this.scheduleHoverClose(160)
+      }
+    })
   }
 
   build() {
     Row() {
       SymbolGlyph($r('sys.symbol.info_circle'))
         .fontSize(this.iconSize)
-        .fontColor([this.open ? this.c.accent : this.c.sub])
+        .fontColor([this.open || this.hovered ? this.c.accent : this.c.sub])
         .animation({ duration: UI_OPTION_ANIMATION_MS, curve: Curve.EaseOut })
     }
     .width(28)
@@ -68,11 +132,31 @@ export struct InfoTipButton {
     .justifyContent(FlexAlign.Center)
     .alignItems(VerticalAlign.Center)
     .borderRadius(UI_RADIUS_PILL)
-    .backgroundColor(this.open ? this.c.softStrong : Color.Transparent)
+    .backgroundColor(this.open ? this.c.softStrong : (this.hovered ? this.c.soft : Color.Transparent))
+    .hoverEffect(HoverEffect.Highlight)
     .clickEffect({ level: ClickEffectLevel.LIGHT, scale: 0.92 })
     .accessibilityText(typeof this.title === 'string' && this.title.trim().length > 0 ? this.title : '说明')
+    .onHover((isHover: boolean) => {
+      this.triggerHover = isHover
+      this.hovered = isHover
+      if (isHover) {
+        this.scheduleHoverOpen()
+      } else {
+        this.scheduleHoverClose(200)
+      }
+    })
     .onClick(() => {
-      this.open = !this.open
+      this.clearTimers()
+      if (!this.open) {
+        this.pinned = true
+        this.open = true
+      } else if (!this.pinned) {
+        // Clicking a hover-opened tip pins it open until clicked again or dismissed outside.
+        this.pinned = true
+      } else {
+        this.pinned = false
+        this.open = false
+      }
     })
     .bindPopup(this.open, {
       builder: this.popupContent,
@@ -90,8 +174,10 @@ export struct InfoTipButton {
         TransitionEffect.OPACITY.animation({ duration: UI_MOTION_FAST_MS, curve: Curve.EaseIn })
       ),
       onStateChange: (event) => {
-        if (!event.isVisible && this.open) {
+        if (!event.isVisible) {
           this.open = false
+          this.pinned = false
+          this.popupHover = false
         }
       }
     })

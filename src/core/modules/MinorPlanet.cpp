@@ -331,6 +331,13 @@ void MinorPlanet::translateName(const StelTranslator &translator)
 		auto it = zhMinorPlanets.constFind(properName);
 		if (it != zhMinorPlanets.constEnd())
 			nameI18 = it.value();
+		else if (properName.contains(QLatin1String("Oumuamua"), Qt::CaseInsensitive))
+			nameI18 = QStringLiteral("奥陌陌 (1I/2017 U1)");
+		else if ((pType == Planet::isInterstellar || properName.startsWith(QLatin1String("2I/"), Qt::CaseInsensitive))
+			&& properName.contains(QLatin1String("Borisov"), Qt::CaseInsensitive))
+			nameI18 = QStringLiteral("鲍里索夫星际彗星 (2I/Borisov)");
+		else if (properName.startsWith(QLatin1String("3I/"), Qt::CaseInsensitive))
+			nameI18 = QStringLiteral("阿特拉斯星际彗星 (3I/ATLAS)");
 	}
 	if (englishName.endsWith('*'))
 		nameI18.append('*');

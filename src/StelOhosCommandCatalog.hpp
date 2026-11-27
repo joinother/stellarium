@@ -58,7 +58,9 @@ inline QStringList names()
 			"addSkyCultureMakerLine,addSkyCultureMakerSelectedStar,importSkyCultureMakerArtwork,setSkyCultureMakerArtworkAnchor,removeSkyCultureMakerArtwork,"
 			"undoSkyCultureMakerEdit,validateSkyCultureMakerDraft,exportSkyCultureMaker,importSkyCultureMaker,"
 			"getCalendarsData,setCalendarSetting,getMinorBodies,importMinorBodies,"
-			"getPlanetaryNomenclature,flyToNomenclature,setNomenclatureSetting").split(',');
+			"getPlanetaryNomenclature,flyToNomenclature,setNomenclatureSetting,"
+			"getRocketLaunchCatalog,parseRocketNotam,simulateRocketLaunch,setRocketLaunchPreview,"
+			"beginStartupAnimation,replayStartupAnimation,skipStartupAnimation,getStartupAnimationState").split(',');
 }
 
 inline QString categoryFor(const QString& name)

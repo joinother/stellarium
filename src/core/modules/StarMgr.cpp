@@ -23,6 +23,7 @@
 
 #include "StelProjector.hpp"
 #include "StarMgr.hpp"
+#include "OhosStartupChoreography.hpp"
 #include "StelObject.hpp"
 #include "StelTexture.hpp"
 
@@ -1347,7 +1348,7 @@ void StarMgr::draw(StelCore* core)
 	StelSkyDrawer* skyDrawer = core->getSkyDrawer();
 	// If stars are turned off don't waste time below
 	// projecting all stars just to draw disembodied labels
-	if (!static_cast<bool>(starsFader.getInterstate()))
+	if (!static_cast<bool>(starsFader.getInterstate()) || OhosStartupChoreography::starfieldScale() <= 0.001f)
 	{
 		StelPainter::clearSkyLabels("stars");
 		return;
@@ -1375,7 +1376,7 @@ void StarMgr::draw(StelCore* core)
 	const GeodesicSearchResult* geodesic_search_result = core->getGeodesicGrid(maxSearchLevel)->search(viewportCaps,maxSearchLevel);
 
 	// Set temporary static variable for optimization
-	const float names_brightness = labelsFader.getInterstate() * starsFader.getInterstate();
+	const float names_brightness = labelsFader.getInterstate() * starsFader.getInterstate() * OhosStartupChoreography::constellationScale();
 
 	// prepare for aberration: Explan. Suppl. 2013, (7.38)
 	const bool withAberration=core->getUseAberration();
@@ -1414,8 +1415,8 @@ void StarMgr::draw(StelCore* core)
 		const float fadeS = static_cast<float>(qBound(0.0, (absTrailArc - 0.0022) / 0.015, 1.0));
 		trailPointCrossfade = fadeS * fadeS * (3.0f - 2.0f * fadeS);
 		m_trailSamples.clear();
-		if (m_trailSamples.capacity() < 1500)
-			m_trailSamples.reserve(1500);
+		if (m_trailSamples.capacity() < 6000)
+			m_trailSamples.reserve(6000);
 	}
 	const float pointRadiusAtten = 1.0f - 0.58f * trailPointCrossfade;
 	const float pointLumAtten = 1.0f - 0.72f * trailPointCrossfade;
@@ -1451,6 +1452,24 @@ void StarMgr::draw(StelCore* core)
 			}
 			rcmag_table[i].radius *= starsFader.getInterstate() * starStreakScale * (fadePointsForTrails ? pointRadiusAtten : 1.0f) * spectralRadiusScale;
 			rcmag_table[i].luminance *= starStreakScale * (fadePointsForTrails ? pointLumAtten : 1.0f) * spectralLumScale;
+			if (OhosStartupChoreography::isActive())
+			{
+				const float starScale = OhosStartupChoreography::starfieldScale();
+				const float magCut = OhosStartupChoreography::starMagCutoff();
+				if (magCut < 50.0f)
+				{
+					const float reveal = OhosStartupChoreography::smoothstep(magCut + 1.15f, magCut - 0.55f, mag) * starScale;
+					const float dMag = (mag - (magCut - 0.15f)) / 0.65f;
+					const float sparkle = 1.0f + 0.55f * std::exp(-dMag * dMag) * OhosStartupChoreography::starSparkle();
+					rcmag_table[i].radius *= (0.30f + 0.70f * reveal) * (1.0f + 0.22f * (sparkle - 1.0f));
+					rcmag_table[i].luminance *= reveal * sparkle;
+				}
+				else
+				{
+					rcmag_table[i].radius *= starScale;
+					rcmag_table[i].luminance *= starScale;
+				}
+			}
 		}
 		lastMaxSearchLevel = z->level;
 
@@ -1471,7 +1490,10 @@ void StarMgr::draw(StelCore* core)
 		if (withParallax) {
 			diffPos = core->getParallaxDiff(core->getJDE());
 		}
-		QVector<StarTrailSample>* levelTrailSink = (collectTrails && z->level <= 1) ? &m_trailSamples : nullptr;
+		// At ultra-wide all-sky FOV (> 130 deg), Level 0 covers all ~4979 naked-eye stars across
+		// the entire 360-deg celestial sphere so no geodesic zone ever gets cut off by sample caps.
+		const int maxTrailLevel = (currentFovDeg > 130.0) ? 0 : 1;
+		QVector<StarTrailSample>* levelTrailSink = (collectTrails && z->level <= maxTrailLevel) ? &m_trailSamples : nullptr;
 		for (GeodesicSearchInsideIterator it1(*geodesic_search_result,z->level);(zone = it1.next()) >= 0;)
 			z->draw(&sPainter, zone, true, rcmag_table, limitMagIndex, core, maxMagStarName, names_brightness, viewportCaps, withAberration, vel, withParallax, diffPos, currentSkycultureUsesCommonStarnames, levelTrailSink);
 		for (GeodesicSearchBorderIterator it1(*geodesic_search_result,z->level);(zone = it1.next()) >= 0;)
@@ -1586,11 +1608,13 @@ void StarMgr::update(double deltaTime)
 	const bool hasStep = std::fabs(deltaJD) > 1e-7;
 	if (hasStep)
 	{
-		const double stepElapsed = qBound(dt, m_timeSinceLastJdChange, 0.16);
+		const double stepElapsed = qBound(dt, m_timeSinceLastJdChange, 0.18);
+		const double idleBeforeStep = m_timeSinceLastJdChange;
 		m_timeSinceLastJdChange = 0.0;
 
-		// Cold one-shot calendar jump (e.g., jumping to another year while idle): do not flash bogus arcs.
-		if (std::fabs(deltaJD) > 0.45 && std::fabs(m_smoothedAngularVel) < 0.05)
+		// Cold one-shot multi-day/year jump (e.g., jumping to an eclipse date while idle): do not flash bogus arcs.
+		// Allow continuous fast-forward (e.g. 1 day/sec) and active Date/Time wheel scrubbing to trail smoothly.
+		if (std::fabs(deltaJD) > 2.5 && std::fabs(m_smoothedAngularVel) < 0.05 && idleBeforeStep > 0.25)
 		{
 			m_smoothedAngularVel = 0.0;
 			m_smoothedTrailAngleRad = 0.0;
@@ -1615,9 +1639,9 @@ void StarMgr::update(double deltaTime)
 		const double attack = 1.0 - std::exp(-dt / 0.055);
 		m_smoothedAngularVel += (instOmega - m_smoothedAngularVel) * attack;
 	}
-	else if (m_timeSinceLastJdChange >= 0.095)
+	else if (m_timeSinceLastJdChange >= 0.16)
 	{
-		// Grace window (95ms) absorbs periodic 16-60ms wheel/transition ticks without pulsing;
+		// Grace window (160ms) absorbs periodic wheel/transition ticks even on wide-FOV frames without pulsing;
 		// once truly idle, decay smoothly back into crisp pinpoint stars.
 		const double decay = std::exp(-dt / 0.13);
 		m_smoothedAngularVel *= decay;
@@ -1666,7 +1690,9 @@ void StarMgr::drawMotionTrails(StelCore* core, StelPainter& sPainter)
 	axis /= axisNorm;
 
 	// Adaptive arc subdivision: guarantees smooth curved arcs around the celestial pole & wide FOV
-	const int segs = (absArc > 0.19) ? 16 : ((absArc > 0.10) ? 12 : ((absArc > 0.045) ? 9 : 6));
+	int segs = (absArc > 0.19) ? 16 : ((absArc > 0.10) ? 12 : ((absArc > 0.045) ? 9 : 6));
+	if (m_trailSamples.size() > 2200 && segs > 10)
+		segs = 10;
 	double cosT[17];
 	double sinT[17];
 	for (int k = 0; k <= segs; ++k)
@@ -1676,8 +1702,9 @@ void StarMgr::drawMotionTrails(StelCore* core, StelPainter& sPainter)
 		sinT[k] = std::sin(theta);
 	}
 
-	const double fovDeg = qBound(0.5, core->getMovementMgr()->getCurrentFov(), 179.0);
-	const int vpH = sPainter.getProjector() ? sPainter.getProjector()->getViewportHeight() : 1080;
+	const StelProjectorP prj = sPainter.getProjector();
+	const double fovDeg = qBound(0.5, core->getMovementMgr()->getCurrentFov(), 360.0);
+	const int vpH = prj ? prj->getViewportHeight() : 1080;
 	const double radPerPx = (fovDeg * M_PI / 180.0) / qMax(360.0, static_cast<double>(vpH));
 	const double screenScale = qBound(1.0, static_cast<double>(StelApp::getInstance().getScreenScale()), 3.5);
 
@@ -1719,6 +1746,9 @@ void StarMgr::drawMotionTrails(StelCore* core, StelPainter& sPainter)
 			baseColor[2] * (1.f - whiteMix) + whiteMix);
 		for (int k = 0; k < segs; ++k)
 		{
+			if (prj && prj->intersectViewportDiscontinuity(arcPts[k], arcPts[k + 1]))
+				continue;
+
 			const float u0 = static_cast<float>(k) / static_cast<float>(segs);
 			const float u1 = static_cast<float>(k + 1) / static_cast<float>(segs);
 
@@ -1784,9 +1814,10 @@ void StarMgr::drawMotionTrails(StelCore* core, StelPainter& sPainter)
 		const float invLumAtten = 1.0f / qMax(0.20f, 1.0f - 0.72f * (fadeS * fadeS * (3.0f - 2.0f * fadeS)));
 		const float restoredRadius = sample.radius * invRadiusAtten;
 		const float lum = qBound(0.12f, sample.luminance * invLumAtten, 1.0f);
-		// Uniform photographic star-trail width proportional to star brightness
+		// Uniform photographic star-trail width proportional to star brightness;
+		// cap angular half-width at 0.0026 rad so stereographic rim magnification at 230+ deg FOV stays sleek and crisp.
 		const double pxRadius = qBound(0.45, static_cast<double>(restoredRadius) * 0.30, 1.35) * screenScale;
-		const double baseHalfW = qBound(0.00007, pxRadius * radPerPx, 0.0020);
+		const double baseHalfW = qBound(0.00007, pxRadius * radPerPx, 0.0026);
 
 		// Uniform spectral-colored photographic core arc
 		appendRibbon(1.0, 0.78f, 0.08f, bvColor, lum, baseHalfW);

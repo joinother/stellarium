@@ -3,7 +3,7 @@ export interface ConstellationModelAsset {
   bytes: number;
 }
 
-export const CONSTELLATION_MODEL_REVISION = '41884225b1f606847180';
+export const CONSTELLATION_MODEL_REVISION = '7d7efb014241533741cc';
 export const CONSTELLATION_MODEL_ASSETS: ConstellationModelAsset[] = [
   {
     "name": "And.scm",
@@ -66,6 +66,10 @@ export const CONSTELLATION_MODEL_ASSETS: ConstellationModelAsset[] = [
     "bytes": 191964
   },
   {
+    "name": "Car.scm",
+    "bytes": 191628
+  },
+  {
     "name": "Cas.scm",
     "bytes": 190560
   },
@@ -86,8 +90,16 @@ export const CONSTELLATION_MODEL_ASSETS: ConstellationModelAsset[] = [
     "bytes": 191772
   },
   {
+    "name": "Cir.scm",
+    "bytes": 196140
+  },
+  {
     "name": "Cnc.scm",
     "bytes": 191820
+  },
+  {
+    "name": "Col.scm",
+    "bytes": 192108
   },
   {
     "name": "Com.scm",
@@ -262,6 +274,10 @@ export const CONSTELLATION_MODEL_ASSETS: ConstellationModelAsset[] = [
     "bytes": 192072
   },
   {
+    "name": "Pup.scm",
+    "bytes": 191868
+  },
+  {
     "name": "Pyx.scm",
     "bytes": 192432
   },
@@ -322,6 +338,10 @@ export const CONSTELLATION_MODEL_ASSETS: ConstellationModelAsset[] = [
     "bytes": 192012
   },
   {
+    "name": "Vel.scm",
+    "bytes": 191772
+  },
+  {
     "name": "Vir.scm",
     "bytes": 191292
   },
@@ -335,6 +355,6 @@ export const CONSTELLATION_MODEL_ASSETS: ConstellationModelAsset[] = [
   },
   {
     "name": "manifest.json",
-    "bytes": 107017
+    "bytes": 114388
   }
 ];

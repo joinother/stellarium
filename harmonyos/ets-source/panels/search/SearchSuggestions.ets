@@ -23,10 +23,18 @@ export struct SearchSuggestions {
     Column({ space: 4 }) {
       Row() {
         Text(I18n.t('loc_search_results')).fontSize(11).fontColor(this.c.sub).layoutWeight(1)
-        Text(this.store.searchSuggestions.length > 0
-          ? I18n.format('search_candidate_count', [this.store.searchSuggestions.length.toString()])
-          : I18n.t('search_no_candidates'))
-          .fontSize(10).fontColor(this.c.sub)
+        if (this.store.searchSuggestionsLoading) {
+          Row({ space: 5 }) {
+            LoadingProgress().width(13).height(13).color(this.c.accent)
+            Text(I18n.t('search_loading_candidates')).fontSize(10).fontColor(this.c.accent)
+          }
+          .alignItems(VerticalAlign.Center)
+        } else {
+          Text(this.store.searchSuggestions.length > 0
+            ? I18n.format('search_candidate_count', [this.store.searchSuggestions.length.toString()])
+            : I18n.t('search_no_candidates'))
+            .fontSize(10).fontColor(this.c.sub)
+        }
       }.width('100%').padding({ left: 4, right: 4 })
       Scroll() {
         Column({ space: 4 }) {
@@ -50,7 +58,17 @@ export struct SearchSuggestions {
               .onClick(() => { this.onSelect(item) })
           }, (item: SearchSug) => item.selection ?? item.en)
           if (this.store.searchSuggestions.length === 0) {
-            Text(I18n.t('search_no_match_hint')).fontSize(12).fontColor(this.c.sub).width('100%').padding({ left: 4, top: 8, bottom: 8 })
+            if (this.store.searchSuggestionsLoading) {
+              Row({ space: 8 }) {
+                LoadingProgress().width(16).height(16).color(this.c.accent)
+                Text(I18n.t('search_loading_hint')).fontSize(12).fontColor(this.c.sub)
+              }
+                .width('100%')
+                .alignItems(VerticalAlign.Center)
+                .padding({ left: 4, top: 8, bottom: 8 })
+            } else {
+              Text(I18n.t('search_no_match_hint')).fontSize(12).fontColor(this.c.sub).width('100%').padding({ left: 4, top: 8, bottom: 8 })
+            }
           }
         }.width('100%')
       }.width('100%').height(this.store.searchSuggestions.length > 0 ? 216 : 48)

@@ -29,6 +29,7 @@
 #include "StelFileMgr.hpp"
 #include "StelTextureMgr.hpp"
 #include "Satellites.hpp"
+#include "OhosStartupChoreography.hpp"
 #include "Satellite.hpp"
 #include "SatellitesListModel.hpp"
 #include "Planet.hpp"
@@ -4988,6 +4989,11 @@ void Satellites::update(double deltaTime)
 
 void Satellites::draw(StelCore* core)
 {
+	if (OhosStartupChoreography::constellationScale() <= 0.02f)
+	{
+		StelPainter::clearSkyLabels("satellites");
+		return;
+	}
 	// Separated because first test should be very fast.
 	if (!hintFader && hintFader.getInterstate() <= 0.f)
 	{

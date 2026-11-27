@@ -79,6 +79,14 @@ export interface AstronomyCalendarEvent {
   remoteHighlight?: boolean
   remoteEndAt?: number
   remoteEnriched?: boolean
+  // Rocket launch trajectory & twilight plume simulation metadata
+  rocketPresetId?: string
+  rocketSiteId?: string
+  rocketVehicleId?: string
+  rocketLaunchTimeUtc?: string
+  rocketAzimuthDeg?: number
+  rocketTargetOrbit?: string
+  rocketBadge?: string
 }
 
 export interface CalendarNativeEvent {
@@ -126,6 +134,14 @@ export interface CalendarNativeEvent {
   remoteHighlight?: boolean
   remoteEndAt?: number
   remoteEnriched?: boolean
+  // Rocket launch trajectory & twilight plume simulation metadata
+  rocketPresetId?: string
+  rocketSiteId?: string
+  rocketVehicleId?: string
+  rocketLaunchTimeUtc?: string
+  rocketAzimuthDeg?: number
+  rocketTargetOrbit?: string
+  rocketBadge?: string
 }
 
 // 44/44 全量流星雨标准中文译名（覆盖内置 MeteorShowers.json 全部流星群，杜绝任何英文残余）

@@ -854,6 +854,10 @@ private:
 	void setFlagAtmosphereInternal(const bool displayed, const bool saveToConfig);
 	//! Apply a fog visibility change without writing it to config.ini.
 	void setFlagFogInternal(const bool displayed, const bool saveToConfig);
+	//! Apply a landscape visibility change without writing it to config.ini.
+	//! Used by automatic environment switching (e.g. observer viewpoints), so
+	//! transient hides never overwrite landscape/flag_landscape in config.ini.
+	void setFlagLandscapeInternal(const bool displayed, const bool saveToConfig);
 
 	//! For a given landscape name, return the landscape ID.
 	//! This takes a name of the landscape, as described in the landscape:name item in the

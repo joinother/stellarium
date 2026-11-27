@@ -24,6 +24,7 @@
 #include "AtmosphereMist.hpp"
 #include "EnvironmentZoomFade.hpp"
 #include "Landscape.hpp"
+#include "OhosStartupChoreography.hpp"
 #include "AtmospherePreetham.hpp"
 #include "AtmosphereLightweight.hpp"
 #if !QT_CONFIG(opengles2)
@@ -61,6 +62,8 @@
 #include <QPainter>
 #include <QElapsedTimer>
 #include <QOpenGLPaintDevice>
+#include <QOpenGLShaderProgram>
+#include <QOpenGLVertexArrayObject>
 
 namespace
 {
@@ -525,7 +528,7 @@ void LandscapeMgr::update(double deltaTime)
 	}
 
 	atmosphere->update(deltaTime);
-	atmosphere->setVisualStrength(drawer->getAtmosphereVisualStrength());
+	atmosphere->setVisualStrength(drawer->getAtmosphereVisualStrength() * OhosStartupChoreography::atmosphereScale());
 
 	if (oldLandscape)
 	{
@@ -708,6 +711,208 @@ void LandscapeMgr::update(double deltaTime)
 	messageFader.update(static_cast<int>(deltaTime*1000));
 }
 
+namespace
+{
+void drawOhosStartupDomeGrid(StelCore* core)
+{
+	const float gridAlpha = OhosStartupChoreography::domeGridAlpha();
+	if (!core || gridAlpha <= 0.004f)
+		return;
+	const StelProjectorP prj = core->getProjection(StelCore::FrameAltAz);
+	if (!prj)
+		return;
+
+	StelPainter painter(prj);
+	painter.setBlending(true);
+	const bool nightVision = StelApp::getInstance().getVisionModeNight();
+	const Vec3f baseColor = nightVision ? Vec3f(0.76f, 0.20f, 0.14f) : Vec3f(0.46f, 0.65f, 0.92f);
+	const float ppx = static_cast<float>(prj->getDevicePixelsPerPixel());
+	const float unfold = OhosStartupChoreography::domeUnfold();
+	const Vec4i vp = prj->getViewport();
+	const double maxSegSq = static_cast<double>(vp[2] * vp[2] + vp[3] * vp[3]) * 0.20;
+
+	auto drawAltAzPolyline = [&](const QVector<Vec3d>& pts, float alpha, float widthPx) {
+		if (pts.size() < 2 || alpha <= 0.003f)
+			return;
+		painter.setColor(baseColor[0], baseColor[1], baseColor[2], alpha);
+		painter.setLineWidth(widthPx * ppx);
+		Vec3d prevScreen;
+		bool prevOk = false;
+		for (int i = 0; i < pts.size(); ++i)
+		{
+			Vec3d screen;
+			const bool ok = prj->project(pts[i], screen) &&
+				std::isfinite(screen[0]) && std::isfinite(screen[1]);
+			if (ok && prevOk && !prj->intersectViewportDiscontinuity(pts[i - 1], pts[i]))
+			{
+				const double dx = screen[0] - prevScreen[0];
+				const double dy = screen[1] - prevScreen[1];
+				if (dx * dx + dy * dy < maxSegSq)
+				{
+					painter.drawLine2d(static_cast<float>(prevScreen[0]), static_cast<float>(prevScreen[1]),
+					                   static_cast<float>(screen[0]), static_cast<float>(screen[1]));
+				}
+			}
+			prevScreen = screen;
+			prevOk = ok;
+		}
+	};
+
+	const double minAltDeg = std::max(0.0, 90.0 * (1.0 - static_cast<double>(unfold)));
+
+	// Silky-smooth continuous dark-stage horizon backlight (zero line-width banding)
+	// rendered in true AltAz projection BEHIND the rising landscape so trees & Mist Mountain
+	// ridges stand out in razor-sharp silhouette against the dark planetarium dome.
+	{
+		QOpenGLContext* ctx = QOpenGLContext::currentContext();
+		QOpenGLFunctions* gl = ctx ? ctx->functions() : nullptr;
+		if (gl)
+		{
+			static std::unique_ptr<QOpenGLShaderProgram> s_domeBgProg;
+			static StelProjectorP s_domeBgPrj;
+			static std::unique_ptr<QOpenGLVertexArrayObject> s_domeBgVao;
+			static GLuint s_domeBgVbo = 0;
+
+			if (!s_domeBgProg || !s_domeBgPrj || !prj->isSameProjection(*s_domeBgPrj))
+			{
+				s_domeBgProg.reset(new QOpenGLShaderProgram);
+				s_domeBgPrj = prj;
+				const QByteArray vert = StelOpenGL::globalShaderPrefix(StelOpenGL::VERTEX_SHADER) + R"(
+ATTRIBUTE highp vec2 a_pos;
+VARYING highp vec3 v_ndc;
+void main() {
+    v_ndc = vec3(a_pos, 0.0);
+    gl_Position = vec4(a_pos, 0.0, 1.0);
+}
+)";
+				const QByteArray frag = StelOpenGL::globalShaderPrefix(StelOpenGL::FRAGMENT_SHADER) +
+					QByteArray("#ifdef GL_ES\nprecision highp float;\n#endif\n") +
+					prj->getUnProjectShader() + R"(
+VARYING highp vec3 v_ndc;
+uniform mat4 u_projInv;
+uniform float u_alpha;
+uniform float u_nightVision;
+void main() {
+    vec4 winPos = u_projInv * vec4(v_ndc, 1.0);
+    bool ok = false;
+    vec3 dir = unProject(winPos.x, winPos.y, ok).xyz;
+    if (!ok || dot(dir, dir) < 1e-8) {
+        FRAG_COLOR = vec4(0.0);
+        return;
+    }
+    dir = normalize(dir);
+    float alt = asin(clamp(dir.z, -1.0, 1.0));
+    // Soft luminous horizon band (0..18 deg) + ultra-faint zenith dome ambient
+    float horizonGlow = exp(-max(0.0, alt) * 9.5) * smoothstep(-0.04, 0.015, alt);
+    float domeAmbient = 0.035 * smoothstep(-0.05, 0.35, alt);
+    float energy = clamp((0.22 * horizonGlow + domeAmbient) * u_alpha, 0.0, 0.35);
+    vec3 col = u_nightVision > 0.5 ? vec3(0.46, 0.10, 0.07) : vec3(0.24, 0.42, 0.74);
+    FRAG_COLOR = vec4(col, energy);
+}
+)";
+				if (s_domeBgProg->addShaderFromSourceCode(QOpenGLShader::Vertex, vert) &&
+				    s_domeBgProg->addShaderFromSourceCode(QOpenGLShader::Fragment, frag) &&
+				    s_domeBgProg->link())
+				{
+					if (!s_domeBgVao)
+					{
+						static const GLfloat kQuad[] = { -1.f, -1.f, 1.f, -1.f, -1.f, 1.f, 1.f, 1.f };
+						s_domeBgVao.reset(new QOpenGLVertexArrayObject);
+						s_domeBgVao->create();
+						s_domeBgVao->bind();
+						gl->glGenBuffers(1, &s_domeBgVbo);
+						gl->glBindBuffer(GL_ARRAY_BUFFER, s_domeBgVbo);
+						gl->glBufferData(GL_ARRAY_BUFFER, sizeof(kQuad), kQuad, GL_STATIC_DRAW);
+						const int posLoc = s_domeBgProg->attributeLocation("a_pos");
+						gl->glEnableVertexAttribArray(posLoc);
+						gl->glVertexAttribPointer(posLoc, 2, GL_FLOAT, GL_FALSE, 2 * sizeof(GLfloat), nullptr);
+						gl->glBindBuffer(GL_ARRAY_BUFFER, 0);
+						s_domeBgVao->release();
+					}
+				}
+				else
+				{
+					s_domeBgProg.reset();
+				}
+			}
+
+			if (s_domeBgProg && s_domeBgProg->isLinked() && s_domeBgVao && s_domeBgVao->isCreated())
+			{
+				const GLboolean depthWas = gl->glIsEnabled(GL_DEPTH_TEST);
+				gl->glDisable(GL_DEPTH_TEST);
+				gl->glEnable(GL_BLEND);
+				gl->glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+				s_domeBgVao->bind();
+				s_domeBgProg->bind();
+				s_domeBgProg->setUniformValue("u_projInv", prj->getProjectionMatrix().toQMatrix().inverted());
+				s_domeBgProg->setUniformValue("u_alpha", gridAlpha);
+				s_domeBgProg->setUniformValue("u_nightVision", nightVision ? 1.0f : 0.0f);
+				prj->setUnProjectUniforms(*s_domeBgProg);
+				gl->glDrawArrays(GL_TRIANGLE_STRIP, 0, 4);
+				s_domeBgProg->release();
+				s_domeBgVao->release();
+				if (depthWas) gl->glEnable(GL_DEPTH_TEST);
+			}
+		}
+	}
+
+	// 12 restrained azimuth meridian arcs (every 30 deg) descending from zenith to horizon
+	QVector<Vec3d> arc;
+	arc.reserve(32);
+	for (int m = 0; m < 12; ++m)
+	{
+		const double azRad = static_cast<double>(m) * (M_PI / 6.0);
+		const double cosAz = std::cos(azRad);
+		const double sinAz = std::sin(azRad);
+		arc.clear();
+		constexpr int kSteps = 24;
+		for (int s = 0; s <= kSteps; ++s)
+		{
+			const double altDeg = 90.0 - (90.0 - minAltDeg) * (static_cast<double>(s) / kSteps);
+			const double altRad = altDeg * M_PI_180;
+			const double cosAlt = std::cos(altRad);
+			arc.append(Vec3d(cosAlt * cosAz, cosAlt * sinAz, std::sin(altRad)));
+		}
+		const float majorBoost = (m % 3 == 0) ? 1.28f : 0.88f;
+		drawAltAzPolyline(arc, 0.21f * majorBoost * gridAlpha, (m % 3 == 0) ? 1.25f : 0.90f);
+	}
+
+	// 5 altitude dome rings (15, 30, 45, 60, 75 deg) unlocking progressively from zenith down
+	const double altRings[] = { 75.0, 60.0, 45.0, 30.0, 15.0 };
+	QVector<Vec3d> ring;
+	ring.reserve(73);
+	for (double altDeg : altRings)
+	{
+		const float ringThreshold = static_cast<float>((90.0 - altDeg) / 90.0);
+		const float ringFade = OhosStartupChoreography::smoothstep(ringThreshold - 0.12f, ringThreshold + 0.08f, unfold);
+		if (ringFade <= 0.01f)
+			continue;
+		const double altRad = altDeg * M_PI_180;
+		const double cosAlt = std::cos(altRad);
+		const double sinAlt = std::sin(altRad);
+		ring.clear();
+		constexpr int kSegs = 72;
+		for (int s = 0; s <= kSegs; ++s)
+		{
+			const double azRad = (static_cast<double>(s) / kSegs) * (2.0 * M_PI);
+			ring.append(Vec3d(cosAlt * std::cos(azRad), cosAlt * std::sin(azRad), sinAlt));
+		}
+		drawAltAzPolyline(ring, 0.18f * ringFade * gridAlpha, 0.95f);
+	}
+
+	// Restrained horizon baseline (0 deg) anchoring the rising landscape stage
+	ring.clear();
+	constexpr int kHorizonSegs = 96;
+	for (int s = 0; s <= kHorizonSegs; ++s)
+	{
+		const double azRad = (static_cast<double>(s) / kHorizonSegs) * (2.0 * M_PI);
+		ring.append(Vec3d(std::cos(azRad), std::sin(azRad), 0.0));
+	}
+	drawAltAzPolyline(ring, 0.30f * gridAlpha, 1.40f);
+	painter.setLineWidth(1.0f);
+}
+} // namespace
+
 void LandscapeMgr::draw(StelCore* core)
 {
 	// For observers we never draw anything of landscape, atmosphere, cardinals.
@@ -727,13 +932,13 @@ void LandscapeMgr::draw(StelCore* core)
 	// mutating the user's persisted atmosphere toggle.
 	const HipsMgr* hips = GETSTELMODULE(HipsMgr);
 	const bool penetrateAtmosphere = hips && hips->getNonVisibleSpectralFade() > 0.05f;
-	if (!getFlagAtmosphereNoScatter() && core->getFlagClearSky() && !penetrateAtmosphere)
+	if (!getFlagAtmosphereNoScatter() && core->getFlagClearSky() && !penetrateAtmosphere && OhosStartupChoreography::atmosphereScale() > 0.001f)
 	    atmosphere->draw(core);
 
 	// GZ 2016-01: When we draw the atmosphere with a low sun, it is possible that the glaring red ball is overpainted and thus invisible.
 	// Attempt to draw the sun only here while not having drawn it by SolarSystem:
 	//if (atmosphere->getFlagShow())
-	if (drawer->getFlagDrawSunAfterAtmosphere())
+	if (drawer->getFlagDrawSunAfterAtmosphere() && OhosStartupChoreography::solarSystemScale() > 0.02f)
 	{
 		static SolarSystem* ssys = GETSTELMODULE(SolarSystem);
 		PlanetP sun=ssys->getSun();
@@ -742,8 +947,13 @@ void LandscapeMgr::draw(StelCore* core)
 	}
 
 	// Draw volumetric atmospheric aurora curtains behind landscape/mist silhouettes
-	if (auroraRenderer.effectiveOpacity() > 0.002f)
+	if (auroraRenderer.effectiveOpacity() > 0.002f && OhosStartupChoreography::milkyWayScale() > 0.02f)
 		auroraRenderer.draw(core);
+
+	// Draw restrained dark planetarium meridian/altitude dome lines BEHIND the rising landscape
+	// during the startup choreography, so rising trees and mountain ridges naturally occlude them.
+	if (OhosStartupChoreography::domeGridAlpha() > 0.004f)
+		drawOhosStartupDomeGrid(core);
 
 	// The spectral magnifying glass always sits IN FRONT OF ground and Dynamic Mist Mountain.
 	// For nighttime 1x lens (whose glass interior was drawn at CallOrder=7 so optical stars,
@@ -793,7 +1003,8 @@ void LandscapeMgr::draw(StelCore* core)
 	}
 
 	// Draw the cardinal points
-	cardinalPoints->draw(core, static_cast<double>(StelApp::getInstance().getCore()->getCurrentLocation().getLatitude()));
+	if (OhosStartupChoreography::cardinalsVisible())
+		cardinalPoints->draw(core, static_cast<double>(StelApp::getInstance().getCore()->getCurrentLocation().getLatitude()));
 
 	// Draw magnifying glass chrome (or full daytime/2x lens) in front of landscape, Mist Mountain, and cardinals.
 	if (lensActiveNoHook)
@@ -829,7 +1040,8 @@ void LandscapeMgr::drawPolylineOnly(StelCore* core)
 		landscape->draw(core, true);
 
 	// Draw the cardinal points
-	cardinalPoints->draw(core, static_cast<double>(StelApp::getInstance().getCore()->getCurrentLocation().getLatitude()));
+	if (OhosStartupChoreography::cardinalsVisible())
+		cardinalPoints->draw(core, static_cast<double>(StelApp::getInstance().getCore()->getCurrentLocation().getLatitude()));
 }
 
 void LandscapeMgr::createAtmosphere()
@@ -1227,9 +1439,15 @@ void LandscapeMgr::updateI18n()
 
 void LandscapeMgr::setFlagLandscape(const bool displayed)
 {
+	setFlagLandscapeInternal(displayed, true);
+}
+
+void LandscapeMgr::setFlagLandscapeInternal(const bool displayed, const bool saveToConfig)
+{
 	if (displayed)
 	{
-		setMistHorizonEnabled(false);
+		if (saveToConfig)
+			setMistHorizonEnabled(false);
 		mistHorizon.opacity = 0.f;
 	}
 	if (oldLandscape && !displayed)
@@ -1238,7 +1456,8 @@ void LandscapeMgr::setFlagLandscape(const bool displayed)
 		landscape->setFlagShow(displayed);
 		emit landscapeDisplayedChanged(displayed);
 	}
-	StelApp::immediateSave("landscape/flag_landscape", displayed);
+	if (saveToConfig)
+		StelApp::immediateSave("landscape/flag_landscape", displayed);
 }
 
 void LandscapeMgr::setMistHorizonEnabled(bool enabled)
@@ -1371,7 +1590,9 @@ void LandscapeMgr::onTargetLocationChanged(const StelLocation &loc, const QStrin
 		if (flagEnvironmentAutoEnabling)
 		{
 			setFlagAtmosphereAndFogForEnvironment(false, false);
-			setFlagLandscape(false);
+			// Transient hide for space observer points: never overwrite the user's
+			// saved landscape/flag_landscape preference in config.ini.
+			setFlagLandscapeInternal(false, false);
 			setFlagCardinalPoints(false); // suppresses all
 		}
 	}
@@ -1386,7 +1607,7 @@ void LandscapeMgr::onTargetLocationChanged(const StelLocation &loc, const QStrin
 			setFlagAtmosphereAndFogForEnvironment(
 				hasAtmosphere && conf->value("landscape/flag_atmosphere", true).toBool(),
 				hasAtmosphere && conf->value("landscape/flag_fog", true).toBool());
-			setFlagLandscape(conf->value("landscape/flag_landscape", true).toBool());
+			setFlagLandscapeInternal(conf->value("landscape/flag_landscape", true).toBool(), false);
 			setFlagCardinalPoints(conf->value("viewing/flag_cardinal_points", true).toBool());
 			setFlagOrdinalPoints(conf->value("viewing/flag_ordinal_points", true).toBool());
 			setFlagOrdinal16WRPoints(conf->value("viewing/flag_16wcr_points", false).toBool());

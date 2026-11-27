@@ -11,7 +11,7 @@ import { fileIo } from '@kit.CoreFileKit';
 import { systemShare } from '@kit.ShareKit';
 import BuildProfile from 'BuildProfile';
 import qpa from 'libqohos.so';
-import { command } from 'libentry.so';
+import { command, setEnv } from 'libentry.so';
 import { notifyLifecycle } from '../common/StellariumLifecycle';
 import { WINDOW_BACKGROUND_COLOR } from './WindowChrome';
 import {LOG_DOMAIN, LOG_TAG, APP_ICP_FILING_NUMBER, APP_ICP_FILING_URL} from '../common/QtAppConstants';
@@ -120,6 +120,105 @@ export default class QAbility extends UIAbility {
   private cliRequests: StellariumCliRequest[] = [];
   private safeAreaWindow: Window.Window | null = null;
   private safeAreaTopPixels: number = 0;
+  private desktopWindowListenerHost: Window.Window | null = null;
+  private lastWindowStatus: Window.WindowStatusType = Window.WindowStatusType.UNDEFINED;
+
+  private readonly windowSizeChangeCallback = (size: Window.Size): void => {
+    if (!this.qtInitialized && size.width >= 320 && size.height >= 240) {
+      this.publishInitialWindowSizeEnv(size.width, size.height);
+    }
+  };
+
+  // PC / 2in1 自由窗口点击最大化按钮时，自动切入沉浸式全屏（隐藏标题栏与 Dock 栏），
+  // 且保留顶部/底部边缘鼠标悬停自动唤出标题栏与 Dock 栏能力（MaximizePresentation.ENTER_IMMERSIVE）。
+  // 出处：harmonyos-guides/application-adaptation-freeform-window & arkts-apis-window-e
+  private readonly windowStatusChangeCallback = (status: Window.WindowStatusType): void => {
+    const prev = this.lastWindowStatus;
+    this.lastWindowStatus = status;
+    AppStorage.setOrCreate('stellariumDesktopFullscreen', status === Window.WindowStatusType.FULL_SCREEN);
+    const win = this.desktopWindowListenerHost;
+    if (win === null || !canIUse('SystemCapability.Window.SessionManager')) {
+      return;
+    }
+    if (status === Window.WindowStatusType.MAXIMIZE && prev !== Window.WindowStatusType.FULL_SCREEN) {
+      void win.maximize(Window.MaximizePresentation.ENTER_IMMERSIVE).then(() => {
+        hilog.info(LOG_DOMAIN, LOG_TAG, '[window] maximized -> ENTER_IMMERSIVE (hover title & dock enabled)');
+      }).catch((err: Error) => {
+        hilog.warn(LOG_DOMAIN, LOG_TAG, '[window] ENTER_IMMERSIVE failed: %{public}s', JSON.stringify(err));
+      });
+    } else if (status === Window.WindowStatusType.FULL_SCREEN) {
+      try {
+        void win.setTitleAndDockHoverShown(true, true).catch((err: Error) => {
+          hilog.debug(LOG_DOMAIN, LOG_TAG, '[window] setTitleAndDockHoverShown skipped: %{public}s', JSON.stringify(err));
+        });
+      } catch (err) {
+        hilog.debug(LOG_DOMAIN, LOG_TAG, '[window] setTitleAndDockHoverShown unsupported on this device');
+      }
+    }
+  };
+
+  private publishInitialWindowSizeEnv(widthPx: number, heightPx: number): void {
+    const w = Math.round(widthPx);
+    const h = Math.round(heightPx);
+    if (!Number.isFinite(w) || !Number.isFinite(h) || w < 320 || h < 240) {
+      return;
+    }
+    try {
+      setEnv('STELLARIUM_OHOS_WINDOW_W', w.toString());
+      setEnv('STELLARIUM_OHOS_WINDOW_H', h.toString());
+      hilog.info(LOG_DOMAIN, LOG_TAG, '[window] published initial OHOS window size %{public}dx%{public}d', w, h);
+    } catch (err) {
+      hilog.warn(LOG_DOMAIN, LOG_TAG, '[window] setEnv initial window size failed: %{public}s', JSON.stringify(err));
+    }
+  }
+
+  private syncInitialWindowSizeFromWindow(mainWindow: Window.Window): void {
+    try {
+      const rect = mainWindow.getWindowProperties().windowRect;
+      this.publishInitialWindowSizeEnv(rect.width, rect.height);
+    } catch (err) {
+      hilog.warn(LOG_DOMAIN, LOG_TAG, '[window] failed to read initial windowRect: %{public}s', JSON.stringify(err));
+    }
+  }
+
+  private unregisterDesktopWindowListeners(): void {
+    if (this.desktopWindowListenerHost === null) {
+      return;
+    }
+    const win = this.desktopWindowListenerHost;
+    this.desktopWindowListenerHost = null;
+    try {
+      win.off('windowSizeChange', this.windowSizeChangeCallback);
+    } catch (err) {
+      hilog.debug(LOG_DOMAIN, LOG_TAG, '[window] off windowSizeChange failed');
+    }
+    try {
+      win.off('windowStatusChange', this.windowStatusChangeCallback);
+    } catch (err) {
+      hilog.debug(LOG_DOMAIN, LOG_TAG, '[window] off windowStatusChange failed');
+    }
+  }
+
+  private registerDesktopWindowListeners(mainWindow: Window.Window): void {
+    if (this.desktopWindowListenerHost === mainWindow) {
+      return;
+    }
+    this.unregisterDesktopWindowListeners();
+    this.desktopWindowListenerHost = mainWindow;
+    try {
+      mainWindow.on('windowSizeChange', this.windowSizeChangeCallback);
+    } catch (err) {
+      hilog.debug(LOG_DOMAIN, LOG_TAG, '[window] on windowSizeChange unavailable');
+    }
+    if (canIUse('SystemCapability.Window.SessionManager')) {
+      try {
+        mainWindow.on('windowStatusChange', this.windowStatusChangeCallback);
+        hilog.info(LOG_DOMAIN, LOG_TAG, '[window] registered windowStatusChange for ENTER_IMMERSIVE maximize');
+      } catch (err) {
+        hilog.debug(LOG_DOMAIN, LOG_TAG, '[window] on windowStatusChange unavailable');
+      }
+    }
+  }
 
   private readonly avoidAreaChangeCallback = (data: WindowAvoidAreaChange): void => {
     if (data.type === Window.AvoidAreaType.TYPE_SYSTEM || data.type === Window.AvoidAreaType.TYPE_CUTOUT) {
@@ -850,7 +949,9 @@ export default class QAbility extends UIAbility {
       AppStorage.setOrCreate('stellariumStartupArtComplete', false);
       AppStorage.setOrCreate('stellariumQtContentReady', false);
       AppStorage.setOrCreate('stellariumPrivacyHostReady', false);
-      await windowStage.getMainWindow();
+      const mainWindow = await windowStage.getMainWindow();
+      this.syncInitialWindowSizeFromWindow(mainWindow);
+      this.registerDesktopWindowListeners(mainWindow);
       this.qtWindowStage = new QtWindowStageAdapter(windowStage, this.rootStorage);
       await windowStage.loadContent('pages/ApplicationRoot', this.rootStorage);
       this.rootContentLoaded = true;
@@ -929,6 +1030,13 @@ export default class QAbility extends UIAbility {
       AppStorage.setOrCreate('stellariumStartupPreparing', true);
       this.logPrivacyProbe('qt-start-transfer-start');
       const contextInitializationStartedAt = Date.now();
+      try {
+        const preQtWindow = await this.pendingWindowStage.getMainWindow();
+        this.syncInitialWindowSizeFromWindow(preQtWindow);
+        this.registerDesktopWindowListeners(preQtWindow);
+      } catch (err) {
+        hilog.warn(LOG_DOMAIN, LOG_TAG, '[window] pre-Qt window size sync skipped: %{public}s', JSON.stringify(err));
+      }
       await this.initializeQtAbilityIfNeeded();
       if (!this.isForeground || !hasCurrentPrivacyConsent()) {
         return;
@@ -995,6 +1103,7 @@ export default class QAbility extends UIAbility {
   private async enterImmersive(windowStage: Window.WindowStage): Promise<void> {
     try {
       const mainWindow = await windowStage.getMainWindow();
+      this.registerDesktopWindowListeners(mainWindow);
       // Qt replaces the ArkUI content asynchronously after consent. Keep the
       // native window opaque during that hand-off so the launcher cannot flash.
       mainWindow.setWindowBackgroundColor(WINDOW_BACKGROUND_COLOR);
@@ -1237,6 +1346,7 @@ export default class QAbility extends UIAbility {
     setConsentAcceptedListener(undefined);
     setStartupCanvasReadyListener(undefined);
     this.stopInputStallProbe();
+    this.unregisterDesktopWindowListeners();
     hilog.info(LOG_DOMAIN, LOG_TAG, 'QAbility::onDestroy()');
     if (this.qtAbilityCreated) {
       return qpa.handleAbilityOnDestroy(this);
@@ -1348,6 +1458,7 @@ export default class QAbility extends UIAbility {
     this.rootContentLoaded = false;
     this.rootContentLoading = undefined;
     this.qtWindowStage = undefined;
+    this.unregisterDesktopWindowListeners();
     hilog.info(LOG_DOMAIN, LOG_TAG, 'QAbility::onStageDestroy()');
     this.logPrivacyProbe('window-stage-destroy');
     if (this.qtAbilityCreated) {

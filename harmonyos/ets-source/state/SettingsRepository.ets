@@ -13,6 +13,8 @@ export const SETTINGS_SCHEMA_VERSION: number = 2
 export interface UiSettings {
   schemaVersion: number
   musicEnabled: boolean
+  sfxEnabled: boolean
+  audioVolume: number
   useMetricUnits: boolean
   viewCoordinatesVisible: boolean
   viewCoordinateFamily: string
@@ -42,6 +44,8 @@ export function defaultUiSettings(): UiSettings {
   return {
     schemaVersion: SETTINGS_SCHEMA_VERSION,
     musicEnabled: false,
+    sfxEnabled: true,
+    audioVolume: 0.7,
     useMetricUnits: true,
     viewCoordinatesVisible: false,
     viewCoordinateFamily: 'equatorial',
@@ -127,6 +131,9 @@ export function migrateUiSettings(raw: string): UiSettings {
   const out = defaultUiSettings()
   out.schemaVersion = SETTINGS_SCHEMA_VERSION
   out.musicEnabled = boolOf(obj['musicEnabled'], defaults.musicEnabled)
+  out.sfxEnabled = boolOf(obj['sfxEnabled'], defaults.sfxEnabled)
+  const rawVolume = numOf(obj['audioVolume'], defaults.audioVolume)
+  out.audioVolume = Math.max(0.0, Math.min(1.0, rawVolume))
   out.useMetricUnits = boolOf(obj['useMetricUnits'], defaults.useMetricUnits)
   out.viewCoordinatesVisible = boolOf(obj['viewCoordinatesVisible'], defaults.viewCoordinatesVisible)
   out.viewCoordinateFamily = strOf(obj['viewCoordinateFamily'], defaults.viewCoordinateFamily)

@@ -44,6 +44,7 @@
 #include "StelMovementMgr.hpp"
 #include "StelObject.hpp"
 #include "OhosObjectDistance.hpp"
+#include "OhosStartupChoreography.hpp"
 #include "MousePicker.hpp"
 #include "TouchPicker.hpp"
 #include "StelObjectMgr.hpp"
@@ -96,6 +97,7 @@
 #include "MilkyWay.hpp"
 #include "ZodiacalLight.hpp"
 #include "SpecialMarkersMgr.hpp"
+#include "RocketLaunchMgr.hpp"
 #include "StelOhosCommandCatalog.hpp"
 #include "external/qtcompress/qzipreader.h"
 #include "external/qtcompress/qzipwriter.h"
@@ -283,6 +285,8 @@ static std::atomic<float> s_ohosSelectedScreenXRatio{0.0f};
 static std::atomic<float> s_ohosSelectedScreenYRatio{0.0f};
 static std::atomic<bool> s_ohosSelectedScreenValid{false};
 static std::atomic<bool> s_ohosSelectedScreenVisible{false};
+// Monotonic cache epoch for satellite pass predictions; incremented on TLE import / catalog refresh.
+static std::atomic<uint64_t> s_ohosSatPassCacheEpoch{0};
 
 // The polar-scope reticle is rendered after StelApp::draw() on the Qt render
 // thread. This keeps it in the same frame and projection as the native sky;
@@ -1010,6 +1014,229 @@ bool ohosSelectionReticleAnimating()
 	const double now = StelApp::getTotalRunTime();
 	return !s_ohosSelectionReticleKey.isEmpty() && (now - s_ohosSelectionReticleStartSec) < (kOhosReticleLockDurationSec + 0.04);
 }
+
+#if defined(__OHOS__)
+static bool s_ohosStartupBootArmed = false;
+
+static void updateOhosStartupChoreography(StelCore* core)
+{
+	const double now = StelApp::getTotalRunTime();
+	if (!s_ohosStartupBootArmed)
+	{
+		s_ohosStartupBootArmed = true;
+		OhosStartupChoreography::armOnBoot(now);
+	}
+	if (!OhosStartupChoreography::isActive() || !core)
+		return;
+
+	double sunAltDeg = -20.0;
+	float sunU = 0.5f;
+	float sunV = 0.62f;
+	bool sunVisible = false;
+
+	if (SolarSystem* ssys = GETSTELMODULE(SolarSystem))
+	{
+		if (PlanetP sun = ssys->getSun())
+		{
+			Vec3d sunAltAz = sun->getAltAzPosApparent(core);
+			if (sunAltAz.normSquared() > 1e-12)
+			{
+				sunAltAz.normalize();
+				sunAltDeg = std::asin(qBound(-1.0, sunAltAz[2], 1.0)) * M_180_PI;
+				if (const StelProjectorP prj = core->getProjection(StelCore::FrameAltAz))
+				{
+					const Vec4i vp = prj->getViewport();
+					const double vpW = std::max(1, vp[2]);
+					const double vpH = std::max(1, vp[3]);
+					Vec3d screen;
+					if (prj->project(sunAltAz, screen) &&
+					    std::isfinite(screen[0]) && std::isfinite(screen[1]))
+					{
+						const float u = static_cast<float>((screen[0] - vp[0]) / vpW);
+						const float v = static_cast<float>((screen[1] - vp[1]) / vpH);
+						if (u >= -0.05f && u <= 1.05f && v >= -0.05f && v <= 1.05f)
+						{
+							sunU = qBound(0.0f, u, 1.0f);
+							sunV = qBound(0.0f, v, 1.0f);
+							sunVisible = true;
+						}
+					}
+					if (!sunVisible)
+					{
+						Vec3d viewDir;
+						const auto center = prj->getViewportCenter();
+						if (prj->unProject(center[0] + vp[0], center[1] + vp[1], viewDir) &&
+						    viewDir.normSquared() > 1e-12)
+						{
+							viewDir.normalize();
+							Vec3d worldUp(0.0, 0.0, 1.0);
+							if (std::abs(viewDir.dot(worldUp)) > 0.98)
+								worldUp = Vec3d(1.0, 0.0, 0.0);
+							Vec3d right = viewDir ^ worldUp;
+							if (right.normSquared() > 1e-12)
+							{
+								right.normalize();
+								Vec3d up = right ^ viewDir;
+								up.normalize();
+								const double dx = sunAltAz.dot(right);
+								const double dy = sunAltAz.dot(up);
+								const double mag = std::hypot(dx, dy);
+								if (mag > 1e-6)
+								{
+									sunU = static_cast<float>(qBound(0.0, 0.5 + 0.50 * (dx / mag), 1.0));
+									sunV = static_cast<float>(qBound(0.0, 0.5 + 0.50 * (dy / mag), 1.0));
+								}
+							}
+						}
+					}
+				}
+			}
+		}
+	}
+
+	OhosStartupChoreography::updateFrame(now, sunAltDeg, sunU, sunV, sunVisible);
+}
+
+static void drawOhosStartupFlashOverlay(StelCore* core)
+{
+	if (!core || !OhosStartupChoreography::isActive())
+		return;
+	const float intensity = OhosStartupChoreography::flashIntensity();
+	QOpenGLContext* ctx = QOpenGLContext::currentContext();
+	if (!ctx)
+		return;
+	QOpenGLFunctions* gl = ctx->functions();
+	if (!gl)
+		return;
+
+	static std::unique_ptr<QOpenGLShaderProgram> s_flashProg;
+	static std::unique_ptr<QOpenGLVertexArrayObject> s_flashVao;
+	static GLuint s_flashVbo = 0;
+
+	if (!s_flashProg)
+	{
+		s_flashProg.reset(new QOpenGLShaderProgram);
+		const QByteArray vert = StelOpenGL::globalShaderPrefix(StelOpenGL::VERTEX_SHADER) + R"(
+ATTRIBUTE highp vec2 a_pos;
+VARYING highp vec2 v_uv;
+void main() {
+    v_uv = a_pos * 0.5 + 0.5;
+    gl_Position = vec4(a_pos, 0.0, 1.0);
+}
+)";
+		const QByteArray frag = StelOpenGL::globalShaderPrefix(StelOpenGL::FRAGMENT_SHADER) + R"(
+#ifdef GL_ES
+precision highp float;
+#endif
+VARYING highp vec2 v_uv;
+uniform vec2 u_sunUv;
+uniform float u_aspect;
+uniform float u_intensity;
+uniform float u_progress;
+uniform float u_isDaytime;
+uniform float u_sunOnScreen;
+uniform float u_nightVision;
+void main() {
+    vec2 center = u_isDaytime > 0.5 ? u_sunUv : vec2(0.5, 0.58);
+    vec2 delta = (v_uv - center) * vec2(u_aspect, 1.0);
+    float d = length(delta);
+
+    if (u_isDaytime > 0.5) {
+        // Sudden sunlit solar flash radiating from the exact projected real Sun position
+        float coreTight = 3.2 + 19.0 * u_progress;
+        float core = exp(-d * d * coreTight) * (u_sunOnScreen > 0.5 ? 1.0 : 0.72);
+        float waveR = u_progress * 2.15;
+        float waveRing = exp(-pow((d - waveR) / 0.16, 2.0)) * 0.44 * (1.0 - u_progress * 0.55);
+        float skyFlood = smoothstep(waveR + 0.55, max(0.0, waveR - 0.65), d) * 0.66 * (1.0 - u_progress * 0.65);
+        float anamorphic = u_sunOnScreen > 0.5
+            ? exp(-abs(v_uv.y - center.y) * 56.0) * exp(-abs(v_uv.x - center.x) * 2.2) * 0.42
+            : 0.0;
+        float energy = clamp((core + waveRing + skyFlood + anamorphic) * u_intensity, 0.0, 1.0);
+        vec3 dayCol = mix(vec3(1.0, 0.93, 0.78), vec3(1.0, 0.99, 0.96), clamp(core * 1.25, 0.0, 1.0));
+        vec3 col = u_nightVision > 0.5 ? vec3(0.95, 0.24, 0.14) : dayCol;
+        FRAG_COLOR = vec4(col, energy * 0.92);
+    } else {
+        // Cool silver-blue celestial starlight wave sweeping outward across the night dome
+        float waveR = u_progress * 1.48;
+        float ring = exp(-pow((d - waveR) / 0.085, 2.0)) * 0.34;
+        float softGlow = exp(-d * d * 2.4) * 0.16 * (1.0 - u_progress * 0.65);
+        float energy = clamp((ring + softGlow) * u_intensity, 0.0, 0.55);
+        vec3 nightCol = vec3(0.68, 0.85, 1.0);
+        vec3 col = u_nightVision > 0.5 ? vec3(0.88, 0.20, 0.14) : nightCol;
+        FRAG_COLOR = vec4(col, energy);
+    }
+}
+)";
+		if (!s_flashProg->addShaderFromSourceCode(QOpenGLShader::Vertex, vert) ||
+		    !s_flashProg->addShaderFromSourceCode(QOpenGLShader::Fragment, frag) ||
+		    !s_flashProg->link())
+		{
+			qWarning() << "OhosStartupFlashOverlay shader failed:" << s_flashProg->log();
+			s_flashProg.reset();
+			return;
+		}
+		static const GLfloat kQuad[] = {
+			-1.f, -1.f,
+			 1.f, -1.f,
+			-1.f,  1.f,
+			 1.f,  1.f
+		};
+		s_flashVao.reset(new QOpenGLVertexArrayObject);
+		s_flashVao->create();
+		s_flashVao->bind();
+		gl->glGenBuffers(1, &s_flashVbo);
+		gl->glBindBuffer(GL_ARRAY_BUFFER, s_flashVbo);
+		gl->glBufferData(GL_ARRAY_BUFFER, sizeof(kQuad), kQuad, GL_STATIC_DRAW);
+		const int posLoc = s_flashProg->attributeLocation("a_pos");
+		gl->glEnableVertexAttribArray(posLoc);
+		gl->glVertexAttribPointer(posLoc, 2, GL_FLOAT, GL_FALSE, 2 * sizeof(GLfloat), nullptr);
+		gl->glBindBuffer(GL_ARRAY_BUFFER, 0);
+		s_flashVao->release();
+	}
+	if (!s_flashProg || !s_flashProg->isLinked() || intensity <= 0.002f)
+		return;
+
+	const auto& st = OhosStartupChoreography::state();
+	const StelProjectorP prj = core->getProjection2d();
+	const Vec4i vp = prj ? prj->getViewport() : Vec4i(0, 0, 1, 1);
+	const float aspect = static_cast<float>(std::max(1, vp[2])) / static_cast<float>(std::max(1, vp[3]));
+
+	const GLboolean depthWas = gl->glIsEnabled(GL_DEPTH_TEST);
+	const GLboolean blendWas = gl->glIsEnabled(GL_BLEND);
+	const GLboolean cullWas = gl->glIsEnabled(GL_CULL_FACE);
+	const GLboolean scissorWas = gl->glIsEnabled(GL_SCISSOR_TEST);
+
+	gl->glDisable(GL_DEPTH_TEST);
+	gl->glDisable(GL_CULL_FACE);
+	gl->glDisable(GL_SCISSOR_TEST);
+	gl->glEnable(GL_BLEND);
+	if (st.isDaytime)
+		gl->glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+	else
+		gl->glBlendFunc(GL_SRC_ALPHA, GL_ONE);
+
+	if (s_flashVao && s_flashVao->isCreated())
+		s_flashVao->bind();
+	s_flashProg->bind();
+	s_flashProg->setUniformValue("u_sunUv", QVector2D(st.sunScreenU, st.sunScreenV));
+	s_flashProg->setUniformValue("u_aspect", aspect);
+	s_flashProg->setUniformValue("u_intensity", intensity);
+	s_flashProg->setUniformValue("u_progress", st.flashProgress);
+	s_flashProg->setUniformValue("u_isDaytime", st.isDaytime ? 1.0f : 0.0f);
+	s_flashProg->setUniformValue("u_sunOnScreen", st.sunOnScreen ? 1.0f : 0.0f);
+	s_flashProg->setUniformValue("u_nightVision", StelApp::getInstance().getVisionModeNight() ? 1.0f : 0.0f);
+	gl->glDrawArrays(GL_TRIANGLE_STRIP, 0, 4);
+	s_flashProg->release();
+	if (s_flashVao && s_flashVao->isCreated())
+		s_flashVao->release();
+
+	gl->glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+	if (depthWas) gl->glEnable(GL_DEPTH_TEST);
+	if (!blendWas) gl->glDisable(GL_BLEND);
+	if (cullWas) gl->glEnable(GL_CULL_FACE);
+	if (scissorWas) gl->glEnable(GL_SCISSOR_TEST);
+}
+#endif
 
 void drawOhosSelectionReticle(StelCore* core)
 {
@@ -2850,10 +3077,11 @@ static void ohosUpdateLandscapeFadeWithZoom()
 	const double fov = mvmgr->getCurrentFov();
 	const double zoomFade = smoothstep((60.0 - fov) / (60.0 - 4.0));
 
-	// Tilting down is an additional, gentler cue. It starts before the horizon
-	// and reaches 75% at the nadir, so the ground still has spatial context
-	// unless the user also zooms all the way in.
-	const double nadirFade = smoothstep((15.0 - altView) / (15.0 - -90.0)) * 0.75;
+	// Tilting down fades the ground at normal/narrow FOVs to peek below the horizon,
+	// but at wide / ultra-wide panoramic FOVs (>= 135 deg, smoothly fading out above 95 deg)
+	// the ground stays 100% solid and opaque when looking down at Earth.
+	const double wideFovSolidMask = 1.0 - smoothstep((fov - 95.0) / (135.0 - 95.0));
+	const double nadirFade = smoothstep((15.0 - altView) / (15.0 - -90.0)) * 0.75 * wideFovSolidMask;
 	double target = zoomFade + (1.0 - zoomFade) * nadirFade;
 
 	// The sky object and its selection reticle are rendered before the local
@@ -8988,13 +9216,14 @@ extern "C" __attribute__((visibility("default"))) const char* StellariumOhos_com
 						|| previous.script() == QChar::Script_Cyrillic);
 				if (latinLikeMark)
 					continue;
+				if (character.isPunct() || character.isSymbol() || character.isSpace())
+					continue;
 				const int digit = character.digitValue();
 				if (digit >= 0)
 					folded.append(QChar(QLatin1Char('0').unicode() + digit));
 				else
 					folded.append(character);
 			}
-			folded.remove(QRegularExpression(QStringLiteral("[\\p{P}\\p{S}\\s]+")));
 			return folded;
 		};
 		const QString normalizedQuery = normalizeSearchText(query);
@@ -9083,6 +9312,44 @@ extern "C" __attribute__((visibility("default"))) const char* StellariumOhos_com
 					addCandidate(pair.second->getEnglishName(), pair.second);
 					addCandidate(pair.second->getNameI18n(), pair.second);
 					addCandidate(pair.second->getID(), pair.second);
+				}
+			}
+		}
+
+		// Direct punctuation-insensitive scan over loaded SolarSystem bodies
+		// (planets, moons, comets, asteroids, interstellar objects). This avoids
+		// alphabetical maxNbItem truncation in StelObjectModule::listMatchingObjects
+		// and guarantees queries like "海尔波普", "c2026c1", "c2019y4", or "1i"
+		// always find matching comets and minor bodies.
+		if (!normalizedQuery.isEmpty())
+		{
+			if (SolarSystem* ssys = GETSTELMODULE(SolarSystem))
+			{
+				const QList<PlanetP> allBodies = ssys->getAllPlanets();
+				for (const PlanetP& body : allBodies)
+				{
+					if (!body || body->getPlanetType() == Planet::isObserver)
+						continue;
+					const StelObjectP obj = qSharedPointerCast<StelObject>(body);
+					auto checkField = [&](const QString& field) {
+						const QString trimmed = field.trimmed();
+						if (trimmed.isEmpty())
+							return;
+						const QString norm = normalizeSearchText(trimmed);
+						if (!norm.isEmpty() && (norm == normalizedQuery || norm.startsWith(normalizedQuery) || norm.contains(normalizedQuery)))
+							addCandidate(trimmed, obj);
+					};
+					checkField(body->getNameI18n());
+					checkField(body->getEnglishName());
+					checkField(body->getIAUDesignation());
+					const QString objId = body->getID();
+					if (objId != body->getEnglishName())
+						checkField(objId);
+					if (const auto comet = body.dynamicCast<Comet>())
+					{
+						for (const QString& extra : comet->getExtraDesignations())
+							checkField(extra);
+					}
 				}
 			}
 		}
@@ -9224,10 +9491,19 @@ extern "C" __attribute__((visibility("default"))) const char* StellariumOhos_com
 				}
 			}
 		}
-		std::sort(candidates.begin(), candidates.end(), [](const SearchCandidate& left, const SearchCandidate& right) {
+		auto canonicalDisplayName = [](const SearchCandidate& candidate) -> QString {
+			if (candidate.object)
+			{
+				const QString i18nName = candidate.object->getNameI18n().trimmed();
+				if (!i18nName.isEmpty())
+					return i18nName;
+			}
+			return candidate.label;
+		};
+		std::sort(candidates.begin(), candidates.end(), [&](const SearchCandidate& left, const SearchCandidate& right) {
 			if (left.rank != right.rank)
 				return left.rank < right.rank;
-			return left.label.localeAwareCompare(right.label) < 0;
+			return canonicalDisplayName(left).localeAwareCompare(canonicalDisplayName(right)) < 0;
 		});
 		QJsonArray items;
 		QJsonArray keys;
@@ -9239,9 +9515,10 @@ extern "C" __attribute__((visibility("default"))) const char* StellariumOhos_com
 		for (int i = 0; i < candidates.size() && i < maxItems; ++i)
 		{
 			const auto& candidate = candidates.at(i);
-			items.append(candidate.label);
-			// pair.first is a localized display label. Keep it for the UI, but
-			// return the object's stable English name for the follow-up selection.
+			// Always emit the object's canonical localized name so search suggestions
+			// match the small selection pill, large detail card, and browse catalog 1:1.
+			items.append(canonicalDisplayName(candidate));
+			// Return the object's stable English name for the follow-up selection and subtitle.
 			const QString key = candidate.object ? candidate.object->getEnglishName() : QString();
 			keys.append(key.isEmpty() ? candidate.label : key);
 			ids.append(candidate.object ? candidate.object->getID() : QString());
@@ -9515,6 +9792,60 @@ extern "C" __attribute__((visibility("default"))) const char* StellariumOhos_com
 			TouchPicker::setTouchRadiusVp(radius);
 			result["ok"] = true;
 			result["radiusVp"] = TouchPicker::getTouchRadiusVp();
+			return result;
+		}
+
+		if (commandName == "beginStartupAnimation")
+		{
+			OhosStartupChoreography::begin(StelApp::getTotalRunTime(), 0);
+			StelMainView::getInstance().thereWasAnEvent();
+			const auto& st = OhosStartupChoreography::state();
+			result["ok"] = true;
+			result["active"] = OhosStartupChoreography::isActive();
+			result["isDaytime"] = st.isDaytime;
+			return result;
+		}
+
+		if (commandName == "replayStartupAnimation")
+		{
+			const QString mode = arg.trimmed().toLower();
+			int forcedMode = 0;
+			if (mode == "day" || mode == "daytime")
+				forcedMode = 1;
+			else if (mode == "night" || mode == "nighttime")
+				forcedMode = 2;
+			OhosStartupChoreography::begin(StelApp::getTotalRunTime(), forcedMode);
+			StelMainView::getInstance().thereWasAnEvent();
+			const auto& st = OhosStartupChoreography::state();
+			result["ok"] = true;
+			result["active"] = OhosStartupChoreography::isActive();
+			result["forcedMode"] = forcedMode;
+			result["isDaytime"] = st.isDaytime;
+			return result;
+		}
+
+		if (commandName == "skipStartupAnimation")
+		{
+			const QString mode = arg.trimmed().toLower();
+			if (mode == "immediate")
+				OhosStartupChoreography::forceFinishImmediate();
+			else
+				OhosStartupChoreography::skip(StelApp::getTotalRunTime());
+			result["ok"] = true;
+			result["active"] = OhosStartupChoreography::isActive();
+			return result;
+		}
+
+		if (commandName == "getStartupAnimationState")
+		{
+			const auto& st = OhosStartupChoreography::state();
+			result["ok"] = true;
+			result["active"] = OhosStartupChoreography::isActive();
+			result["phase"] = static_cast<int>(st.phase);
+			result["isDaytime"] = st.isDaytime;
+			result["elapsed"] = static_cast<double>(st.elapsed);
+			result["totalDuration"] = static_cast<double>(st.totalDuration);
+			result["uiChromeOpacity"] = static_cast<double>(st.uiChromeOpacity);
 			return result;
 		}
 
@@ -13649,6 +13980,8 @@ extern "C" __attribute__((visibility("default"))) const char* StellariumOhos_com
 		// setObserverPlanet — relocate the observer onto another planet (sky + landscape recompute)
 		if (commandName == "setObserverPlanet")
 		{
+			QElapsedTimer opTimer;
+			opTimer.start();
 			if (!core)
 			{
 				result["error"] = "core not ready";
@@ -13715,9 +14048,14 @@ extern "C" __attribute__((visibility("default"))) const char* StellariumOhos_com
 				{
 					const QString earthLandscape = landscapeMgr->getCurrentLandscapeID();
 					// A transient zero horizon must not overwrite the remembered
-					// panorama.
+					// panorama. Avoid synchronous disk sync when already persisted.
 					if (!earthLandscape.isEmpty() && earthLandscape != QStringLiteral("zero"))
-						StelApp::immediateSaveNow("landscape/saved_earth_landscape_id", earthLandscape);
+					{
+						const QString currentSaved = StelApp::getInstance().getSettings()
+							->value("landscape/saved_earth_landscape_id").toString();
+						if (currentSaved != earthLandscape)
+							StelApp::immediateSaveNow("landscape/saved_earth_landscape_id", earthLandscape);
+					}
 				}
 				if (loc.planetName == QStringLiteral("Earth"))
 				{
@@ -13732,11 +14070,22 @@ extern "C" __attribute__((visibility("default"))) const char* StellariumOhos_com
 				}
 				else if (landscapeMgr->getFlagLandscapeAutoSelection())
 				{
-					landscapeHint = loc.planetName;
+					// Match lowercase landscape directory IDs directly (e.g. "mars", "moon");
+					// clear otherwise so onTargetLocationChanged resolves by name or falls back to "zero".
+					landscapeHint = loc.planetName.toLower();
+					if (!landscapeMgr->getAllLandscapeIDs().contains(landscapeHint))
+						landscapeHint.clear();
 				}
 			}
 			if (planetChanged || parts.size() >= 4)
 				core->moveObserverTo(loc, 0.0, 0.0, landscapeHint);
+			if (planetChanged && loc.role != QChar('o') && landscapeMgr)
+			{
+				// Reset any lingering zoom/nadir fade so the new body's landscape appears cleanly.
+				s_landscapeFadeSmooth = 0.f;
+				if (s_landscapeFadeWithZoom)
+					landscapeMgr->setLandscapeTransparency(0.0);
+			}
 			markOhosInteraction();
 			const StelLocation& actual = core->getCurrentLocation();
 			result["ok"] = true;
@@ -13746,6 +14095,7 @@ extern "C" __attribute__((visibility("default"))) const char* StellariumOhos_com
 			result["longitude"] = actual.getLongitude(true);
 			result["altitude"] = actual.altitude;
 			result["landscapeID"] = landscapeMgr ? landscapeMgr->getCurrentLandscapeID() : QString();
+			qInfo() << "[StellariumOhos] setObserverPlanet done:" << actual.planetName << "planetChanged=" << planetChanged << "ms=" << opTimer.elapsed();
 			return result;
 		}
 
@@ -19179,6 +19529,10 @@ extern "C" __attribute__((visibility("default"))) const char* StellariumOhos_com
 				sats->updateFromFiles(validPaths, options.value("deleteFiles").toBool(false));
 				const int after = sats->listAllIds().size();
 				const bool succeeded = sats->getUpdateState() == Satellites::CompleteUpdates || sats->getUpdateState() == Satellites::CompleteNoUpdates;
+				if (succeeded)
+				{
+					s_ohosSatPassCacheEpoch.fetch_add(1, std::memory_order_relaxed);
+				}
 				result["ok"] = succeeded;
 				if (!succeeded)
 				{
@@ -19217,6 +19571,7 @@ extern "C" __attribute__((visibility("default"))) const char* StellariumOhos_com
 					return result;
 				}
 				sats->updateFromOnlineSources();
+				s_ohosSatPassCacheEpoch.fetch_add(1, std::memory_order_relaxed);
 				result["ok"] = sats->getUpdateState() == Satellites::Updating;
 				result["updateState"] = static_cast<int>(sats->getUpdateState());
 				if (sats->getUpdateState() != Satellites::Updating) result["error"] = "satellite update could not start";
@@ -19528,10 +19883,133 @@ extern "C" __attribute__((visibility("default"))) const char* StellariumOhos_com
 			return result;
 		}
 
+		// Rocket launch trajectory & twilight plume simulation commands (Phase 1+)
+		if (commandName == "getRocketLaunchCatalog")
+		{
+			return RocketLaunchMgr::catalogToJson();
+		}
+		if (commandName == "parseRocketNotam")
+		{
+			const QJsonDocument doc = QJsonDocument::fromJson(arg.toUtf8());
+			const QJsonObject jo = doc.isObject() ? doc.object() : QJsonObject();
+			const QString notamText = jo.isEmpty() ? arg : jo.value(QStringLiteral("notamText")).toString();
+			double padLat = jo.value(QStringLiteral("padLatDeg")).toDouble(0.0);
+			double padLon = jo.value(QStringLiteral("padLonDeg")).toDouble(0.0);
+			bool hasPad = jo.contains(QStringLiteral("padLatDeg")) && jo.contains(QStringLiteral("padLonDeg"));
+			const QString siteId = jo.value(QStringLiteral("siteId")).toString().trimmed();
+			if (!hasPad && !siteId.isEmpty())
+			{
+				for (const auto& s : RocketLaunchMgr::launchSites())
+				{
+					if (s.id == siteId)
+					{
+						padLat = s.latDeg; padLon = s.lonDeg; hasPad = true;
+						break;
+					}
+				}
+			}
+			const RocketNotamZone z = RocketLaunchMgr::parseNotamText(notamText, padLat, padLon, hasPad);
+			result["ok"] = z.valid;
+			result["valid"] = z.valid;
+			if (!z.valid)
+			{
+				result["error"] = QStringLiteral("未能解析到有效 NOTAM 坐标或 Q 行圆");
+				return result;
+			}
+			result["notamId"] = z.notamId;
+			result["validFromUtc"] = z.validFromUtc;
+			result["validToUtc"] = z.validToUtc;
+			result["hasCircle"] = z.hasCircle;
+			result["circleLatDeg"] = z.circleLatDeg;
+			result["circleLonDeg"] = z.circleLonDeg;
+			result["circleRadiusKm"] = z.circleRadiusKm;
+			result["centerLatDeg"] = z.centerLatDeg;
+			result["centerLonDeg"] = z.centerLonDeg;
+			result["invertedAzimuthDeg"] = z.invertedAzimuthDeg;
+			result["downrangeKm"] = z.downrangeKm;
+			QJsonArray polyArr;
+			for (const auto& pt : z.polygonLatLon)
+				polyArr.append(QJsonArray{pt.first, pt.second});
+			result["polygon"] = polyArr;
+			return result;
+		}
+		if (commandName == "simulateRocketLaunch")
+		{
+			StelCore* core = StelApp::getInstance().getCore();
+			const QJsonDocument doc = QJsonDocument::fromJson(arg.toUtf8());
+			const QJsonObject jo = doc.isObject() ? doc.object() : QJsonObject();
+			const StelLocation loc = core ? core->getCurrentLocation() : StelLocation();
+			const double obsLat = jo.contains(QStringLiteral("observerLatDeg")) ? jo.value(QStringLiteral("observerLatDeg")).toDouble() : static_cast<double>(loc.getLatitude());
+			const double obsLon = jo.contains(QStringLiteral("observerLonDeg")) ? jo.value(QStringLiteral("observerLonDeg")).toDouble() : static_cast<double>(loc.getLongitude());
+			const double obsAlt = jo.contains(QStringLiteral("observerAltM")) ? jo.value(QStringLiteral("observerAltM")).toDouble() : static_cast<double>(loc.altitude);
+			const bool includeFullTrack = jo.value(QStringLiteral("includeFullTrack")).toBool(true);
+
+			LandscapeMgr* landscapeMgr = GETSTELMODULE(LandscapeMgr);
+			std::function<double(double)> horizonLookup = nullptr;
+			if (landscapeMgr && landscapeMgr->getFlagLandscape())
+			{
+				horizonLookup = [landscapeMgr](double azDeg) -> double {
+					// Binary search landscape opacity threshold in [0..45] deg (~0.18 deg resolution)
+					if (landscapeMgr->getLandscapeOpacity(static_cast<float>(azDeg), 0.0f) < 0.5f)
+						return 0.0;
+					double lo = 0.0, hi = 45.0;
+					for (int iter = 0; iter < 8; ++iter)
+					{
+						const double mid = 0.5 * (lo + hi);
+						if (landscapeMgr->getLandscapeOpacity(static_cast<float>(azDeg), static_cast<float>(mid)) >= 0.5f)
+							lo = mid;
+						else
+							hi = mid;
+					}
+					return lo;
+				};
+			}
+
+			const RocketSimulationResult sim = RocketLaunchMgr::simulate(jo, obsLat, obsLon, obsAlt, horizonLookup);
+			if (jo.value(QStringLiteral("activatePreview")).toBool(false))
+			{
+				if (RocketLaunchMgr* rlm = GETSTELMODULE(RocketLaunchMgr))
+				{
+					const double startT = sim.firstVisibleSec > 5.0 ? std::max(0.0, sim.firstVisibleSec - 5.0) : 0.0;
+					rlm->setActivePreview(sim, startT, jo.value(QStringLiteral("autoPlay")).toBool(false), jo.value(QStringLiteral("speed")).toDouble(1.0));
+				}
+			}
+			return RocketLaunchMgr::simulationToJson(sim, includeFullTrack);
+		}
+		if (commandName == "setRocketLaunchPreview")
+		{
+			RocketLaunchMgr* rlm = GETSTELMODULE(RocketLaunchMgr);
+			if (!rlm) { result["error"] = "RocketLaunchMgr not found"; return result; }
+			const QJsonDocument doc = QJsonDocument::fromJson(arg.toUtf8());
+			const QJsonObject jo = doc.isObject() ? doc.object() : QJsonObject();
+			const QString action = jo.value(QStringLiteral("action")).toString().trimmed();
+			if (action == QLatin1String("clear"))
+			{
+				rlm->clearActivePreview();
+			}
+			else if (action == QLatin1String("playback"))
+			{
+				rlm->setPreviewPlayback(
+					jo.contains(QStringLiteral("timeSec")) ? jo.value(QStringLiteral("timeSec")).toDouble(-1.0) : -1.0,
+					jo.value(QStringLiteral("playing")).toBool(false),
+					jo.value(QStringLiteral("speed")).toDouble(-1.0));
+			}
+			else if (action == QLatin1String("framing"))
+			{
+				rlm->setPreviewFramingFocalMm(jo.value(QStringLiteral("focalMm")).toInt(0));
+			}
+			result = rlm->getPreviewStateJson();
+			result["ok"] = true;
+			return result;
+		}
+
 		// getTonightEvents — 聚合"今晚看什么"：月相、日月升落与天文暮光、
 		// 主要行星升落/星等/可见性、活跃流星雨、卫星概况。供 ArkTS 今夜天文事件面板。
 		if (commandName == "getTonightEvents")
 		{
+			QElapsedTimer tnTimer;
+			tnTimer.start();
+			const bool liteMode = (arg.trimmed().compare(QStringLiteral("lite"), Qt::CaseInsensitive) == 0);
 			StelCore* core = StelApp::getInstance().getCore();
 			SolarSystem* ssys = GETSTELMODULE(SolarSystem);
 			// 暗夜开始时刻（天文暮光结束），供流星雨等事件的跳转时间基准
@@ -19612,6 +20090,27 @@ extern "C" __attribute__((visibility("default"))) const char* StellariumOhos_com
 				return illum;
 			};
 
+			const double localDayJD = nowJD + core->getUTCOffset(nowJD) / 24.0;
+			const QDate localCivilDate = QDate::fromJulianDay(static_cast<qint64>(std::floor(localDayJD + 0.5)));
+			// Earth RTS cache: Planet::getRTSTime() calls core->update(0) across all minor bodies (~60ms each x 10 = ~600ms).
+			// Cache rise/transit/set per (~20km, civilDate) bucket so auto-location & returning to Earth finish in < 10ms.
+			static QString s_cachedEarthRtsKey;
+			static Vec4d s_cachedMoonRts(0.0, 0.0, 0.0, 0.0);
+			static Vec4d s_cachedSunRts(0.0, 0.0, 0.0, 0.0);
+			static Vec4d s_cachedSunAstroRts(0.0, 0.0, 0.0, 0.0);
+			static QHash<QString, Vec4d> s_cachedPlanetRts;
+			const QString earthRtsKey = isEarthObserver
+				? QStringLiteral("%1|%2|%3-%4-%5")
+					.arg(static_cast<int>(std::round(static_cast<double>(currentLoc.getLatitude()) * 5.0)))
+					.arg(static_cast<int>(std::round(static_cast<double>(currentLoc.getLongitude()) * 5.0)))
+					.arg(localCivilDate.year()).arg(localCivilDate.month()).arg(localCivilDate.day())
+				: QString();
+			const bool earthRtsCacheHit = isEarthObserver && (earthRtsKey == s_cachedEarthRtsKey);
+			if (isEarthObserver && !earthRtsCacheHit)
+			{
+				s_cachedPlanetRts.clear();
+			}
+
 			QJsonObject moonObj;
 			QJsonObject companionObj;
 			if (isEarthObserver)
@@ -19625,7 +20124,8 @@ extern "C" __attribute__((visibility("default"))) const char* StellariumOhos_com
 					moonObj["phaseName"] = moonPhaseNameZh(age);
 					moonObj["illumination"] = illum;
 					moonObj["age"] = age;
-					Vec4d mrts = moon->getRTSTime(core);
+					Vec4d mrts = earthRtsCacheHit ? s_cachedMoonRts : moon->getRTSTime(core);
+					if (!earthRtsCacheHit) s_cachedMoonRts = mrts;
 					moonObj["rise"] = fmtLocal(mrts[0]);
 					moonObj["transit"] = fmtLocal(mrts[1]);
 					moonObj["set"] = fmtLocal(mrts[2]);
@@ -19671,13 +20171,16 @@ extern "C" __attribute__((visibility("default"))) const char* StellariumOhos_com
 			PlanetP sun = ssys->getSun();
 			if (sun)
 			{
+				Vec4d srts(0.0, 0.0, 0.0, 0.0);
 				if (isEarthObserver)
 				{
-					Vec4d srts = sun->getRTSTime(core);
+					srts = earthRtsCacheHit ? s_cachedSunRts : sun->getRTSTime(core);
+					if (!earthRtsCacheHit) s_cachedSunRts = srts;
 					sunObj["rise"] = fmtLocal(srts[0]);
 					sunObj["transit"] = fmtLocal(srts[1]);
 					sunObj["set"] = fmtLocal(srts[2]);
-					Vec4d astro = sun->getRTSTime(core, -18.0);
+					Vec4d astro = earthRtsCacheHit ? s_cachedSunAstroRts : sun->getRTSTime(core, -18.0);
+					if (!earthRtsCacheHit) s_cachedSunAstroRts = astro;
 					const double astroEnd = astro[2];
 					double astroStart = astro[0];
 					// getRTSTime() returns the morning and evening events in the same
@@ -19699,17 +20202,39 @@ extern "C" __attribute__((visibility("default"))) const char* StellariumOhos_com
 				if (sunObj.contains("darkWindowHours"))
 					sunCycleObj["darkWindowHours"] = sunObj["darkWindowHours"];
 
-				// Scan forward 48h in 0.5h steps for the next sunrise/sunset crossing (exact on any planet!)
+				// Fast path: Earth already has exact sunrise/sunset from sun->getRTSTime(core).
+				// Avoid running a 96-step + 12-bisection VSOP87 loop on the Qt render thread.
 				QString nextEventType = (std::isfinite(sunAltNow) && sunAltNow > -0.5) ? QStringLiteral("polar-day") : QStringLiteral("polar-night");
 				double nextEventJD = 0.0;
-				if (currentPlanet && std::isfinite(sunAltNow))
+				bool foundNextEvent = false;
+				if (isEarthObserver && (srts[0] > 0.0 || srts[2] > 0.0))
 				{
+					double nextRise = srts[0];
+					double nextSet = srts[2];
+					if (nextRise > 0.0 && nextRise <= nowJD) nextRise += 1.0;
+					if (nextSet > 0.0 && nextSet <= nowJD) nextSet += 1.0;
+					if (nextRise > nowJD && (nextSet <= nowJD || nextRise < nextSet))
+					{
+						nextEventJD = nextRise;
+						nextEventType = QStringLiteral("sunrise");
+						foundNextEvent = true;
+					}
+					else if (nextSet > nowJD)
+					{
+						nextEventJD = nextSet;
+						nextEventType = QStringLiteral("sunset");
+						foundNextEvent = true;
+					}
+				}
+				if (!foundNextEvent && !liteMode && currentPlanet && std::isfinite(sunAltNow))
+				{
+					// Coarse 2-hour scan (24 steps) + 8-step bisection (< 30s accuracy, 4x fewer ephemeris calls).
 					double prevJD = nowJD;
 					double prevAlt = sunAltNow;
-					const int scanSteps = 96; // 48 hours at 30-min resolution
+					const int scanSteps = 24;
 					for (int s = 1; s <= scanSteps; ++s)
 					{
-						const double sampleJD = nowJD + (s * 0.5) / 24.0;
+						const double sampleJD = nowJD + (s * 2.0) / 24.0;
 						const double sampleAlt = ohosCalendarTopocentricAlt(core, currentPlanet, currentLoc, sun, sampleJD);
 						if (!std::isfinite(sampleAlt)) continue;
 						if ((prevAlt <= -0.5 && sampleAlt > -0.5) || (prevAlt >= -0.5 && sampleAlt < -0.5))
@@ -19717,7 +20242,7 @@ extern "C" __attribute__((visibility("default"))) const char* StellariumOhos_com
 							const bool rising = sampleAlt > prevAlt;
 							double lo = prevJD;
 							double hi = sampleJD;
-							for (int b = 0; b < 12; ++b)
+							for (int b = 0; b < 8; ++b)
 							{
 								const double mid = 0.5 * (lo + hi);
 								const double midAlt = ohosCalendarTopocentricAlt(core, currentPlanet, currentLoc, sun, mid);
@@ -19744,23 +20269,50 @@ extern "C" __attribute__((visibility("default"))) const char* StellariumOhos_com
 					}
 				}
 
-				// Build 25-point 48-hour lightweight timeline (every 2 hours) for offline desktop widget interpolation
-				if (currentPlanet)
+				// Build 25-point 48-hour lightweight timeline (every 2 hours) ONLY for full widget refreshes.
+				// Hoist precession matrix & reuse a single heliocentric evaluation per sample (no throwaway waxing pass).
+				if (!liteMode && currentPlanet)
 				{
+					const double deltaTDays = core->computeDeltaT(nowJD) / 86400.0;
+					const Mat4d vsopToEq = ohosCalendarVsopToEq(currentPlanet, nowJD + deltaTDays);
+					const double latRad = static_cast<double>(currentLoc.getLatitude()) * M_PI / 180.0;
+					const double sinLat = std::sin(latRad);
+					const double cosLat = std::cos(latRad);
+					const double lonDeg = static_cast<double>(currentLoc.getLongitude());
+					auto fastAltFromDir = [&](const Vec3d& dir, double sampleJD, double sampleJDE) -> double {
+						const double dNorm = dir.norm();
+						if (!std::isfinite(dNorm) || dNorm <= 1e-12) return std::numeric_limits<double>::quiet_NaN();
+						const Vec3d eq = vsopToEq * (dir / dNorm);
+						const double eqNorm = eq.norm();
+						if (!std::isfinite(eqNorm) || eqNorm <= 1e-12) return std::numeric_limits<double>::quiet_NaN();
+						const double ra = std::atan2(eq[1], eq[0]);
+						const double dec = std::asin(qBound(-1.0, eq[2] / eqNorm, 1.0));
+						const double lstRad = (currentPlanet->getSiderealTime(sampleJD, sampleJDE) + lonDeg) * M_PI / 180.0;
+						const double sinAlt = sinLat * std::sin(dec) + cosLat * std::cos(dec) * std::cos(lstRad - ra);
+						return std::asin(qBound(-1.0, sinAlt, 1.0)) * M_180_PI;
+					};
 					for (int step = 0; step <= 24; ++step)
 					{
 						const double sampleJD = nowJD + (step * 2.0) / 24.0;
-						const double sAlt = ohosCalendarTopocentricAlt(core, currentPlanet, currentLoc, sun, sampleJD);
+						const double sampleJDE = sampleJD + deltaTDays;
+						Vec3d obsPos, obsVel;
+						const bool hasObs = ohosCalendarHelioState(currentPlanet, sampleJDE, obsPos, obsVel);
+						const double sAlt = hasObs ? fastAltFromDir(-obsPos, sampleJD, sampleJDE) : std::numeric_limits<double>::quiet_NaN();
 						const double safeSunAlt = std::isfinite(sAlt) ? sAlt : -30.0;
 						const auto sky = PlanetaryCalendarHelper::skyHexForSunAltitude(obsPlanetEn.toStdString(), hasAtmo, safeSunAlt);
 						double cAlt = -90.0;
 						double cIllum = 0.0;
-						if (companionBody)
+						if (hasObs && companionBody)
 						{
-							const double rawCAlt = ohosCalendarTopocentricAlt(core, currentPlanet, currentLoc, companionBody, sampleJD);
-							if (std::isfinite(rawCAlt)) cAlt = rawCAlt;
-							bool dummyWaxing = true;
-							cIllum = computeCompanionIllum(sampleJD, dummyWaxing);
+							Vec3d compPos, compVel;
+							if (ohosCalendarHelioState(companionBody, sampleJDE, compPos, compVel))
+							{
+								const Vec3d obsToComp = compPos - obsPos;
+								const double rawCAlt = fastAltFromDir(obsToComp, sampleJD, sampleJDE);
+								if (std::isfinite(rawCAlt)) cAlt = rawCAlt;
+								cIllum = PlanetaryCalendarHelper::illuminationPercent(
+									{obsToComp[0], obsToComp[1], obsToComp[2]}, {compPos[0], compPos[1], compPos[2]});
+							}
 						}
 						QJsonObject pt;
 						pt["at"] = std::round((sampleJD - 2440587.5) * 86400000.0);
@@ -19792,7 +20344,10 @@ extern "C" __attribute__((visibility("default"))) const char* StellariumOhos_com
 				po["englishName"] = pn;
 				if (isEarthObserver)
 				{
-					Vec4d rts = p->getRTSTime(core);
+					Vec4d rts = (earthRtsCacheHit && s_cachedPlanetRts.contains(pn))
+						? s_cachedPlanetRts.value(pn)
+						: p->getRTSTime(core);
+					if (!earthRtsCacheHit) s_cachedPlanetRts.insert(pn, rts);
 					po["rise"] = fmtLocal(rts[0]);
 					po["transit"] = fmtLocal(rts[1]);
 					po["set"] = fmtLocal(rts[2]);
@@ -19804,6 +20359,10 @@ extern "C" __attribute__((visibility("default"))) const char* StellariumOhos_com
 				po["altitude"] = alt;
 				po["visible"] = alt > 0;
 				planets.append(po);
+			}
+			if (isEarthObserver && !earthRtsCacheHit)
+			{
+				s_cachedEarthRtsKey = earthRtsKey;
 			}
 			out["planets"] = planets;
 
@@ -19879,10 +20438,27 @@ extern "C" __attribute__((visibility("default"))) const char* StellariumOhos_com
 			}
 			out["satellites"] = satObj;
 
-			// 未来 48 小时重点人造卫星过境预报（供桌面「卫星过境」卡片与提醒复用，最多扫描 6 颗代表航天器）
+			// 未来 48 小时重点人造卫星过境预报（供桌面「卫星过境」卡片与提醒复用，lite 模式跳过；全量模式按 0.1° + 30min 缓存）
 			QJsonArray satellitePasses;
-			if (sats && isEarthObserver)
+			if (!liteMode && sats && isEarthObserver)
 			{
+				static QString s_cachedSatPassKey;
+				static QJsonArray s_cachedSatPasses;
+				const qint64 lastUpdSec = sats->getLastUpdate().first.isValid()
+					? sats->getLastUpdate().first.toSecsSinceEpoch() : 0;
+				const QString satKey = QStringLiteral("%1|%2|%3|%4|%5|%6")
+					.arg(static_cast<int>(std::round(static_cast<double>(currentLoc.getLatitude()) * 10.0)))
+					.arg(static_cast<int>(std::round(static_cast<double>(currentLoc.getLongitude()) * 10.0)))
+					.arg(static_cast<qint64>(std::floor(nowJD * 48.0)))
+					.arg(static_cast<qulonglong>(s_ohosSatPassCacheEpoch.load(std::memory_order_relaxed)))
+					.arg(lastUpdSec)
+					.arg(sats->listAllIds().size());
+				if (satKey == s_cachedSatPassKey)
+				{
+					satellitePasses = s_cachedSatPasses;
+				}
+				else
+				{
 				const QStringList flagshipIds = QStringList()
 					<< "25544" // ISS (ZARYA)
 					<< "48274" // CSS (TIANHE)
@@ -19950,14 +20526,28 @@ extern "C" __attribute__((visibility("default"))) const char* StellariumOhos_com
 						if (satellitePasses.size() >= 6) break;
 					}
 				}
+				s_cachedSatPassKey = satKey;
+				s_cachedSatPasses = satellitePasses;
+				}
 			}
 			out["satellitePasses"] = satellitePasses;
 
-			// 未来最多 8 场天象预告（当前观测星球视角，跨未来 3 个月，供「天象预告」翻页列表与「天穹之窗」倒计时）
+			// 未来最多 8 场天象预告（当前观测星球视角，跨未来 3 个月；lite 模式跳过，全量模式按星球+日期缓存）
 			QJsonArray upcomingEvents;
+			if (!liteMode)
 			{
 				const double localJD = nowJD + core->getUTCOffset(nowJD) / 24.0;
 				const QDate baseDate = QDate::fromJulianDay(static_cast<qint64>(std::floor(localJD + 0.5)));
+				static QString s_cachedUpcomingKey;
+				static QJsonArray s_cachedUpcomingEvents;
+				const QString upcomingKey = QStringLiteral("%1|%2-%3-%4")
+					.arg(obsPlanetEn).arg(baseDate.year()).arg(baseDate.month()).arg(baseDate.day());
+				if (upcomingKey == s_cachedUpcomingKey)
+				{
+					upcomingEvents = s_cachedUpcomingEvents;
+				}
+				else
+				{
 				QList<QJsonObject> candidates;
 				for (int mOff = 0; mOff <= 2; ++mOff)
 				{
@@ -19998,6 +20588,9 @@ extern "C" __attribute__((visibility("default"))) const char* StellariumOhos_com
 					upcomingEvents.append(ev);
 					if (upcomingEvents.size() >= 8) break;
 				}
+				s_cachedUpcomingKey = upcomingKey;
+				s_cachedUpcomingEvents = upcomingEvents;
+				}
 			}
 			out["upcomingEvents"] = upcomingEvents;
 
@@ -20005,6 +20598,7 @@ extern "C" __attribute__((visibility("default"))) const char* StellariumOhos_com
 
 			result["ok"] = true;
 			result["tonight"] = out;
+			qInfo() << "[StellariumOhos] getTonightEvents(" << (liteMode ? "lite" : "full") << ") planet=" << obsPlanetEn << "ms=" << tnTimer.elapsed();
 			return result;
 		}
 
@@ -25360,8 +25954,12 @@ void main()
 	highp float inLens = (1.0 - smoothstep(u_lensCircle.z - u_lensCircle.w * 0.6, u_lensCircle.z + u_lensCircle.w * 0.6, dist)) * u_lensAlpha;
 	highp vec3 midCol = texture2D(u_mid, v_uv).rgb;
 	highp vec3 emitCol = texture2D(u_emit, v_uv).rgb;
-	highp vec3 whiteCol = texture2D(u_white, v_uv).rgb;
-	highp vec3 transmittance = clamp(whiteCol - emitCol, vec3(0.0), vec3(1.0));
+	highp vec3 probeCol = texture2D(u_white, v_uv).rgb;
+	// Pass 2 clears sceneFBO to mid-grey (64/255) instead of white (1.0) so
+	// additive layers (3D constellation models, stars, lines: GL_SRC_ALPHA/GL_ONE)
+	// have headroom (191/255 = 0.749) without clamping to 1.0 and dimming over bright glass.
+	const highp float kProbeGrey = 64.0 / 255.0;
+	highp vec3 transmittance = clamp((probeCol - emitCol) / kProbeGrey, vec3(0.0), vec3(1.0));
 	highp vec3 frontOverMid = clamp(midCol * transmittance + emitCol, vec3(0.0), vec3(1.0));
 	FRAG_COLOR = vec4(mix(midCol, frontOverMid, inLens), 1.0);
 }
@@ -25555,6 +26153,7 @@ void main()
 		// advances. The maintainer below then compensates this very frame instead
 		// of anchoring one time-step late and visibly drifting after release.
 		ohosUpdatePinchSettle(dt);
+		updateOhosStartupChoreography(ohosCore);
 		app.update(dt);
 		if (!s_ohosKeyboardPanKeys.isEmpty())
 			ohosCaptureSelectedZoomAnchor();
@@ -25654,7 +26253,8 @@ void main()
 					gl->glBindFramebuffer(GL_DRAW_FRAMEBUFFER, s_lensEmitFbo);
 					backdropExtraFns->glBlitFramebuffer(0, 0, width, height, 0, 0, width, height, GL_COLOR_BUFFER_BIT, GL_NEAREST);
 
-					// Pass 2: capture White (post-lens drawn over white inside sceneFBO) to recover exact transmittance T = W - E
+					// Pass 2: capture Probe (post-lens drawn over mid-grey 64/255 inside sceneFBO)
+					// to recover exact transmittance T = (P - E) / k without clamping additive layers.
 					if (splitSkyDrawer && pass0WorldLum > 0.f)
 						splitSkyDrawer->reportLuminanceInFov(pass0WorldLum, true);
 					gl->glBindFramebuffer(GL_FRAMEBUFFER, targetFbo);
@@ -25672,7 +26272,8 @@ void main()
 						gl->glColorMask(GL_TRUE, GL_TRUE, GL_TRUE, GL_TRUE);
 						gl->glBindFramebuffer(GL_FRAMEBUFFER, static_cast<GLuint>(activeFbo));
 						gl->glViewport(0, 0, width, height);
-						gl->glClearColor(1.f, 1.f, 1.f, 1.f);
+						constexpr float kProbeGrey = 64.0f / 255.0f;
+						gl->glClearColor(kProbeGrey, kProbeGrey, kProbeGrey, 1.f);
 						gl->glClear(GL_COLOR_BUFFER_BIT);
 						gl->glClearColor(0.f, 0.f, 0.f, 0.f);
 						gl->glColorMask(cmWas[0], cmWas[1], cmWas[2], cmWas[3]);
@@ -25734,6 +26335,7 @@ void main()
 			drawOhosSelectionReticle(ohosCore);
 			drawOhosPolarScopeOverlay(ohosCore);
 			drawOhosTelescopeOverlay(ohosCore);
+			drawOhosStartupFlashOverlay(ohosCore);
 		}
 		t4 = StelApp::getTotalRunTime();
 	}
@@ -25955,6 +26557,7 @@ bool StelMainView::needsMaxFPS() const
 		&& ((moveMgr && moveMgr->getCurrentFov() < 28.0) || satelliteSelected);
 	return (now - lastEventTimeSec < 0.8) || s_ohosPanInertiaActive || s_ohosPinchActive ||
 		s_ohosPinchSettleActive || s_gyroTransitionActive ||
+		OhosStartupChoreography::isPlaying() ||
 		(moveMgr && moveMgr->getFlagAutoMove()) ||
 		zoomedLiveMotion || auroraAnimating || ohosSelectionReticleAnimating() ||
 		ohosTelescopeMarkerAnimating() || fabs(timeRate) > StelCore::JD_SECOND;

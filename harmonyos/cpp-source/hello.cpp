@@ -4,6 +4,7 @@
 #include "napi/native_api.h"
 #include "PresentationGeometry.h"
 #include "DetailModelNative.h"
+#include "AetherisAudioNative.h"
 
 #include <EGL/egl.h>
 #include <GLES3/gl3.h>
@@ -1288,6 +1289,7 @@ static napi_value Init(napi_env env, napi_value exports)
     };
     napi_define_properties(env, exports, sizeof(desc) / sizeof(desc[0]), desc);
     registerDetailModelNapi(env, exports);
+    registerAetherisAudioNapi(env, exports);
     registerNativeXComponent(env, exports);
     return exports;
 }

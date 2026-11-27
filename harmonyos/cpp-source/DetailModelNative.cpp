@@ -540,7 +540,7 @@ napi_value RenderDetailModelProcedural(napi_env env, napi_callback_info info) {
 }
 
 // ---------------------------------------------------------------------------
-// 3. Constellation 3D Mesh Rasterizer (SCM1 binary format, 82 constellations)
+// 3. Constellation 3D Mesh Rasterizer (SCM1 binary format, 87 models / 88 IAU constellations; Argo Navis split into Car/Vel/Pup)
 // ---------------------------------------------------------------------------
 struct CachedScmMesh {
     uint64_t fingerprint = 0;

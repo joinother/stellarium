@@ -262,6 +262,7 @@ private:
 	QVector<Vec3f> modelColors;
 	QVector<unsigned short> modelIndices;
 	Vec3d modelCenter = Vec3d(0., 0., 1.);
+	Vec3d modelPivot = Vec3d(0., 0., 1.);
 	Vec3d modelRight = Vec3d(1., 0., 0.);
 	Vec3d modelUp = Vec3d(0., 1., 0.);
 	double modelSpanDegrees = 1.;
@@ -290,6 +291,7 @@ private:
 	bool lineAnimActive = false;
 	double lineAnimRawProgress = 1.0;
 	void loadArtModel(const QString& path, const Mat4d& transform, int width, int height);
+	void setSharedModelFrame(const Vec3d& pivot, const Vec3d& right, const Vec3d& up);
 	void drawArtModel(StelPainter& painter, float intensity, const Vec3d& velocity, bool managedDepthState = false) const;
 	SphericalCap boundingCap;
 	SphericalRegionP convexHull; //!< The convex hull formed by stars contained in the defined lines (constellation) plus extra stars (hullExtension).

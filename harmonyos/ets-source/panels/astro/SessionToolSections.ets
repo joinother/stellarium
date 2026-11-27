@@ -11,16 +11,30 @@ import { panelFontSize } from '../../common/ui/UiTypography'
 // 滑块/输入/结果文案由 store + @Prop 驱动实时刷新。
 // 引擎与桥依赖仍在宿主，以回调解入。
 
+// 独立封装观测星球下拉框：严禁把 200+ 项数组做成 @Prop（ArkUI @Prop 会在父组件每次重渲染时深拷贝整组数组，
+// 触发 6000+ RS 指令 / 1.84MB IPC 分包导致 480ms 掉帧）。改由整型 optionsVersion 驱动，仅列表加载或切换语言时刷新一次。
 @Component
-export struct ObserverPlanetSection {
-  @ObjectLink store: SessionToolStore
-  @StorageProp('stellariumReadableUi') readableUi: boolean = false
+struct ObserverPlanetDropdown {
+  @Prop @Watch('refreshCachedOptions') optionsVersion: number = 0
+  @Prop @Watch('refreshCachedOptions') uiLang: string = 'zh_CN'
+  @Prop selectedIndex: number = 0
+  @Prop selectedValue: string = ''
+  @Prop readableUi: boolean = false
+  @State private cachedOptions: SelectOption[] = []
   @State c: ThemeSlots = DEFAULT_SLOTS
   // Same night-mode treatment as Settings → Interface language: an opaque
   // deep red-black menu with no extra blur material.
   @StorageLink('stellariumNightMode') private nightMode: boolean = false
-  planetLabel: (en: string) => string = (en: string) => en
-  onSelectPlanet: (name: string) => void = () => {}
+  getOptions: () => SelectOption[] = () => []
+  onSelectIndex: (index: number) => void = () => {}
+
+  aboutToAppear(): void {
+    this.cachedOptions = this.getOptions()
+  }
+
+  private refreshCachedOptions(): void {
+    this.cachedOptions = this.getOptions()
+  }
 
   onWillApplyTheme(theme: Theme): void {
     this.c = slotsFromTheme(theme)
@@ -31,32 +45,102 @@ export struct ObserverPlanetSection {
   }
 
   build() {
+    Select(this.cachedOptions)
+      .selected(this.selectedIndex)
+      .value(this.selectedValue)
+      .font({ size: panelFontSize(14, this.readableUi) })
+      .fontColor(this.c.text)
+      .selectedOptionFontColor(this.c.onAccent)
+      .optionFontColor(this.c.text)
+      .backgroundColor(this.c.input)
+      .selectedOptionBgColor(this.c.accent)
+      .optionBgColor(this.menuBackground())
+      .menuBackgroundColor(this.menuBackground())
+      // The default COMPONENT_ULTRA_THICK material adds a light layer on
+      // top of the opaque menu and breaks night mode.
+      .menuBackgroundBlurStyle(BlurStyle.NONE)
+      .borderRadius(UI_RADIUS_CONTROL)
+      .width('100%').height(44)
+      .id('observer-planet-select')
+      .onSelect((index: number) => {
+        this.onSelectIndex(index)
+      })
+  }
+}
+
+@Component
+export struct ObserverPlanetSection {
+  @ObjectLink store: SessionToolStore
+  @StorageProp('stellariumReadableUi') readableUi: boolean = false
+  @State c: ThemeSlots = DEFAULT_SLOTS
+  planetLabel: (en: string) => string = (en: string) => en
+  onSelectPlanet: (name: string) => void = () => {}
+
+  onWillApplyTheme(theme: Theme): void {
+    this.c = slotsFromTheme(theme)
+  }
+
+  private switchingLabel(): string {
+    const target = this.store.observerPlanetTarget
+    const label = target.length > 0 ? this.store.observerPlanetLabel(target) : this.store.observerPlanetLabel(this.store.observerPlanet)
+    return I18n.t('m_switching_planet').replace('%s', label)
+  }
+
+  build() {
     Column({ space: 8 }) {
-      Text(I18n.t('c_observing_planet')).fontSize(panelFontSize(13, this.readableUi)).fontColor(this.c.text).width('100%').margin({ top: 10, bottom: 2 })
-      Select(this.store.observerPlanetOptions())
-        .selected(Math.max(0, this.store.planetList.indexOf(this.store.observerPlanet)))
-        .value(this.store.observerPlanetLabel(this.store.observerPlanet))
-        .font({ size: panelFontSize(14, this.readableUi) })
-        .fontColor(this.c.text)
-        .selectedOptionFontColor(this.c.onAccent)
-        .optionFontColor(this.c.text)
-        .backgroundColor(this.c.input)
-        .selectedOptionBgColor(this.c.accent)
-        .optionBgColor(this.menuBackground())
-        .menuBackgroundColor(this.menuBackground())
-        // The default COMPONENT_ULTRA_THICK material adds a light layer on
-        // top of the opaque menu and breaks night mode.
-        .menuBackgroundBlurStyle(BlurStyle.NONE)
-        .borderRadius(UI_RADIUS_CONTROL)
-        .width('100%').height(44)
-        .enabled(!this.store.observerPlanetPending)
-        .id('observer-planet-select')
-        .onSelect((index: number) => {
+      Row({ space: 8 }) {
+        Text(I18n.t('c_observing_planet'))
+          .fontSize(panelFontSize(13, this.readableUi))
+          .fontColor(this.c.text)
+          .layoutWeight(1)
+        if (this.store.observerPlanetSwitching) {
+          Row({ space: 6 }) {
+            LoadingProgress()
+              .width(16)
+              .height(16)
+              .color(this.c.accent)
+            Text(this.switchingLabel())
+              .fontSize(panelFontSize(11, this.readableUi))
+              .fontColor(this.c.accent)
+              .maxLines(1)
+          }
+          .alignItems(VerticalAlign.Center)
+        }
+      }
+      .width('100%')
+      .alignItems(VerticalAlign.Center)
+      .margin({ top: 10, bottom: 2 })
+
+      ObserverPlanetDropdown({
+        optionsVersion: this.store.planetOptionsVersion,
+        uiLang: I18n.getLanguage(),
+        selectedIndex: Math.max(0, this.store.planetList.indexOf(this.store.observerPlanet)),
+        selectedValue: this.store.observerPlanetLabel(this.store.observerPlanet),
+        readableUi: this.readableUi,
+        getOptions: (): SelectOption[] => this.store.observerPlanetOptions(),
+        onSelectIndex: (index: number) => {
+          if (this.store.observerPlanetPending) return
           if (index >= 0 && index < this.store.planetList.length) this.onSelectPlanet(this.store.planetList[index])
-        })
+        }
+      })
+      .opacity(this.store.observerPlanetSwitching ? 0.65 : 1.0)
+
       if (this.store.observerPlanet !== 'Earth') {
-        Button(I18n.t('btn_back_to_earth'))
-          .fontSize(panelFontSize(12, this.readableUi)).fontColor(this.c.text).backgroundColor(this.c.softStrong)
+        Button() {
+          Row({ space: 6 }) {
+            if (this.store.observerPlanetSwitching && this.store.observerPlanetTarget === 'Earth') {
+              LoadingProgress()
+                .width(16)
+                .height(16)
+                .color(this.c.accent)
+            }
+            Text(I18n.t('btn_back_to_earth'))
+              .fontSize(panelFontSize(12, this.readableUi))
+              .fontColor(this.c.text)
+          }
+          .alignItems(VerticalAlign.Center)
+        }
+          .backgroundColor(this.c.softStrong)
           .borderRadius(UI_RADIUS_CONTROL).height(36).width('100%')
           .enabled(!this.store.observerPlanetPending)
           .onClick(() => { this.onSelectPlanet('Earth') })

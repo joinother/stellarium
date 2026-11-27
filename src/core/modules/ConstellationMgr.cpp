@@ -20,6 +20,7 @@
 
 
 #include "ConstellationMgr.hpp"
+#include "OhosStartupChoreography.hpp"
 #include "Constellation.hpp"
 #include "ConstellationPresentation.hpp"
 #include "StarMgr.hpp"
@@ -549,6 +550,11 @@ void ConstellationMgr::loadLinesNamesAndArt(const StelSkyCulture &culture)
 	Constellation::seasonalRuleEnabled = false;
 
 	int readOk = 0;
+	bool hasArgoTransform = false;
+	Mat4d argoTransform;
+	int argoTexSizeX = 0;
+	int argoTexSizeY = 0;
+	Constellation* argoCar = nullptr;
 	for (const auto& constellationData : culture.constellations)
 	{
 		Constellation*const cons = new Constellation;
@@ -687,7 +693,39 @@ void ConstellationMgr::loadLinesNamesAndArt(const StelSkyCulture &culture)
 		cons->boundingCap.n=tmp;
 		cons->boundingCap.d=tmp*tmp2;
 		if (culture.id == "modern")
+		{
 			cons->loadArtModel(culture.path + "/models/" + cons->getShortName() + ".scm", X, texSizeX, texSizeY);
+			if (cons->getShortName() == QLatin1String("Car"))
+			{
+				hasArgoTransform = true;
+				argoTransform = X;
+				argoTexSizeX = texSizeX;
+				argoTexSizeY = texSizeY;
+				argoCar = cons;
+			}
+		}
+	}
+
+	if (culture.id == "modern" && hasArgoTransform)
+	{
+		Vec3d argoPivot = normalize(argoTransform * Vec3d(0.5 * argoTexSizeX, 0.5 * argoTexSizeY, 0.));
+		Vec3d argoRight = normalize(argoTransform * Vec3d(argoTexSizeX, argoTexSizeY * 0.5, 0.) -
+		                            argoTransform * Vec3d(0., argoTexSizeY * 0.5, 0.));
+		argoRight = normalize(argoRight - argoPivot * (argoRight * argoPivot));
+		Vec3d argoUp = normalize(argoPivot ^ argoRight);
+		for (const QString& siblingId : {QStringLiteral("Vel"), QStringLiteral("Pup")})
+		{
+			if (Constellation* sibling = findFromAbbreviation(siblingId))
+			{
+				if (!sibling->hasArtModel())
+					sibling->loadArtModel(culture.path + "/models/" + sibling->getShortName() + ".scm",
+					                      argoTransform, argoTexSizeX, argoTexSizeY);
+				if (sibling->hasArtModel())
+					sibling->setSharedModelFrame(argoPivot, argoRight, argoUp);
+			}
+		}
+		if (argoCar && argoCar->hasArtModel())
+			argoCar->setSharedModelFrame(argoPivot, argoRight, argoUp);
 	}
 
 	qInfo().noquote() << "Loaded" << readOk << "/" << constellations.size() << "constellation records successfully for culture" << culture.id;
@@ -702,7 +740,7 @@ void ConstellationMgr::loadLinesNamesAndArt(const StelSkyCulture &culture)
 
 void ConstellationMgr::draw(StelCore* core)
 {
-	if (!core->getFlagClearSky())
+	if (!core->getFlagClearSky() || OhosStartupChoreography::constellationScale() <= 0.02f)
 		return;
 
 	const StelProjectorP prj = core->getProjection(StelCore::FrameJ2000);
@@ -1389,17 +1427,62 @@ void ConstellationMgr::update(double deltaTime)
 		value += (target - value) * blend;
 		if (std::abs(target - value) < 0.00001f) value = target;
 	};
+	const auto isArgoPart = [](const QString& id) {
+		return id == QLatin1String("Car") || id == QLatin1String("Vel") || id == QLatin1String("Pup");
+	};
+	const bool focusIsArgo = focus && isArgoPart(focus->getShortName());
+	const bool emphasizedIsArgo = emphasized && isArgoPart(emphasized->getShortName());
+	Constellation* argoPoseMaster = nullptr;
+	double argoMaxSpan = 1.;
+	float argoMaxCentral = 0.f;
+	for (auto* c : std::as_const(constellations))
+	{
+		if (c->hasArtModel() && isArgoPart(c->getShortName()))
+		{
+			argoMaxSpan = qMax(argoMaxSpan, c->modelSpanDegrees);
+			argoMaxCentral = qMax(argoMaxCentral, float(ConstellationPresentation::centerWeight(c->modelCenter * viewDirection, fov)));
+			if (!argoPoseMaster || c->getShortName() == QLatin1String("Car"))
+				argoPoseMaster = c;
+		}
+	}
+	float argoSharedZoom = 1.f;
+	float argoSharedYaw = 0.f;
+	float argoSharedPitch = 0.f;
+	float argoSharedRoll = 0.f;
+	if (argoPoseMaster)
+	{
+		ConstellationPresentation::CenterArrival arrival{argoPoseMaster->modelArrivalArmed, argoPoseMaster->modelArrivalElapsed};
+		const bool argoVisible = art3dDisplayed && artDisplayed && (focusIsArgo || emphasizedIsArgo) &&
+			argoPoseMaster->isSeasonallyVisible() && argoPoseMaster->artFader.getInterstate() > 0.f &&
+			ConstellationPresentation::zoomOpacity(fov, argoMaxSpan) > 0.02;
+		const float turn = float(arrival.update(deltaTime, argoMaxCentral, argoVisible));
+		argoPoseMaster->modelArrivalArmed = arrival.armed;
+		argoPoseMaster->modelArrivalElapsed = arrival.elapsed;
+		argoSharedZoom = float(ConstellationPresentation::zoomOpacity(fov, argoMaxSpan));
+		argoSharedYaw = float(qBound(-0.06, (viewDirection * argoPoseMaster->modelRight) * 0.12, 0.06)) + turn * 0.18f;
+		argoSharedPitch = float(qBound(-0.045, -(viewDirection * argoPoseMaster->modelUp) * 0.10, 0.045)) - turn * 0.065f;
+		argoSharedRoll = turn * 0.04f;
+	}
 	for (auto* constellation : std::as_const(constellations))
 	{
 		const bool focused = focus == constellation;
 		const bool hasModel = !constellation->modelIndices.isEmpty();
+		const bool argoSibling = hasModel && isArgoPart(constellation->getShortName());
 		const Vec3d center = hasModel ? constellation->modelCenter : normalize(constellation->getJ2000EquatorialPos(core));
 		const float central = float(ConstellationPresentation::centerWeight(center * viewDirection, fov));
 		const bool leading = emphasized == constellation;
-		const float artTarget = !art3dDisplayed ? 1.f : (focused ? 1.f : central * (hasFocus ? 0.05f : leading ? 0.85f : 0.10f));
+		float artTarget = !art3dDisplayed ? 1.f : (focused ? 1.f : central * (hasFocus ? 0.05f : leading ? 0.85f : 0.10f));
+		if (art3dDisplayed && argoSibling && !focused)
+		{
+			if (focusIsArgo)
+				artTarget = qMax(0.34f, central * 0.55f);
+			else if (!hasFocus && emphasizedIsArgo && !leading)
+				artTarget = qMax(central * 0.58f, argoMaxCentral * 0.44f);
+		}
+		const double effectiveSpan = argoSibling ? argoMaxSpan : constellation->modelSpanDegrees;
 		const bool modelOrArtPresent = artDisplayed && constellation->isSeasonallyVisible() &&
 			constellation->artFader.getInterstate() > 0.01f &&
-			(!art3dDisplayed || !hasModel || ConstellationPresentation::zoomOpacity(fov, constellation->modelSpanDegrees) > 0.02);
+			(!art3dDisplayed || !hasModel || ConstellationPresentation::zoomOpacity(fov, effectiveSpan) > 0.02);
 		float lineTarget = 1.f;
 		if (lineCenterAnimDisplayed)
 		{
@@ -1423,17 +1506,27 @@ void ConstellationMgr::update(double deltaTime)
 		approach(constellation->labelPresentation, labelTarget);
 		if (hasModel)
 		{
-			ConstellationPresentation::CenterArrival arrival{constellation->modelArrivalArmed, constellation->modelArrivalElapsed};
-			const bool canPresent = art3dDisplayed && artDisplayed && leading && constellation->isSeasonallyVisible() &&
-				constellation->artFader.getInterstate() > 0.f &&
-				ConstellationPresentation::zoomOpacity(fov, constellation->modelSpanDegrees) > 0.02;
-			const float turn = float(arrival.update(deltaTime, central, canPresent));
-			constellation->modelArrivalArmed = arrival.armed;
-			constellation->modelArrivalElapsed = arrival.elapsed;
-			approach(constellation->modelZoomOpacity, float(ConstellationPresentation::zoomOpacity(fov, constellation->modelSpanDegrees)));
-			approach(constellation->modelYaw, float(qBound(-0.06, (viewDirection * constellation->modelRight) * 0.12, 0.06)) + turn * 0.18f);
-			approach(constellation->modelPitch, float(qBound(-0.045, -(viewDirection * constellation->modelUp) * 0.10, 0.045)) - turn * 0.065f);
-			approach(constellation->modelRoll, turn * 0.04f);
+			if (argoSibling && argoPoseMaster)
+			{
+				approach(constellation->modelZoomOpacity, argoSharedZoom);
+				approach(constellation->modelYaw, argoSharedYaw);
+				approach(constellation->modelPitch, argoSharedPitch);
+				approach(constellation->modelRoll, argoSharedRoll);
+			}
+			else
+			{
+				ConstellationPresentation::CenterArrival arrival{constellation->modelArrivalArmed, constellation->modelArrivalElapsed};
+				const bool canPresent = art3dDisplayed && artDisplayed && leading && constellation->isSeasonallyVisible() &&
+					constellation->artFader.getInterstate() > 0.f &&
+					ConstellationPresentation::zoomOpacity(fov, constellation->modelSpanDegrees) > 0.02;
+				const float turn = float(arrival.update(deltaTime, central, canPresent));
+				constellation->modelArrivalArmed = arrival.armed;
+				constellation->modelArrivalElapsed = arrival.elapsed;
+				approach(constellation->modelZoomOpacity, float(ConstellationPresentation::zoomOpacity(fov, constellation->modelSpanDegrees)));
+				approach(constellation->modelYaw, float(qBound(-0.06, (viewDirection * constellation->modelRight) * 0.12, 0.06)) + turn * 0.18f);
+				approach(constellation->modelPitch, float(qBound(-0.045, -(viewDirection * constellation->modelUp) * 0.10, 0.045)) - turn * 0.065f);
+				approach(constellation->modelRoll, turn * 0.04f);
+			}
 		}
 		constellation->update(delta);
 	}

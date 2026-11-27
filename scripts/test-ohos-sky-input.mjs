@@ -210,7 +210,13 @@ function mouse(action, overrides = {}) {
   assert.deepEqual(test.taps, [[400, 200]]);
   test.controller.handleSkyMouse(mouse(MouseAction.Press, { button: MouseButton.Right }));
   test.controller.handleSkyMouse(mouse(MouseAction.Release, { button: MouseButton.Right }));
-  assert.equal(test.taps.length, 1);
+  assert.deepEqual(test.taps, [[400, 200], ['double', 400, 200]]);
+  // 右键在 UI 区域或大幅拖拽不触发取消选中
+  test.controller.handleSkyMouse(mouse(MouseAction.Press, { x: 20, button: MouseButton.Right }));
+  test.controller.handleSkyMouse(mouse(MouseAction.Release, { x: 20, button: MouseButton.Right }));
+  test.controller.handleSkyMouse(mouse(MouseAction.Press, { x: 400, y: 200, button: MouseButton.Right }));
+  test.controller.handleSkyMouse(mouse(MouseAction.Release, { x: 440, y: 200, button: MouseButton.Right }));
+  assert.equal(test.taps.length, 2);
   test.controller.handleSkyMouse(mouse(MouseAction.Press));
   test.controller.handleSkyMouse(mouse(MouseAction.Move, { x: 420, y: 210, button: MouseButton.None, pressedButtons: [MouseButton.Left] }));
   assert.equal(test.calls('dragView')[0].payload, '400|200|420|210');

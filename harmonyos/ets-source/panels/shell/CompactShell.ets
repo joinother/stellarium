@@ -51,6 +51,7 @@ export struct CompactShell {
   @Prop dockLeft: number
   @Prop dockTop: number
   @Prop musicEnabled: boolean
+  @Prop showGyro: boolean = true
   @Prop compactQuickPressed: string
   @Prop quickX: number
   @Prop quickY: number
@@ -97,6 +98,8 @@ export struct CompactShell {
   onDockTap: (item: ShellAction) => void = () => {}
   onPanelTouch: (event: TouchEvent) => void = () => {}
   onOpenTime: () => void = () => {}
+  onScrubTime: (deltaMinutes: number) => void = () => {}
+  onScrubFov: (zoomIn: boolean) => void = () => {}
   onZoomIn: () => void = () => {}
   onZoomOut: () => void = () => {}
   onGyro: () => void = () => {}
@@ -169,21 +172,19 @@ export struct CompactShell {
         .height(66)
         .justifyContent(FlexAlign.Center)
         .position({ x: 0, y: this.dockTop })
-        .hitTestBehavior(HitTestMode.Block)
         .zIndex(40)
 
       // 三件套（FOV 读数 / 缩放按钮 / 常驻时钟）共用宿主给的锚点：手机·半折两端取同一个 x
       // （跟随 dock 两端），平板则贴屏幕左右缘。
       if (!this.panelVisible && !this.polarScopeVisible && this.dockClockText.length > 0) {
-        DockClockLayer({ clockText: this.dockClockText, layerWidth: this.chromeRowWidth, posX: this.chromeRowPosXRight, posY: this.chromeRowY, onOpenTime: () => { this.onOpenTime() } })
+        DockClockLayer({ clockText: this.dockClockText, layerWidth: this.chromeRowWidth, posX: this.chromeRowPosXRight, posY: this.chromeRowY, chromeOpacity: this.chromeOpacity, onOpenTime: () => { this.onOpenTime() }, onScrubTime: (deltaMinutes: number) => { this.onScrubTime(deltaMinutes) } })
       }
 
-      // FOV 读数：贴左端，与右侧时钟左右对称（纯信息展示，整层不参与命中测试）。
-      // 首帧前 currentFovText 为 '--'，用 '°' 兜住，避免出现 "FOV --"。
+      // FOV 读数：贴左端，与右侧时钟左右对称；桌面端支持悬停滚轮精细微调视场。
       if (!this.panelVisible && !this.polarScopeVisible && this.fovText.indexOf('°') >= 0) {
         DockFovLayer({
           fovText: this.fovText, layerWidth: this.chromeRowWidth, posX: this.chromeRowPosXLeft,
-          posY: this.chromeRowY
+          posY: this.chromeRowY, chromeOpacity: this.chromeOpacity, onScrubFov: (zoomIn: boolean) => { this.onScrubFov(zoomIn) }
         })
       }
 
@@ -192,43 +193,31 @@ export struct CompactShell {
         SkyZoomLayer({
           layerWidth: this.chromeRowWidth, posX: this.chromeRowPosXLeft,
           rowY: this.chromeRowY, horizontal: this.chromeZoomHorizontal,
+          chromeOpacity: this.chromeOpacity,
           onZoomIn: () => { this.onZoomIn() },
           onZoomOut: () => { this.onZoomOut() }
         })
       }
 
-      // 手机端右上角常驻快捷区：陀螺仪 + 音频（与平板左侧栏入口一致）
-      Stack() {
-        CompactTopQuickControls({
-          gyroActive: this.gyroStore.gyroscopeEnabled, audioActive: this.musicEnabled,
-          pressedId: this.compactQuickPressed, chromeOpacity: this.chromeOpacity,
-          onGyro: () => {
-            this.onGyro()
-          },
-          onAudio: () => {
-            this.onAudio()
-          }
-        })
-      }
-          .position({ x: this.quickX, y: this.quickY })
-          .hitTestBehavior(HitTestMode.Block)
-          .zIndex(30)
-        // Keep a dedicated touch target above the Qt XComponent.  The native
-        // surface otherwise intermittently captures the compact quick buttons.
+      // 右上角常驻快捷区：陀螺仪（硬件支持时显示）+ 音频。
+      // 不用外层 HitTestMode.Block 或透明遮罩，否则会阻断桌面端鼠标 onHover 浮现按钮名称。
+      if (!this.polarScopeVisible) {
         Stack() {
-          Row()
-            .width('100%')
-            .height('100%')
-            .backgroundColor(Color.Transparent)
-        }
-          .width(44)
-          .height(98)
-          .position({ x: this.quickX, y: this.quickY })
-          .hitTestBehavior(HitTestMode.Block)
-          .zIndex(31)
-          .onTouch((event: TouchEvent) => {
-            this.onCompactTopQuickTouch(event)
+          CompactTopQuickControls({
+            gyroActive: this.gyroStore.gyroscopeEnabled, audioActive: this.musicEnabled,
+            showGyro: this.showGyro, receiveTap: true,
+            pressedId: this.compactQuickPressed, chromeOpacity: this.chromeOpacity,
+            onGyro: () => {
+              this.onGyro()
+            },
+            onAudio: () => {
+              this.onAudio()
+            }
           })
+        }
+          .position({ x: this.quickX, y: this.quickY })
+          .zIndex(40)
+      }
       // 陀螺仪校准面板（紧凑布局）
       if (this.gyroStore.gyroscopeEnabled && this.gyroStore.gyroCalibPanelOpen) {
         Stack() { GyroCalibPanel({ store: this.gyroStore, onFlashHint: (text: string) => { this.onFlashHint(text) }, onCalibrate: () => { this.onCalibrate() }, onToggle: (enabled: boolean) => { this.onToggleGyroscope(enabled) } }) }

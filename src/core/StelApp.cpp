@@ -41,6 +41,7 @@
 #include "SolarSystem.hpp"
 #include "NomenclatureMgr.hpp"
 #include "SporadicMeteorMgr.hpp"
+#include "RocketLaunchMgr.hpp"
 #include "SpecificTimeMgr.hpp"
 #include "StarMgr.hpp"
 #include "StelProjector.hpp"
@@ -771,6 +772,11 @@ void StelApp::init(QSettings* conf)
 	SporadicMeteorMgr* meteors = new SporadicMeteorMgr(10, 72);
 	meteors->init();
 	getModuleMgr().registerModule(meteors);
+
+	// Rocket Launch Trajectory & Twilight Plume Simulator
+	RocketLaunchMgr* rocketLaunchMgr = new RocketLaunchMgr();
+	rocketLaunchMgr->init();
+	getModuleMgr().registerModule(rocketLaunchMgr);
 
 	// User labels
 	SplashScreen::showMessage(q_("Initializing user labels..."));

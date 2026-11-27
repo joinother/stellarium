@@ -32,6 +32,8 @@ export class SearchController {
   private hooks: SearchHostHooks
   // 建议去抖定时器：控制器自持，宿主 aboutToDisappear 经 stop() 收口。
   private suggestionTimer: number = -1
+  // 候选请求代际序号，防止乱序回包覆盖更新后的输入。
+  private suggestionSeq: number = 0
 
   constructor(
     port: CommandPort,
@@ -53,6 +55,8 @@ export class SearchController {
       clearTimeout(this.suggestionTimer)
       this.suggestionTimer = -1
     }
+    this.suggestionSeq += 1
+    this.searchStore.searchSuggestionsLoading = false
   }
 
   // 140ms 去抖后按当前前缀取建议。
@@ -62,9 +66,18 @@ export class SearchController {
       this.suggestionTimer = -1
     }
     if (prefix.length < 1) {
+      this.suggestionSeq += 1
       this.searchStore.searchSuggestions = []
+      this.searchStore.searchSuggestionsQuery = ''
+      this.searchStore.searchSuggestionsLoading = false
       return
     }
+    // 立刻进入加载态并清掉无关旧词候选，避免输入时先闪「无候选/没有匹配的天体」再跳出结果。
+    if (this.searchStore.searchSuggestionsQuery !== prefix) {
+      this.searchStore.searchSuggestions = []
+      this.searchStore.searchSuggestionsQuery = ''
+    }
+    this.searchStore.searchSuggestionsLoading = true
     this.suggestionTimer = setTimeout(() => {
       this.suggestionTimer = -1
       if (this.searchStore.searchText.trim() === prefix) this.fetchSuggestions(prefix)
@@ -73,14 +86,24 @@ export class SearchController {
 
   // 桥查询并本地化候选。语言代际缺省值由 -1 哨兵在体内解析
   //（serial 自 0 递增，-1 不可能是真实值）。
-  fetchSuggestions(prefix: string, languageSerial: number = -1): void {
+  fetchSuggestions(prefix: string, languageSerial: number = -1, onReady?: (suggestions: SearchSug[]) => void): void {
     const serial = languageSerial >= 0 ? languageSerial : this.languageStore.languageRefreshSerial
-    if (prefix.length < 1) { this.searchStore.searchSuggestions = []; return }
+    if (prefix.length < 1) {
+      this.suggestionSeq += 1
+      this.searchStore.searchSuggestions = []
+      this.searchStore.searchSuggestionsQuery = ''
+      this.searchStore.searchSuggestionsLoading = false
+      if (onReady !== undefined) onReady([])
+      return
+    }
+    const reqSeq = ++this.suggestionSeq
+    this.searchStore.searchSuggestionsLoading = true
     // Native matching covers localized names, English names, catalog IDs, and
     // spacing/hyphen variants across every currently loaded object module.
     this.port.requestInteractive('listMatchingObjects', prefix + '|30', (result) => {
       // Only apply if the query prefix is still current (user may have typed more).
-      if (this.searchStore.searchText.trim() !== prefix || this.languageStore.languageRefreshSerial !== serial) { return }
+      if (reqSeq !== this.suggestionSeq || this.searchStore.searchText.trim() !== prefix ||
+        this.languageStore.languageRefreshSerial !== serial) { return }
       const suggestions: SearchSug[] = []
       const seen: Record<string, boolean> = {}
       if (Array.isArray(result.items)) {
@@ -113,7 +136,58 @@ export class SearchController {
       }
       // C++ ranks exact, prefix, and substring matches. Keep that order instead
       // of re-sorting localized display labels in ArkUI.
-      this.searchStore.searchSuggestions = suggestions.slice(0, 30)
+      const finalList = suggestions.slice(0, 30)
+      this.searchStore.searchSuggestions = finalList
+      this.searchStore.searchSuggestionsQuery = prefix
+      this.searchStore.searchSuggestionsLoading = false
+      if (onReady !== undefined) onReady(finalList)
+    }, (_failure: StellariumBridgeResponse) => {
+      if (reqSeq !== this.suggestionSeq) return
+      this.searchStore.searchSuggestionsLoading = false
+      if (onReady !== undefined) onReady([])
+    })
+  }
+
+  // 从已排序的候选列表中挑选回车提交目标：精确同名优先，否则取引擎排序第一的最佳匹配（如「哈雷」→「哈雷彗星」）。
+  private pickBestSuggestion(query: string, suggestions: SearchSug[]): SearchSug | undefined {
+    if (suggestions.length === 0) return undefined
+    const qLower = query.toLowerCase()
+    for (let i = 0; i < suggestions.length; i++) {
+      const s = suggestions[i]
+      if (s.zh.trim().toLowerCase() === qLower || s.en.trim().toLowerCase() === qLower) {
+        return s
+      }
+    }
+    return suggestions[0]
+  }
+
+  // 回车提交搜索：
+  // 1) 若当前词的候选已就绪，直接选中最佳匹配（如输入「哈雷」按回车直接定位「哈雷彗星」）；
+  // 2) 若用户打字后立刻按回车（尚在去抖或检索中），立刻跳过 140ms 去抖发一次匹配请求，拿到首条即定位；
+  // 3) 仅当确实无任何候选时才回退直接按原词查引擎。
+  submitSearch(rawText: string): void {
+    const query = rawText.trim()
+    if (query.length === 0) return
+    if (this.suggestionTimer >= 0) {
+      clearTimeout(this.suggestionTimer)
+      this.suggestionTimer = -1
+    }
+    if (this.searchStore.searchSuggestionsQuery === query && !this.searchStore.searchSuggestionsLoading) {
+      const best = this.pickBestSuggestion(query, this.searchStore.searchSuggestions)
+      if (best !== undefined) {
+        this.selectSearchSuggestion(best)
+      } else {
+        this.hooks.searchObject(query, '', '')
+      }
+      return
+    }
+    this.fetchSuggestions(query, -1, (suggestions: SearchSug[]) => {
+      const best = this.pickBestSuggestion(query, suggestions)
+      if (best !== undefined) {
+        this.selectSearchSuggestion(best)
+      } else {
+        this.hooks.searchObject(query, '', '')
+      }
     })
   }
 

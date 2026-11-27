@@ -20,9 +20,17 @@ export interface LocationPort {
   // 'precise' = 精确位置已授权；'approximate' = 仅模糊位置；'denied' = 均未授权。
   // 海拔来自 GNSS，只有精确位置权限可用。
   requestLocationPermissions(): Promise<string>
+  // 静默检查是否已具备精确位置权限（checkAccessTokenSync），绝不触发权限弹窗。
+  hasPreciseLocationPermission?(): boolean
   // 取当前位置（geoLocationManager.getCurrentLocation：SingleLocationRequest、
   // PRIORITY_ACCURACY、10s 超时；需要精确位置权限才能拿到海拔）。
   getCurrentLocation(): Promise<LocationFix>
+  // 快速单次定位（PRIORITY_LOCATING_SPEED、4s 超时）：首帧快速锁定坐标或静默刷新用。
+  getQuickCurrentLocation?(): Promise<LocationFix>
+  // 启动前台低功耗大位移位置监听（geoLocationManager.on('locationChange')）。
+  startLocationWatch?(minDistanceMeters: number, minIntervalSec: number, onFix: (fix: LocationFix) => void): void
+  // 停止前台位置监听（geoLocationManager.off('locationChange')）。
+  stopLocationWatch?(): void
   // GPS 定位成功后反查最小行政区名称（Map Kit site.reverseGeocode；失败返回空串）。
   // 仅在 METERED_MAP_APIS_ENABLED 为真时由控制器调用。
   reverseGeocodePlaceName(latitude: number, longitude: number): Promise<string>

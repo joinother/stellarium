@@ -502,14 +502,23 @@ int main(int argc, char **argv)
 	const QRect screenGeom = qscreen->geometry();
 
 #if defined(__OHOS__)
-	const auto virtSize = screenGeom.size();
+	// QAbility publishes mainWindow.getWindowProperties().windowRect in physical px,
+	// whereas QWidget::resize() takes Qt logical pixels (QtForOhos multiplies by devicePixelRatio).
+	// Previously this branch divided screenGeom.size() (already logical!) by pixelRatio a second time,
+	// shrinking MateBook Pro's 2090x1394 desktop window down to 1642x1094 right after loading.
+	const double pixelRatio = qMax(1.0, qscreen->devicePixelRatio());
+	const int ohosWinW = qEnvironmentVariableIntValue("STELLARIUM_OHOS_WINDOW_W");
+	const int ohosWinH = qEnvironmentVariableIntValue("STELLARIUM_OHOS_WINDOW_H");
+	const QSize size = (ohosWinW >= 320 && ohosWinH >= 240)
+		? QSize(std::lround(ohosWinW / pixelRatio), std::lround(ohosWinH / pixelRatio))
+		: screenGeom.size();
 #else
 	const auto virtSize = QSize(confSettings->value("video/screen_w", screenGeom.width()).toInt(),
 								confSettings->value("video/screen_h", screenGeom.height()).toInt());
-#endif
 	const auto pixelRatio = qscreen->devicePixelRatio();
 	const auto size = QSize(std::lround(virtSize.width()/pixelRatio),
 				    std::lround(virtSize.height()/pixelRatio));
+#endif
 	mainWin.resize(size);
 
 	const bool fullscreen =

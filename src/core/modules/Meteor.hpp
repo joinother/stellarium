@@ -48,10 +48,20 @@ public:
 	void init(const float& radiantAlpha, const float& radiantDelta,
 		  const float& speed, const QList<ColorPair> colors);
 
+	//! Physical archetype for realistic meteor diversity
+	enum class Archetype
+	{
+		MicroNeedle = 0,           //! Razor-thin hairline streak (most common naked-eye meteor)
+		SpectralStreak = 1,        //! Fast multi-spectral meteor (e.g. Perseid: green->rose->flare->lilac)
+		AirburstBolide = 2,        //! Intense mid/late airburst with atmospheric scattering glare & optical halo ring
+		FragmentingSuperbolide = 3 //! Slower warm-gold bolide that explodes & splits into glowing lead chunks + trailing sparks
+	};
+
 	//! Initialize a preview meteor whose 3D AltAz trajectory crosses near centerAltAz.
 	void initInViewport(const Vec3d& centerAltAz, float offsetRightRad, float offsetUpRad,
 			    float slopeAngleRad, float speed, const QList<ColorPair>& colors,
-			    bool isFireball, float startDelaySec = 0.f);
+			    bool isFireball, float startDelaySec = 0.f,
+			    Archetype forcedArchetype = Archetype::SpectralStreak);
 
 	//! Updates the position of the meteor, and expires it if necessary.
 	//! @param deltaTime the time increment in seconds since the last call.
@@ -84,8 +94,17 @@ private:
 	//! Determine color vectors of outer halo, spectral sheath and incandescent core.
 	void buildColorVectors(const QList<ColorPair> colors);
 
-	//! Configure physical morphology (width class, terminal flare, ionization afterglow).
-	void configureMorphology(bool forceFireball, float speedKmS, const QList<ColorPair>& colors);
+	//! Configure physical morphology (width class, terminal flare, airburst glare, fragmentation, smoke train).
+	void configureMorphology(bool forceFireball, float speedKmS, const QList<ColorPair>& colors, int forcedArchetype = -1);
+
+	//! Draws intense atmospheric scattering glare & subtle optical halo ring during bright airbursts.
+	void drawAirburstGlare(StelPainter& sPainter, const Vec3d& burstDir, float burstIntensity, const Vec3f& tintRgb);
+
+	//! Spawns physical breakup fragments (lead chunks + trailing sparks) for FragmentingSuperbolide.
+	void spawnBreakupFragments();
+
+	//! Draws active glowing breakup fragments & trailing embers.
+	void drawFragments(StelPainter& sPainter);
 
 	//! get RGB from color name
 	static Vec4f getColorFromName(QString colorName);
@@ -102,6 +121,15 @@ private:
 	void drawTrain(const StelCore* core, StelPainter& sPainter, const double &angularHalfWidth,
 		       Vec3d& outHeadDir, Vec3d& outHeadTangent);
 
+	//! Evaluates the meteor's exact analytical state (position, flare, glare, fragments, smoke) as a pure function of simulation Julian Day.
+	bool evaluateAtSimTime(double currentJd);
+
+	//! Captures 3D sky anchors for a persistent mesospheric wind-sheared smoke train.
+	void captureSmokeTrainAnchors();
+
+	//! Draws the slowly drifting, curling, diffusing persistent smoke/dust train after fireball ablation.
+	void drawPersistentSmokeTrain(StelPainter& sPainter);
+
 	//! Calculates the z-component of a meteor as a function of meteor zenith angle
 	static float meteorZ(float zenithAngle, float altitude);
 
@@ -116,6 +144,11 @@ private:
 	bool m_alive;                   //! Indicates if the meteor it still visible.
 	bool m_bypassDaylight;          //! Preview meteors animate regardless of daylight or pause.
 	QString m_rejectionReason;
+	double m_birthJd;               //! Simulation Julian Day when meteor was born
+	double m_burnDurationSec;       //! Total luminous burn duration in simulation seconds
+	double m_totalLifetimeSec;      //! Total lifetime including embers & smoke in simulation seconds
+	double m_breakupTimeSec;        //! Simulation seconds after birth when superbolide fragments
+	bool m_visibleAtSimTime;        //! True when current simulation time is inside [0, totalLifetime]
 	double m_speed;                  //! Velocity of meteor in km/s.
 	Mat4d m_matAltAzToRadiant;      //! Rotation matrix to convert from horizontal to radiant coordinate system.
 	Vec3d m_position;               //! Meteor position in radiant coordinate system.
@@ -138,7 +171,48 @@ private:
 	bool m_headExtinguished;        //! True once meteor passes m_finalZ
 	float m_headFade;               //! Rapid head fade factor [1 -> 0] after m_finalZ
 	Vec3f m_headTintColor;          //! Spectral tint for bolide coma
-	Vec3f m_afterglowColor;         //! Spectral tint for persistent ionization train
+	Vec3f m_afterglowColor;         //! Spectral tint for persistent ionization/smoke train
+
+	// Persistent wind-sheared mesospheric smoke train (bright meteors / fireballs)
+	bool m_smokeCaptured;           //! True once smoke anchor points along the luminous path are recorded
+	float m_smokeAgeSec;            //! Elapsed seconds since smoke train started drifting/diffusing
+	float m_smokeDurationSec;       //! Total smoke persistence lifetime (seconds)
+	float m_smokeWindFreq;          //! Spatial frequency of mesospheric wind shear waves along path
+	float m_smokeWindPhase;         //! Random phase for S-curve shear
+	float m_smokeWindPhase2;        //! Secondary eddy phase for organic curling hooks
+	float m_smokeDriftRate;         //! Base angular drift rate (rad/sec)
+	Vec3d m_smokeShearAxis1;        //! Primary unit wind-shear axis on celestial sphere
+	Vec3d m_smokeShearAxis2;        //! Secondary orthogonal axis for subtle 3D eddy curl
+	QVector<Vec3d> m_smokeAnchors;  //! Unit AltAz sky vectors recorded along ablation path
+	QVector<float> m_smokeWeights;  //! Per-anchor dust density weight (peaking at ablation flare)
+	QVector<float> m_smokeU;        //! Normalized longitudinal coordinate [0..1] per anchor
+
+	Archetype m_archetype;          //! Physical meteor archetype
+	int m_lightCurveMode;           //! 0=GradualSwell, 1=SlowBuildToDazzlingPeak, 2=PulsingBreakupSurge
+	int m_glareStyle;               //! 0=PureHaze, 1=AsymCross4, 2=AnamorphicStreak, 3=OrganicScatterRays, 4=Aperture6or8
+	unsigned int m_glareSeed;       //! Per-meteor seed for unique ray angles/lengths/widths
+	float m_glareAngleOffset;       //! Random diffraction spike orientation angle (radians)
+	float m_burstProgress;          //! Normalized burn progress [0..1] when peak brightness/breakup occurs
+	float m_burstFlash;             //! Smoothly filtered instantaneous glare intensity [0..1.2]
+	float m_burstPeakMag;           //! Peak glare strength for bright bolides & superbolides
+	float m_burnTimeSec;            //! Elapsed active burn seconds (for subtle ablation flicker)
+	Vec3d m_burstAltAzDir;          //! Live moving unit AltAz direction of the dazzling fireball head
+	bool m_burstTriggered;          //! True once breakup fragmentation has triggered
+
+	struct BreakupFragment
+	{
+		Vec3d originPosRad;     //! Initial breakup position in radiant frame (km)
+		Vec3d initVelRad;       //! Initial breakup velocity in radiant frame (km/s)
+		Vec3d posRad;           //! Evaluated position at current sim time (km)
+		Vec3d prevPosRad;       //! Evaluated short wake tail at current sim time (km)
+		float dragRate;         //! Deceleration rate (1/s) — smaller sparks slow down faster
+		float sizePx;           //! Base screen radius scale
+		float brightness;       //! Initial brightness multiplier
+		float ageSec;           //! Evaluated elapsed seconds since breakup
+		float lifeSec;          //! Total luminous ember lifetime
+		bool isLeadChunk;       //! True for major glowing companion chunk; false for trailing spark
+	};
+	QVector<BreakupFragment> m_fragments;
 
 	StelTextureSP m_bolideTexture;  //! Meteor bolide texture
 	int m_segments;                 //! Number of segments along the train (10 classic / 24 vivid)

@@ -100,6 +100,8 @@ private:
 	unsigned int m_lastVividGeneration;
 	QString m_lastGenerationSuppression;
 	double m_spawnAccumulator;
+	double m_lastSimJd;
+	bool m_hasLastSimJd;
 	QHash<QString, quint64> m_diagnosticRejectionReasons;
 };
 

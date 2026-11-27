@@ -315,6 +315,11 @@ export struct LocationFullScreenMap {
     }
     this.searchRequestId += 1
     try {
+      this.controller?.setMyLocationEnabled(false)
+    } catch (_error) {
+      // Ignore if my-location layer was never enabled or controller is already torn down.
+    }
+    try {
       this.planetSurfaceOverlay?.remove()
       this.gpsHitMarker?.remove()
     } catch (_error) {
@@ -344,6 +349,11 @@ export struct LocationFullScreenMap {
     this.localGlobePending = false
     this.mapFailed = true
     this.mapErrorText = reason
+    try {
+      this.controller?.setMyLocationEnabled(false)
+    } catch (_error) {
+      // Ignore if my-location layer was never enabled.
+    }
     try {
       this.planetSurfaceOverlay?.remove()
       this.gpsHitMarker?.remove()
@@ -814,6 +824,9 @@ export struct LocationFullScreenMap {
       const point = await this.toMapCoordinate(fix.latitude, fix.longitude)
       this.focusMap(point)
       await this.ensureGpsHitMarker()
+      // 定位成功后直接将 GPS 蓝点设为当前选点，方便用户一步点按「选此点」。
+      this.selectedPointSource = 'gps'
+      await this.setDraft(fix.latitude, fix.longitude, point, I18n.t('m_current_location'), this.gpsAlt, 'gps')
       this.recenterZoomed = false
     } catch (_error) {
       this.gpsMessage = I18n.t('m_gps_unavailable')
@@ -977,80 +990,93 @@ export struct LocationFullScreenMap {
     const syncId = ++this.placeMarkerSyncId
     this.removeNamedPlaceMarkers()
     if (this.observerPlanet === 'Earth' || this.namedPlaces.length === 0) return
-    for (let placeIndex = 0; placeIndex < this.namedPlaces.length; placeIndex += 1) {
-      const place = this.namedPlaces[placeIndex]
+    // 非地球天体无需走 WGS84→GCJ02 异步纠偏；按每批 12 个并发添加标记，缩短外星全屏地图标记出图耗时。
+    const BATCH_SIZE = 12
+    for (let start = 0; start < this.namedPlaces.length; start += BATCH_SIZE) {
       if (syncId !== this.placeMarkerSyncId || this.controller !== controller) return
-      const point = await this.toMapCoordinate(place.la, place.lo)
-      if (syncId !== this.placeMarkerSyncId || this.controller !== controller) return
-      const label = this.placeLabel(place.n)
-      let placeMarker: map.Marker | undefined = undefined
+      const end = Math.min(this.namedPlaces.length, start + BATCH_SIZE)
+      const tasks: Array<Promise<map.Marker | undefined>> = []
+      const labels: Array<string> = []
+      for (let placeIndex = start; placeIndex < end; placeIndex += 1) {
+        const place = this.namedPlaces[placeIndex]
+        const point: mapCommon.LatLng = { latitude: place.la, longitude: place.lo }
+        const label = this.placeLabel(place.n)
+        labels.push(label)
+        tasks.push(this.addNamedPlaceMarker(controller, point, label, placeIndex))
+      }
+      const created = await Promise.all(tasks)
+      if (syncId !== this.placeMarkerSyncId || this.controller !== controller) {
+        for (const m of created) {
+          if (m !== undefined) {
+            try { m.remove() } catch (_e) {}
+          }
+        }
+        return
+      }
+      for (let i = 0; i < created.length; i += 1) {
+        const placeMarker = created[i]
+        if (placeMarker === undefined) continue
+        let placeId = ''
+        try {
+          placeId = placeMarker.getId()
+        } catch (_error) {
+          placeId = ''
+        }
+        if (placeId.length === 0) {
+          try { placeMarker.remove() } catch (_e) {}
+          continue
+        }
+        this.placeMarkers.push(placeMarker)
+        this.placeMarkerIds.push(placeId)
+        this.placeMarkerPlaces.push(this.namedPlaces[start + i])
+        this.placeMarkerLabels.push(labels[i])
+      }
+    }
+    this.refreshPlaceLabelVisibility()
+  }
+
+  private async addNamedPlaceMarker(
+    controller: map.MapComponentController,
+    point: mapCommon.LatLng,
+    label: string,
+    placeIndex: number
+  ): Promise<map.Marker | undefined> {
+    try {
+      return await controller.addMarker({
+        position: point,
+        icon: $r('app.media.ic_map_dot'),
+        anchorU: 0.5,
+        anchorV: 0.5,
+        clickable: true,
+        zIndex: 5,
+        priority: placeIndex,
+        collisionRule: mapCommon.CollisionRule.NONE,
+        annotations: [{
+          content: label,
+          color: PLACE_LABEL_COLOR,
+          fontSize: PLACE_LABEL_FONT_SIZE,
+          strokeColor: PLACE_LABEL_STROKE_COLOR,
+          strokeWidth: 2
+        }],
+        annotationPosition: mapCommon.TextPosition.TOP,
+        showIcon: true,
+        title: label
+      })
+    } catch (_error) {
       try {
-        placeMarker = await controller.addMarker({
+        return await controller.addMarker({
           position: point,
           icon: $r('app.media.ic_map_dot'),
           anchorU: 0.5,
           anchorV: 0.5,
           clickable: true,
           zIndex: 5,
-          // Map Kit 自带的标记碰撞：数值越小优先级越高。地点库靠前的
-          // 任务地点（如 Apollo 11）优先保留，配合下面的标签避让使用。
-          priority: placeIndex,
-          collisionRule: mapCommon.CollisionRule.NONE,
-          annotations: [{
-            content: label,
-            color: PLACE_LABEL_COLOR,
-            fontSize: PLACE_LABEL_FONT_SIZE,
-            strokeColor: PLACE_LABEL_STROKE_COLOR,
-            strokeWidth: 2
-          }],
-          annotationPosition: mapCommon.TextPosition.TOP,
-          showIcon: true,
           title: label
         })
-      } catch (_error) {
-        try {
-          placeMarker = await controller.addMarker({
-            position: point,
-            icon: $r('app.media.ic_map_dot'),
-            anchorU: 0.5,
-            anchorV: 0.5,
-            clickable: true,
-            zIndex: 5,
-            title: label
-          })
-        } catch (_fallbackError) {
-          placeMarker = undefined
-        }
+      } catch (_fallbackError) {
+        return undefined
       }
-      if (placeMarker === undefined) continue
-      if (syncId !== this.placeMarkerSyncId || this.controller !== controller) {
-        try {
-          placeMarker.remove()
-        } catch (_removeError) {
-          // A newer sync owns the marker layer now.
-        }
-        return
-      }
-      let placeId = ''
-      try {
-        placeId = placeMarker.getId()
-      } catch (_error) {
-        placeId = ''
-      }
-      if (placeId.length === 0) {
-        try {
-          placeMarker.remove()
-        } catch (_removeError) {
-          // Ignore a marker that cannot be addressed; it must not stay pickable.
-        }
-        continue
-      }
-      this.placeMarkers.push(placeMarker)
-      this.placeMarkerIds.push(placeId)
-      this.placeMarkerPlaces.push(place)
-      this.placeMarkerLabels.push(label)
     }
-    this.refreshPlaceLabelVisibility()
   }
 
   private cancelNamedPlaceMarkers(): void {
@@ -1229,15 +1255,17 @@ export struct LocationFullScreenMap {
   }
 
   private setMapLayerType(type: string): void {
-    if (type !== 'terrain' && type !== 'satellite') return
+    if (type !== 'standard' && type !== 'terrain' && type !== 'satellite') return
     hilog.info(0x0000, 'StellariumArkUI', '[full-map] layer type=%{public}s', type)
     this.layerMenuOpen = false
     this.mapLayerType = type
     const controller = this.controller
     if (!controller) return
     try {
-      controller.setMapType(type === 'satellite'
-        ? mapCommon.MapType.SATELLITE : mapCommon.MapType.TERRAIN)
+      const targetType = type === 'satellite'
+        ? mapCommon.MapType.SATELLITE
+        : (type === 'terrain' ? mapCommon.MapType.TERRAIN : mapCommon.MapType.STANDARD)
+      controller.setMapType(targetType)
       // A map-type switch can reset the style; re-apply the day/night mode.
       this.applyMapNightMode()
       // The topographic layer is only rendered at zoom 5..14.
@@ -1300,6 +1328,42 @@ export struct LocationFullScreenMap {
     this.locationStore.searchLocations(query, this.observerPlanet)
   }
 
+  // 批量把花瓣 POI 返回的 GCJ02 坐标反算为 WGS84（单次 IPC 替代最多 20 次串行 rectifyCoordinate）。
+  private async batchToWgs84(positions: Array<mapCommon.LatLng>): Promise<Array<mapCommon.LatLng>> {
+    if (positions.length === 0 || this.observerPlanet !== 'Earth' || this.localGlobe) return positions
+    const candidates: Array<mapCommon.LatLng> = positions.map((pos: mapCommon.LatLng): mapCommon.LatLng => {
+      try {
+        return inverseMapPoint(pos, (point: MapPoint): MapPoint =>
+          map.convertCoordinateSync(mapCommon.CoordinateType.WGS84, mapCommon.CoordinateType.GCJ02, point))
+      } catch (_error) {
+        return pos
+      }
+    })
+    try {
+      const context = this.getUIContext().getHostContext()
+      if (!context) return positions
+      const req = candidates.map((loc: mapCommon.LatLng): mapCommon.CoordinateLatLng => ({
+        coordinateType: mapCommon.CoordinateType.WGS84,
+        location: loc
+      }))
+      const verified = await map.rectifyCoordinate(context, req)
+      if (verified && verified.length === positions.length) {
+        return positions.map((pos: mapCommon.LatLng, i: number): mapCommon.LatLng => {
+          const v = verified[i]
+          if (v.coordinateType === mapCommon.CoordinateType.GCJ02 &&
+            Math.abs(v.location.latitude - pos.latitude) < 0.00002 &&
+            Math.abs(v.location.longitude - pos.longitude) < 0.00002) {
+            return candidates[i]
+          }
+          return pos
+        })
+      }
+    } catch (_error) {
+      // Fall through to raw positions.
+    }
+    return positions
+  }
+
   private async searchPetal(query: string, requestId: number): Promise<void> {
     if (!this.onlineSearchAllowed() || requestId !== this.searchRequestId) return
     this.petalState = 'loading'
@@ -1311,10 +1375,14 @@ export struct LocationFullScreenMap {
       })
       if (!this.onlineSearchAllowed() || requestId !== this.searchRequestId) return
       const sites = result.sites === undefined ? [] : result.sites
+      const validSites = sites.filter((s) => s.location !== undefined).slice(0, 20)
+      const wgsPoints = await this.batchToWgs84(validSites.map((s) => s.location!))
+      if (!this.onlineSearchAllowed() || requestId !== this.searchRequestId) return
       const mapped: Array<MapApiSearchResult> = []
-      for (const item of sites) {
-        if (!item.location) continue
-        const point = await this.toWgs84(item.location)
+      for (let i = 0; i < validSites.length; i += 1) {
+        const item = validSites[i]
+        const point = wgsPoints[i]
+        const loc = item.location!
         const component = item.addressComponent
         mapped.push({
           name: item.name ?? item.formatAddress ?? query,
@@ -1323,11 +1391,10 @@ export struct LocationFullScreenMap {
             component.adminLevel3 ?? component.adminLevel1 ?? '',
           latitude: point.latitude,
           longitude: point.longitude,
-          mapLatitude: item.location.latitude,
-          mapLongitude: item.location.longitude,
+          mapLatitude: loc.latitude,
+          mapLongitude: loc.longitude,
           source: 'petal'
         })
-        if (mapped.length >= 20) break
       }
       if (!this.onlineSearchAllowed() || requestId !== this.searchRequestId) return
       this.petalResults = mapped
@@ -1390,8 +1457,19 @@ export struct LocationFullScreenMap {
   }
 
   private selectDraft(): void {
-    const name = this.selectedName.length > 0 ? this.selectedName : this.locationName
-    this.onPick(this.draftLat, this.draftLon, this.selectedAltitude, name, this.selectedPointSource)
+    let altitude = this.selectedAltitude
+    let name = this.selectedName.length > 0 ? this.selectedName : this.locationName
+    // 若异步海拔/地名尚未返回就点「选此点」，同步用最近离线城市海拔兜底，避免把 0 m 写入观测点。
+    if (this.observerPlanet === 'Earth' && this.altitudeResolving) {
+      const fallback = this.locationStore.altitudeForPoint(this.draftLat, this.draftLon, 'Earth')
+      if (fallback.found) {
+        altitude = Math.round(fallback.altitude)
+        if ((name.length === 0 || name === I18n.t('custom_location')) && fallback.name.length > 0) {
+          name = fallback.name
+        }
+      }
+    }
+    this.onPick(this.draftLat, this.draftLon, altitude, name, this.selectedPointSource)
     this.onClose()
   }
 
@@ -1750,6 +1828,7 @@ export struct LocationFullScreenMap {
           Column({ space: 2 }) {
             Text(I18n.t('map_layer_title')).fontSize(10).fontColor(this.c.sub)
               .width('100%').padding({ left: 8, top: 2, bottom: 2 })
+            this.layerOption('standard', I18n.t('map_layer_standard'))
             this.layerOption('terrain', I18n.t('map_layer_terrain'))
             this.layerOption('satellite', I18n.t('map_layer_satellite'))
           }

@@ -291,9 +291,16 @@ void MeteorShower::update(StelCore* core, double deltaTime)
 		}
 	}
 
-	// paused | forward | backward ?
-	// don't create new meteors
-	if(!core->getRealTimeSpeed())
+	// Bind meteor shower spawning strictly to simulation time flow (JD delta)
+	const double jdNow = core->getJD();
+	double simDeltaSec = 0.0;
+	if (m_hasLastSimJd)
+		simDeltaSec = (jdNow - m_lastSimJd) * 86400.0;
+	m_lastSimJd = jdNow;
+	m_hasLastSimJd = true;
+
+	const double speedFactor = core->getTimeRate() * 86400.0;
+	if (std::fabs(speedFactor) < 1e-4 || std::fabs(speedFactor) > 4.0 || simDeltaSec <= 0.0 || simDeltaSec > 4.0)
 	{
 		return;
 	}
@@ -305,8 +312,8 @@ void MeteorShower::update(StelCore* core, double deltaTime)
 		return;
 	}
 
-	// average meteors per frame
-	const float mpf = currentZHR * static_cast<float>(deltaTime) / 3600.f;
+	// average meteors per frame (strictly driven by simulation delta seconds)
+	const float mpf = currentZHR * static_cast<float>(qMin(simDeltaSec, 1.0)) / 3600.f;
 
 	// maximum amount of meteors for the current frame
 	int maxMpf = qRound(mpf);

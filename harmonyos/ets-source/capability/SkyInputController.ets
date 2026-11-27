@@ -62,6 +62,7 @@ export interface SkyInputHostHooks {
   keyboardTextInputFocused(): boolean
   compactTopQuickX(): number
   isCompactTopQuickPoint(x: number, y: number): boolean
+  compactQuickIdAt?: (x: number, y: number) => string
   lastInfoWinCloseMs(): number
   // 手势归属标志（宿主裸字段，跨 handleOverlayTouch / Dock / 详情定时器共用）
   touchStartedOnUi(): boolean
@@ -104,6 +105,9 @@ export interface SkyInputHostHooks {
   arCameraActive?: () => boolean
   arSkyBlendValue?: () => number
   onArSkyBlendChange?: (value: number, dragging: boolean) => void
+  // 桌面端鼠标悬停星图微预览（只读 probeSelectAt，不改变选中态）。
+  onSkyHoverMove?: (x: number, y: number) => void
+  onSkyHoverClear?: () => void
 }
 
 // 星点亮度归一化值 b ∈ [0, 1]（默认 0.5 对应 Stellarium 默认 absoluteStarScale=1.0）
@@ -219,6 +223,9 @@ export class SkyInputController {
   private mouseSkyLastX: number = 0
   private mouseSkyLastY: number = 0
   private mouseSkyLastSampleMs: number = 0
+  private mouseRightPressed: boolean = false
+  private mouseRightStartX: number = 0
+  private mouseRightStartY: number = 0
   private lastPointerPositionMs: number = 0
   private axisOwner: SkyGestureOwner = SkyGestureOwner.None
   private axisPinchActive: boolean = false
@@ -343,24 +350,53 @@ export class SkyInputController {
 
   handleSkyMouse(event: MouseEvent): void {
     if (event.action === MouseAction.CANCEL) {
+      this.mouseRightPressed = false
+      this.hooks.onSkyHoverClear?.()
       this.finishSkyMouse(true)
       return
     }
     const x = event.x
     const y = event.y
     if (!Number.isFinite(x) || !Number.isFinite(y)) { return }
-    if (event.action === MouseAction.Move && !this.hooks.isUiPoint(x, y)) {
-      const now = Date.now()
-      if (now - this.lastPointerPositionMs >= 32) {
-        this.lastPointerPositionMs = now
-        this.commandPort.fire('setPointerPosition', Math.round(x).toString() + '|' + Math.round(y).toString())
+    if (event.action === MouseAction.Move) {
+      if (!this.hooks.isUiPoint(x, y)) {
+        const now = Date.now()
+        if (now - this.lastPointerPositionMs >= 32) {
+          this.lastPointerPositionMs = now
+          this.commandPort.fire('setPointerPosition', Math.round(x).toString() + '|' + Math.round(y).toString())
+        }
+        if (!this.mouseSkyPressed && !this.mouseRightPressed) {
+          this.hooks.onSkyHoverMove?.(x, y)
+        }
+      } else {
+        this.hooks.onSkyHoverClear?.()
       }
+    } else if (event.action === MouseAction.Press) {
+      this.hooks.onSkyHoverClear?.()
     }
     if (!this.hooks.navigationMouseEnabled()) {
+      this.mouseRightPressed = false
       this.finishSkyMouse(true)
       return
     }
+    // 桌面端星图右键取消选中（经典 Stellarium 交互，不干扰 UI 区域与左键拖拽）。
+    if (event.action === MouseAction.Press && event.button === MouseButton.Right) {
+      this.mouseRightPressed = !this.mouseSkyPressed && !this.hooks.isUiPoint(x, y)
+      this.mouseRightStartX = x
+      this.mouseRightStartY = y
+      return
+    }
+    if (event.action === MouseAction.Release && event.button === MouseButton.Right) {
+      const wasPressed = this.mouseRightPressed
+      this.mouseRightPressed = false
+      if (wasPressed && !this.mouseSkyPressed && distance(x, y, this.mouseRightStartX, this.mouseRightStartY) <= 8 && !this.hooks.isUiPoint(x, y)) {
+        this.resetSkyTapSequence()
+        this.hooks.clearSkySelectionFromDoubleTap(x, y)
+      }
+      return
+    }
     if (event.action === MouseAction.Press && event.button === MouseButton.Left) {
+      this.mouseRightPressed = false
       this.finishSkyAxis(true)
       this.finishSkyMouse(true)
       this.mouseSkyPressed = !this.hooks.isUiPoint(x, y)
@@ -478,7 +514,10 @@ export class SkyInputController {
     }
     const ending = event.action === AxisAction.END
     if (!ending && event.action !== AxisAction.BEGIN && event.action !== AxisAction.UPDATE) { return }
-    if (event.action === AxisAction.BEGIN) { this.finishSkyAxis(true) }
+    if (event.action === AxisAction.BEGIN) {
+      this.hooks.onSkyHoverClear?.()
+      this.finishSkyAxis(true)
+    }
     const x = event.x
     const y = event.y
     if (!Number.isFinite(x) || !Number.isFinite(y)) {
@@ -747,6 +786,7 @@ export class SkyInputController {
         }
         return
       }
+      this.hooks.onSkyHoverClear?.()
       this.finishSkyAxis(true)
       this.finishSkyMouse(true)
       this.stopSkyInertia()
@@ -810,20 +850,26 @@ export class SkyInputController {
         this.hooks.setSkyTouchActive(false)
         this.hooks.setSkyDragging(false)
         this.nativeDragActive = false
-        // 手机端右上角快捷按钮（陀螺仪/音频）：XComponent 同样吞掉了 onClick，
-        // 需要坐标级分派，与上方 tablet rail workaround 同理。
-        if (!this.hooks.isExpandedLayout() && this.hooks.isCompactTopQuickPoint(downX, downY)) {
-          const qx = this.hooks.compactTopQuickX()
-          const qy = compactTopQuickY()
-          // 陀螺仪按钮（上方的 44x44，圆心约 qx+22, qy+22）
-          if (downX >= qx && downX <= qx + 44 && downY >= qy && downY <= qy + 44) {
+        // 右上角快捷按钮（陀螺仪/音频）：若 XComponent 兜底透传了触摸，按实际槽位路由。
+        if (this.hooks.isCompactTopQuickPoint(downX, downY)) {
+          let quickId = ''
+          if (this.hooks.compactQuickIdAt !== undefined) {
+            quickId = this.hooks.compactQuickIdAt(downX, downY)
+          } else if (!this.hooks.isExpandedLayout()) {
+            const qx = this.hooks.compactTopQuickX()
+            const qy = compactTopQuickY()
+            if (downX >= qx && downX <= qx + 44) {
+              if (downY >= qy && downY <= qy + 44) quickId = 'gyro'
+              else if (downY >= qy + 54 && downY <= qy + 54 + 44) quickId = 'audio'
+            }
+          }
+          if (quickId === 'gyro') {
             hilog.info(0x0000, 'StellariumArkUI', '[DIAG] gyro tap via handleSkyTouch')
             this.hooks.resetPanelIdle()
             this.hooks.toggleGyroscope(!this.hooks.gyroscopeEnabled())
             return
           }
-          // 音频按钮（下方的 44x44，间距 10vp，圆心约 qx+22, qy+54+22）
-          if (downX >= qx && downX <= qx + 44 && downY >= qy + 54 && downY <= qy + 54 + 44) {
+          if (quickId === 'audio') {
             hilog.info(0x0000, 'StellariumArkUI', '[DIAG] audio tap via handleSkyTouch')
             this.hooks.resetPanelIdle()
             this.hooks.toggleMusic()

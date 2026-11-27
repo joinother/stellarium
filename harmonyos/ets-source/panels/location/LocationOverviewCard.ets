@@ -31,7 +31,7 @@ export struct LocationOverviewCard {
   // True while the full-screen picker is open: unmount the panel map so two
   // native map surfaces are never alive at the same time.
   @Prop @Watch('onInputChanged') suspended: boolean = false
-  @Prop source: string = 'named'
+  @Prop @Watch('onInputChanged') source: string = 'named'
   @Prop previewWidth: number = 276
   @Prop previewHeight: number = 138
   @State private c: ThemeSlots = DEFAULT_SLOTS
@@ -45,6 +45,8 @@ export struct LocationOverviewCard {
   private themeNight: boolean = false
   private lastModeKey: string = ''
   private timeoutId: number = -1
+  private syncSeq: number = 0
+  private syncTimerId: number = -1
 
   private options: mapCommon.MapOptions = {
     position: { target: { latitude: 0, longitude: 0 }, zoom: PREVIEW_ZOOM },
@@ -92,6 +94,11 @@ export struct LocationOverviewCard {
 
   aboutToDisappear(): void {
     this.clearTimeout()
+    if (this.syncTimerId >= 0) {
+      clearTimeout(this.syncTimerId)
+      this.syncTimerId = -1
+    }
+    this.syncSeq += 1
     this.mapStarted = false
     this.controller = undefined
     this.marker = undefined
@@ -104,13 +111,24 @@ export struct LocationOverviewCard {
       this.prepareMap()
       return
     }
+    // 离线/弱网超时失败后，不再随每次坐标更新反复重建 MapComponent（避免持续转圈 12 秒）。
     if (this.mapFailed) {
-      this.prepareMap()
       return
     }
     if (this.mapReady) {
-      this.syncPoint()
+      this.scheduleSync()
     }
+  }
+
+  // 合并同一事件循环内的 lat/lon/source 多属性变更，避免并发多次 rectifyCoordinate 与 moveCamera。
+  private scheduleSync(): void {
+    if (this.syncTimerId >= 0) {
+      clearTimeout(this.syncTimerId)
+    }
+    this.syncTimerId = setTimeout(() => {
+      this.syncTimerId = -1
+      void this.syncPoint()
+    }, 16)
   }
 
   private hasNetwork(): boolean {
@@ -165,11 +183,13 @@ export struct LocationOverviewCard {
 
   private async onMapLoad(): Promise<void> {
     if (!this.mapStarted) return
-    this.mapReady = true
-    this.mapFailed = false
     this.clearTimeout()
+    this.mapFailed = false
     this.applyMapNightMode()
-    await this.syncPoint()
+    // 先完成国内 GCJ02 纠偏与移镜，再显露地图，避免打开瞬间从 WGS84 闪跳到 GCJ02。
+    await this.syncPoint(true)
+    if (!this.mapStarted) return
+    this.mapReady = true
   }
 
   private onMapError(): void {
@@ -214,18 +234,20 @@ export struct LocationOverviewCard {
     return point
   }
 
-  private async syncPoint(): Promise<void> {
-    if (!this.mapStarted || !this.mapReady) return
+  private async syncPoint(allowBeforeReady: boolean = false): Promise<void> {
+    if (!this.mapStarted || (!this.mapReady && !allowBeforeReady)) return
     const controller = this.controller
     if (!controller) return
+    const seq = ++this.syncSeq
     const point = await this.toMapCoordinate(this.latitude, this.longitude)
-    if (!this.mapStarted || this.controller !== controller) return
+    if (seq !== this.syncSeq || !this.mapStarted || this.controller !== controller) return
     try {
       controller.moveCamera(map.newCameraPosition({ target: point, zoom: PREVIEW_ZOOM }))
     } catch (_error) {
       // Keep the current camera if the SDK rejects the update.
     }
     await this.updateMarker(point)
+    if (seq !== this.syncSeq || !this.mapStarted || this.controller !== controller) return
     this.applyMapNightMode()
   }
 
@@ -328,9 +350,8 @@ export struct LocationOverviewCard {
           .position({ x: this.previewWidth - 32, y: this.previewHeight - 32 })
           .hitTestBehavior(HitTestMode.None)
       }
-      // Transparent full-card tap layer. The map is inert, so this layer owns
-      // the tap and opens the full-screen picker; a drag still scrolls the
-      // surrounding panel.
+      // Transparent full-card tap layer. The map is inert, so this single layer
+      // owns the tap and opens the full-screen picker without double-firing.
       Row()
         .width('100%').height('100%')
         .backgroundColor(Color.Transparent)
@@ -346,7 +367,7 @@ export struct LocationOverviewCard {
         .borderRadius(UI_RADIUS_CONTROL)
         .position({ x: this.previewWidth - 38, y: 8 })
         .zIndex(3)
-        .onClick(() => { this.onOpen() })
+        .hitTestBehavior(HitTestMode.None)
         .accessibilityText(I18n.t('map_open_fullscreen'))
     }
       .width(this.previewWidth)
@@ -357,7 +378,6 @@ export struct LocationOverviewCard {
       .border({ width: 1, color: this.c.border })
       .borderRadius(UI_RADIUS_CONTROL)
       .margin({ top: 10 })
-      .onClick(() => { this.onOpen() })
       .id('observer-planet-map')
   }
 }

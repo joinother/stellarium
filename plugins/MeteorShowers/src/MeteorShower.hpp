@@ -161,6 +161,8 @@ private:
 
 	QList<MeteorObj*> m_activeMeteors; //! List with all the active meteors
 
+	double m_lastSimJd = 0.0;
+	bool m_hasLastSimJd = false;
 	double eclJ2000;                   //! Ecliptic on J2000.0 epoch
 
 	//! Calculates the ZHR using two types of distribution function

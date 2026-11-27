@@ -4,7 +4,8 @@ import { I18n } from '../../pages/I18n'
 import {
   QUICK_ACTION_COLUMNS, QuickActionItem, QUICK_ACTION_EMPTY_ID,
   isValidQuickActionOrder, quickActionById, quickActionCandidatesFor,
-  quickActionDefaultOrder, quickActionItemsFor, quickCandidateRowsFor, quickCandidateSlotsFor
+  quickActionDefaultOrder, quickActionItemsFor, quickCandidateRowsFor,
+  quickCandidateSlotsFor, quickCandidateVisibleRowsFor
 } from '../../common/derive/quickActions'
 import { UI_RADIUS_PILL } from '../../common/ui/UiTokens'
 import { NightModeStore } from '../../state/NightModeStore'
@@ -23,6 +24,7 @@ import { QuickActionGrid } from '../quick/QuickActionGrid'
 // 返回 / 点面板外 = 丢弃复原。格子恒 12 个、位置固定，只做**替换**。
 export interface QuickPanelHostHooks {
   saveOrder: (json: string) => void
+  saveExpanded?: (expanded: boolean) => void
   hint: (text: string) => void
 }
 
@@ -31,7 +33,7 @@ export class QuickPanelStore {
   // 12 格顺序（条目 id 序列，长度恒 12）。
   order: string[] = quickActionDefaultOrder()
   editable: boolean = false
-  // 正常态的“更多操作”区是否展开（临时 UI 状态，不落盘；每次打开面板重置为 false）。
+  // 正常态的“更多操作”区是否展开（持久化保留：关闭面板再打开仍维持上次长/短限位）。
   expanded: boolean = false
   // 进入编辑态时的顺序快照，供「丢弃」复原。
   orderSnapshot: string[] = []
@@ -52,19 +54,35 @@ export class QuickPanelStore {
     return quickActionItemsFor(this.order)
   }
 
-  // 候选带：池中「当前未列入」的项，已按 6 列补位（空位为占位项），上限两行。
+  // 候选带：池中「当前未列入」的全部项，按 6 列补位（空位为占位项）。
   candidateSlots(): QuickActionItem[] {
     return quickCandidateSlotsFor(this.order)
   }
 
-  // —— 正常态“更多操作”区 ——
-  setExpanded(value: boolean): void {
+  // —— 正常态“更多操作”区（带状态记忆）——
+  setExpanded(value: boolean, persist: boolean = true): void {
+    const changed = this.expanded !== value
     this.expanded = value
+    if (changed && persist && this.hooks.saveExpanded !== undefined) {
+      this.hooks.saveExpanded(value)
+    }
   }
 
-  // 候选带占用的行数（与宿主高度公式同源，见 quickCandidateRowsFor）。
+  // 候选带总行数（全部可滚动行）。
   moreRows(): number {
     return quickCandidateRowsFor(this.order)
+  }
+
+  // 候选带有限位可视行数（与宿主面板高度公式同源）。
+  visibleMoreRows(): number {
+    return quickCandidateVisibleRowsFor(this.order)
+  }
+
+  candidateRowIndices(): number[] {
+    const rows = this.moreRows()
+    const indices: number[] = []
+    for (let i = 0; i < rows; i++) indices.push(i)
+    return indices
   }
 
   // —— 编辑态 ——
@@ -138,10 +156,14 @@ export struct QuickPanel {
   @Prop gyroActive: boolean = false
   @Prop arCameraActive: boolean = false
   @Prop arCameraStarting: boolean = false
+  @Prop cellSize: number = 52
+  @Prop dampProgress: number = 0
   @StorageLink('stellariumSpectralLensActive') spectralLensActive: boolean = false
   @State private c: ThemeSlots = DEFAULT_SLOTS
+  candidateScroller: Scroller = new Scroller()
   onToggle: (id: string, value: boolean) => void = () => {}
   onToggleArCamera: () => void = () => {}
+  onToggleExpand: () => void = () => {}
   onHint: (text: string) => void = () => {}
 
   onWillApplyTheme(theme: Theme): void { this.c = slotsFromTheme(theme) }
@@ -253,17 +275,55 @@ export struct QuickPanel {
           ))
           .onClick(() => { this.onToggleArCamera() })
       }
-      // 默认只有 6×2；用顶部抓手向上拖动（或进入编辑态）才显示分隔线与更多按钮。
+      // 默认只有 6×2 短限位；上滚越过阻尼（或拖动顶部抓手 / 进入编辑态）后菜单框变长至有限位高度，
+      // 剩余第一/二梯队扩展开关在独立 Scroll 内顺滑滚动，同时顶部 12 格保持锚定（便于编辑态拖放替换）。
       if (this.store.expanded || this.store.editable) {
         Row()
           .width('100%')
           .height(1)
           .backgroundColor(this.c.border)
           .margin({ top: 10 })
-        this.candidateRow(0)
-        if (this.store.moreRows() > 1) {
-          this.candidateRow(1)
+        Scroll(this.candidateScroller) {
+          Column() {
+            ForEach(this.store.candidateRowIndices(), (rowIndex: number) => {
+              this.candidateRow(rowIndex)
+            }, (rowIndex: number) => 'candidate-row-' + rowIndex)
+          }
+            .width('100%')
+            .padding({ bottom: 4 })
         }
+          .width('100%')
+          .height(Math.max(this.cellSize + 12,
+            12 + this.store.visibleMoreRows() * this.cellSize + Math.max(0, this.store.visibleMoreRows() - 1) * 6 + 4))
+          .scrollable(ScrollDirection.Vertical)
+          .scrollBar(BarState.Auto)
+          .edgeEffect(EdgeEffect.Spring)
+          .nestedScroll({
+            scrollForward: NestedScrollMode.SELF_ONLY,
+            scrollBackward: NestedScrollMode.SELF_ONLY
+          })
+          .transition(TransitionEffect.asymmetric(
+            TransitionEffect.OPACITY.animation({ duration: 200, curve: Curve.EaseOut })
+              .combine(TransitionEffect.translate({ x: 0, y: 8 }).animation({ duration: 260, curve: curves.springMotion(0.46, 0.86) })),
+            TransitionEffect.OPACITY.animation({ duration: 150, curve: Curve.EaseIn })
+          ))
+      } else {
+        // 短限位底部阻尼微指示条：上滚蓄力时随 dampProgress 柔和加宽亮起，亦可轻点展开。
+        Row() {
+          Row()
+            .width(28 + Math.round(Math.max(0, this.dampProgress) * 24))
+            .height(3.5)
+            .borderRadius(2)
+            .backgroundColor(this.dampProgress > 0.15 ? this.c.accent : this.c.dragHandle)
+            .opacity(0.45 + Math.min(0.55, Math.max(0, this.dampProgress) * 0.55))
+            .animation({ duration: 140, curve: Curve.EaseOut })
+        }
+          .width('100%')
+          .height(14)
+          .margin({ top: 4 })
+          .justifyContent(FlexAlign.Center)
+          .alignItems(VerticalAlign.Center)
+          .onClick(() => { this.onToggleExpand() })
       }
       if (this.store.editable) {
         Row() {

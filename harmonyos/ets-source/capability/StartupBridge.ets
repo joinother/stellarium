@@ -14,6 +14,7 @@ import { StellariumBridgeResponse } from '../pages/StellariumTypes'
 import { LimitMagnitudeResponse } from '../pages/MainWindowModels'
 import { I18n } from '../pages/I18n'
 import { AudioEngine } from './AudioEngine'
+import { normalizeAetherisMaterial, normalizeAetherisMood } from './AudioCatalog'
 import { astroGroupForTab, clamp } from '../common/derive/astro'
 import { CommandPort } from '../bridge/CommandPort'
 import { SkyCultureViewStore } from '../state/SkyCultureViewStore'
@@ -218,13 +219,18 @@ export class StartupBridge {
     const settings = AppStorage.get<string>("stellariumSettings")
     if (settings) {
       try {
-        const saved = JSON.parse(settings) as Record<string, boolean | string>
+        const saved = JSON.parse(settings) as Record<string, boolean | string | number>
         if (saved.gyroscopeEnabled !== undefined) {
           this.gyroStore.gyroscopeEnabled = false
           this.gyroStore.gyroscopeStatus = I18n.t('m_gyro_off')
         }
         if (saved.gyroscopeSensitivityText !== undefined) { this.gyroStore.gyroscopeSensitivityText = saved.gyroscopeSensitivityText as string }
         if (saved.musicEnabled !== undefined) { this.audioStore.musicEnabled = saved.musicEnabled as boolean }
+        if (saved.sfxEnabled !== undefined) { this.audioStore.sfxEnabled = saved.sfxEnabled as boolean }
+        const savedVolume = Number(saved.audioVolume)
+        if (Number.isFinite(savedVolume) && savedVolume >= 0 && savedVolume <= 1) {
+          this.audioStore.audioVolume = savedVolume
+        }
         if (saved.useMetricUnits !== undefined) { this.viewSettingsStore.useMetricUnits = saved.useMetricUnits as boolean }
         if (saved.viewCoordinatesVisible !== undefined) { this.overlayStore.viewCoordinatesVisible = saved.viewCoordinatesVisible as boolean }
         if (saved.viewCoordinateFamily !== undefined) { this.overlayStore.viewCoordinateFamily = saved.viewCoordinateFamily as string }
@@ -256,7 +262,26 @@ export class StartupBridge {
         if (savedMoonPhaseDays === 30 || savedMoonPhaseDays === 90) this.astroStore.moonPhaseDays = savedMoonPhaseDays
       } catch (_err) { }
     }
-    if (this.audioStore.musicEnabled) { AudioEngine.getInstance().start() }
+    const audioEngine = AudioEngine.getInstance()
+    const rawSettings = AppStorage.get<string>('stellariumSettings')
+    if (rawSettings) {
+      try {
+        const parsed = JSON.parse(rawSettings) as Record<string, Object>
+        if (typeof parsed['audioMood'] === 'string') {
+          this.audioStore.audioMood = normalizeAetherisMood(parsed['audioMood'] as string)
+        }
+        if (typeof parsed['audioMaterial'] === 'string') {
+          this.audioStore.audioMaterial = normalizeAetherisMaterial(parsed['audioMaterial'] as string)
+        }
+        if (typeof parsed['audioSeed'] === 'string' && (parsed['audioSeed'] as string).length > 0) {
+          this.audioStore.audioSeed = parsed['audioSeed'] as string
+        }
+      } catch (_e) { }
+    }
+    audioEngine.applyAetherisSettings(this.audioStore.audioSeed, this.audioStore.audioMood, this.audioStore.audioMaterial)
+    audioEngine.setVolume(this.audioStore.audioVolume)
+    audioEngine.setSfxEnabled(this.audioStore.sfxEnabled)
+    void audioEngine.setMusicEnabled(this.audioStore.musicEnabled)
     I18n.setLanguage(I18n.fromStellariumCode(this.languageStore.selectedLanguage))
     this.hooks.syncViewCoordinateTimer()
     this.hooks.syncDockClockTimer()

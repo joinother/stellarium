@@ -737,16 +737,22 @@ void Constellation::loadArtModel(const QString& path, const Mat4d& transform, in
 	modelIndices.swap(indices);
 	modelCenter = normalize(transform * Vec3d(width * (minimumHorizontal + maximumHorizontal) * 0.5,
 	                                        height * (minimumVertical + maximumVertical) * 0.5, 0.));
+	modelPivot = modelCenter;
 	modelRight = normalize(transform * Vec3d(width, height * 0.5, 0.) - transform * Vec3d(0., height * 0.5, 0.));
 	modelRight = normalize(modelRight - modelCenter * (modelRight * modelCenter));
 	modelUp = normalize(modelCenter ^ modelRight);
+	if (!artTexture)
+	{
+		boundingCap.n = modelCenter;
+		boundingCap.d = 1.;
+	}
 	double minimumCosine = 1.;
 	double poseMargin = 0.;
 	for (const Vec3d& position : modelPositions)
 	{
 		boundingCap.d = qMin(boundingCap.d, boundingCap.n * normalize(position));
 		minimumCosine = qMin(minimumCosine, modelCenter * normalize(position));
-		poseMargin = qMax(poseMargin, std::asin(qMin(1., 2. * std::sin(0.40 * 0.5) * (position - modelCenter).norm() / position.norm())));
+		poseMargin = qMax(poseMargin, std::asin(qMin(1., 2. * std::sin(0.40 * 0.5) * (position - modelPivot).norm() / position.norm())));
 	}
 	modelSpanDegrees = 2. * std::acos(qBound(-1., minimumCosine, 1.)) * 180. / M_PI;
 	boundingCap.d = std::cos(qMin(M_PI, std::acos(qBound(-1., boundingCap.d, 1.)) + poseMargin));
@@ -756,6 +762,27 @@ void Constellation::loadArtModel(const QString& path, const Mat4d& transform, in
 	modelValid.resize(modelPositions.size());
 	modelDrawColors.resize(modelPositions.size());
 	modelVisibleIndices.reserve(modelIndices.size());
+}
+
+void Constellation::setSharedModelFrame(const Vec3d& pivot, const Vec3d& right, const Vec3d& up)
+{
+	if (modelPositions.isEmpty()) return;
+	modelPivot = normalize(pivot);
+	modelRight = normalize(right - modelPivot * (right * modelPivot));
+	modelUp = normalize(up);
+	if (!artTexture)
+	{
+		boundingCap.n = modelCenter;
+		boundingCap.d = 1.;
+	}
+	double poseMargin = 0.;
+	for (const Vec3d& position : modelPositions)
+	{
+		boundingCap.d = qMin(boundingCap.d, boundingCap.n * normalize(position));
+		poseMargin = qMax(poseMargin, std::asin(qMin(1., 2. * std::sin(0.40 * 0.5) * (position - modelPivot).norm() / position.norm())));
+	}
+	boundingCap.d = std::cos(qMin(M_PI, std::acos(qBound(-1., boundingCap.d, 1.)) + poseMargin));
+	modelCachedYaw = 100.f;
 }
 
 float Constellation::modelIntensity() const
@@ -768,14 +795,14 @@ void Constellation::prepareModelPose() const
 	if (!modelDirections.isEmpty() &&
 		std::abs(modelYaw - modelCachedYaw) + std::abs(modelPitch - modelCachedPitch) + std::abs(modelRoll - modelCachedRoll) < 0.004f)
 		return;
-	const Mat4d rotation = Mat4d::rotation(modelCenter, modelRoll) * Mat4d::rotation(modelUp, modelYaw) * Mat4d::rotation(modelRight, modelPitch);
+	const Mat4d rotation = Mat4d::rotation(modelPivot, modelRoll) * Mat4d::rotation(modelUp, modelYaw) * Mat4d::rotation(modelRight, modelPitch);
 	const int vertexCount = modelPositions.size();
 	modelDirections.resize(vertexCount);
 	modelDepths.resize(vertexCount);
 	const double r00 = rotation.r[0], r01 = rotation.r[4], r02 = rotation.r[8];
 	const double r10 = rotation.r[1], r11 = rotation.r[5], r12 = rotation.r[9];
 	const double r20 = rotation.r[2], r21 = rotation.r[6], r22 = rotation.r[10];
-	const double cx = modelCenter[0], cy = modelCenter[1], cz = modelCenter[2];
+	const double cx = modelPivot[0], cy = modelPivot[1], cz = modelPivot[2];
 	const Vec3d* src = modelPositions.constData();
 	Vec3d* dstDir = modelDirections.data();
 	float* dstDepth = modelDepths.data();

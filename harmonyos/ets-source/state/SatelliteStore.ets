@@ -194,6 +194,13 @@ export class SatelliteStore {
     return n
   }
 
+  // 本地导入 TLE 或手动更新完成后主动通知宿主刷新天象日历、桌面过境卡片与通知订阅。
+  notifyCatalogUpdated(): void {
+    if (this.onCatalogUpdated !== null) {
+      this.onCatalogUpdated()
+    }
+  }
+
   loadSatelliteSources(): void {
     const port = this.ensurePort()
     if (port === null) {
@@ -212,7 +219,8 @@ export class SatelliteStore {
         this.satUpdateSettings = response.settings
         if (response.settings.updateState === 0) {
           this.observingUpdate = true
-          if (this.panelVisible && this.updatePollTimer < 0 && this.updatePollCount < 90) {
+          // 即使用户在更新期间离开卫星面板前往天象日历，也继续轮询至本次更新完成，确保过境卡片自动刷新。
+          if ((this.panelVisible || this.observingUpdate) && this.updatePollTimer < 0 && this.updatePollCount < 90) {
             this.updatePollCount++
             this.updatePollTimer = setTimeout(() => {
               this.updatePollTimer = -1
@@ -224,10 +232,13 @@ export class SatelliteStore {
           this.updatePollTimer = -1
           this.updatePollCount = 0
           if (this.observingUpdate || completedChanged) {
+            const wasObserving = this.observingUpdate
             this.observingUpdate = false
             this.satSourceStatus = this.lastCheckResultText()
             this.loadSatellites()
-            if (this.onCatalogUpdated !== null && (response.settings.updateState === 2 || response.settings.updateState === 5)) {
+            if (this.onCatalogUpdated !== null &&
+              (response.settings.updateState === 2 || response.settings.updateState === 5 ||
+                (wasObserving && response.settings.updateState === 1))) {
               this.onCatalogUpdated()
             }
           }

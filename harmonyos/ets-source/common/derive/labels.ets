@@ -536,6 +536,9 @@ export function panelTitleFor(activePanel: string, configTab: number, isExpanded
   if (activePanel === 'devTools') {
     return I18n.t('panel_dev_tools')
   }
+  if (activePanel === 'audio') {
+    return I18n.t('panel_audio_ctrl')
+  }
   if (activePanel === 'layers') {
     return I18n.t('i0100')
   }

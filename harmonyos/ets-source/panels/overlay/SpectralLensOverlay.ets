@@ -1,6 +1,7 @@
 import { Theme } from '@kit.ArkUI'
 import { vibrator } from '@kit.SensorServiceKit'
 import { BridgeClient } from '../../bridge/BridgeClient'
+import { AudioEngine } from '../../capability/AudioEngine'
 import { DEFAULT_SLOTS, ThemeSlots, slotsFromTheme } from '../../state/StellariumTheme'
 import { UI_RADIUS_PILL } from '../../common/ui/UiTokens'
 
@@ -177,6 +178,7 @@ export struct SpectralLensOverlay {
 
   private onActiveChanged(): void {
     if (this.active) {
+      AudioEngine.getInstance().playUiCue('loupe_open')
       const idx = bandIndexById(this.storedBandId)
       this.bandIndex = idx
       this.handleAngleDeg = LENS_BANDS[idx].angleDeg
@@ -196,6 +198,7 @@ export struct SpectralLensOverlay {
         this.scheduleTipFade()
       }
     } else {
+      AudioEngine.getInstance().playUiCue('loupe_close')
       this.clearAnimTimer()
       this.isExpandingFullScreen = false
       this.isResizingLens = false
@@ -359,6 +362,8 @@ export struct SpectralLensOverlay {
     }
     if (changed) {
       this.triggerDetentHaptic()
+      AudioEngine.getInstance().playUiCue('loupe_blip')
+      AudioEngine.getInstance().playBandCue(LENS_BANDS[clamped].id)
       this.syncFullNativeLens()
       if (snapAngle) this.flashBandToast()
     }
@@ -367,6 +372,7 @@ export struct SpectralLensOverlay {
   // 拉大圆镜至阈值：纯 GPU 水波扩散铺满整屏后零闪烁无缝移交全屏 4K 多光谱
   private expandToFullScreenAnimated(): void {
     if (this.isExpandingFullScreen) return
+    AudioEngine.getInstance().playUiCue('loupe_fullscreen')
     this.clearAnimTimer()
     this.isExpandingFullScreen = true
     this.isResizingLens = false

@@ -7,7 +7,7 @@ import { tintMatrixFor } from '../../common/ui/IconTint'
 import { UI_RADIUS_CARD } from '../../common/ui/UiTokens'
 
 // 搜索面板内嵌的「日历 ›」近期天象横滑卡片条：
-// 点击标题进入完整天文日历，点击单张卡片直达对应天象详情。
+// 支持轻柔自动轮播（触摸/手动拖动时立即让位并暂停），点击标题进入完整天文日历，点击单张卡片直达对应天象详情。
 @Component
 export struct SearchCalendarStrip {
   @ObjectLink calendarStore: AstronomyCalendarStore
@@ -15,6 +15,57 @@ export struct SearchCalendarStrip {
   @State private c: ThemeSlots = DEFAULT_SLOTS
   onOpenCalendar: () => void = () => {}
   onSelectEvent: (id: string) => void = () => {}
+  private stripScroller: Scroller = new Scroller()
+  private autoScrollTimer: number = -1
+  private autoScrollPausedUntil: number = 0
+  private static readonly CARD_STEP_VP: number = 122
+  private static readonly AUTO_SCROLL_INTERVAL_MS: number = 3600
+  private static readonly USER_PAUSE_MS: number = 6000
+
+  aboutToAppear(): void {
+    this.startAutoScroll()
+  }
+
+  aboutToDisappear(): void {
+    this.stopAutoScroll()
+  }
+
+  private pauseAutoScroll(durationMs: number = SearchCalendarStrip.USER_PAUSE_MS): void {
+    this.autoScrollPausedUntil = Date.now() + durationMs
+  }
+
+  private startAutoScroll(): void {
+    if (this.autoScrollTimer >= 0) return
+    this.autoScrollTimer = setInterval(() => {
+      if (Date.now() < this.autoScrollPausedUntil) return
+      if (this.previewEvents().length <= 2) return
+      try {
+        if (this.stripScroller.isAtEnd()) {
+          this.stripScroller.scrollTo({
+            xOffset: 0,
+            yOffset: 0,
+            animation: { duration: 600, curve: Curve.EaseInOut }
+          })
+        } else {
+          const curX = this.stripScroller.currentOffset().xOffset
+          this.stripScroller.scrollTo({
+            xOffset: Math.max(0, curX) + SearchCalendarStrip.CARD_STEP_VP,
+            yOffset: 0,
+            animation: { duration: 520, curve: Curve.EaseInOut }
+          })
+        }
+      } catch (_err) {
+        // Scroller may not yet be attached to a mounted Scroll view.
+      }
+    }, SearchCalendarStrip.AUTO_SCROLL_INTERVAL_MS) as number
+  }
+
+  private stopAutoScroll(): void {
+    if (this.autoScrollTimer >= 0) {
+      clearInterval(this.autoScrollTimer)
+      this.autoScrollTimer = -1
+    }
+  }
 
   onWillApplyTheme(theme: Theme): void {
     this.c = slotsFromTheme(theme)
@@ -218,7 +269,7 @@ export struct SearchCalendarStrip {
         .onClick(() => { this.onOpenCalendar() })
 
       if (this.previewEvents().length > 0) {
-        Scroll() {
+        Scroll(this.stripScroller) {
           Row({ space: 8 }) {
             ForEach(this.previewEvents(), (event: AstronomyCalendarEvent) => {
               this.eventPreviewCard(event)
@@ -230,6 +281,8 @@ export struct SearchCalendarStrip {
           .scrollable(ScrollDirection.Horizontal)
           .scrollBar(BarState.Off)
           .edgeEffect(EdgeEffect.Spring)
+          .onTouch(() => { this.pauseAutoScroll() })
+          .onScrollStart(() => { this.pauseAutoScroll() })
       } else {
         Row({ space: 10 }) {
           if (this.calendarStore.loading) {

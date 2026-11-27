@@ -2,6 +2,7 @@ import { curves, Theme } from '@kit.ArkUI'
 import { ShellAction } from '../../pages/StellariumTypes'
 import { BottomDock } from './BottomDock'
 import { DockClockLayer, DockFovLayer, SkyZoomLayer } from './PanelChromeExtras'
+import { CompactTopQuickControls } from './CompactTopQuickControls'
 import { GyroCalibPanel } from '../sensors/GyroCalibPanel'
 import { UnifiedObjectDetailCard } from '../object/UnifiedObjectDetailCard'
 import { GyroStore } from '../../state/GyroStore'
@@ -55,6 +56,11 @@ export struct ExpandedShell {
   @Prop dockHeight: number
   @Prop expandedDockWidth: number
   @Prop expandedDockLeft: number
+  @Prop musicEnabled: boolean = false
+  @Prop showGyro: boolean = true
+  @Prop compactQuickPressed: string = ''
+  @Prop quickX: number = 0
+  @Prop quickY: number = 18
   @Prop gyroPanelLeft: number
   @Prop gyroPanelTop: number
   @Prop infoWinVisible: boolean
@@ -100,8 +106,12 @@ export struct ExpandedShell {
   onDockTap: (item: ShellAction) => void = () => {}
   onPanelTouch: (event: TouchEvent) => void = () => {}
   onOpenTime: () => void = () => {}
+  onScrubTime: (deltaMinutes: number) => void = () => {}
+  onScrubFov: (zoomIn: boolean) => void = () => {}
   onZoomIn: () => void = () => {}
   onZoomOut: () => void = () => {}
+  onGyro: () => void = () => {}
+  onAudio: () => void = () => {}
   onFlashHint: (text: string) => void = () => {}
   onCalibrate: () => void = () => {}
   onToggleGyroscope: (enabled: boolean) => void = () => {}
@@ -165,19 +175,18 @@ export struct ExpandedShell {
           .height(this.dockHeight)
           .justifyContent(FlexAlign.Center)
           .position({ x: this.expandedDockLeft, y: this.dockTop })
-          .hitTestBehavior(HitTestMode.Block)
           .zIndex(40)
           .animation({ duration: 300, curve: curves.springMotion(0.46, 0.86) })
         // 三件套共用宿主锚点：平板（expanded）下贴屏幕左右缘 —— 平板 dock 宽度封顶 640 且
         // 面板打开时会被挤到右侧，若跟随 dock 两端，三件套会随面板开合整体横移。
         if (!this.panelVisible && !this.polarScopeVisible && this.dockClockText.length > 0) {
-          DockClockLayer({ clockText: this.dockClockText, layerWidth: this.chromeRowWidth, posX: this.chromeRowPosXRight, posY: this.chromeRowY, onOpenTime: () => { this.onOpenTime() } })
+          DockClockLayer({ clockText: this.dockClockText, layerWidth: this.chromeRowWidth, posX: this.chromeRowPosXRight, posY: this.chromeRowY, chromeOpacity: this.chromeOpacity, onOpenTime: () => { this.onOpenTime() }, onScrubTime: (deltaMinutes: number) => { this.onScrubTime(deltaMinutes) } })
         }
-        // FOV 读数：贴左端，与右侧时钟左右对称（整层不参与命中测试）。首帧前为 '--'，用 '°' 兜住。
+        // FOV 读数：贴左端，与右侧时钟左右对称；桌面端支持悬停滚轮精细微调视场。
         if (!this.panelVisible && !this.polarScopeVisible && this.fovText.indexOf('°') >= 0) {
           DockFovLayer({
             fovText: this.fovText, layerWidth: this.chromeRowWidth, posX: this.chromeRowPosXLeft,
-            posY: this.chromeRowY
+            posY: this.chromeRowY, chromeOpacity: this.chromeOpacity, onScrubFov: (zoomIn: boolean) => { this.onScrubFov(zoomIn) }
           })
         }
         // 缩放按钮：紧贴读数行上沿；平板横排（一行 44 + 4 间隙），手机·半折竖排（96 高）。
@@ -185,9 +194,27 @@ export struct ExpandedShell {
           SkyZoomLayer({
             layerWidth: this.chromeRowWidth, posX: this.chromeRowPosXLeft,
             rowY: this.chromeRowY, horizontal: this.chromeZoomHorizontal,
+            chromeOpacity: this.chromeOpacity,
             onZoomIn: () => { this.onZoomIn() },
             onZoomOut: () => { this.onZoomOut() }
           })
+        }
+        // 右上角常驻快捷区：与紧凑模式统一（支持真实硬件陀螺仪时显示陀螺仪 + 音频，否则仅显示音频）。
+        if (!this.polarScopeVisible) {
+          Stack() {
+            CompactTopQuickControls({
+              gyroActive: this.gyroStore.gyroscopeEnabled,
+              audioActive: this.musicEnabled,
+              showGyro: this.showGyro,
+              receiveTap: true,
+              pressedId: this.compactQuickPressed,
+              chromeOpacity: this.chromeOpacity,
+              onGyro: () => { this.onGyro() },
+              onAudio: () => { this.onAudio() }
+            })
+          }
+            .position({ x: this.quickX, y: this.quickY })
+            .zIndex(40)
         }
       }
       // 陀螺仪校准面板（开启陀螺仪时显示在侧栏右侧）

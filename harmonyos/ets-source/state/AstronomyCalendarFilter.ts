@@ -2,7 +2,7 @@
 // Kept free of ArkUI imports so both ArkTS panels/stores and Node host test suites can run it directly.
 
 export type CalendarFilterCategory =
-  'moon' | 'planet' | 'meteor' | 'solar' | 'satellite' | 'companion' | 'eclipse' | 'season' | 'dynamic'
+  'moon' | 'planet' | 'meteor' | 'solar' | 'satellite' | 'companion' | 'eclipse' | 'season' | 'dynamic' | 'rocket'
 
 export type CalendarSatelliteSubFilter = 'all' | 'stations' | 'visible' | 'high_alt'
 
@@ -119,6 +119,7 @@ export interface NativeSatellitePassRecord {
 
 export const EARTH_CALENDAR_CATEGORIES: CalendarFilterCategoryMeta[] = [
   { id: 'dynamic', labelZh: '动态天象', labelEn: 'Live Alerts', dotHex: '#CE93D8' },
+  { id: 'rocket', labelZh: '火箭发射', labelEn: 'Rocket Launches', dotHex: '#FF784E' },
   { id: 'eclipse', labelZh: '日月食', labelEn: 'Eclipses', dotHex: '#FF7043' },
   { id: 'moon', labelZh: '月相', labelEn: 'Moon', dotHex: '#E0E6F2' },
   { id: 'planet', labelZh: '行星', labelEn: 'Planets', dotHex: '#FFB74D' },
@@ -144,6 +145,7 @@ export function calendarCategoriesForPlanet(observerPlanet: string): CalendarFil
 }
 
 export function calendarCategoryOfKind(kind: string): CalendarFilterCategory {
+  if (kind === 'rocket-launch') return 'rocket'
   if (kind === 'aurora-alert' || kind === 'comet-event' || kind === 'spaceflight' ||
     kind === 'transient' || kind === 'editorial') return 'dynamic'
   if (kind === 'solar-eclipse' || kind === 'lunar-eclipse' || kind === 'companion-eclipse') return 'eclipse'
@@ -158,6 +160,7 @@ export function calendarCategoryOfKind(kind: string): CalendarFilterCategory {
 
 export function isHighlightCalendarEvent(event: CalendarFilterableEvent): boolean {
   if (event.remoteHighlight === true) return true
+  if (event.kind === 'rocket-launch') return true
   if (event.kind === 'aurora-alert' || event.kind === 'comet-event' || event.kind === 'spaceflight') return true
   if (event.kind === 'solar-eclipse' || event.kind === 'lunar-eclipse' ||
     event.kind === 'meteor-peak' || event.kind === 'companion-eclipse') return true

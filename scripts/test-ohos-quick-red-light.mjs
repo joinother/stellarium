@@ -20,8 +20,8 @@ test('red light is a candidate-only quick action and keeps the 12-slot default g
   assert.equal(item.type, 'toggle');
   assert.equal(item.kind, 'vector');
   assert.equal(item.labelKey, 'quick_red_light');
-  // 含多光谱透视镜后，候选池为 18 项（12 格默认 + 6 格候选 = 完整 1 行）。
-  assert.equal(pool.length, 18);
+  // 含第一/第二梯队 21 项官方图标后，候选池为 39 项（12 格默认 + 27 格候选 = 5 行，展开有限位可视 3 行）。
+  assert.equal(pool.length, 39);
 
   const defaults = quick.quickActionDefaultOrder();
   assert.equal(defaults.length, 12);
@@ -29,10 +29,11 @@ test('red light is a candidate-only quick action and keeps the 12-slot default g
   assert.ok(defaults.includes('satellites'));
 
   const candidates = quick.quickActionCandidatesFor(defaults);
-  assert.equal(candidates.length, 6);
+  assert.equal(candidates.length, 27);
   assert.ok(candidates.some((entry) => entry.id === 'red_light'));
-  assert.equal(quick.quickCandidateRowsFor(defaults), 1);
-  assert.equal(quick.quickCandidateSlotsFor(defaults).length, 6);
+  assert.equal(quick.quickCandidateRowsFor(defaults), 5);
+  assert.equal(quick.quickCandidateVisibleRowsFor(defaults), 3);
+  assert.equal(quick.quickCandidateSlotsFor(defaults).length, 30);
 });
 
 test('the quick cell resolves the new red-light and map-navigation icons', () => {

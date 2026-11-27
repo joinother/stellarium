@@ -69,6 +69,28 @@ export function getIcon(icon: string, isActive: boolean): Resource {
     'bt_flip_horizontal': $r('app.media.bt_flip_horizontal'),
     'bt_obs_list': $r('app.media.bt_obs_list'),
     'edit': $r('app.media.ic_edit'),
+    // 三期扩充（第一 + 第二梯队共 21 枚官方原版工具栏图标，统一经 colorFilter 着色）。
+    'bt_constellation_boundaries': $r('app.media.bt_constellation_boundaries'),
+    'bt_meteor_showers': $r('app.media.bt_meteor_showers'),
+    'bt_angle_measure': $r('app.media.bt_angle_measure'),
+    'bt_asterism_lines': $r('app.media.bt_asterism_lines'),
+    'bt_hips': $r('app.media.bt_hips'),
+    'bt_flip_vertical': $r('app.media.bt_flip_vertical'),
+    'bt_sensor': $r('app.media.bt_sensor'),
+    'bt_telrad': $r('app.media.bt_telrad'),
+    'bt_mosaic_camera': $r('app.media.bt_mosaic_camera'),
+    'bt_compass_marks': $r('app.media.bt_compass_marks'),
+    'bt_ecliptic_grid': $r('app.media.bt_ecliptic_grid'),
+    'bt_galactic_grid': $r('app.media.bt_galactic_grid'),
+    'bt_planets': $r('app.media.bt_planets'),
+    'bt_archaeo_lines': $r('app.media.bt_archaeo_lines'),
+    'bt_telescope': $r('app.media.bt_telescope'),
+    'bt_nav_stars': $r('app.media.bt_nav_stars'),
+    'bt_calendars': $r('app.media.bt_calendars'),
+    'bt_exoplanets': $r('app.media.bt_exoplanets'),
+    'bt_pulsars': $r('app.media.bt_pulsars'),
+    'bt_quasars': $r('app.media.bt_quasars'),
+    'bt_fullscreen': $r('app.media.bt_fullscreen'),
   }
   return map[icon] || $r('app.media.ic_search')
 }

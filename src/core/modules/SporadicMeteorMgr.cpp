@@ -50,6 +50,8 @@ SporadicMeteorMgr::SporadicMeteorMgr(int zhr, int maxv)
 	, m_lastVividGeneration(0)
 	, m_lastGenerationSuppression(QStringLiteral("not-started"))
 	, m_spawnAccumulator(0.)
+	, m_lastSimJd(0.)
+	, m_hasLastSimJd(false)
 {
 	setObjectName("SporadicMeteorMgr");
 }
@@ -118,20 +120,40 @@ void SporadicMeteorMgr::update(double deltaTime)
 	}
 
 	StelCore* core = StelApp::getInstance().getCore();
-
-	// going forward/backward OR current ZHR is zero ?
-	// don't create new meteors
-	if(!core->getRealTimeSpeed() || m_zhr < 1)
+	const double jdNow = core ? core->getJD() : 0.0;
+	const double timeRate = core ? core->getTimeRate() : 0.0;
+	double simDeltaSec = 0.0;
+	if (m_hasLastSimJd && core)
 	{
-		m_spawnAccumulator = 0.;
-		m_lastGenerationSuppression = !core->getRealTimeSpeed()
-			? QStringLiteral("real-time-speed-required")
-			: QStringLiteral("zhr-zero");
+		simDeltaSec = (jdNow - m_lastSimJd) * 86400.0;
+	}
+	m_lastSimJd = jdNow;
+	m_hasLastSimJd = (core != nullptr);
+
+	// Bind meteor generation strictly to simulation time flow:
+	//   - Paused (timeRate == 0) -> freeze completely (zero new meteors, existing meteors frozen in place!)
+	//   - Normal / slow-mo / moderate speed (0 < |timeRate| <= 15x) -> spawn proportional to simDeltaSec
+	//   - Fast time-lapse (> 15x) or large jump -> suppress new spawns cleanly
+	const double speedFactor = timeRate * 86400.0;
+	const bool isPaused = std::fabs(speedFactor) < 1e-4;
+	const bool isExtremeSpeed = std::fabs(speedFactor) > 4.0 || std::fabs(simDeltaSec) > 4.0;
+	if (m_zhr < 1 || isPaused || isExtremeSpeed || simDeltaSec <= 0.0)
+	{
+		if (m_zhr < 1 || isExtremeSpeed)
+			m_spawnAccumulator = 0.;
+		if (m_zhr < 1)
+			m_lastGenerationSuppression = QStringLiteral("zhr-zero");
+		else if (isPaused)
+			m_lastGenerationSuppression = QStringLiteral("time-paused");
+		else if (speedFactor < 0.0)
+			m_lastGenerationSuppression = QStringLiteral("time-reversed");
+		else
+			m_lastGenerationSuppression = QStringLiteral("time-rate-too-fast");
 		return;
 	}
 	m_lastGenerationSuppression = QStringLiteral("none");
 
-	const double spawnDelta = qMin(qMax(deltaTime, 0.), 0.25);
+	const double spawnDelta = qMin(simDeltaSec, 1.0);
 	m_spawnAccumulator += static_cast<double>(m_zhr) * spawnDelta / 3600.0;
 	int requested = static_cast<int>(std::floor(m_spawnAccumulator));
 	m_spawnAccumulator -= requested;
@@ -241,30 +263,39 @@ void SporadicMeteorMgr::triggerPreviewSalvo()
 	if (!core->getSkyDrawer()->getFlagHasAtmosphere() && !getFlagForcedMeteorsActivity())
 		return;
 
-	// Ensure meteors display is enabled when user explicitly triggers a preview
+	// Ensure meteors display is enabled when user explicitly triggers a preview;
+	// if simulation time is currently paused, resume 1x real-time so the preview plays immediately
+	// (and pausing again at any moment will freeze the preview meteors mid-air!).
 	if (!m_flagShow)
 		setFlagShow(true);
+	if (std::fabs(core->getTimeRate()) < 1e-12)
+		core->setRealTimeSpeed();
 
 	const Vec3d viewJ2000 = core->getMovementMgr()->getViewDirectionJ2000();
 	const Vec3d viewAltAz = core->j2000ToAltAz(viewJ2000);
 	const double fovRad = qBound(18.0, core->getMovementMgr()->getCurrentFov(), 120.0) * M_PI / 180.0;
 	const float span = static_cast<float>(fovRad * 0.34);
 
-	// 5 diverse physical meteor archetypes flying at natural parallel-angled shower geometry
-	const QList<Meteor::ColorPair> emeraldFireball = {
-		{"roseMagenta", 20}, {"emerald", 54}, {"cyanGreen", 18}, {"white", 8}
+	// 5 authentic physical meteor archetypes matching real astrophotography & fireball footage:
+	//   1. Perseid fast multi-spectral fireball (oGreen -> roseGold -> emerald+white flare -> lilacTip + drifting smoke)
+	//   2. Shijiazhuang-class fragmenting warm-gold superbolide (airburst glare ring + 2 lead chunks + trailing sparks + smoke)
+	//   3. Intense airburst flare bolide (sudden atmospheric scattering halo ring)
+	//   4. Crisp sodium-amber medium streak
+	//   5. Razor-thin silver-white needle
+	const QList<Meteor::ColorPair> perseidFireball = {
+		{"oGreen", 32}, {"roseGold", 28}, {"emerald", 28}, {"lilacTip", 12}
 	};
-	const QList<Meteor::ColorPair> emeraldClassic = {
-		{"emerald", 52}, {"cyanGreen", 32}, {"white", 16}
+	const QList<Meteor::ColorPair> superbolideGold = {
+		{"amberGold", 28}, {"paleGold", 38}, {"white", 24}, {"orangeYellow", 10}
+	};
+	const QList<Meteor::ColorPair> airburstCyanWhite = {
+		{"oGreen", 24}, {"cyanGreen", 36}, {"white", 40}
 	};
 	const QList<Meteor::ColorPair> sodiumAmber = {
-		{"amberGold", 58}, {"paleGold", 28}, {"white", 14}
-	};
-	const QList<Meteor::ColorPair> calciumViolet = {
-		{"violet", 42}, {"iceBlue", 42}, {"white", 16}
+		{"amberGold", 48}, {"paleGold", 32}, {"white", 20}
 	};
 	const QList<Meteor::ColorPair> silverNeedle = {
-		{"iceBlue", 36}, {"white", 64}
+		{"iceBlue", 22}, {"white", 78}
 	};
 
 	struct SalvoSpec {
@@ -275,19 +306,20 @@ void SporadicMeteorMgr::triggerPreviewSalvo()
 		QList<Meteor::ColorPair> colors;
 		bool fireball;
 		float delay;
+		Meteor::Archetype archetype;
 	};
 	const QVector<SalvoSpec> specs = {
-		{ -0.62f * span,  0.56f * span,  0.88f, 64.f, emeraldFireball, true,  0.00f },
-		{  0.64f * span,  0.44f * span,  0.48f, 38.f, sodiumAmber,     false, 0.14f },
-		{ -0.68f * span,  0.38f * span,  0.40f, 62.f, calciumViolet,   false, 0.26f },
-		{  0.24f * span,  0.58f * span,  0.45f, 54.f, emeraldClassic,  true,  0.40f },
-		{ -0.36f * span,  0.22f * span,  0.43f, 68.f, silverNeedle,    false, 0.56f }
+		{ -0.42f * span,  0.46f * span,  0.68f, 62.f, perseidFireball,   true,  0.00f, Meteor::Archetype::SpectralStreak },
+		{  0.48f * span,  0.34f * span,  0.84f, 24.f, superbolideGold,   true,  0.22f, Meteor::Archetype::FragmentingSuperbolide },
+		{ -0.58f * span,  0.30f * span,  0.44f, 54.f, airburstCyanWhite, true,  0.52f, Meteor::Archetype::AirburstBolide },
+		{  0.20f * span,  0.54f * span,  0.48f, 38.f, sodiumAmber,       false, 0.14f, Meteor::Archetype::MicroNeedle },
+		{ -0.26f * span,  0.18f * span,  0.42f, 66.f, silverNeedle,      false, 0.36f, Meteor::Archetype::MicroNeedle }
 	};
 
 	for (const auto& s : specs)
 	{
 		SporadicMeteor* m = new SporadicMeteor(core, viewAltAz, s.offR, s.offU, s.slope,
-						       s.speed, s.colors, m_bolideTexture, s.fireball, s.delay);
+						       s.speed, s.colors, m_bolideTexture, s.fireball, s.delay, s.archetype);
 		if (m->isAlive())
 		{
 			activeMeteors.append(m);

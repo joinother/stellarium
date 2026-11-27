@@ -57,6 +57,8 @@ export class LocationPickerStore {
   // GPS label suffix resolved asynchronously by reverse geocoding
   // (smallest administrative division). Empty for non-GPS sources.
   gpsPlaceDetail: string = ''
+  // 设备定位请求进行中标志：供标题栏自动定位按钮、位置面板状态栏与悬浮指示器展示鸿蒙 LoadingProgress。
+  deviceLocating: boolean = false
   locationPickMode: string = 'map'
   observerTimeZone: string = ''
   mapRenderWidth: number = 280

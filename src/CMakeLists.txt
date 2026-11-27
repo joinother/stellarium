@@ -221,6 +221,8 @@ SET(stellarium_lib_SRCS
      core/modules/SporadicMeteor.hpp
      core/modules/SporadicMeteorMgr.cpp
      core/modules/SporadicMeteorMgr.hpp
+     core/modules/RocketLaunchMgr.cpp
+     core/modules/RocketLaunchMgr.hpp
      core/modules/MilkyWay.cpp
      core/modules/MilkyWay.hpp
      core/modules/Nebula.cpp

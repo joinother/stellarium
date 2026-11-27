@@ -97,6 +97,42 @@ export struct LocationSearchPanel {
     this.store.locSearchOnlineState = 'idle'
   }
 
+  // 批量把花瓣搜索返回的 GCJ02 坐标反算为 WGS84（单次 IPC 替代最多 20 次串行 rectifyCoordinate）。
+  private async batchOnlineToWgs84(positions: Array<mapCommon.LatLng>): Promise<Array<mapCommon.LatLng>> {
+    if (positions.length === 0) return []
+    const candidates: Array<mapCommon.LatLng> = positions.map((pos: mapCommon.LatLng): mapCommon.LatLng => {
+      try {
+        return inverseMapPoint(pos, (point: MapPoint): MapPoint =>
+          map.convertCoordinateSync(mapCommon.CoordinateType.WGS84, mapCommon.CoordinateType.GCJ02, point))
+      } catch (_error) {
+        return pos
+      }
+    })
+    try {
+      const context = this.getUIContext().getHostContext()
+      if (!context) return positions
+      const req = candidates.map((loc: mapCommon.LatLng): mapCommon.CoordinateLatLng => ({
+        coordinateType: mapCommon.CoordinateType.WGS84,
+        location: loc
+      }))
+      const verified = await map.rectifyCoordinate(context, req)
+      if (verified && verified.length === positions.length) {
+        return positions.map((pos: mapCommon.LatLng, i: number): mapCommon.LatLng => {
+          const v = verified[i]
+          if (v.coordinateType === mapCommon.CoordinateType.GCJ02 &&
+            Math.abs(v.location.latitude - pos.latitude) < 0.00002 &&
+            Math.abs(v.location.longitude - pos.longitude) < 0.00002) {
+            return candidates[i]
+          }
+          return pos
+        })
+      }
+    } catch (_error) {
+      // Fall back to raw positions when rectifyCoordinate is unavailable.
+    }
+    return positions
+  }
+
   // Petal returns GCJ02 in the mainland; the engine observer point is WGS84.
   // Mirror the full-screen picker: inverse-convert, then verify with
   // rectifyCoordinate so overseas WGS84 results are left untouched.
@@ -147,14 +183,16 @@ export struct LocationSearchPanel {
       })
       if (requestId !== this.onlineRequestId) return
       const sites = result.sites === undefined ? [] : result.sites
+      const validSites = sites.filter((s) => s.location !== undefined).slice(0, 20)
+      const wgsPoints = await this.batchOnlineToWgs84(validSites.map((s) => s.location!))
+      if (requestId !== this.onlineRequestId) return
       const items: Array<LocSearchItem> = []
-      for (const siteItem of sites) {
-        if (!siteItem.location) continue
+      for (let i = 0; i < validSites.length; i += 1) {
+        const siteItem = validSites[i]
         const component = siteItem.addressComponent
         const cityName = component.locality ?? component.adminLevel2 ??
           component.adminLevel3 ?? component.adminLevel1 ?? ''
-        const point = await this.onlineToWgs84(siteItem.location)
-        if (requestId !== this.onlineRequestId) return
+        const point = wgsPoints[i]
         const name = siteItem.name ?? siteItem.formatAddress ?? query
         items.push({
           name: name,
@@ -166,7 +204,6 @@ export struct LocationSearchPanel {
           country: component.countryCode ?? 'ZZ',
           province: component.adminLevel1 ?? component.adminLevel2 ?? ''
         })
-        if (items.length >= 20) break
       }
       if (requestId !== this.onlineRequestId) return
       this.store.locSearchOnlineResults = items

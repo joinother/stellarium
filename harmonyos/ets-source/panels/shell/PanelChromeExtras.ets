@@ -1,5 +1,5 @@
 import { Theme } from '@kit.ArkUI'
-import { UI_RADIUS_PILL } from '../../common/ui/UiTokens'
+import { UI_MOTION_FAST_MS, UI_OPTION_ANIMATION_MS, UI_RADIUS_PILL } from '../../common/ui/UiTokens'
 import {
   CHROME_ZOOM_EDGE_PADDING,
   chromeZoomLayerHeight,
@@ -11,15 +11,53 @@ import { DEFAULT_SLOTS, ThemeSlots, slotsFromTheme } from '../../state/Stellariu
 //
 // 都是无状态外观件：时钟文本、几何参数与拖拽回调由宿主以 @Prop / 回调解入。
 
-// 主界面 Dock 右上常驻时钟（HH:mm）：点按直接打开时间面板。
+// 主界面 Dock 右上常驻时钟（HH:mm）：点按直接打开时间面板；桌面端悬停滚轮可微调模拟时间（±10 分钟）。
 @Component
 export struct DockClockChip {
   @Prop clockText: string
   @State c: ThemeSlots = DEFAULT_SLOTS
+  @State private hovered: boolean = false
+  @State private tipOpen: boolean = false
+  private hoverTimer: number = -1
+  private lastScrubMs: number = 0
   onOpenTime: () => void = () => {}
+  onScrubTime: (deltaMinutes: number) => void = () => {}
 
   onWillApplyTheme(theme: Theme): void {
     this.c = slotsFromTheme(theme)
+  }
+
+  aboutToDisappear(): void {
+    if (this.hoverTimer >= 0) {
+      clearTimeout(this.hoverTimer)
+      this.hoverTimer = -1
+    }
+  }
+
+  private popupBg(): ResourceColor {
+    return this.c.isNight ? '#F4220908' : '#F4132234'
+  }
+
+  @Builder
+  private clockTipContent() {
+    Row({ space: 6 }) {
+      Text('时间与推演')
+        .fontSize(12)
+        .fontWeight(FontWeight.Medium)
+        .fontColor(this.c.textStrong)
+        .maxLines(1)
+      Text('滚轮调时')
+        .fontSize(10)
+        .fontColor(this.c.sub)
+        .padding({ left: 5, right: 5, top: 1, bottom: 1 })
+        .backgroundColor(this.c.soft)
+        .borderRadius(4)
+        .maxLines(1)
+    }
+      .padding({ left: 10, right: 10, top: 6, bottom: 6 })
+      .border({ width: 1, color: this.c.border })
+      .borderRadius(UI_RADIUS_PILL)
+      .alignItems(VerticalAlign.Center)
   }
 
   build() {
@@ -34,50 +72,141 @@ export struct DockClockChip {
       .alignItems(VerticalAlign.Center)
       .backgroundColor(this.c.bgStrong)
       .backdropBlur(20)
+      .border({ width: 1, color: this.hovered ? this.c.border : Color.Transparent })
       .borderRadius(UI_RADIUS_PILL)
+      .hoverEffect(HoverEffect.Highlight)
       .clickEffect({ level: ClickEffectLevel.LIGHT })
-      .onClick(() => { this.onOpenTime() })
+      .onHover((isHover: boolean) => {
+        this.hovered = isHover
+        if (this.hoverTimer >= 0) {
+          clearTimeout(this.hoverTimer)
+          this.hoverTimer = -1
+        }
+        if (isHover) {
+          this.hoverTimer = setTimeout(() => {
+            this.hoverTimer = -1
+            if (this.hovered) this.tipOpen = true
+          }, 260) as number
+        } else {
+          this.tipOpen = false
+        }
+      })
+      .onAxisEvent((event: AxisEvent) => {
+        if (event.action !== AxisAction.BEGIN && event.action !== AxisAction.UPDATE) return
+        const vertical = event.getVerticalAxisValue()
+        if (!Number.isFinite(vertical) || Math.abs(vertical) < 0.001) return
+        const now = Date.now()
+        if (now - this.lastScrubMs < 45) return
+        this.lastScrubMs = now
+        this.tipOpen = false
+        // 滚轮向上 = 前进 10 分钟，向下 = 回退 10 分钟。
+        this.onScrubTime(vertical < 0 ? 10 : -10)
+      })
+      .bindPopup(this.tipOpen, {
+        builder: this.clockTipContent,
+        placement: Placement.Top,
+        enableArrow: true,
+        autoCancel: true,
+        mask: false,
+        radius: UI_RADIUS_PILL,
+        popupColor: this.popupBg(),
+        backgroundBlurStyle: BlurStyle.NONE,
+        transition: TransitionEffect.asymmetric(
+          TransitionEffect.OPACITY.animation({ duration: UI_OPTION_ANIMATION_MS, curve: Curve.EaseOut }),
+          TransitionEffect.OPACITY.animation({ duration: UI_MOTION_FAST_MS, curve: Curve.EaseIn })
+        ),
+        onStateChange: (event) => {
+          if (!event.isVisible && this.tipOpen) {
+            this.tipOpen = false
+          }
+        }
+      })
+      .onClick(() => {
+        if (this.hoverTimer >= 0) {
+          clearTimeout(this.hoverTimer)
+          this.hoverTimer = -1
+        }
+        this.tipOpen = false
+        this.onOpenTime()
+      })
   }
 }
 
-// Dock 时钟定位层：右端与 dock 栏对齐；空白区触摸穿透回星图，仅时钟本体拦截点击。
+// Dock 时钟定位层：右端与 dock 栏对齐；空白区触摸穿透回星图，仅时钟本体拦截点击与滚轮。
 @Component
 export struct DockClockLayer {
   @Prop clockText: string
   @Prop layerWidth: number
   @Prop posX: number
   @Prop posY: number
+  @Prop chromeOpacity: number = 1.0
   onOpenTime: () => void = () => {}
+  onScrubTime: (deltaMinutes: number) => void = () => {}
 
   build() {
     Row() {
-      Stack() { DockClockChip({ clockText: this.clockText, onOpenTime: this.onOpenTime }) }
-        .hitTestBehavior(HitTestMode.Block)
+      // 不能用 HitTestMode.Block：ArkUI 中 Block 会拦截子节点（吞掉 DockClockChip 的 onHover/onClick）。
+      // Default 让时钟本体接管点击与悬停并自然阻断下方星图，外层 Transparent 放行空白区。
+      Stack() { DockClockChip({ clockText: this.clockText, onOpenTime: this.onOpenTime, onScrubTime: this.onScrubTime }) }
     }
       .width(this.layerWidth)
       .height(36)
       .justifyContent(FlexAlign.End)
       .padding({ right: 4 })
       .position({ x: this.posX, y: this.posY })
+      .opacity(this.chromeOpacity)
       .hitTestBehavior(HitTestMode.Transparent)
       .zIndex(40)
   }
 }
 
 // Dock 上方的视场（FOV）读数胶囊：与常驻时钟同一行（posY = dockTop - 48）。
-//
-// 造型：双行 —— 上行 10vp 的 "FOV" 细字标签，下行 16vp 的数值。
-// 之所以不用单行 "FOV 60.0°"：单行在 22vp 下约 134vp 宽，是时钟（"10:44" ≈ 83vp）的 1.55 倍，
-// 左右两端体量不对称。双行后宽度只由最宽的一行决定（数值 ≈ 43~51vp + 24 内边距 ≈ 67~75vp），
-// 反而比时钟更窄，且**高度仍保持 36vp**，与时钟同高、读数行不受影响（缩放按钮的贴靠关系不变）。
-// 纯信息展示：整层与胶囊都不参与命中测试，点击穿透回星图。
+// 桌面端悬停浮现「视场角 · 滚轮微调」并支持直接滚轮精细缩放视场。
 @Component
 export struct DockFovChip {
   @Prop fovText: string
   @State c: ThemeSlots = DEFAULT_SLOTS
+  @State private hovered: boolean = false
+  @State private tipOpen: boolean = false
+  private hoverTimer: number = -1
+  private lastScrubMs: number = 0
+  onScrubFov: (zoomIn: boolean) => void = () => {}
 
   onWillApplyTheme(theme: Theme): void {
     this.c = slotsFromTheme(theme)
+  }
+
+  aboutToDisappear(): void {
+    if (this.hoverTimer >= 0) {
+      clearTimeout(this.hoverTimer)
+      this.hoverTimer = -1
+    }
+  }
+
+  private popupBg(): ResourceColor {
+    return this.c.isNight ? '#F4220908' : '#F4132234'
+  }
+
+  @Builder
+  private fovTipContent() {
+    Row({ space: 6 }) {
+      Text('视场角')
+        .fontSize(12)
+        .fontWeight(FontWeight.Medium)
+        .fontColor(this.c.textStrong)
+        .maxLines(1)
+      Text('滚轮微调')
+        .fontSize(10)
+        .fontColor(this.c.sub)
+        .padding({ left: 5, right: 5, top: 1, bottom: 1 })
+        .backgroundColor(this.c.soft)
+        .borderRadius(4)
+        .maxLines(1)
+    }
+      .padding({ left: 10, right: 10, top: 6, bottom: 6 })
+      .border({ width: 1, color: this.c.border })
+      .borderRadius(UI_RADIUS_PILL)
+      .alignItems(VerticalAlign.Center)
   }
 
   build() {
@@ -97,30 +226,77 @@ export struct DockFovChip {
       .alignItems(HorizontalAlign.Center)
       .backgroundColor(this.c.bgStrong)
       .backdropBlur(20)
+      .border({ width: 1, color: this.hovered ? this.c.border : Color.Transparent })
       .borderRadius(UI_RADIUS_PILL)
-      .hitTestBehavior(HitTestMode.None)
+      .hoverEffect(HoverEffect.Highlight)
+      .onHover((isHover: boolean) => {
+        this.hovered = isHover
+        if (this.hoverTimer >= 0) {
+          clearTimeout(this.hoverTimer)
+          this.hoverTimer = -1
+        }
+        if (isHover) {
+          this.hoverTimer = setTimeout(() => {
+            this.hoverTimer = -1
+            if (this.hovered) this.tipOpen = true
+          }, 260) as number
+        } else {
+          this.tipOpen = false
+        }
+      })
+      .onAxisEvent((event: AxisEvent) => {
+        if (event.action !== AxisAction.BEGIN && event.action !== AxisAction.UPDATE) return
+        const vertical = event.getVerticalAxisValue()
+        if (!Number.isFinite(vertical) || Math.abs(vertical) < 0.001) return
+        const now = Date.now()
+        if (now - this.lastScrubMs < 45) return
+        this.lastScrubMs = now
+        this.tipOpen = false
+        this.onScrubFov(vertical < 0)
+      })
+      .bindPopup(this.tipOpen, {
+        builder: this.fovTipContent,
+        placement: Placement.Right,
+        enableArrow: true,
+        autoCancel: true,
+        mask: false,
+        radius: UI_RADIUS_PILL,
+        popupColor: this.popupBg(),
+        backgroundBlurStyle: BlurStyle.NONE,
+        transition: TransitionEffect.asymmetric(
+          TransitionEffect.OPACITY.animation({ duration: UI_OPTION_ANIMATION_MS, curve: Curve.EaseOut }),
+          TransitionEffect.OPACITY.animation({ duration: UI_MOTION_FAST_MS, curve: Curve.EaseIn })
+        ),
+        onStateChange: (event) => {
+          if (!event.isVisible && this.tipOpen) {
+            this.tipOpen = false
+          }
+        }
+      })
   }
 }
 
-// Dock 视场显示定位层：与常驻时钟同一行，贴在左端（右端留给时钟，左右对称），
-// 缩放按钮列的正下方 —— 两者同列，形成"上方按钮、下方读数"的一组。
+// Dock 视场显示定位层：与常驻时钟同一行，贴在左端；空白区透传回星图，胶囊本体响应悬停与滚轮微调。
 @Component
 export struct DockFovLayer {
   @Prop fovText: string
   @Prop layerWidth: number
   @Prop posX: number
   @Prop posY: number
+  @Prop chromeOpacity: number = 1.0
+  onScrubFov: (zoomIn: boolean) => void = () => {}
 
   build() {
     Row() {
-      DockFovChip({ fovText: this.fovText })
+      Stack() { DockFovChip({ fovText: this.fovText, onScrubFov: this.onScrubFov }) }
     }
       .width(this.layerWidth)
       .height(36)
       .justifyContent(FlexAlign.Start)
       .padding({ left: 4 })
       .position({ x: this.posX, y: this.posY })
-      .hitTestBehavior(HitTestMode.None)
+      .opacity(this.chromeOpacity)
+      .hitTestBehavior(HitTestMode.Transparent)
       .zIndex(40)
   }
 }
@@ -136,12 +312,98 @@ export struct SkyZoomLayer {
   @Prop posX: number
   @Prop rowY: number
   @Prop horizontal: boolean
+  @Prop chromeOpacity: number = 1.0
   @State c: ThemeSlots = DEFAULT_SLOTS
+  @State private hoveredIn: boolean = false
+  @State private hoveredOut: boolean = false
+  @State private tipInOpen: boolean = false
+  @State private tipOutOpen: boolean = false
+  private hoverInTimer: number = -1
+  private hoverOutTimer: number = -1
+  private touchInTimer: number = -1
+  private touchOutTimer: number = -1
   onZoomIn: () => void = () => {}
   onZoomOut: () => void = () => {}
 
   onWillApplyTheme(theme: Theme): void {
     this.c = slotsFromTheme(theme)
+  }
+
+  aboutToDisappear(): void {
+    this.clearInTimers()
+    this.clearOutTimers()
+  }
+
+  private clearInTimers(): void {
+    if (this.hoverInTimer >= 0) {
+      clearTimeout(this.hoverInTimer)
+      this.hoverInTimer = -1
+    }
+    if (this.touchInTimer >= 0) {
+      clearTimeout(this.touchInTimer)
+      this.touchInTimer = -1
+    }
+  }
+
+  private clearOutTimers(): void {
+    if (this.hoverOutTimer >= 0) {
+      clearTimeout(this.hoverOutTimer)
+      this.hoverOutTimer = -1
+    }
+    if (this.touchOutTimer >= 0) {
+      clearTimeout(this.touchOutTimer)
+      this.touchOutTimer = -1
+    }
+  }
+
+  private popupBg(): ResourceColor {
+    return this.c.isNight ? '#F4220908' : '#F4132234'
+  }
+
+  @Builder
+  private zoomInTipContent() {
+    Row({ space: 6 }) {
+      Text('放大')
+        .fontSize(12)
+        .fontWeight(FontWeight.Medium)
+        .fontColor(this.c.textStrong)
+        .maxLines(1)
+      Text('+')
+        .fontSize(10)
+        .fontWeight(FontWeight.Medium)
+        .fontColor(this.c.sub)
+        .padding({ left: 5, right: 5, top: 1, bottom: 1 })
+        .backgroundColor(this.c.soft)
+        .borderRadius(4)
+        .maxLines(1)
+    }
+      .padding({ left: 10, right: 10, top: 6, bottom: 6 })
+      .border({ width: 1, color: this.c.border })
+      .borderRadius(UI_RADIUS_PILL)
+      .alignItems(VerticalAlign.Center)
+  }
+
+  @Builder
+  private zoomOutTipContent() {
+    Row({ space: 6 }) {
+      Text('缩小')
+        .fontSize(12)
+        .fontWeight(FontWeight.Medium)
+        .fontColor(this.c.textStrong)
+        .maxLines(1)
+      Text('−')
+        .fontSize(10)
+        .fontWeight(FontWeight.Medium)
+        .fontColor(this.c.sub)
+        .padding({ left: 5, right: 5, top: 1, bottom: 1 })
+        .backgroundColor(this.c.soft)
+        .borderRadius(4)
+        .maxLines(1)
+    }
+      .padding({ left: 10, right: 10, top: 6, bottom: 6 })
+      .border({ width: 1, color: this.c.border })
+      .borderRadius(UI_RADIUS_PILL)
+      .alignItems(VerticalAlign.Center)
   }
 
   @Builder
@@ -155,9 +417,55 @@ export struct SkyZoomLayer {
       .height(44)
       .backgroundColor(this.c.bgStrong)
       .backdropBlur(20)
+      .border({ width: 1, color: this.hoveredIn ? this.c.border : Color.Transparent })
       .borderRadius(UI_RADIUS_PILL)
+      .hoverEffect(HoverEffect.Highlight)
       .clickEffect({ level: ClickEffectLevel.LIGHT })
-      .onClick(() => { this.onZoomIn() })
+      .accessibilityText('放大')
+      .onHover((isHover: boolean) => {
+        this.hoveredIn = isHover
+        this.clearInTimers()
+        if (isHover) {
+          this.hoverInTimer = setTimeout(() => {
+            this.hoverInTimer = -1
+            if (this.hoveredIn) this.tipInOpen = true
+          }, 260) as number
+        } else {
+          this.tipInOpen = false
+        }
+      })
+      .gesture(LongPressGesture({ repeat: false, duration: 480 }).onAction(() => {
+        this.clearInTimers()
+        this.tipInOpen = true
+        this.touchInTimer = setTimeout(() => {
+          this.touchInTimer = -1
+          if (!this.hoveredIn) this.tipInOpen = false
+        }, 1800) as number
+      }))
+      .bindPopup(this.tipInOpen, {
+        builder: this.zoomInTipContent,
+        placement: Placement.Top,
+        enableArrow: true,
+        autoCancel: true,
+        mask: false,
+        radius: UI_RADIUS_PILL,
+        popupColor: this.popupBg(),
+        backgroundBlurStyle: BlurStyle.NONE,
+        transition: TransitionEffect.asymmetric(
+          TransitionEffect.OPACITY.animation({ duration: UI_OPTION_ANIMATION_MS, curve: Curve.EaseOut }),
+          TransitionEffect.OPACITY.animation({ duration: UI_MOTION_FAST_MS, curve: Curve.EaseIn })
+        ),
+        onStateChange: (event) => {
+          if (!event.isVisible && this.tipInOpen) {
+            this.tipInOpen = false
+          }
+        }
+      })
+      .onClick(() => {
+        this.clearInTimers()
+        this.tipInOpen = false
+        this.onZoomIn()
+      })
       .id('skyZoomInButton')
     Stack({ alignContent: Alignment.Center }) {
       Text('−')
@@ -168,24 +476,69 @@ export struct SkyZoomLayer {
       .height(44)
       .backgroundColor(this.c.bgStrong)
       .backdropBlur(20)
+      .border({ width: 1, color: this.hoveredOut ? this.c.border : Color.Transparent })
       .borderRadius(UI_RADIUS_PILL)
+      .hoverEffect(HoverEffect.Highlight)
       .clickEffect({ level: ClickEffectLevel.LIGHT })
-      .onClick(() => { this.onZoomOut() })
+      .accessibilityText('缩小')
+      .onHover((isHover: boolean) => {
+        this.hoveredOut = isHover
+        this.clearOutTimers()
+        if (isHover) {
+          this.hoverOutTimer = setTimeout(() => {
+            this.hoverOutTimer = -1
+            if (this.hoveredOut) this.tipOutOpen = true
+          }, 260) as number
+        } else {
+          this.tipOutOpen = false
+        }
+      })
+      .gesture(LongPressGesture({ repeat: false, duration: 480 }).onAction(() => {
+        this.clearOutTimers()
+        this.tipOutOpen = true
+        this.touchOutTimer = setTimeout(() => {
+          this.touchOutTimer = -1
+          if (!this.hoveredOut) this.tipOutOpen = false
+        }, 1800) as number
+      }))
+      .bindPopup(this.tipOutOpen, {
+        builder: this.zoomOutTipContent,
+        placement: Placement.Top,
+        enableArrow: true,
+        autoCancel: true,
+        mask: false,
+        radius: UI_RADIUS_PILL,
+        popupColor: this.popupBg(),
+        backgroundBlurStyle: BlurStyle.NONE,
+        transition: TransitionEffect.asymmetric(
+          TransitionEffect.OPACITY.animation({ duration: UI_OPTION_ANIMATION_MS, curve: Curve.EaseOut }),
+          TransitionEffect.OPACITY.animation({ duration: UI_MOTION_FAST_MS, curve: Curve.EaseIn })
+        ),
+        onStateChange: (event) => {
+          if (!event.isVisible && this.tipOutOpen) {
+            this.tipOutOpen = false
+          }
+        }
+      })
+      .onClick(() => {
+        this.clearOutTimers()
+        this.tipOutOpen = false
+        this.onZoomOut()
+      })
       .id('skyZoomOutButton')
   }
 
   build() {
     Row() {
       if (this.horizontal) {
+        // 不用 HitTestMode.Block：Block 会阻断内部缩放按钮接收 onHover / LongPressGesture。
         Row({ space: 8 }) {
           this.zoomButtonPair()
         }
-          .hitTestBehavior(HitTestMode.Block)
       } else {
         Column({ space: 8 }) {
           this.zoomButtonPair()
         }
-          .hitTestBehavior(HitTestMode.Block)
       }
     }
       .width(this.layerWidth)
@@ -194,6 +547,7 @@ export struct SkyZoomLayer {
       .alignItems(VerticalAlign.Center)
       .padding({ left: CHROME_ZOOM_EDGE_PADDING })
       .position({ x: this.posX, y: chromeZoomLayerTop(this.rowY, this.horizontal) })
+      .opacity(this.chromeOpacity)
       .hitTestBehavior(HitTestMode.Transparent)
       .zIndex(40)
   }

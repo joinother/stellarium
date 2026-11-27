@@ -157,6 +157,10 @@ float AuroraRenderer::computeSolarGate(double sunAltDeg)
 void AuroraRenderer::update(double deltaTime, bool enabled, bool onEarth, double sunAltDeg, float zoomVisibility, int style)
 {
 	const float dt = static_cast<float>(qBound(0.0, deltaTime, 0.1));
+	animationTime += dt;
+	if (animationTime > 7200.0f)
+		animationTime -= 7200.0f;
+
 	activeStyle = qBound(0, style, kStyleCount - 1);
 	const float targetFade = (enabled && onEarth) ? 1.0f : 0.0f;
 	const float fadeSpeed = (targetFade > fadeOpacity) ? 1.8f : 2.4f;
@@ -168,9 +172,6 @@ void AuroraRenderer::update(double deltaTime, bool enabled, bool onEarth, double
 
 	solarGateValue = onEarth ? computeSolarGate(sunAltDeg) : 0.0f;
 	zoomOpacity = qBound(0.0f, zoomVisibility, 1.0f);
-
-	if (effectiveOpacity() > 0.001f)
-		animationTime = std::fmod(animationTime + dt, 10000.0f);
 }
 
 void AuroraRenderer::releaseGL()

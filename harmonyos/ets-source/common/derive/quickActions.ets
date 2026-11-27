@@ -27,14 +27,16 @@ export interface QuickActionItem {
 // 网格列数与格子数。二期自定义只做「替换」，格子数恒为 12（用户确认）。
 export const QUICK_ACTION_COLUMNS: number = 6
 export const QUICK_ACTION_SLOTS: number = QUICK_ACTION_COLUMNS * 2
+// 展开态有限位可视行数：面板拉长到该行数后封顶，剩余候选行在区域内顺滑滚动。
+export const QUICK_EXPANDED_VISIBLE_ROWS: number = 3
 
-// 全量候选池（17 项）。顺序即默认网格顺序：**前 12 项即默认网格**。
+// 全量候选池（39 项 = 默认 12 项 + 27 项扩展候选）。顺序即默认网格顺序：**前 12 项即默认网格**。
 //
 // 详情卡固定观测模式后，快捷面板不再提供「观测模式」开关；原第 10 格的
 // 「卫星提示」回到默认网格，保持一期 12 项的语义。
 export function quickActionPool(): QuickActionItem[] {
   return [
-    // —— 一期 12 项 ——
+    // —— 一期 12 项（默认网格）——
     { id: 'constellation_lines', labelKey: 's0522', icon: 'bt_constellation_lines', kind: 'raster', type: 'toggle', actionId: 'actionShow_Constellation_Lines', openPanel: '' },
     { id: 'constellation_labels', labelKey: 's0523', icon: 'bt_constellation_labels', kind: 'raster', type: 'toggle', actionId: 'actionShow_Constellation_Labels', openPanel: '' },
     { id: 'constellation_art', labelKey: 's0525', icon: 'bt_constellation_art', kind: 'raster', type: 'toggle', actionId: 'actionShow_Constellation_Art', openPanel: '' },
@@ -47,14 +49,36 @@ export function quickActionPool(): QuickActionItem[] {
     { id: 'satellites', labelKey: 'plugin_satellites', icon: 'satellite', kind: 'vector', type: 'toggle', actionId: '', openPanel: '' },
     { id: 'gyroscope', labelKey: 'i0060', icon: 'gyro', kind: 'vector', type: 'toggle', actionId: '', openPanel: '' },
     { id: 'night_mode', labelKey: 's0300', icon: 'bt_night_view', kind: 'raster', type: 'toggle', actionId: '', openPanel: '' },
-    // —— 二期新增 4 项（默认网格外的候选）——
+    // —— 二期候选 6 项 ——
     { id: 'equatorial_mount', labelKey: 'quick_mount_mode', icon: 'bt_equatorial_mount', kind: 'raster', type: 'toggle', actionId: 'actionSwitch_Equatorial_Mount', openPanel: '' },
     { id: 'flip_horizontal', labelKey: 'quick_flip_horizontal', icon: 'bt_flip_horizontal', kind: 'raster', type: 'toggle', actionId: 'actionHorizontal_Flip', openPanel: '' },
     { id: 'observing_list', labelKey: 'more_observe_list', icon: 'bt_obs_list', kind: 'raster', type: 'entry', actionId: '', openPanel: 'observing' },
     { id: 'oculars', labelKey: 'panel_oculars', icon: 'oculars', kind: 'vector', type: 'entry', actionId: '', openPanel: 'oculars' },
-    // —— 红光手电 & 多光谱透视镜：默认在扩展列（候选带）第 5、6 格，可拖入前 12 格常驻 ——
     { id: 'red_light', labelKey: 'quick_red_light', icon: 'red_light', kind: 'vector', type: 'toggle', actionId: '', openPanel: '' },
-    { id: 'spectral_lens', labelKey: 'quick_spectral_lens', icon: 'spectral_lens', kind: 'vector', type: 'toggle', actionId: '', openPanel: '' }
+    { id: 'spectral_lens', labelKey: 'quick_spectral_lens', icon: 'spectral_lens', kind: 'vector', type: 'toggle', actionId: '', openPanel: '' },
+    // —— 第一梯队（高频观星与天文摄影，6 项）——
+    { id: 'constellation_boundaries', labelKey: 's0524', icon: 'bt_constellation_boundaries', kind: 'raster', type: 'toggle', actionId: 'actionShow_Constellation_Boundaries', openPanel: '' },
+    { id: 'meteor_showers', labelKey: 'plugin_meteor_showers', icon: 'bt_meteor_showers', kind: 'raster', type: 'toggle', actionId: 'actionShow_MeteorShowers', openPanel: '' },
+    { id: 'angle_measure', labelKey: 'panel_angle_measure', icon: 'bt_angle_measure', kind: 'raster', type: 'toggle', actionId: '', openPanel: '' },
+    { id: 'asterism_lines', labelKey: 's0528', icon: 'bt_asterism_lines', kind: 'raster', type: 'toggle', actionId: 'actionShow_Asterism_Lines', openPanel: '' },
+    { id: 'hips_surveys', labelKey: 's0600', icon: 'bt_hips', kind: 'raster', type: 'toggle', actionId: 'actionShow_Hips_Surveys', openPanel: '' },
+    { id: 'flip_vertical', labelKey: 's0310', icon: 'bt_flip_vertical', kind: 'raster', type: 'toggle', actionId: 'actionVertical_Flip', openPanel: '' },
+    // —— 第二梯队（进阶望远镜、构图、坐标与专业天体，15 项）——
+    { id: 'ccd_sensor', labelKey: 'c_ccd_frame', icon: 'bt_sensor', kind: 'raster', type: 'toggle', actionId: '', openPanel: '' },
+    { id: 'telrad', labelKey: 'quick_telrad', icon: 'bt_telrad', kind: 'raster', type: 'toggle', actionId: '', openPanel: '' },
+    { id: 'mosaic_camera', labelKey: 'Mosaic Camera', icon: 'bt_mosaic_camera', kind: 'raster', type: 'entry', actionId: '', openPanel: 'mosaicCamera' },
+    { id: 'compass_marks', labelKey: 'quick_compass_marks', icon: 'bt_compass_marks', kind: 'raster', type: 'toggle', actionId: 'actionShow_Compass_Marks', openPanel: '' },
+    { id: 'ecliptic_grid', labelKey: 's0505', icon: 'bt_ecliptic_grid', kind: 'raster', type: 'toggle', actionId: 'actionShow_Ecliptic_Grid', openPanel: '' },
+    { id: 'galactic_grid', labelKey: 'quick_galactic_grid', icon: 'bt_galactic_grid', kind: 'raster', type: 'toggle', actionId: 'actionShow_Galactic_Grid', openPanel: '' },
+    { id: 'planets', labelKey: 's0311', icon: 'bt_planets', kind: 'raster', type: 'toggle', actionId: 'actionShow_Planets', openPanel: '' },
+    { id: 'archaeo_lines', labelKey: 'quick_archaeo_lines', icon: 'bt_archaeo_lines', kind: 'raster', type: 'toggle', actionId: '', openPanel: '' },
+    { id: 'telescope', labelKey: 'panel_telescope_control', icon: 'bt_telescope', kind: 'raster', type: 'entry', actionId: '', openPanel: 'telescope' },
+    { id: 'nav_stars', labelKey: 'panel_nav_stars', icon: 'bt_nav_stars', kind: 'raster', type: 'toggle', actionId: '', openPanel: '' },
+    { id: 'calendars', labelKey: 'plugin_calendars', icon: 'bt_calendars', kind: 'raster', type: 'entry', actionId: '', openPanel: 'calendars' },
+    { id: 'exoplanets', labelKey: 'plugin_exoplanets', icon: 'bt_exoplanets', kind: 'raster', type: 'toggle', actionId: 'actionShow_Exoplanets', openPanel: '' },
+    { id: 'pulsars', labelKey: 'plugin_pulsars', icon: 'bt_pulsars', kind: 'raster', type: 'toggle', actionId: 'actionShow_Pulsars', openPanel: '' },
+    { id: 'quasars', labelKey: 'plugin_quasars', icon: 'bt_quasars', kind: 'raster', type: 'toggle', actionId: 'actionShow_Quasars', openPanel: '' },
+    { id: 'fullscreen', labelKey: 'quick_fullscreen', icon: 'bt_fullscreen', kind: 'raster', type: 'toggle', actionId: '', openPanel: '' }
   ]
 }
 
@@ -107,12 +131,11 @@ export function quickActionEmptyItem(): QuickActionItem {
   return { id: QUICK_ACTION_EMPTY_ID, labelKey: '', icon: '', kind: 'vector', type: 'entry', actionId: '', openPanel: '' }
 }
 
-// 候选带布局：把「当前未列入」的项按 6 列补位，**上限两行**（12 格）。
-// 池 18 项 → 未列入 6 项 → 1 行。若日后把池扩到 18 项以上（默认 12 项固定），
-// 这里会截断，届时须同步扩展 QuickPanel 的行渲染与宿主高度公式（见计划 §13.12 风险）。
+// 候选带布局：把「当前未列入」的全部项按 6 列补位，不再截断；
+// 展开时菜单框只拉长到 QUICK_EXPANDED_VISIBLE_ROWS 行（有限位），其余行在候选带内顺滑滚动。
 export function quickCandidateSlotsFor(order: string[]): QuickActionItem[] {
   const candidates = quickActionCandidatesFor(order)
-  const rows = Math.max(1, Math.min(2, Math.ceil(candidates.length / QUICK_ACTION_COLUMNS)))
+  const rows = Math.max(1, Math.ceil(candidates.length / QUICK_ACTION_COLUMNS))
   const capacity = rows * QUICK_ACTION_COLUMNS
   const slots: QuickActionItem[] = []
   for (let i = 0; i < capacity; i++) {
@@ -121,10 +144,15 @@ export function quickCandidateSlotsFor(order: string[]): QuickActionItem[] {
   return slots
 }
 
-// 候选带占用的行数（宿主高度公式与 QuickPanel 的行渲染必须一致，故共用此函数）。
+// 候选带总行数（全部候选行，用于逐行渲染）。
 export function quickCandidateRowsFor(order: string[]): number {
   const candidates = quickActionCandidatesFor(order)
-  return Math.max(1, Math.min(2, Math.ceil(candidates.length / QUICK_ACTION_COLUMNS)))
+  return Math.max(1, Math.ceil(candidates.length / QUICK_ACTION_COLUMNS))
+}
+
+// 候选带有限位可视行数（宿主面板高度公式与 QuickPanel 滚动视口共用）。
+export function quickCandidateVisibleRowsFor(order: string[]): number {
+  return Math.min(QUICK_EXPANDED_VISIBLE_ROWS, quickCandidateRowsFor(order))
 }
 
 // 持久化序列校验：长度必须等于格子数、元素必须都在池内、且不得重复。

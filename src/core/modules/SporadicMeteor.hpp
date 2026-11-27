@@ -34,7 +34,8 @@ public:
 	SporadicMeteor(const StelCore* core, const Vec3d& centerAltAz,
 		       float offsetRightRad, float offsetUpRad, float slopeAngleRad,
 		       float speed, const QList<ColorPair>& colors,
-		       const StelTextureSP& bolideTexture, bool isFireball, float startDelaySec = 0.f);
+		       const StelTextureSP& bolideTexture, bool isFireball, float startDelaySec = 0.f,
+		       Meteor::Archetype forcedArchetype = Meteor::Archetype::SpectralStreak);
 	~SporadicMeteor() override;
 
 	static QList<ColorPair> getRandColor(float speedKmS = 45.f);

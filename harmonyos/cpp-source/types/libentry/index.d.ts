@@ -56,3 +56,23 @@ export const renderDetailModelBodyMesh: (
   lightY: number,
   lightZ: number,
 ) => ArrayBuffer | undefined;
+export const aetherisRender: (buffer: ArrayBuffer) => number;
+export const aetherisSetMaster: (musicEnabled: boolean, sfxEnabled: boolean, volume: number, ducked: boolean) => void;
+export const aetherisSetDNA: (
+  seed: string,
+  mood: string,
+  rootPc: number,
+  jade: number,
+  felt: number,
+  tape: number,
+  bowl: number,
+  variation: number,
+) => void;
+export const aetherisApplySeed: (seed: string) => string;
+export const aetherisSetOutputMode: (isSpeaker: boolean) => void;
+export const aetherisSetHorizonAltitude: (altDeg: number) => void;
+export const aetherisSetLowPower: (enabled: boolean) => void;
+export const aetherisSkipNextAct: () => void;
+export const aetherisTriggerStar: (tempK: number, mag: number, distLy: number, pan: number, altitude: number) => void;
+export const aetherisTriggerCue: (cueId: string, pan: number) => void;
+export const aetherisReset: () => void;

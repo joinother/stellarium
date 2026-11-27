@@ -24,6 +24,7 @@
 #include "StelApp.hpp"
 #include "NebulaList.hpp"
 #include "NebulaMgr.hpp"
+#include "OhosStartupChoreography.hpp"
 #include "Nebula.hpp"
 #include "StelTexture.hpp"
 #include "StelUtils.hpp"
@@ -1113,7 +1114,7 @@ void NebulaMgr::draw(StelCore* core)
 	drawStats.layerOpacity = hintsFader.getInterstate() * flagShow.getInterstate();
 	drawCandidates.clear();
 	auto& layout = StelPainter::skyLabelLayoutForGroup(QStringLiteral("nebulae"));
-	if (!core->getFlagClearSky())
+	if (!core->getFlagClearSky() || OhosStartupChoreography::nebulaScale() <= 0.001f)
 	{
 		layout.clear();
 		return;
@@ -1130,8 +1131,9 @@ void NebulaMgr::draw(StelCore* core)
 	{
 		const StelSkyDrawer* skyDrawer = core->getSkyDrawer();
 
-		Nebula::hintsBrightness  = hintsFader.getInterstate()*flagShow.getInterstate()*static_cast<float>(hintsBrightness);
-		Nebula::labelsBrightness = hintsFader.getInterstate()*flagShow.getInterstate()*static_cast<float>(labelsBrightness);
+		const float startupNebula = OhosStartupChoreography::nebulaScale();
+		Nebula::hintsBrightness  = hintsFader.getInterstate()*flagShow.getInterstate()*static_cast<float>(hintsBrightness)*startupNebula;
+		Nebula::labelsBrightness = hintsFader.getInterstate()*flagShow.getInterstate()*static_cast<float>(labelsBrightness)*startupNebula;
 
 		// Use a 4 degree margin (esp. for wide outlines)
 		const float margin = 4.f*M_PI_180f*prj->getPixelPerRadAtCenter();

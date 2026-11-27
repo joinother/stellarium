@@ -24,6 +24,7 @@
 #endif
 
 #include "SolarSystem.hpp"
+#include "OhosStartupChoreography.hpp"
 #include "StelTexture.hpp"
 #include "EphemWrapper.hpp"
 #include "Orbit.hpp"
@@ -2025,7 +2026,7 @@ void SolarSystem::draw(StelCore* core)
 	drawEphemerisItems(core);
 #endif
 
-	if (!flagShow)
+	if (!flagShow || OhosStartupChoreography::solarSystemScale() <= 0.02f)
 		return;
 	static StelObjectMgr *sObjMgr=GETSTELMODULE(StelObjectMgr);
 	QFont font=QGuiApplication::font();

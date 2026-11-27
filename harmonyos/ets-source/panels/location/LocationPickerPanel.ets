@@ -257,13 +257,40 @@ export struct LocationPickerPanel {
         .width('100%')
         .margin({ top: 6 })
       }
-      Text(this.pickerStore.locationPickerStatus)
-        .fontSize(11)
-        .fontColor(this.c.sub)
+      if (this.pickerStore.deviceLocating) {
+        Row({ space: 6 }) {
+          LoadingProgress()
+            .width(16)
+            .height(16)
+            .color(this.c.accent)
+          Text(this.pickerStore.locationPickerStatus)
+            .fontSize(11)
+            .fontColor(this.c.accent)
+            .layoutWeight(1)
+            .maxLines(2)
+            .textOverflow({ overflow: TextOverflow.Ellipsis })
+        }
         .width('100%')
-        .maxLines(2)
-        .textOverflow({ overflow: TextOverflow.Ellipsis })
+        .alignItems(VerticalAlign.Center)
         .margin({ top: 9 })
+      } else {
+        Text(this.pickerStore.locationPickerStatus)
+          .fontSize(11)
+          .fontColor(this.c.sub)
+          .width('100%')
+          .maxLines(2)
+          .textOverflow({ overflow: TextOverflow.Ellipsis })
+          .margin({ top: 9 })
+        if (this.isEarth() && this.pickerStore.locationSource === 'gps') {
+          Text(I18n.t('loc_auto_follow_active'))
+            .fontSize(10)
+            .fontColor(this.c.accent)
+            .width('100%')
+            .maxLines(1)
+            .textOverflow({ overflow: TextOverflow.Ellipsis })
+            .margin({ top: 4 })
+        }
+      }
     }
        .width('100%')
        .padding({ left: 10, right: 10, top: 10, bottom: 10 })

@@ -301,36 +301,255 @@ void Comet::setAbsoluteMagnitudeAndSlope(const float magnitude, const float slop
 
 void Comet::translateName(const StelTranslator &translator)
 {
+	if (translator.getTrueLocaleName().startsWith(QLatin1String("zh"), Qt::CaseInsensitive))
+	{
+		// Unified Chinese comet naming so search suggestions, browse lists,
+		// small selection pills, and large detail cards always display the exact
+		// same localized title.
+		static const QHash<QString, QString> zhExactComets = {
+			{QStringLiteral("1P/Halley (1986)"), QStringLiteral("哈雷彗星 (1P/Halley)")},
+			{QStringLiteral("1P/Halley"), QStringLiteral("哈雷彗星 (1P/Halley)")},
+			{QStringLiteral("1I/2017 U1 (`Oumuamua)"), QStringLiteral("奥陌陌 (1I/2017 U1)")},
+			{QStringLiteral("2I/2019 Q4 (Borisov)"), QStringLiteral("鲍里索夫星际彗星 (2I/2019 Q4)")},
+			{QStringLiteral("3I/ATLAS"), QStringLiteral("阿特拉斯星际彗星 (3I/ATLAS)")},
+			{QStringLiteral("3I/2025 N1 (ATLAS)"), QStringLiteral("阿特拉斯星际彗星 (3I/ATLAS)")},
+			{QStringLiteral("Kirch (Great Comet of 1680)"), QStringLiteral("1680年大彗星 (基尔希)")},
+			{QStringLiteral("C/1680 V1 (Kirch)"), QStringLiteral("1680年大彗星 (基尔希)")},
+			{QStringLiteral("ATLAS (Fragment A)"), QStringLiteral("阿特拉斯彗星 A碎片 (C/2019 Y4-A)")},
+			{QStringLiteral("ATLAS (Fragment B)"), QStringLiteral("阿特拉斯彗星 B碎片 (C/2019 Y4-B)")},
+			{QStringLiteral("LINEAR (2000)"), QStringLiteral("林尼尔彗星 (C/1999 S4)")},
+			{QStringLiteral("C/1956 R1 (Arend-Roland)"), QStringLiteral("阿伦德-罗兰彗星 (C/1956 R1)")},
+			{QStringLiteral("C/1965 S1-A (Ikeya-Seki)"), QStringLiteral("池谷-关彗星 (C/1965 S1-A)")},
+			{QStringLiteral("C/1965 S1 (Ikeya-Seki)"), QStringLiteral("池谷-关彗星 (C/1965 S1)")},
+			{QStringLiteral("C/1969 Y1 (Bennett)"), QStringLiteral("贝内特彗星 (C/1969 Y1)")},
+			{QStringLiteral("C/1975 V1 (West)"), QStringLiteral("威斯特彗星 (C/1975 V1)")},
+			{QStringLiteral("C/1995 O1 (Hale-Bopp)"), QStringLiteral("海尔-波普彗星 (C/1995 O1)")},
+			{QStringLiteral("C/1996 B2 (Hyakutake)"), QStringLiteral("百武彗星 (C/1996 B2)")},
+			{QStringLiteral("C/1999 S4 (LINEAR)"), QStringLiteral("林尼尔彗星 (C/1999 S4)")},
+			{QStringLiteral("C/2002 V1 (NEAT)"), QStringLiteral("尼特彗星 (C/2002 V1)")},
+			{QStringLiteral("C/2006 P1 (McNaught)"), QStringLiteral("麦克诺特彗星 (C/2006 P1)")},
+			{QStringLiteral("C/2011 W3 (Lovejoy)"), QStringLiteral("洛夫乔伊彗星 (C/2011 W3)")},
+			{QStringLiteral("C/2012 S1 (ISON)"), QStringLiteral("艾森彗星 (C/2012 S1)")},
+			{QStringLiteral("C/2020 F3 (NEOWISE)"), QStringLiteral("新智彗星 (C/2020 F3)")},
+			{QStringLiteral("C/2022 E3 (ZTF)"), QStringLiteral("ZTF彗星 (C/2022 E3)")},
+			{QStringLiteral("C/2023 A3 (Tsuchinshan-ATLAS)"), QStringLiteral("紫金山-阿特拉斯彗星 (C/2023 A3)")},
+			{QStringLiteral("C/2024 G3 (ATLAS)"), QStringLiteral("阿特拉斯彗星 (C/2024 G3)")},
+			{QStringLiteral("C/2025 A6 (Lemmon)"), QStringLiteral("莱蒙彗星 (C/2025 A6)")},
+			{QStringLiteral("C/2026 B2 (Sun-Gao)"), QStringLiteral("孙-高彗星 (C/2026 B2)")},
+			{QStringLiteral("C/2026 C1 (Tsuchinshan)"), QStringLiteral("紫金山彗星 (C/2026 C1)")},
+		};
+		auto exactIt = zhExactComets.constFind(englishName);
+		if (exactIt != zhExactComets.constEnd())
+		{
+			nameI18 = exactIt.value();
+			return;
+		}
+
+		// Translate individual discoverer / survey tokens (hyphen-separated names supported).
+		static const QHash<QString, QString> zhDiscovererTokens = {
+			{QStringLiteral("halley"), QStringLiteral("哈雷")},
+			{QStringLiteral("encke"), QStringLiteral("恩克")},
+			{QStringLiteral("tempel"), QStringLiteral("坦普尔")},
+			{QStringLiteral("swift"), QStringLiteral("斯威夫特")},
+			{QStringLiteral("tuttle"), QStringLiteral("塔特尔")},
+			{QStringLiteral("pons"), QStringLiteral("庞斯")},
+			{QStringLiteral("brooks"), QStringLiteral("布鲁克斯")},
+			{QStringLiteral("wolf"), QStringLiteral("沃尔夫")},
+			{QStringLiteral("borrelly"), QStringLiteral("包瑞利")},
+			{QStringLiteral("giacobini"), QStringLiteral("贾科比尼")},
+			{QStringLiteral("zinner"), QStringLiteral("齐纳")},
+			{QStringLiteral("schaumasse"), QStringLiteral("肖马斯")},
+			{QStringLiteral("schwassmann"), QStringLiteral("施瓦斯曼")},
+			{QStringLiteral("wachmann"), QStringLiteral("瓦赫曼")},
+			{QStringLiteral("wirtanen"), QStringLiteral("维尔塔宁")},
+			{QStringLiteral("churyumov"), QStringLiteral("丘留莫夫")},
+			{QStringLiteral("gerasimenko"), QStringLiteral("格拉西缅科")},
+			{QStringLiteral("wild"), QStringLiteral("怀尔德")},
+			{QStringLiteral("hartley"), QStringLiteral("哈特雷")},
+			{QStringLiteral("iras"), QStringLiteral("红外天文卫星")},
+			{QStringLiteral("machholz"), QStringLiteral("麦克霍尔兹")},
+			{QStringLiteral("panstarrs"), QStringLiteral("泛星")},
+			{QStringLiteral("atlas"), QStringLiteral("阿特拉斯")},
+			{QStringLiteral("tsuchinshan"), QStringLiteral("紫金山")},
+			{QStringLiteral("linear"), QStringLiteral("林尼尔")},
+			{QStringLiteral("neowise"), QStringLiteral("新智")},
+			{QStringLiteral("wise"), QStringLiteral("广域红外")},
+			{QStringLiteral("neat"), QStringLiteral("尼特")},
+			{QStringLiteral("catalina"), QStringLiteral("卡特琳娜")},
+			{QStringLiteral("lemmon"), QStringLiteral("莱蒙")},
+			{QStringLiteral("spacewatch"), QStringLiteral("太空监视")},
+			{QStringLiteral("loneos"), QStringLiteral("洛厄尔")},
+			{QStringLiteral("sidingspring"), QStringLiteral("赛丁泉")},
+			{QStringLiteral("siding spring"), QStringLiteral("赛丁泉")},
+			{QStringLiteral("mcnaught"), QStringLiteral("麦克诺特")},
+			{QStringLiteral("shoemaker"), QStringLiteral("苏梅克")},
+			{QStringLiteral("levy"), QStringLiteral("列维")},
+			{QStringLiteral("holt"), QStringLiteral("霍尔特")},
+			{QStringLiteral("boattini"), QStringLiteral("博阿蒂尼")},
+			{QStringLiteral("christensen"), QStringLiteral("克里斯滕森")},
+			{QStringLiteral("garradd"), QStringLiteral("加拉德")},
+			{QStringLiteral("leonard"), QStringLiteral("伦纳德")},
+			{QStringLiteral("lovejoy"), QStringLiteral("洛夫乔伊")},
+			{QStringLiteral("ison"), QStringLiteral("艾森")},
+			{QStringLiteral("hale"), QStringLiteral("海尔")},
+			{QStringLiteral("bopp"), QStringLiteral("波普")},
+			{QStringLiteral("hyakutake"), QStringLiteral("百武")},
+			{QStringLiteral("ikeya"), QStringLiteral("池谷")},
+			{QStringLiteral("seki"), QStringLiteral("关")},
+			{QStringLiteral("west"), QStringLiteral("威斯特")},
+			{QStringLiteral("arend"), QStringLiteral("阿伦德")},
+			{QStringLiteral("roland"), QStringLiteral("罗兰")},
+			{QStringLiteral("bennett"), QStringLiteral("贝内特")},
+			{QStringLiteral("mueller"), QStringLiteral("米勒")},
+			{QStringLiteral("mrkos"), QStringLiteral("姆尔科斯")},
+			{QStringLiteral("kowal"), QStringLiteral("科瓦尔")},
+			{QStringLiteral("howell"), QStringLiteral("豪威尔")},
+			{QStringLiteral("gehrels"), QStringLiteral("盖雷尔斯")},
+			{QStringLiteral("bok"), QStringLiteral("博克")},
+			{QStringLiteral("sun"), QStringLiteral("孙")},
+			{QStringLiteral("gao"), QStringLiteral("高")},
+			{QStringLiteral("urata"), QStringLiteral("浦田")},
+			{QStringLiteral("niijima"), QStringLiteral("新岛")},
+			{QStringLiteral("wiseman"), QStringLiteral("怀斯曼")},
+			{QStringLiteral("skiff"), QStringLiteral("斯基夫")},
+			{QStringLiteral("hergenrother"), QStringLiteral("赫根罗特")},
+			{QStringLiteral("lasagra"), QStringLiteral("拉萨格拉")},
+			{QStringLiteral("la sagra"), QStringLiteral("拉萨格拉")},
+			{QStringLiteral("hermann"), QStringLiteral("赫尔曼")},
+			{QStringLiteral("ory"), QStringLiteral("奥里")},
+			{QStringLiteral("rinner"), QStringLiteral("林纳")},
+			{QStringLiteral("fuls"), QStringLiteral("富尔斯")},
+			{QStringLiteral("neujmin"), QStringLiteral("诺伊明")},
+			{QStringLiteral("palomar"), QStringLiteral("帕洛马")},
+			{QStringLiteral("taylor"), QStringLiteral("泰勒")},
+			{QStringLiteral("smirnova"), QStringLiteral("斯米尔诺娃")},
+			{QStringLiteral("chernykh"), QStringLiteral("切尔内赫")},
+			{QStringLiteral("kohoutek"), QStringLiteral("科胡特克")},
+			{QStringLiteral("ikemura"), QStringLiteral("池村")},
+			{QStringLiteral("lovas"), QStringLiteral("洛瓦什")},
+			{QStringLiteral("wierzchos"), QStringLiteral("维尔兹霍斯")},
+			{QStringLiteral("rankin"), QStringLiteral("兰金")},
+			{QStringLiteral("borisov"), QStringLiteral("鲍里索夫")},
+			{QStringLiteral("soho"), QStringLiteral("SOHO")},
+			{QStringLiteral("ztf"), QStringLiteral("ZTF")},
+			{QStringLiteral("maps"), QStringLiteral("MAPS")},
+			{QStringLiteral("swan"), QStringLiteral("SWAN")},
+		};
+		auto translateDiscoverer = [&](const QString& rawDiscoverer) -> QString {
+			const QString trimmed = rawDiscoverer.trimmed();
+			if (trimmed.isEmpty())
+				return QString();
+			const QString lowerWhole = trimmed.toLower();
+			auto wholeIt = zhDiscovererTokens.constFind(lowerWhole);
+			if (wholeIt != zhDiscovererTokens.constEnd())
+				return wholeIt.value();
+			const QStringList parts = trimmed.split(QLatin1Char('-'), Qt::SkipEmptyParts);
+			if (parts.size() > 1)
+			{
+				QStringList translatedParts;
+				bool anyTranslated = false;
+				for (const QString& part : parts)
+				{
+					const QString pTrim = part.trimmed();
+					auto pIt = zhDiscovererTokens.constFind(pTrim.toLower());
+					if (pIt != zhDiscovererTokens.constEnd())
+					{
+						translatedParts.append(pIt.value());
+						anyTranslated = true;
+					}
+					else
+					{
+						translatedParts.append(pTrim);
+					}
+				}
+				if (anyTranslated)
+					return translatedParts.join(QLatin1Char('-'));
+			}
+			return trimmed;
+		};
+
+		// 1) Non-periodic / provisional / interstellar comets: "C/2026 A3 (PANSTARRS)", "P/2022 M1 (LONEOS-PANSTARRS)"
+		static const QRegularExpression nonPeriodicRe(QStringLiteral("^([CPDAXI]/\\d{4}\\s+[A-Z0-9]+(?:-[A-Z0-9]+)?)\\s*\\(([^)]+)\\)\\s*$"));
+		QRegularExpressionMatch nonPerMatch = nonPeriodicRe.match(englishName);
+		if (nonPerMatch.hasMatch())
+		{
+			const QString desig = nonPerMatch.captured(1).trimmed();
+			const QString rawName = nonPerMatch.captured(2).trimmed();
+			// Skip pure year suffixes like "A/2024 U2 (2026)"
+			static const QRegularExpression pureYearRe(QStringLiteral("^-?\\d{3,4}$"));
+			if (pureYearRe.match(rawName).hasMatch())
+			{
+				nameI18 = QStringLiteral("%1 彗星").arg(desig);
+				return;
+			}
+			const QString zhName = translateDiscoverer(rawName);
+			const bool needsSpace = !zhName.isEmpty() && zhName.back().unicode() < 128;
+			nameI18 = QStringLiteral("%1%2彗星 (%3)").arg(zhName, needsSpace ? QStringLiteral(" ") : QString(), desig);
+			return;
+		}
+
+		// 2) Numbered periodic comets with optional fragment & orbital return year:
+		//    "10P/Tempel (2026)", "141P-A/Machholz (2026)", "73P/Schwassmann-Wachmann 3-C (2006)"
+		static const QRegularExpression numberedRe(QStringLiteral("^(\\d+[PD])(?:-([A-Z0-9]+))?/([^(]+?)(?:\\s*\\((-?\\d+)\\))?\\s*$"));
+		QRegularExpressionMatch numMatch = numberedRe.match(englishName);
+		if (numMatch.hasMatch())
+		{
+			const QString baseDesig = numMatch.captured(1).trimmed();
+			QString fragment = numMatch.captured(2).trimmed();
+			QString rawName = numMatch.captured(3).trimmed();
+			QString numberSuffix;
+			// Handle trailing numbering / fragment embedded in name like "Schwassmann-Wachmann 3-C"
+			static const QRegularExpression embeddedFragRe(QStringLiteral("^(.+?)\\s+(\\d+)(?:-([A-Z0-9]+))?$"));
+			QRegularExpressionMatch embMatch = embeddedFragRe.match(rawName);
+			if (embMatch.hasMatch())
+			{
+				rawName = embMatch.captured(1).trimmed();
+				numberSuffix = embMatch.captured(2).trimmed() + QStringLiteral("号");
+				if (fragment.isEmpty() && !embMatch.captured(3).isEmpty())
+					fragment = embMatch.captured(3).trimmed();
+			}
+			const QString zhName = translateDiscoverer(rawName);
+			const QString fullDesig = fragment.isEmpty() ? baseDesig : (baseDesig + QLatin1Char('-') + fragment);
+			const bool needsSpace = !zhName.isEmpty() && numberSuffix.isEmpty() && zhName.back().unicode() < 128;
+			if (!fragment.isEmpty())
+				nameI18 = QStringLiteral("%1%2%3彗星 %4碎片 (%5)").arg(zhName, numberSuffix, needsSpace ? QStringLiteral(" ") : QString(), fragment, fullDesig);
+			else
+				nameI18 = QStringLiteral("%1%2%3彗星 (%4)").arg(zhName, numberSuffix, needsSpace ? QStringLiteral(" ") : QString(), fullDesig);
+			return;
+		}
+
+		// 3) Historical unnumbered periodic like "P/Halley (-1403)"
+		static const QRegularExpression histHalleyRe(QStringLiteral("^P/([A-Za-z-]+)\\s*\\((-?\\d+)\\)\\s*$"));
+		QRegularExpressionMatch histMatch = histHalleyRe.match(englishName);
+		if (histMatch.hasMatch())
+		{
+			const QString zhName = translateDiscoverer(histMatch.captured(1));
+			const QString year = histMatch.captured(2);
+			const bool needsSpace = !zhName.isEmpty() && zhName.back().unicode() < 128;
+			nameI18 = QStringLiteral("%1%2彗星 (P/%3 %4)").arg(zhName, needsSpace ? QStringLiteral(" ") : QString(), histMatch.captured(1), year);
+			return;
+		}
+
+		// 4) Pure numbered periodic without discoverer: "505P (2026)"
+		static const QRegularExpression bareNumRe(QStringLiteral("^(\\d+[PD])(?:\\s*\\((-?\\d+)\\))?\\s*$"));
+		QRegularExpressionMatch bareMatch = bareNumRe.match(englishName);
+		if (bareMatch.hasMatch())
+		{
+			const QString desig = bareMatch.captured(1);
+			const QString year = bareMatch.captured(2);
+			nameI18 = year.isEmpty()
+				? QStringLiteral("%1 彗星").arg(desig)
+				: QStringLiteral("%1 彗星 (%2)").arg(desig, year);
+			return;
+		}
+	}
+
 	static const QRegularExpression cometNamePattern("^(.+)[(](.+)[)]\\s*$");
 	QRegularExpressionMatch matchCometName = cometNamePattern.match(englishName);
 	if (matchCometName.hasMatch())
 		nameI18 = QString("%1(%2)").arg(matchCometName.captured(1),translator.qtranslate(matchCometName.captured(2), "comet"));
 	else
 		nameI18 = translator.qtranslate(englishName, "comet");
-
-	if (nameI18 == englishName && translator.getTrueLocaleName().startsWith(QLatin1String("zh"), Qt::CaseInsensitive))
-	{
-		static const QHash<QString, QString> zhComets = {
-			{QStringLiteral("1P/Halley (1986)"), QStringLiteral("哈雷彗星 (1P/Halley)")},
-			{QStringLiteral("1P/Halley"), QStringLiteral("哈雷彗星")},
-			{QStringLiteral("1I/2017 U1 (`Oumuamua)"), QStringLiteral("奥陌陌 (1I/2017 U1)")},
-			{QStringLiteral("2I/2019 Q4 (Borisov)"), QStringLiteral("鲍里索夫星际彗星 (2I/2019 Q4)")},
-			{QStringLiteral("C/1995 O1 (Hale-Bopp)"), QStringLiteral("海尔-波普彗星 (C/1995 O1)")},
-			{QStringLiteral("C/1996 B2 (Hyakutake)"), QStringLiteral("百武彗星 (C/1996 B2)")},
-			{QStringLiteral("C/2020 F3 (NEOWISE)"), QStringLiteral("新智彗星 (C/2020 F3)")},
-			{QStringLiteral("C/2006 P1 (McNaught)"), QStringLiteral("麦克诺特彗星 (C/2006 P1)")},
-			{QStringLiteral("C/2011 W3 (Lovejoy)"), QStringLiteral("洛夫乔伊彗星 (C/2011 W3)")},
-			{QStringLiteral("C/1965 S1-A (Ikeya-Seki)"), QStringLiteral("池谷-关彗星 (C/1965 S1-A)")},
-			{QStringLiteral("C/1975 V1 (West)"), QStringLiteral("威斯特彗星 (C/1975 V1)")},
-			{QStringLiteral("C/1956 R1 (Arend-Roland)"), QStringLiteral("阿伦德-罗兰彗星 (C/1956 R1)")},
-			{QStringLiteral("C/1969 Y1 (Bennett)"), QStringLiteral("贝内特彗星 (C/1969 Y1)")},
-			{QStringLiteral("C/2023 A3 (Tsuchinshan-ATLAS)"), QStringLiteral("紫金山-阿特拉斯彗星 (C/2023 A3)")},
-			{QStringLiteral("C/2026 C1 (Tsuchinshan)"), QStringLiteral("紫金山彗星 (C/2026 C1)")},
-		};
-		auto it = zhComets.constFind(englishName);
-		if (it != zhComets.constEnd())
-			nameI18 = it.value();
-	}
 }
 
 QString Comet::getInfoStringName(const StelCore *core, const InfoStringGroup& flags) const

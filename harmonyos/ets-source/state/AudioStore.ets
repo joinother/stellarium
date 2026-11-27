@@ -1,49 +1,133 @@
-// 音频（audio）域状态：背景音乐开关 musicEnabled 与音量 audioVolume，同为 AudioPanel 入参，
-// 由面板以 @ObjectLink 订阅，持久化于 AppStorage 的 'stellariumSettings' 键。
-// 本 store 自持 toggleMusic / persistMusicEnabled；播放 / 静音副作用（AudioEngine 为原生桥）
-// 经 AudioStoreHooks 具名回注，store 不 import NAPI。
-//
-// 约束：两字段均为布尔 / 数值整体赋值，无原地变更。
+// 音频（audio）域状态：背景音乐开关 musicEnabled、天体与交互音效开关 sfxEnabled、主音量 audioVolume、
+// 以及 Aetheris 千人千面程序化音景 DNA（audioMood / audioMaterial / audioSeed）。
+// 播放 / 静音 / 音量 / DNA 副作用经 AudioStoreHooks 具名回注，store 不 import NAPI。
+
+import {
+  AetherisMaterialPreset,
+  AetherisMoodId,
+  normalizeAetherisMaterial,
+  normalizeAetherisMood
+} from '../capability/AudioCatalog'
+
 export interface AudioStoreHooks {
-  // 背景音乐引擎开关（宿主 AudioEngine.start()/setMuted）。
   setMusicPlaying(enabled: boolean): void
-  // UI 提示（宿主 flashHint）。
+  setSfxEnabled(enabled: boolean): void
+  setAudioVolume(volume: number): void
+  setAetherisMood(mood: AetherisMoodId): void
+  setAetherisMaterial(preset: AetherisMaterialPreset): void
+  randomizeAetherisSeed(): void
+  skipNextAct(): void
+  playAudioLogo(): void
+  persistAudioSettings(): void
   flashHint(text: ResourceStr): void
 }
 
 @Observed
 export class AudioStore {
   musicEnabled: boolean = false
+  sfxEnabled: boolean = true
   audioVolume: number = 0.7
+  audioMood: AetherisMoodId = 'newmoon'
+  audioMaterial: AetherisMaterialPreset = 'jade'
+  audioSeed: string = 'SkyInstrument-01'
 
   private hooks: AudioStoreHooks | null = null
-  // 350ms 防抖时间戳：避免坐标命中与 onClick 双触发导致来回跳（不可观测，不入 store 数据面）。
   private lastMusicToggle: number = 0
 
   attachHooks(hooks: AudioStoreHooks): void {
     this.hooks = hooks
   }
 
-  // 防抖后翻转开关、下发引擎、持久化并提示。
   toggleMusic(): void {
     const now = Date.now()
     if (now - this.lastMusicToggle < 350) { return }
     this.lastMusicToggle = now
-    this.musicEnabled = !this.musicEnabled
-    const hooks = this.hooks
-    if (hooks !== null) { hooks.setMusicPlaying(this.musicEnabled) }
-    this.persistMusicEnabled()
-    if (hooks !== null) { hooks.flashHint(this.musicEnabled ? '音乐：开 ♪' : '音乐：静音') }
+    this.setMusicEnabled(!this.musicEnabled, true)
   }
 
-  // 写 AppStorage 的 'stellariumSettings'（AppStorage 非 NAPI，可在 store 内直接使用）。
+  setMusicEnabled(enabled: boolean, notifyHint: boolean = false): void {
+    this.musicEnabled = enabled
+    const hooks = this.hooks
+    if (hooks !== null) { hooks.setMusicPlaying(enabled) }
+    this.persistAudioSettings()
+    if (notifyHint && hooks !== null) {
+      hooks.flashHint(this.musicEnabled ? '音乐：开 ♪' : '音乐：静音')
+    }
+  }
+
+  setSfxEnabled(enabled: boolean): void {
+    this.sfxEnabled = enabled
+    const hooks = this.hooks
+    if (hooks !== null) { hooks.setSfxEnabled(enabled) }
+    this.persistAudioSettings()
+  }
+
+  setAudioVolume(value: number): void {
+    const clamped = Number.isFinite(value) ? Math.max(0.0, Math.min(1.0, value)) : 0.7
+    this.audioVolume = clamped
+    const hooks = this.hooks
+    if (hooks !== null) { hooks.setAudioVolume(clamped) }
+    this.persistAudioSettings()
+  }
+
+  setAudioMood(mood: AetherisMoodId): void {
+    const norm = normalizeAetherisMood(mood)
+    this.audioMood = norm
+    const hooks = this.hooks
+    if (hooks !== null) { hooks.setAetherisMood(norm) }
+    this.persistAudioSettings()
+  }
+
+  setAudioMaterial(preset: AetherisMaterialPreset): void {
+    const norm = normalizeAetherisMaterial(preset)
+    this.audioMaterial = norm
+    const hooks = this.hooks
+    if (hooks !== null) { hooks.setAetherisMaterial(norm) }
+    this.persistAudioSettings()
+  }
+
+  syncGeneratedSeed(seed: string, mood: AetherisMoodId, material: AetherisMaterialPreset): void {
+    this.audioSeed = seed
+    this.audioMood = normalizeAetherisMood(mood)
+    this.audioMaterial = normalizeAetherisMaterial(material)
+    this.persistAudioSettings()
+  }
+
+  randomizeDna(): void {
+    const hooks = this.hooks
+    if (hooks !== null) { hooks.randomizeAetherisSeed() }
+  }
+
+  skipNextAct(): void {
+    const hooks = this.hooks
+    if (hooks !== null) { hooks.skipNextAct() }
+  }
+
+  playAudioLogo(): void {
+    const hooks = this.hooks
+    if (hooks !== null) { hooks.playAudioLogo() }
+  }
+
   persistMusicEnabled(): void {
-    let obj: Record<string, boolean | string> = {}
+    this.persistAudioSettings()
+  }
+
+  persistAudioSettings(): void {
+    let obj: Record<string, boolean | string | number> = {}
     const cur = AppStorage.get<string>('stellariumSettings')
     if (cur) {
-      try { obj = JSON.parse(cur) as Record<string, boolean | string> } catch (e) { }
+      try { obj = JSON.parse(cur) as Record<string, boolean | string | number> } catch (_e) { }
     }
     obj['musicEnabled'] = this.musicEnabled
+    obj['sfxEnabled'] = this.sfxEnabled
+    obj['audioVolume'] = this.audioVolume
+    obj['audioMood'] = this.audioMood
+    obj['audioMaterial'] = this.audioMaterial
+    obj['audioSeed'] = this.audioSeed
     AppStorage.setOrCreate('stellariumSettings', JSON.stringify(obj))
+    const hooks = this.hooks
+    if (hooks !== null) {
+      hooks.persistAudioSettings()
+    }
   }
 }

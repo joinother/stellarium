@@ -27,16 +27,16 @@ SporadicMeteor::SporadicMeteor(const StelCore* core, const float& maxVel, const 
 {
 	// meteor velocity [11, maxVel] km/s
 	const bool vivid = StelApp::getInstance().getFlagVividRendering();
-	// In vivid mode, ~24% of sporadic meteors enter at a shallow earth-grazing radiant (2°..13°)
-	// so dramatic long sky-sweeping bolides regularly streak across the celestial dome.
-	const bool longSkySweeper = vivid && (StelApp::getInstance().getRandF() < 0.24f);
+	// In vivid mode, keep shallow earth-grazing fireballs genuinely rare (~4% instead of 24%)
+	// so the night sky stays natural and never spams screen-spanning streaks.
+	const bool longSkySweeper = vivid && (StelApp::getInstance().getRandF() < 0.04f);
 	float speed = longSkySweeper
-		? (34.f + qMax(1.f, qMin(maxVel, 66.f) - 34.f) * static_cast<float>(StelApp::getInstance().getRandF()))
+		? (32.f + qMax(1.f, qMin(maxVel, 58.f) - 32.f) * static_cast<float>(StelApp::getInstance().getRandF()))
 		: (11.f + (maxVel - 11.f) * static_cast<float>(StelApp::getInstance().getRandF()));
 
 	// select a random radiant in a visible area
 	double rAlt = longSkySweeper
-		? (0.035 + 0.195 * static_cast<double>(StelApp::getInstance().getRandF())) // [2°, 13.2°] shallow grazer
+		? (0.045 + 0.095 * static_cast<double>(StelApp::getInstance().getRandF())) // [2.6°, 8.0°] rare shallow grazer
 		: (M_PI_2 * static_cast<double>(StelApp::getInstance().getRandF()));       // [0°, 90°]
 	double rAz = 2 * M_PI * static_cast<double>(StelApp::getInstance().getRandF());  // [0, 2pi]
 	Vec3d pos;
@@ -54,11 +54,12 @@ SporadicMeteor::SporadicMeteor(const StelCore* core, const float& maxVel, const 
 SporadicMeteor::SporadicMeteor(const StelCore* core, const Vec3d& centerAltAz,
 			       float offsetRightRad, float offsetUpRad, float slopeAngleRad,
 			       float speed, const QList<ColorPair>& colors,
-			       const StelTextureSP& bolideTexture, bool isFireball, float startDelaySec)
+			       const StelTextureSP& bolideTexture, bool isFireball, float startDelaySec,
+			       Meteor::Archetype forcedArchetype)
 	: Meteor(core, bolideTexture)
 {
 	initInViewport(centerAltAz, offsetRightRad, offsetUpRad, slopeAngleRad,
-		       speed, colors, isFireball, startDelaySec);
+		       speed, colors, isFireball, startDelaySec, forcedArchetype);
 }
 
 SporadicMeteor::~SporadicMeteor()
@@ -97,85 +98,75 @@ QList<Meteor::ColorPair> SporadicMeteor::getRandColor(float speedKmS)
 
 	const bool fast = speedKmS >= 46.f;
 
-	// Velocity-correlated multi-spectral emission palettes:
-	//   1. Emerald Magnesium / Forbidden Oxygen (signature vibrant green -> cyan -> white head)
-	//   2. High-Speed Rose-Magenta -> Emerald -> Cyan-White (N2/O atmospheric wake + Mg plasma)
-	//   3. Sodium Gold / Warm Amber (Na I 589 nm, enriched in slower meteoroids)
-	//   4. Ice-Blue / Calcium Violet (Ca II H&K / Fe)
-	//   5. Crisp Silver-White / Pale-Cyan Needle (abundant fine background micro-meteors)
+	// Realistic naked-eye multi-spectral emission distribution:
+	//   Most sporadic meteors appear crisp silver-white or warm pale-gold;
+	//   only a modest subset of faster/brighter meteors display subtle Mg/O emerald-cyan or Na amber tints.
 	if (fast)
 	{
-		if (prob < 0.34f)
+		if (prob < 0.48f)
 		{
-			// Vivid emerald Mg/O streak
-			colors.push_back(Meteor::ColorPair("emerald", 45));
-			colors.push_back(Meteor::ColorPair("cyanGreen", 35));
-			colors.push_back(Meteor::ColorPair("white", 20));
+			// Crisp silver-white / pale ice-blue needle (most common)
+			colors.push_back(Meteor::ColorPair("iceBlue", 24));
+			colors.push_back(Meteor::ColorPair("white", 76));
 		}
-		else if (prob < 0.56f)
+		else if (prob < 0.68f)
 		{
-			// Multi-spectral high-velocity streak: rose-magenta tail -> emerald body -> cyan-white head
-			colors.push_back(Meteor::ColorPair("roseMagenta", 22));
-			colors.push_back(Meteor::ColorPair("emerald", 48));
-			colors.push_back(Meteor::ColorPair("cyanGreen", 20));
-			colors.push_back(Meteor::ColorPair("white", 10));
-		}
-		else if (prob < 0.72f)
-		{
-			// Calcium violet / ice-blue streak
-			colors.push_back(Meteor::ColorPair("violet", 30));
-			colors.push_back(Meteor::ColorPair("iceBlue", 45));
-			colors.push_back(Meteor::ColorPair("white", 25));
+			// Warm golden-white streak
+			colors.push_back(Meteor::ColorPair("paleGold", 35));
+			colors.push_back(Meteor::ColorPair("white", 65));
 		}
 		else if (prob < 0.86f)
 		{
-			// Warm amber-gold sodium streak
-			colors.push_back(Meteor::ColorPair("amberGold", 45));
-			colors.push_back(Meteor::ColorPair("paleGold", 35));
-			colors.push_back(Meteor::ColorPair("white", 20));
+			// Authentic Perseid-type high-velocity spectroscopy:
+			// fine O I green entry -> warm N2/Na rose-gold -> Mg emerald/white burst -> faint Ca II lilac tip
+			colors.push_back(Meteor::ColorPair("oGreen", 32));
+			colors.push_back(Meteor::ColorPair("roseGold", 28));
+			colors.push_back(Meteor::ColorPair("emerald", 28));
+			colors.push_back(Meteor::ColorPair("lilacTip", 12));
+		}
+		else if (prob < 0.94f)
+		{
+			// Subtle emerald-cyan Mg/O -> incandescent white needle
+			colors.push_back(Meteor::ColorPair("oGreen", 30));
+			colors.push_back(Meteor::ColorPair("cyanGreen", 32));
+			colors.push_back(Meteor::ColorPair("white", 38));
 		}
 		else
 		{
-			// Crisp silver-white / pale-cyan fine needle
-			colors.push_back(Meteor::ColorPair("iceBlue", 35));
-			colors.push_back(Meteor::ColorPair("white", 65));
+			// Calcium violet / ice-blue streak
+			colors.push_back(Meteor::ColorPair("violet", 24));
+			colors.push_back(Meteor::ColorPair("iceBlue", 38));
+			colors.push_back(Meteor::ColorPair("white", 38));
 		}
 	}
 	else
 	{
-		if (prob < 0.30f)
+		if (prob < 0.50f)
+		{
+			// Crisp silver-white / faint warm-white needle
+			colors.push_back(Meteor::ColorPair("paleGold", 20));
+			colors.push_back(Meteor::ColorPair("white", 80));
+		}
+		else if (prob < 0.78f)
 		{
 			// Warm sodium amber-gold streak
-			colors.push_back(Meteor::ColorPair("amberGold", 50));
-			colors.push_back(Meteor::ColorPair("paleGold", 32));
-			colors.push_back(Meteor::ColorPair("white", 18));
+			colors.push_back(Meteor::ColorPair("amberGold", 38));
+			colors.push_back(Meteor::ColorPair("paleGold", 34));
+			colors.push_back(Meteor::ColorPair("white", 28));
 		}
-		else if (prob < 0.56f)
+		else if (prob < 0.90f)
 		{
-			// Emerald Mg/O streak
-			colors.push_back(Meteor::ColorPair("emerald", 45));
-			colors.push_back(Meteor::ColorPair("cyanGreen", 35));
-			colors.push_back(Meteor::ColorPair("white", 20));
-		}
-		else if (prob < 0.70f)
-		{
-			// Rose-amber -> pale gold warm streak
-			colors.push_back(Meteor::ColorPair("roseMagenta", 25));
-			colors.push_back(Meteor::ColorPair("amberGold", 45));
-			colors.push_back(Meteor::ColorPair("paleGold", 30));
-		}
-		else if (prob < 0.84f)
-		{
-			// Ice-blue / violet streak
-			colors.push_back(Meteor::ColorPair("iceBlue", 50));
-			colors.push_back(Meteor::ColorPair("violet", 25));
-			colors.push_back(Meteor::ColorPair("white", 25));
+			// Subtle emerald-cyan Mg/O streak
+			colors.push_back(Meteor::ColorPair("emerald", 30));
+			colors.push_back(Meteor::ColorPair("cyanGreen", 30));
+			colors.push_back(Meteor::ColorPair("white", 40));
 		}
 		else
 		{
-			// Crisp silver-white needle
-			colors.push_back(Meteor::ColorPair("paleGold", 25));
-			colors.push_back(Meteor::ColorPair("white", 75));
+			// Soft ice-blue / violet streak
+			colors.push_back(Meteor::ColorPair("iceBlue", 42));
+			colors.push_back(Meteor::ColorPair("violet", 18));
+			colors.push_back(Meteor::ColorPair("white", 40));
 		}
 	}
 

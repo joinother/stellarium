@@ -296,6 +296,7 @@ export class SatelliteController {
         this.satelliteStore.satTleFileInput = ''
         this.satelliteStore.satSourceStatus = I18n.t('sat_tle_imported')
         this.satelliteStore.loadSatellites(true, true)
+        this.satelliteStore.notifyCatalogUpdated()
       } else this.satelliteStore.satSourceStatus = r.error ?? I18n.t('sat_tle_import_failed')
     }, (failure: StellariumBridgeResponse) => { this.satelliteStore.satSourceStatus = failure.error ?? I18n.t('sat_tle_import_failed') })
   }

@@ -32,6 +32,8 @@ export interface SessionToolHooks {
   shareSessionJson(json: string): void
   // 是否具备分布式续传能力。
   canUseDistributed(): boolean
+  // 今晚天象拉取完成后回调宿主（复用同一份 TonightEvents 刷新桌面卡片，避免重复触发 getTonightEvents）。
+  onTonightReady?: (tonight: TonightEvents) => void
 }
 
 // 观测/会话工具区块 store：持有观测星球切换、虚拟指星笔、手表陀螺仪模拟、今晚天象与会话
@@ -48,6 +50,13 @@ export class SessionToolStore {
   planetList: string[] = []
   observerPlanets: ObserverPlanetItem[] = []
   observerPlanetPending: boolean = false
+  // 仅跨星球切换时置真（地球内 GPS / 地图选点不置真），供切换星球加载指示器使用。
+  observerPlanetSwitching: boolean = false
+  observerPlanetTarget: string = ''
+  // 缓存 Select 下拉选项数组，避免每次状态刷新都重建 200+ MenuItem 导致 580ms UI 冻结。
+  planetOptionsVersion: number = 0
+  private cachedPlanetOptions: SelectOption[] = []
+  private cachedPlanetOptionsKey: string = ''
 
   // —— 虚拟指星笔（多设备联动）——
   pointAlt: string = '45'
@@ -127,6 +136,8 @@ export class SessionToolStore {
         this.planetList = r.planets
         this.observerPlanets = r.observerPlanets ?? []
         this.sortObserverPlanets()
+        this.cachedPlanetOptionsKey = ''
+        this.planetOptionsVersion += 1
         this.notifyChanged()
       }
     })
@@ -229,7 +240,16 @@ export class SessionToolStore {
   }
 
   observerPlanetOptions(): SelectOption[] {
-    return this.planetList.map((name: string): SelectOption => ({ value: this.observerPlanetLabel(name) }))
+    const lang: string = typeof I18n.getLanguage === 'function' ? I18n.getLanguage() : 'zh_CN'
+    const first: string = this.planetList.length > 0 ? this.planetList[0] : ''
+    const last: string = this.planetList.length > 0 ? this.planetList[this.planetList.length - 1] : ''
+    const key: string = `${lang}|${this.planetList.length}|${first}|${last}`
+    if (this.cachedPlanetOptionsKey === key && this.cachedPlanetOptions.length === this.planetList.length) {
+      return this.cachedPlanetOptions
+    }
+    this.cachedPlanetOptions = this.planetList.map((name: string): SelectOption => ({ value: this.observerPlanetLabel(name) }))
+    this.cachedPlanetOptionsKey = key
+    return this.cachedPlanetOptions
   }
 
   // 选中天体是否为当前观测星球。
@@ -359,7 +379,8 @@ export class SessionToolStore {
       return
     }
     this.tonightInFlight = true
-    port.requestWhenReady('getTonightEvents', '', (r: StellariumBridgeResponse) => {
+    // 位置面板仅需日月升落/行星/流星雨/卫星概况，走 lite 模式跳过 48h 时间轴、6星 SGP4 与 3 个月天象日历，避免阻塞星图渲染线程。
+    port.requestWhenReady('getTonightEvents', 'lite', (r: StellariumBridgeResponse) => {
       this.tonightInFlight = false
       if (!r.ok || !r.tonight) { hooks.flashHint(I18n.t('msg_fetch_failed')); return }
       this.tonightFetchedAt = Date.now()
@@ -387,6 +408,9 @@ export class SessionToolStore {
       this.tonightSunJd = t.sun?.astroTwilightEndJd ?? 0
       this.tonightShowerJd = (t.meteorShowers && t.meteorShowers.length > 0) ? (t.meteorShowers[0].primeJd ?? this.tonightSunJd) : this.tonightSunJd
       this.tonightHint = I18n.t('tn_updated') + ' · ' + this.fmtIso(t.date ?? '')
+      if (hooks.onTonightReady !== undefined) {
+        hooks.onTonightReady(t)
+      }
       // 只有用户主动点「刷新」才弹提示；面板打开或定位变化后的自动刷新静默完成。
       if (force && !silent) hooks.flashHint('已刷新今晚天象 · 点击卡片可跳转')
     }, (): void => { this.tonightInFlight = false })

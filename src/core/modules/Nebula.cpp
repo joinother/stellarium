@@ -1008,9 +1008,18 @@ void drawSkyMarkerPolyline(StelPainter& sPainter, const SkyMarkerFrame& f,
 	if (count < 2)
 		return;
 
+	const Vec4i vp = prj->getViewport();
+	const double vpX = static_cast<double>(vp[0]);
+	const double vpY = static_cast<double>(vp[1]);
+	const double vpW = std::max(1.0, static_cast<double>(vp[2]));
+	const double vpH = std::max(1.0, static_cast<double>(vp[3]));
+	const double maxDim = std::max(vpW, vpH);
+	const double safeMargin = maxDim * 0.25;
+	const double maxStepPx = maxDim * 0.18;
+
 	QVarLengthArray<float, 512> seg;
 	seg.reserve((count + 1) * 2);
-	Vec3d prevSky(0.0);
+	Vec3d prevSky(0.0), prevScr(0.0);
 	bool hasPrev = false;
 
 	auto flushSeg = [&]()
@@ -1029,18 +1038,23 @@ void drawSkyMarkerPolyline(StelPainter& sPainter, const SkyMarkerFrame& f,
 	{
 		const Vec2f& p = normPts[i % count];
 		Vec3d sky, scr;
-		if (!projectSkyMarkerPoint(prj, f, static_cast<double>(p[0]), static_cast<double>(p[1]), sky, scr))
+		if (!projectSkyMarkerPoint(prj, f, static_cast<double>(p[0]), static_cast<double>(p[1]), sky, scr) ||
+		    !std::isfinite(scr[0]) || !std::isfinite(scr[1]) ||
+		    scr[0] < vpX - safeMargin || scr[0] > vpX + vpW + safeMargin ||
+		    scr[1] < vpY - safeMargin || scr[1] > vpY + vpH + safeMargin)
 		{
 			flushSeg();
 			continue;
 		}
-		if (hasPrev && prj->intersectViewportDiscontinuity(prevSky, sky))
+		if (hasPrev && (prj->intersectViewportDiscontinuity(prevSky, sky) ||
+		                std::hypot(scr[0] - prevScr[0], scr[1] - prevScr[1]) > maxStepPx))
 		{
 			flushSeg();
 		}
 		seg.push_back(static_cast<float>(scr[0]));
 		seg.push_back(static_cast<float>(scr[1]));
 		prevSky = sky;
+		prevScr = scr;
 		hasPrev = true;
 	}
 	flushSeg();
@@ -1252,18 +1266,30 @@ void Nebula::renderMarkerPointedCircle(StelPainter& sPainter, const Vec3d& direc
 	{
 		if (halfAngle <= 1e-5)
 			return;
+		const Vec4i vp = prj->getViewport();
+		const double vpX = static_cast<double>(vp[0]);
+		const double vpY = static_cast<double>(vp[1]);
+		const double vpW = std::max(1.0, static_cast<double>(vp[2]));
+		const double vpH = std::max(1.0, static_cast<double>(vp[3]));
+		const double maxDim = std::max(vpW, vpH);
+		const double safeMargin = maxDim * 0.25;
+		const double maxStepPx = maxDim * 0.18;
 		Vec3d prevSky(0.0), prevScr(0.0);
 		bool hasPrev = false;
 		for (int s = 0; s <= subSegs; ++s)
 		{
 			const double ang = centerAngle - halfAngle + (2.0 * halfAngle) * (static_cast<double>(s) / static_cast<double>(subSegs));
 			Vec3d sky, scr;
-			if (!projectSkyMarkerPoint(prj, f, std::cos(ang), std::sin(ang), sky, scr))
+			if (!projectSkyMarkerPoint(prj, f, std::cos(ang), std::sin(ang), sky, scr) ||
+			    !std::isfinite(scr[0]) || !std::isfinite(scr[1]) ||
+			    scr[0] < vpX - safeMargin || scr[0] > vpX + vpW + safeMargin ||
+			    scr[1] < vpY - safeMargin || scr[1] > vpY + vpH + safeMargin)
 			{
 				hasPrev = false;
 				continue;
 			}
-			if (hasPrev && !prj->intersectViewportDiscontinuity(prevSky, sky))
+			if (hasPrev && !prj->intersectViewportDiscontinuity(prevSky, sky) &&
+			    std::hypot(scr[0] - prevScr[0], scr[1] - prevScr[1]) <= maxStepPx)
 			{
 				verts.push_back(static_cast<float>(prevScr[0]));
 				verts.push_back(static_cast<float>(prevScr[1]));

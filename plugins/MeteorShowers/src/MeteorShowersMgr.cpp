@@ -30,6 +30,7 @@
 #endif
 #include "MeteorShowers.hpp"
 #include "MeteorShowersMgr.hpp"
+#include "OhosStartupChoreography.hpp"
 #include "Planet.hpp"
 #include "StelActionMgr.hpp"
 #include "StelApp.hpp"
@@ -312,7 +313,7 @@ void MeteorShowersMgr::update(double deltaTime)
 
 void MeteorShowersMgr::draw(StelCore* core)
 {
-	if (m_drawSuppressed)
+	if (m_drawSuppressed || OhosStartupChoreography::constellationScale() <= 0.02f)
 		return;
 	if (m_enablePlugin && m_onEarth)
 	{

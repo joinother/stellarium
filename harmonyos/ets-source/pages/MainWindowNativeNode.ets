@@ -1,4 +1,4 @@
-import { abilityAccessCtrl, common, Permissions, Want } from '@kit.AbilityKit'
+import { abilityAccessCtrl, bundleManager, common, Permissions, Want } from '@kit.AbilityKit'
 import { geoLocationManager } from '@kit.LocationKit'
 import { sensor } from '@kit.SensorServiceKit'
 import { curves, window } from '@kit.ArkUI'
@@ -49,6 +49,7 @@ import { ASTRONOMY_GUIDES, AstronomyGuide, GuideState, GuideStep, guideHasSkyAtm
 import { StellariumBridgeResponse, SessionSnapshot, TonightPlanet, TonightShower, TonightEvents, WutTarget, EphemerisRow, AstroCalcContext, RtsCalendarDay, AltAzPoint, AnnualElevationPoint, ObservabilityDay, LunarElongationPoint, PlanetTimeSeriesPoint, PlanetPairDistancePoint, PlanetCalcItem, PhenomenonItem, EclipseItem, PlanetaryTransitItem, MoonPhaseItem, SeasonEvent, LangOption, HierCity, NameItem, SearchSug, WindowNativeNodeCreateInfo, ChipItem, LandscapeItem, ScriptMetadata, HeliocentricPosition, CelestialPosition, ObjectInfo, SkyCultureItem, SkyCultureRawItem, SkyCultureArtItem, SkyCultureDescriptionBlock, SkyCultureTerritoryEntry, SkyCultureTerritoryPolygon, PluginItem, Scenery3dItem, ShellAction, LocSearchItem, SavedLocation, ObjectDetailField, ObjectDetailModel, SatellitePass, StationComplexMember, KeyboardShortcutItem } from './StellariumTypes'
 import { setLifecycleListener } from '../common/StellariumLifecycle'
 import { AudioEngine } from '../capability/AudioEngine'
+import { AetherisMaterialPreset, AetherisMoodId } from '../capability/AudioCatalog'
 import { I18n, LANGUAGE_DISPLAY, PROJECTION_KEYS } from './I18n'
 import { DeepSkyWarmupStatus, getDeepSkyResourceWarmupStatus, isStellariumDetailMediaPreparationFailed, resolveStellariumDetailMediaAsset } from '../qability/StellariumResourceBootstrap'
 import { UI_RADIUS_CONTROL, UI_RADIUS_PANEL, UI_RADIUS_SHEET, UI_RADIUS_PILL, UI_OPTION_ANIMATION_MS } from '../common/ui/UiTokens'
@@ -62,16 +63,17 @@ import {
   chromeZoomButtonTop
 } from '../common/ui/ChromeGeometry'
 import { gyroRotateAboutAxis, gyroMultiplyQuaternions, gyroFilterDeviceVector, gyroCross, gyroRotateAboutVertical, gyroScreenAxisForDisplay, shortestGyroAzimuthDelta, wrapGyroAzimuth, gyroNormalizeVector, gyroNormalizeQuaternion, gyroConjugateQuaternion, gyroDot, gyroMagneticHeadingFromDeviceVectors } from '../common/derive/gyro'
-import { jdToLocalTimeText, graphModeLabel, graphStartOptionLabel, planetMetricUnit, planetPairBodyName, phenomenonCaption, hecPointColor, hecLayoutPositions, hecPointLeft, hecPointTop, messierNumberOf, minorPlanetNumberOf, fmtDegMin, clamp, distance } from '../common/derive/astro'
+import { dateToJD, jdToLocalTimeText, graphModeLabel, graphStartOptionLabel, planetMetricUnit, planetPairBodyName, phenomenonCaption, hecPointColor, hecLayoutPositions, hecPointLeft, hecPointTop, messierNumberOf, minorPlanetNumberOf, fmtDegMin, clamp, distance } from '../common/derive/astro'
 import { resourceText, describeDecodeError, zhNameOf, zhType, planetZh, sensZh, scriptZh, scriptDesc, pluginZh, pluginDesc, pluginHostName, pluginFeatureRoute, approximateTimeZoneDisplay, panelTitleFor, celestialTitle, quickLocationLabel } from '../common/derive/labels'
 import { isSafeSkyCultureArtPath, cleanSkyCultureDescription, cleanSkyCultureNarration, isCliPanelName, parseObservingList, formatRate, configDitheringLabel, isRecordable } from '../common/derive/skycult'
 import { primaryDockActions, moreActions, observingHubActions, skyDataHubActions, automationHubActions, getCityPreset, validationFromResponse, officialLocationAliases, panelRouteParent, panelRouteRoot, inferredPanelRouteDirection, locationSearchMatchScore } from '../common/derive/actions'
-import { quickActionById, quickCandidateRowsFor } from '../common/derive/quickActions'
+import { quickActionById, quickCandidateRowsFor, quickCandidateVisibleRowsFor } from '../common/derive/quickActions'
 import { pointInsideRect, pointOverlapsUiObstacle, touchScreenX, touchScreenY, touchWindowX, touchWindowY, azBarHeight, compactTopQuickY, baseCompactObjectPeekY, expandedDetailSummaryHeight, isPhoneDetailPeek, useTabletObjectInspector, useExpandedDetailSummary, railTop, expandedMainPanelLeft, panelLeft, panelRight, baseExpandedDetailSummaryX, baseExpandedDetailSummaryY, baseTabletInspectorX, baseTabletInspectorY, tabletInspectorHeight, baseBottomCardX, baseBottomCardY, expandedDockOccupiedLeft, expandedDockWidth, expandedDockLeft, dockWidthPixels, dockLeft, chromeRowPosXLeft, chromeRowPosXRight, guideCardHeight, guideCardX, guideCardY, scriptControlWidth, scriptControlX, scriptControlY, isPanelBackPoint, isDockPoint, isObjectDetailCardPoint, canShowExpandedDetailSummary, expandedDetailSummaryWidth } from '../common/derive/geometry'
 import { catalogIconForModule, catalogIconForObjectType, wutCategoryOptions, wutCategoryKey, wutDirectionLabel } from '../common/derive/catalog'
 import { objectInspectorFallbackVisualKind, objectInspectorStarColor } from '../common/derive/media'
 import { BridgeClient } from '../bridge/BridgeClient'
 import { CommandPort } from '../bridge/CommandPort'
+import { RocketCatalogData, RocketSimulationData, RocketSimulationRequest } from '../state/RocketLaunchTypes'
 import { MediaPort, MediaSaveResult, ScreenCaptureState, MediaImportResult } from '../bridge/MediaPort'
 import { PlatformPort } from '../bridge/PlatformPort'
 import { SensorPort, SensorProbeInfo } from '../bridge/SensorPort'
@@ -923,14 +925,36 @@ class HostPlatformPort implements PlatformPort {
   }
 }
 
+interface SkyHoverPickCandidate {
+  name?: string
+  englishName?: string
+  type?: string
+  objectType?: string
+  magnitude?: number
+}
+
+interface SkyHoverProbeResponse extends StellariumBridgeResponse {
+  found?: boolean
+  pickCandidates?: SkyHoverPickCandidate[]
+}
+
 // 宿主 → SensorPort 的具名适配器。转发 sensor.* 查询/订阅/退订。
 class HostSensorPort implements SensorPort {
   // 控制器只给 label（不 import sensor 命名空间），适配器在此映射到 SensorId。
   private static sensorIdForLabel(label: string): sensor.SensorId {
+    if (label === 'gyroscope') return sensor.SensorId.GYROSCOPE
     if (label === 'gravity') return sensor.SensorId.GRAVITY
     if (label === 'magnetic-field') return sensor.SensorId.MAGNETIC_FIELD
     if (label === 'orientation-fallback') return sensor.SensorId.ORIENTATION
     return sensor.SensorId.ROTATION_VECTOR
+  }
+
+  // 2in1 桌面设备（如 MateBook Pro）的 SensorService 会暴露 virtual_gyro / virtual_acc 占位传感器，
+  // 并非真实物理陀螺仪；据此过滤虚拟/模拟传感器，避免在无硬件陀螺仪设备上误显示陀螺仪入口。
+  static isVirtualSensor(info: SensorProbeInfo | undefined): boolean {
+    if (info === undefined) return false
+    const name = (info.sensorName || '').toLowerCase()
+    return name.indexOf('virtual') >= 0 || name.indexOf('mock') >= 0
   }
 
   probeSensor(label: string): SensorProbeInfo | undefined {
@@ -984,6 +1008,7 @@ class HostSensorPort implements SensorPort {
 // UI 上下文工厂经 configure 惰性注入（适配器在字段初始化时构造，此时 getUIContext 尚不可用）。
 class HostLocationPort implements LocationPort {
   private contextFactory: (() => common.UIAbilityContext) | null = null
+  private locationWatchCallback: ((loc: geoLocationManager.Location) => void) | null = null
 
   configure(contextFactory: () => common.UIAbilityContext): void {
     this.contextFactory = contextFactory
@@ -995,6 +1020,18 @@ class HostLocationPort implements LocationPort {
       throw new Error('HostLocationPort not configured')
     }
     return factory()
+  }
+
+  hasPreciseLocationPermission(): boolean {
+    try {
+      const bundleInfo = bundleManager.getBundleInfoForSelfSync(bundleManager.BundleFlag.GET_BUNDLE_INFO_WITH_APPLICATION)
+      const tokenId = bundleInfo.appInfo.accessTokenId
+      const atManager = abilityAccessCtrl.createAtManager()
+      const status = atManager.checkAccessTokenSync(tokenId, 'ohos.permission.LOCATION')
+      return status === abilityAccessCtrl.GrantStatus.PERMISSION_GRANTED
+    } catch (_err) {
+      return false
+    }
   }
 
   async requestLocationPermissions(): Promise<string> {
@@ -1036,6 +1073,65 @@ class HostLocationPort implements LocationPort {
       altitude,
       accuracy: current.accuracy,
       altitudeAccuracy: current.altitudeAccuracy
+    }
+  }
+
+  async getQuickCurrentLocation(): Promise<LocationFix> {
+    const current = await geoLocationManager.getCurrentLocation({
+      locatingPriority: geoLocationManager.LocatingPriority.PRIORITY_LOCATING_SPEED,
+      locatingTimeoutMs: 4000,
+      needPoi: false
+    })
+    const altitude = Number.isFinite(current.altitude) ? current.altitude : 0
+    hilog.info(0x0000, 'StellariumArkUI',
+      '[gps] quick-fix lat=%{public}s lon=%{public}s alt=%{public}s altAcc=%{public}s acc=%{public}s',
+      current.latitude.toString(), current.longitude.toString(), altitude.toString(),
+      current.altitudeAccuracy === undefined ? 'unknown' : current.altitudeAccuracy.toString(),
+      current.accuracy.toString())
+    return {
+      latitude: current.latitude,
+      longitude: current.longitude,
+      altitude,
+      accuracy: current.accuracy,
+      altitudeAccuracy: current.altitudeAccuracy
+    }
+  }
+
+  startLocationWatch(minDistanceMeters: number, minIntervalSec: number, onFix: (fix: LocationFix) => void): void {
+    this.stopLocationWatch()
+    const request: geoLocationManager.LocationRequest = {
+      priority: geoLocationManager.LocationRequestPriority.LOW_POWER,
+      scenario: geoLocationManager.LocationRequestScenario.DAILY_LIFE_SERVICE,
+      timeInterval: Math.max(60, Math.round(minIntervalSec)),
+      distanceInterval: Math.max(500, Math.round(minDistanceMeters)),
+      maxAccuracy: 0
+    }
+    const cb = (loc: geoLocationManager.Location): void => {
+      const altitude = Number.isFinite(loc.altitude) ? loc.altitude : 0
+      onFix({
+        latitude: loc.latitude,
+        longitude: loc.longitude,
+        altitude,
+        accuracy: loc.accuracy,
+        altitudeAccuracy: loc.altitudeAccuracy
+      })
+    }
+    try {
+      geoLocationManager.on('locationChange', request, cb)
+      this.locationWatchCallback = cb
+    } catch (err) {
+      hilog.warn(0x0000, 'StellariumArkUI', '[gps] startLocationWatch failed: %{public}s', JSON.stringify(err))
+    }
+  }
+
+  stopLocationWatch(): void {
+    if (this.locationWatchCallback === null) return
+    const cb = this.locationWatchCallback
+    this.locationWatchCallback = null
+    try {
+      geoLocationManager.off('locationChange', cb)
+    } catch (_err) {
+      // Ignore already-unregistered errors.
     }
   }
 
@@ -1164,6 +1260,17 @@ export struct WindowNativeNode {
   @Watch('onPrivacyNativeStartupAllowedChanged')
   @StorageLink('stellariumPrivacyNativeStartupAllowed')
   private privacyNativeStartupAllowed: boolean = false
+  // 缓存隐私同意结果（启动/回前台/隐私门放行时刷新），避免在 build() 渲染热路径反复同步调用
+  // AppGalleryKit IPC（单次 65~80ms）导致切换星球和自动定位界面卡顿。
+  @State private cachedPrivacyConsent: boolean = false
+
+  private refreshPrivacyConsentCache(): boolean {
+    const consented = hasCurrentPrivacyConsent()
+    if (this.cachedPrivacyConsent !== consented) {
+      this.cachedPrivacyConsent = consented
+    }
+    return consented
+  }
   @StorageLink('stellariumScreenSafeTopPixels')
   private screenSafeTopPixels: number = 0
   @StorageLink('stellariumScreenSafeBottomPixels')
@@ -1271,6 +1378,21 @@ export struct WindowNativeNode {
   private hostMediaPort: HostMediaPort = new HostMediaPort()
   private hostPlatformPort: HostPlatformPort = new HostPlatformPort()
   private hostSensorPort: HostSensorPort = new HostSensorPort()
+  // 设备是否具备真实物理陀螺仪 + 姿态传感器（aboutToAppear 中一次性探测；用于紧凑/平板模式右上快捷区显隐陀螺仪按钮）。
+  @State private gyroHardwareSupported: boolean = false
+  private lastAudioQuickToggleMs: number = 0
+  // 桌面端星图悬停微预览（P1）：只读 probeSelectAt 探针，不改变选中态也不弹详情大卡。
+  @State private skyHoverPeekVisible: boolean = false
+  @State private skyHoverPeekName: string = ''
+  @State private skyHoverPeekMeta: string = ''
+  @State private skyHoverPeekX: number = 0
+  @State private skyHoverPeekY: number = 0
+  private skyHoverTimer: number = -1
+  private skyHoverRefreshTimer: number = -1
+  private skyHoverProbeInFlight: boolean = false
+  private skyHoverReqSeq: number = 0
+  private skyHoverAnchorX: number = -1000
+  private skyHoverAnchorY: number = -1000
   // 位置域端口适配器（aboutToAppear 里 configure UI 上下文）。
   private hostLocationPort: HostLocationPort = new HostLocationPort()
   // 统一 UI 偏好持久化（Preferences 端口在 aboutToAppear 注入）。
@@ -1474,6 +1596,13 @@ export struct WindowNativeNode {
   @State private obsListStore: ObservingListStore = new ObservingListStore()
   @State private isLoading: boolean = true
   @State private splashGone: boolean = false
+  @Watch('onStartupArtCompleteChanged') @StorageLink('stellariumStartupArtComplete') private startupArtComplete: boolean = false
+  @State private startupChromeOpacity: number = 0.0
+  private startupChoreographyActive: boolean = false
+  private startupChoreographyStarted: boolean = false
+  private startupChoreographyTimer: number = -1
+  private startupChoreographyEndTimer: number = -1
+  private startupChoreographyStartedAt: number = 0
   private startupViewportCheckedAt: number = 0
   @State private viewTab: number = 0  // View面板子标签索引
   @State private configTab: number = -1  // 统一设置面板子标签索引；默认显示首位「设备与隐私」
@@ -1653,6 +1782,7 @@ export struct WindowNativeNode {
     if (!foreground && this.guideStore.guideState.phase === 'observing') this.guideCtl().pausePlayer()
     this.objectModelRendererCtl().setForeground(foreground)
     if (foreground) {
+      this.refreshPrivacyConsentCache()
       // 回前台时引擎可能已被外部（CLI/配置）改变；引擎就绪后立即同步一次 UI store。
       if (this.engineReady) {
         this.refreshStateNow()
@@ -1668,12 +1798,17 @@ export struct WindowNativeNode {
           this.detailRefreshCtl().startDetailAutoRefresh()
         }
       }
-      if (this.audioStore.musicEnabled) {
-        void AudioEngine.getInstance().start()
-      }
+      void AudioEngine.getInstance().setForeground(true)
       this.gyroCtl().resumeAfterForeground()
       if (this.arControllerImpl !== null) {
         this.arControllerImpl.onApplicationForegroundChanged(true)
+      }
+      if (this.locationControllerImpl !== null) {
+        setTimeout(() => {
+          if (this.applicationInForeground && this.locationControllerImpl !== null) {
+            this.locationControllerImpl.onApplicationForegroundChanged(true)
+          }
+        }, 800)
       }
       this.viewCoordinateCtl().syncViewCoordinateTimer()
       this.syncDockClockTimer()
@@ -1686,6 +1821,9 @@ export struct WindowNativeNode {
 
     // This app declares no background task. Stop ArkUI polling and audio
     // rendering as soon as the Ability leaves the foreground.
+    if (this.locationControllerImpl !== null) {
+      this.locationControllerImpl.onApplicationForegroundChanged(false)
+    }
     this.foregroundRefreshPaused = this.timeCtl().hasPanelTimer() || this.detailRefreshCtl().hasDetailTimer()
     this.timeCtl().stopPanelTimers()
     this.viewCoordinateCtl().stopViewCoordinateTimer()
@@ -1699,7 +1837,7 @@ export struct WindowNativeNode {
     this.skyInputCtl().stop()
     this.clearStarBrightnessHudTimer()
     this.keyboardShortcutCtl().setSkyFocused(false)
-    void AudioEngine.getInstance().stop()
+    void AudioEngine.getInstance().setForeground(false)
     this.gyroCtl().pauseForBackground()
     if (this.arControllerImpl !== null) {
       this.arControllerImpl.onApplicationForegroundChanged(false)
@@ -1761,6 +1899,62 @@ export struct WindowNativeNode {
 
   private stopTwinkle(): void {
     if (this.fpsTimer !== 0) { clearInterval(this.fpsTimer); this.fpsTimer = 0 }
+  }
+
+  private onStartupArtCompleteChanged(): void {
+    if (this.startupArtComplete) {
+      this.beginStageBChoreography()
+    }
+  }
+
+  private stopStartupChoreographyTimer(): void {
+    if (this.startupChoreographyTimer >= 0) {
+      clearTimeout(this.startupChoreographyTimer)
+      this.startupChoreographyTimer = -1
+    }
+    if (this.startupChoreographyEndTimer >= 0) {
+      clearTimeout(this.startupChoreographyEndTimer)
+      this.startupChoreographyEndTimer = -1
+    }
+  }
+
+  private revealStartupChrome(durationMs: number = 460): void {
+    if (this.startupChromeOpacity >= 0.99) return
+    try {
+      this.getUIContext().animateTo({ duration: durationMs, curve: Curve.EaseOut }, () => {
+        this.startupChromeOpacity = 1.0
+      })
+    } catch (_e) {
+      this.startupChromeOpacity = 1.0
+    }
+  }
+
+  private beginStageBChoreography(): void {
+    if (this.startupChoreographyStarted) return
+    this.startupChoreographyStarted = true
+    this.startupChoreographyActive = true
+    this.startupChromeOpacity = 0.0
+    this.startupChoreographyStartedAt = Date.now()
+    // Fire once and avoid polling C++ bridge during the animation so Qt renders uninterrupted at 60/120 FPS.
+    this.commandPort().requestWhenReady('beginStartupAnimation', '', () => {})
+    this.stopStartupChoreographyTimer()
+    this.startupChoreographyTimer = setTimeout(() => {
+      this.startupChoreographyTimer = -1
+      this.revealStartupChrome(520)
+    }, 2850) as number
+    this.startupChoreographyEndTimer = setTimeout(() => {
+      this.startupChoreographyEndTimer = -1
+      this.startupChoreographyActive = false
+      this.revealStartupChrome(320)
+    }, 3750) as number
+  }
+
+  private skipStageBChoreography(): void {
+    if (!this.startupChoreographyActive) return
+    this.startupChoreographyActive = false
+    this.stopStartupChoreographyTimer()
+    this.callNative('skipStartupAnimation', '')
+    this.revealStartupChrome(260)
   }
 
   private isHalfFoldedStatus(): boolean {
@@ -1891,6 +2085,7 @@ export struct WindowNativeNode {
 
   aboutToAppear(): void {
     hilog.info(0x0000, 'StellariumArkUI', '[privacy-probe] phase=main-page-appear')
+    this.gyroHardwareSupported = this.detectGyroscopeHardwareSupported()
     this.syncUiTypographyScale()
     const localStorage = this.getUIContext().getSharedLocalStorage()
     if (localStorage) {
@@ -2032,7 +2227,14 @@ export struct WindowNativeNode {
       sessionImportText: (): string => this.tools.sessionImportText,
       setSessionExportText: (text: string): void => { this.tools.sessionExportText = text },
       shareSessionJson: (json: string): void => { this.shareCollaborationSession(json) },
-      canUseDistributed: (): boolean => this.canUseDistributed
+      canUseDistributed: (): boolean => this.canUseDistributed,
+      onTonightReady: (tonight: TonightEvents): void => {
+        // 仅在全量数据含 48h 时间轴时才覆盖桌面卡片快照；位置面板 lite 模式不冲掉桌面卡片。
+        const cardData = tonight as CardTonightData
+        if (cardData.timeline48h !== undefined && cardData.timeline48h.length > 0) {
+          this.publishAlmanacCardFromTonight(tonight)
+        }
+      }
     })
     // 导览域的引擎/定时器/桥在 GuideController；跨域/UI/引擎动作经
     // guideCtl() 的具名 hooks 注入（state/GuideStore 为纯状态）。
@@ -2082,6 +2284,14 @@ export struct WindowNativeNode {
     // 卫星域有 publish* CLI 发布点（publishSatellitePanelState），
     // 故 onChanged 用它，保持 CLI 侧 satellitePanelState 与 store 同步。
     this.satelliteStore.attachPort(hostPort, (error: string) => { this.publishSatellitePanelState(error) }, () => {
+      // 卫星目录在线更新或本地导入 TLE 完成后，同步刷新天象日历卫星卡片、探索页近期天象、桌面过境卡片与通知订阅。
+      this.satelliteCalendarDirty = true
+      this.sessionToolStore.invalidateTonight()
+      if (this.calendarController !== undefined && this.calendarStore.loaded) {
+        this.satelliteCalendarDirty = false
+        this.calendarController.refreshSatellitePasses()
+      }
+      this.scheduleCardSnapshotSync(400)
       if (this.notificationStore.satellitePassEnabled) {
         void this.notificationCtl().refreshSubscriptions()
       }
@@ -2153,6 +2363,12 @@ export struct WindowNativeNode {
       setObserverPlanet: (value: string): void => { this.sessionToolStore.observerPlanet = value }
     })
     // OHOS 首次运行默认开启深空背景图与比例标识；迁移标记存在后保留用户选择。
+    if (this.startupArtComplete) {
+      this.startupChoreographyStarted = true
+      this.startupChoreographyActive = false
+      this.startupChromeOpacity = 1.0
+      this.commandPort().requestWhenReady('skipStartupAnimation', 'immediate', () => {})
+    }
     this.commandPort().requestWhenReady('applyDeepSkyDefaults', '', () => { this.refreshState() })
     // OHOS 首次运行默认开启“随观测星球自动选择地景”；已显式保存过的偏好保持不变。
     this.commandPort().requestWhenReady('applyLandscapeDefaults', '', () => { this.refreshState() })
@@ -2186,10 +2402,42 @@ export struct WindowNativeNode {
       writeSearchHistoryStorage: (json: string): Promise<void> => this.writeSearchHistoryStorage(json)
     })
     // （AudioEngine 是原生桥）与 UI 提示经具名 hooks 注入（store 不 import NAPI/UI）。
+    try {
+      const hostCtx = this.getUIContext().getHostContext() as common.UIAbilityContext | undefined
+      if (hostCtx !== undefined) {
+        AudioEngine.getInstance().attachContext(hostCtx)
+      }
+    } catch (_e) { }
     this.audioStore.attachHooks({
       setMusicPlaying: (enabled: boolean): void => {
-        const engine = AudioEngine.getInstance()
-        if (enabled) { engine.start().then(() => { engine.setMuted(false) }) } else { engine.setMuted(true) }
+        void AudioEngine.getInstance().setMusicEnabled(enabled)
+      },
+      setSfxEnabled: (enabled: boolean): void => {
+        AudioEngine.getInstance().setSfxEnabled(enabled)
+      },
+      setAudioVolume: (volume: number): void => {
+        AudioEngine.getInstance().setVolume(volume)
+      },
+      setAetherisMood: (mood: AetherisMoodId): void => {
+        AudioEngine.getInstance().setAetherisMood(mood)
+      },
+      setAetherisMaterial: (preset: AetherisMaterialPreset): void => {
+        AudioEngine.getInstance().setAetherisMaterialPreset(preset)
+      },
+      randomizeAetherisSeed: (): void => {
+        const res = AudioEngine.getInstance().randomizeAetherisSeed()
+        this.audioStore.syncGeneratedSeed(res.seed, res.mood, AudioEngine.getInstance().getAetherisPresetForState())
+        this.flashHint(`已切换星音签名：${res.seed}`)
+      },
+      skipNextAct: (): void => {
+        AudioEngine.getInstance().skipNextAct()
+        this.flashHint('已平滑切换至下一星穹乐章')
+      },
+      playAudioLogo: (): void => {
+        AudioEngine.getInstance().playAudioLogo()
+      },
+      persistAudioSettings: (): void => {
+        this.settingsRepository.patch(this.collectUiSettings())
       },
       flashHint: (text: ResourceStr): void => this.flashHint(text)
     })
@@ -2224,6 +2472,7 @@ export struct WindowNativeNode {
   private onPrivacyNativeStartupAllowedChanged(): void {
     hilog.info(0x0000, 'StellariumArkUI',
       '[privacy-probe] phase=native-node-gate-observed allowed=%{public}s', this.privacyNativeStartupAllowed.toString())
+    this.refreshPrivacyConsentCache()
     this.startPageAfterPrivacyIfNeeded()
   }
 
@@ -2556,6 +2805,7 @@ export struct WindowNativeNode {
     if (!this.privacyNativeStartupAllowed || this.privacyPageStartupStarted) {
       return
     }
+    this.refreshPrivacyConsentCache()
     this.privacyPageStartupStarted = true
     const feedback = this.haptics()
     feedback.setForeground(this.applicationInForeground)
@@ -2572,9 +2822,10 @@ export struct WindowNativeNode {
     this.registerFoldListeners()
     this.subscribeApplicationLifecycle()
     this.startupBridge().startupBridgeSync()
-    // 快捷面板编辑态的落盘 / 提示经 hooks 注入面板自己的 store（面板不 import NAPI）。
+    // 快捷面板编辑态与展开限位的落盘 / 提示经 hooks 注入面板自己的 store（面板不 import NAPI）。
     this.quickPanelStore.configure({
       saveOrder: (json: string) => { this.saveQuickActionOrder(json) },
+      saveExpanded: (expanded: boolean) => { this.saveQuickExpanded(expanded) },
       hint: (text: string) => { this.flashHint(text) }
     })
     this.loadQuickActionOrderFromStorage()
@@ -2615,9 +2866,27 @@ export struct WindowNativeNode {
       if (typeof brightness === 'number' && Number.isFinite(brightness)) {
         this.redLightBrightness = Math.max(0.05, Math.min(1.0, brightness))
       }
+      // 恢复快捷面板长/短限位记忆（默认关闭=短限位；用户滚长后关闭再打开保持变长状态）。
+      const savedExpanded = await store.get('expanded', false)
+      if (typeof savedExpanded === 'boolean') {
+        this.quickPanelStore.setExpanded(savedExpanded, false)
+      }
     } catch (e) {
       hilog.warn(0xD002, 'Stellarium', 'load quick panel order failed: %{public}s', String(e))
     }
+  }
+
+  private saveQuickExpanded(expanded: boolean): void {
+    void (async (): Promise<void> => {
+      try {
+        const ctx = this.getUIContext().getHostContext() as common.UIAbilityContext
+        const store = await preferences.getPreferences(ctx, QUICK_PANEL_STORE)
+        await store.put('expanded', expanded)
+        await store.flush()
+      } catch (e) {
+        hilog.warn(0xD002, 'Stellarium', 'save quick panel expanded failed: %{public}s', String(e))
+      }
+    })()
   }
 
   private saveRedLightBrightness(): void {
@@ -2644,6 +2913,16 @@ export struct WindowNativeNode {
       clearTimeout(this.redLightBrightnessTimer)
       this.redLightBrightnessTimer = -1
     }
+    if (this.quickWheelResetTimer >= 0) {
+      clearTimeout(this.quickWheelResetTimer)
+      this.quickWheelResetTimer = -1
+    }
+    if (this.skyHoverTimer >= 0) {
+      clearTimeout(this.skyHoverTimer)
+      this.skyHoverTimer = -1
+    }
+    this.stopSkyHoverRefresh()
+    this.stopStartupChoreographyTimer()
     if (this.sharedLocationRetryTimer >= 0) {
       clearTimeout(this.sharedLocationRetryTimer)
       this.sharedLocationRetryTimer = -1
@@ -2666,6 +2945,9 @@ export struct WindowNativeNode {
     this.clearStarBrightnessHudTimer()
     this.keyboardShortcutCtl().setSkyFocused(false)
     this.gyroCtl().stopGyroscope(false)
+    if (this.locationControllerImpl !== null) {
+      this.locationControllerImpl.stopForegroundLocationWatch()
+    }
     if (this.arControllerImpl !== null) {
       void this.arControllerImpl.disableArCamera(false)
     }
@@ -2891,7 +3173,7 @@ export struct WindowNativeNode {
           setScriptMetadata: (raw: Object | undefined): void => { this.scriptPlaybackCtl().setScriptMetadata(raw) },
           reloadConfigurationSettings: (): void => { this.settingsCtl().loadConfigurationSettings() },
           // 引擎启动确认后由 StartupBridge 调用；立即读引擎状态，不排队、不延时。
-          refreshRuntimeState: (): void => { this.engineReady = true; this.arCtl().restoreInterruptedArSkyStateIfNeeded(); this.refreshStateNow(); this.callInteractive('setTouchPickRadius', this.viewSettingsStore.touchPickRadiusVp.toString(), () => {}); this.syncStarBrightnessFromEngine(); this.consumeCardRoute(); this.consumeSharedLocation(); void this.notificationCtl().refreshSubscriptions(); this.scheduleCardSnapshotSync(1800); setTimeout(() => { this.ensureCalendarPreviewLoaded(); this.syncRemoteCalendarFeed(false) }, 600) },
+          refreshRuntimeState: (): void => { this.engineReady = true; this.arCtl().restoreInterruptedArSkyStateIfNeeded(); this.refreshStateNow(); this.callInteractive('setTouchPickRadius', this.viewSettingsStore.touchPickRadiusVp.toString(), () => {}); this.syncStarBrightnessFromEngine(); this.consumeCardRoute(); this.consumeSharedLocation(); void this.notificationCtl().refreshSubscriptions(); this.scheduleCardSnapshotSync(4500); setTimeout(() => { this.ensureCalendarPreviewLoaded(); this.syncRemoteCalendarFeed(false) }, 4200) },
           // Startbridge 的「引擎就绪」以 StelApp::isInitialized() 为准：
           // 出帧就绪可能早于 init 完成，提前投放查询会在 init 期间堆积重试链。
           enginePresentationReady: (): boolean => isEngineReady()
@@ -3657,6 +3939,9 @@ export struct WindowNativeNode {
         keyboardTextInputFocused: (): boolean => this.keyboardTextInputFocused,
         compactTopQuickX: (): number => this.compactTopQuickX(),
         isCompactTopQuickPoint: (x: number, y: number): boolean => this.isCompactTopQuickPoint(x, y),
+        compactQuickIdAt: (x: number, y: number): string => this.compactQuickIdAt(x, y),
+        onSkyHoverMove: (x: number, y: number): void => { this.handleSkyHoverMove(x, y) },
+        onSkyHoverClear: (): void => { this.clearSkyHoverPeek() },
         lastInfoWinCloseMs: (): number => this.lastInfoWinCloseMs,
         touchStartedOnUi: (): boolean => this.touchStartedOnUi,
         setTouchStartedOnUi: (value: boolean): void => { this.touchStartedOnUi = value },
@@ -3732,6 +4017,9 @@ export struct WindowNativeNode {
         refreshState: (): void => { this.refreshState() },
         loadObserverInfo: (): void => { this.locationPickerStore.loadObserverInfo(true) },
         setObserverPlanetCrossStore: (name: string): void => { this.sessionToolStore.observerPlanet = name },
+        setSkyCultureObserverLatitude: (latitude: number): void => {
+          this.skyCultureSettingsStore.skyCultureObserverLatitude = latitude
+        },
         refreshTonightData: (): void => {
           // 位置变化会让月出/日落/行星可见性全部失效；先清缓存，面板可见时再静默重算。
           this.sessionToolStore.invalidateTonight()
@@ -3743,18 +4031,19 @@ export struct WindowNativeNode {
             if (this.activePanel === 'astro' && this.panelVisible && this.astroStore.astroTab === 5) {
               this.astroCalcCtl().loadTonightAstro()
             }
-          }, 200)
+          }, 260)
         },
-        setLocationTexts: (location: string, coordinate: string, altitude: string): void => {
+        setLocationTexts: (location: string, coordinate: string, altitude: string, coordsChanged: boolean = true): void => {
           this.locationText = location
           this.coordinateText = coordinate
           this.altitudeText = altitude
-          void this.notificationCtl().refreshSubscriptions()
-          this.scheduleCardSnapshotSync(600)
+          if (!coordsChanged) return
+          // 延后错峰同步通知与桌面卡片，避免定位/切换星球瞬间叠加阻塞星图 OpenGL 渲染线程。
+          this.scheduleLocationFollowupSync(true)
         },
         privacyAllowed: (): boolean => this.privacyNativeStartupAllowed,
         inForeground: (): boolean => this.applicationInForeground,
-        hasPrivacyConsent: (): boolean => hasCurrentPrivacyConsent()
+        hasPrivacyConsent: (): boolean => this.cachedPrivacyConsent || this.refreshPrivacyConsentCache()
       }
       this.locationControllerImpl = new LocationController(
         this.commandPort(), this.hostLocationPort, this.locationPickerStore, this.locationStore, this.sessionToolStore, hooks
@@ -4398,6 +4687,8 @@ export struct WindowNativeNode {
       selectedLanguage: this.languageStore.selectedLanguage,
       useMetricUnits: this.viewSettingsStore.useMetricUnits,
       musicEnabled: this.audioStore.musicEnabled,
+      sfxEnabled: this.audioStore.sfxEnabled,
+      audioVolume: this.audioStore.audioVolume,
       viewCoordinatesVisible: this.overlayStore.viewCoordinatesVisible,
       viewCoordinateFamily: this.overlayStore.viewCoordinateFamily,
       viewEquatorialEpoch: this.overlayStore.viewEquatorialEpoch,
@@ -4426,6 +4717,8 @@ export struct WindowNativeNode {
     const next: UiSettings = {
       schemaVersion: current.schemaVersion,
       musicEnabled: this.audioStore.musicEnabled,
+      sfxEnabled: this.audioStore.sfxEnabled,
+      audioVolume: this.audioStore.audioVolume,
       useMetricUnits: this.viewSettingsStore.useMetricUnits,
       viewCoordinatesVisible: this.overlayStore.viewCoordinatesVisible,
       viewCoordinateFamily: this.overlayStore.viewCoordinateFamily,
@@ -4556,6 +4849,8 @@ export struct WindowNativeNode {
     AppStorage.setOrCreate('stellariumSettings', JSON.stringify({
       useMetricUnits: settings.useMetricUnits,
       musicEnabled: settings.musicEnabled,
+      sfxEnabled: settings.sfxEnabled,
+      audioVolume: settings.audioVolume,
       viewCoordinatesVisible: settings.viewCoordinatesVisible,
       viewCoordinateFamily: settings.viewCoordinateFamily,
       viewEquatorialEpoch: settings.viewEquatorialEpoch,
@@ -4774,10 +5069,35 @@ export struct WindowNativeNode {
   }
 
   private cardSnapshotSyncTimer: number = -1
+  private locationNotificationSyncTimer: number = -1
+  // 卫星目录更新后标记天象日历过境数据待刷新（若日历尚未构造，待打开天象日历或探索页时补刷）。
+  private satelliteCalendarDirty: boolean = false
+
+  // 定位或切换观测点后的低优先级错峰同步：避免定位瞬间与星图重绘、今夜天象争抢 Qt 渲染线程。
+  private scheduleLocationFollowupSync(needCardSnapshot: boolean): void {
+    if (this.locationNotificationSyncTimer >= 0) {
+      clearTimeout(this.locationNotificationSyncTimer)
+    }
+    this.locationNotificationSyncTimer = setTimeout(() => {
+      this.locationNotificationSyncTimer = -1
+      if (this.engineReady && this.applicationInForeground) {
+        void this.notificationCtl().refreshSubscriptions()
+        if (this.calendarController !== undefined && this.calendarStore.loaded) {
+          this.calendarController.refreshSatellitePasses()
+        }
+      }
+    }, 1200)
+    if (needCardSnapshot) {
+      this.scheduleCardSnapshotSync(2200)
+    } else if (this.cardSnapshotSyncTimer >= 0) {
+      clearTimeout(this.cardSnapshotSyncTimer)
+      this.cardSnapshotSyncTimer = -1
+    }
+  }
 
   // 防抖触发桌面卡片快照同步与按星球分键缓存（启动后、卡片点击入端、切换观测星球/位置时自动执行）。
   private scheduleCardSnapshotSync(delayMs: number = 400): void {
-    if (!this.engineReady || !hasCurrentPrivacyConsent()) return
+    if (!this.engineReady || !this.cachedPrivacyConsent) return
     if (this.cardSnapshotSyncTimer >= 0) {
       clearTimeout(this.cardSnapshotSyncTimer)
     }
@@ -4787,18 +5107,27 @@ export struct WindowNativeNode {
     }, Math.max(80, delayMs))
   }
 
+  // 直接复用已拉取好的 TonightEvents 发布桌面卡片，省去一次阻塞渲染线程的 getTonightEvents。
+  private publishAlmanacCardFromTonight(tonight: TonightEvents): void {
+    if (!this.engineReady || !this.cachedPrivacyConsent) return
+    if (this.cardSnapshotSyncTimer >= 0) {
+      clearTimeout(this.cardSnapshotSyncTimer)
+      this.cardSnapshotSyncTimer = -1
+    }
+    const context = this.getUIContext().getHostContext() as common.UIAbilityContext
+    void publishAstronomyCard(context, tonight as CardTonightData).then((result) => {
+      hilog.info(0xD003, 'Stellarium', '[form-update] planet=%{public}s updated=%{public}d failed=%{public}d',
+        result.snapshot['observerPlanet'] ?? 'Earth', result.updatedForms, result.failedForms)
+    }).catch((error: Error) => {
+      hilog.warn(0xD003, 'Stellarium', 'save card snapshot failed: %{public}s', error.message)
+    })
+  }
+
   // 年历加载完成后，拉取今夜天象并刷新桌面卡片快照。
   private persistAlmanacCardSnapshot(): void {
     this.callNativeWhenReady('getTonightEvents', '', (response: StellariumBridgeResponse) => {
       if (response.ok !== true || response.tonight === undefined) return
-      const tonight = response.tonight as TonightEvents
-      const context = this.getUIContext().getHostContext() as common.UIAbilityContext
-      void publishAstronomyCard(context, tonight as CardTonightData).then((result) => {
-        hilog.info(0xD003, 'Stellarium', '[form-update] planet=%{public}s updated=%{public}d failed=%{public}d',
-          result.snapshot['observerPlanet'] ?? 'Earth', result.updatedForms, result.failedForms)
-      }).catch((error: Error) => {
-        hilog.warn(0xD003, 'Stellarium', 'save card snapshot failed: %{public}s', error.message)
-      })
+      this.publishAlmanacCardFromTonight(response.tonight as TonightEvents)
     })
   }
 
@@ -5675,9 +6004,9 @@ export struct WindowNativeNode {
     // 时间面板首帧必须已经是当前模拟时间：用缓存的 JD 预填时间轮与手动时间，
     // 不要等面板动画后的 125ms 轮询（否则会先闪一下旧日期/空刻度）。
     if (panel === 'time' && nextVisible) this.prepareTimePanel()
-    // 快捷面板每次打开都回到 6×2；“更多操作”的展开态只是临时 UI 状态。
+    // 快捷面板保留用户的长/短限位状态（关闭再打开不重置 expanded），仅清零临时阻尼偏移。
     if (panel === 'quick' && nextVisible) {
-      this.quickPanelStore.setExpanded(false)
+      this.resetQuickDampingImmediate()
     }
     // 手机端“更多功能”默认以加高高度打开；从它进入的子面板沿用当前高度，
     // 其他入口仍回到标准 0.6。
@@ -5866,7 +6195,11 @@ export struct WindowNativeNode {
         void this.notificationCtl().refreshStatus()
         const activePlanet = this.sessionToolStore.observerPlanet?.trim() || 'Earth'
         if (!this.calendarStore.loaded || this.calendarStore.observerPlanet.toLowerCase() !== activePlanet.toLowerCase()) {
+          this.satelliteCalendarDirty = false
           this.calendarCtl().reload()
+        } else if (this.satelliteCalendarDirty) {
+          this.satelliteCalendarDirty = false
+          this.calendarCtl().refreshSatellitePasses()
         }
       } else if (panel === 'widgets') {
         this.refreshState()
@@ -6085,9 +6418,16 @@ export struct WindowNativeNode {
   private ensureCalendarPreviewLoaded(): void {
     if (this.calendarStore.loading) return
     const activePlanet = this.sessionToolStore.observerPlanet?.trim() || 'Earth'
-    if (!this.calendarStore.loaded || this.calendarStore.observerPlanet.toLowerCase() !== activePlanet.toLowerCase()) {
+    const now = new Date()
+    const onCurrentMonth = this.calendarStore.year === now.getFullYear() && this.calendarStore.month === (now.getMonth() + 1)
+    if (!this.calendarStore.loaded || this.calendarStore.observerPlanet.toLowerCase() !== activePlanet.toLowerCase() || !onCurrentMonth) {
+      this.satelliteCalendarDirty = false
       this.calendarCtl().goToCurrentMonth()
       return
+    }
+    if (this.satelliteCalendarDirty) {
+      this.satelliteCalendarDirty = false
+      this.calendarCtl().refreshSatellitePasses()
     }
     if (!this.calendarStore.loadingMore &&
       this.calendarStore.throughYear === this.calendarStore.year &&
@@ -6471,6 +6811,26 @@ export struct WindowNativeNode {
       }
     }
     // 顶部搜索栏：点击区域不穿透到星图
+    if (this.isCompactTopQuickPoint(x, y)) {
+      return true
+    }
+    if (!this.panelVisible && !this.polarScopeStore.polarScopeVisible) {
+      if (this.skyZoomButtonAt(x, y).length > 0) {
+        return true
+      }
+      const rowY = this.chromeRowY()
+      if (y >= rowY - 6 && y <= rowY + 42) {
+        const rowW = dockWidthPixels(this.isExpandedLayout, this.skyWidth, this.panelVisible, this.panelWidth, this.panelOffsetX, this.EDGE_MARGIN, this.compactDockWidthPercent())
+        const leftX = chromeRowPosXLeft(this.isExpandedLayout, this.EDGE_MARGIN, this.skyWidth, this.panelVisible, this.panelWidth, this.panelOffsetX, this.compactDockWidthPercent())
+        const rightEnd = chromeRowPosXRight(this.isExpandedLayout, this.EDGE_MARGIN, this.skyWidth, this.panelVisible, this.panelWidth, this.panelOffsetX, this.compactDockWidthPercent()) + rowW
+        if (x >= leftX && x <= leftX + 100) {
+          return true
+        }
+        if (x >= rightEnd - 110 && x <= rightEnd + 4) {
+          return true
+        }
+      }
+    }
     if (this.isExpandedLayout) {
       const sbX = this.EDGE_MARGIN + 64
       const sbY = this.EDGE_MARGIN
@@ -6693,6 +7053,9 @@ export struct WindowNativeNode {
   }
 
   private handleSkySurfaceTouch(event: TouchEvent): void {
+    if (event.type === TouchType.Down && this.startupChoreographyActive) {
+      this.skipStageBChoreography()
+    }
     if (event.type === TouchType.Down && event.source !== SourceType.Mouse && event.touches.length > 0) {
       this.focusSkyKeyboard(event.touches[0].x, event.touches[0].y)
     }
@@ -6700,11 +7063,17 @@ export struct WindowNativeNode {
   }
 
   private handleSkySurfaceMouse(event: MouseEvent): void {
+    if (event.action === MouseAction.Press && this.startupChoreographyActive) {
+      this.skipStageBChoreography()
+    }
     if (event.action === MouseAction.Press) { this.focusSkyKeyboard(event.x, event.y) }
     this.skyInputCtl().handleSkyMouse(event)
   }
 
   private handleSkyKeyboard(event: KeyEvent, panelOnly: boolean = false): boolean {
+    if (event.type === KeyType.Down && this.startupChoreographyActive) {
+      this.skipStageBChoreography()
+    }
     const hooks: KeyboardShortcutInputHooks = {
       skyWidth: (): number => this.skyWidth,
       skyHeight: (): number => this.skyHeight,
@@ -6750,6 +7119,7 @@ export struct WindowNativeNode {
     const requestSerial = ++this.skySelectionRequestSerial
     this.skyInputCtl().resetSkyTapSequence()
     this.detailRefreshCtl().stop()
+    AudioEngine.getInstance().playUiCue('deselect')
     this.applySelectedObject({ ok: true, found: false } as StellariumBridgeResponse)
     hilog.info(0x0000, 'StellariumArkUI', 'double tap cleared sky selection at ' +
       Math.round(x).toString() + ',' + Math.round(y).toString())
@@ -6780,16 +7150,197 @@ export struct WindowNativeNode {
  * 这两项是观星高频功能，手机端保留顶部快捷入口；它们与底部 Dock
  * 共享同一状态和命令，不再依赖已经弃用的左侧栏。
  */
-  /** 手机端右上快捷区左上角坐标（与顶部搜索栏同高，靠右缘） */
+  private stopSkyHoverRefresh(): void {
+    if (this.skyHoverRefreshTimer >= 0) {
+      clearInterval(this.skyHoverRefreshTimer)
+      this.skyHoverRefreshTimer = -1
+    }
+    this.skyHoverProbeInFlight = false
+  }
+
+  private startSkyHoverRefresh(probeX: number, probeY: number, seq: number): void {
+    if (this.skyHoverRefreshTimer >= 0) return
+    // 浮标显示期间每 200ms 在静止光标处轻量复检：卫星等移动目标离开鼠标尖后立即消隐（或切换为新目标）。
+    this.skyHoverRefreshTimer = setInterval(() => {
+      if (seq !== this.skyHoverReqSeq || !this.skyHoverPeekVisible || this.skyDragging ||
+        this.polarScopeStore.polarScopeVisible || this.tools.angleMeasureEnabled ||
+        this.redLightOn || this.isUiPoint(probeX, probeY)) {
+        this.stopSkyHoverRefresh()
+        if (this.skyHoverPeekVisible && (this.skyDragging || this.isUiPoint(probeX, probeY))) {
+          this.skyHoverPeekVisible = false
+        }
+        return
+      }
+      this.probeSkyHoverAt(probeX, probeY, seq, true)
+    }, 200) as number
+  }
+
+  private probeSkyHoverAt(probeX: number, probeY: number, seq: number, isRefresh: boolean): void {
+    if (isRefresh && this.skyHoverProbeInFlight) return
+    if (seq !== this.skyHoverReqSeq || this.skyDragging || this.isUiPoint(probeX, probeY)) return
+    this.skyHoverProbeInFlight = true
+    const payload = probeX.toString() + '|' + probeY.toString() + '|' +
+      Math.round(this.skyWidth).toString() + '|' + Math.round(this.skyHeight).toString() + '|mouse'
+    this.commandPort().requestInteractive('probeSelectAt', payload, (raw: StellariumBridgeResponse) => {
+      this.skyHoverProbeInFlight = false
+      if (seq !== this.skyHoverReqSeq || this.skyDragging || this.isUiPoint(probeX, probeY)) return
+      const r = raw as SkyHoverProbeResponse
+      const list = r.pickCandidates
+      if (r.ok !== true || r.found !== true || list === undefined || list.length === 0) {
+        this.skyHoverPeekVisible = false
+        this.stopSkyHoverRefresh()
+        return
+      }
+      const first = list[0]
+      const rawName = (first.name && first.name.trim().length > 0)
+        ? first.name.trim()
+        : (first.englishName ? first.englishName.trim() : '')
+      if (rawName.length === 0) {
+        this.skyHoverPeekVisible = false
+        this.stopSkyHoverRefresh()
+        return
+      }
+      // 已选中并展开详情卡的同一天体不再重复叠加微预览气泡。
+      if (this.infoWindowStore.infoWinVisible &&
+        (this.objectDetailStore.selectedName === rawName ||
+          (first.englishName !== undefined && this.objectDetailStore.selectedName === first.englishName))) {
+        this.skyHoverPeekVisible = false
+        this.stopSkyHoverRefresh()
+        return
+      }
+      const displayName = zhNameOf(rawName)
+      const typeLabel = zhType((first.type && first.type.length > 0) ? first.type : (first.objectType ?? ''))
+      let meta = typeLabel
+      if (typeof first.magnitude === 'number' && Number.isFinite(first.magnitude) && first.magnitude < 30) {
+        const magText = first.magnitude.toFixed(1) + ' 等'
+        meta = meta.length > 0 ? (meta + ' · ' + magText) : magText
+      }
+      this.skyHoverAnchorX = probeX
+      this.skyHoverAnchorY = probeY
+      if (this.skyHoverPeekName !== displayName) this.skyHoverPeekName = displayName
+      if (this.skyHoverPeekMeta !== meta) this.skyHoverPeekMeta = meta
+      // 按中英文字符宽度估算浮标实际宽度，近右缘时自动翻到光标左侧，避免长星名（如 Gaia DR3 19 位编号）被窗口右缘挤裁。
+      const maxTextW = Math.min(340, Math.max(200, this.skyWidth - 48))
+      let nameEst = 0
+      for (let i = 0; i < displayName.length; i++) {
+        nameEst += displayName.charCodeAt(i) > 255 ? 13.0 : 7.8
+      }
+      let metaEst = 0
+      for (let i = 0; i < meta.length; i++) {
+        metaEst += meta.charCodeAt(i) > 255 ? 11.0 : 6.6
+      }
+      const estPillW = Math.min(maxTextW + 36, Math.max(104, Math.max(nameEst, metaEst) + 38))
+      const preferRightX = probeX + 16
+      const rawX = (preferRightX + estPillW <= this.skyWidth - 12) ? preferRightX : (probeX - estPillW - 14)
+      this.skyHoverPeekX = clamp(rawX, 12, Math.max(12, this.skyWidth - estPillW - 12))
+      this.skyHoverPeekY = clamp(probeY - 48, 14, Math.max(14, this.skyHeight - 108))
+      this.skyHoverPeekVisible = true
+      this.startSkyHoverRefresh(probeX, probeY, seq)
+    }, () => {
+      this.skyHoverProbeInFlight = false
+    })
+  }
+
+  private clearSkyHoverPeek(): void {
+    this.skyHoverReqSeq += 1
+    if (this.skyHoverTimer >= 0) {
+      clearTimeout(this.skyHoverTimer)
+      this.skyHoverTimer = -1
+    }
+    this.stopSkyHoverRefresh()
+    if (this.skyHoverPeekVisible) {
+      this.skyHoverPeekVisible = false
+    }
+  }
+
+  private handleSkyHoverMove(x: number, y: number): void {
+    if (this.polarScopeStore.polarScopeVisible || this.tools.angleMeasureEnabled ||
+      this.redLightOn || this.skyDragging ||
+      this.skyWidth <= 0 || this.skyHeight <= 0) {
+      this.clearSkyHoverPeek()
+      return
+    }
+    if (this.skyHoverPeekVisible && distance(x, y, this.skyHoverAnchorX, this.skyHoverAnchorY) > 16) {
+      this.skyHoverPeekVisible = false
+      this.stopSkyHoverRefresh()
+    }
+    if (this.skyHoverTimer >= 0) {
+      clearTimeout(this.skyHoverTimer)
+      this.skyHoverTimer = -1
+    }
+    const probeX = Math.round(x)
+    const probeY = Math.round(y)
+    const seq = ++this.skyHoverReqSeq
+    this.stopSkyHoverRefresh()
+    this.skyHoverTimer = setTimeout(() => {
+      this.skyHoverTimer = -1
+      this.probeSkyHoverAt(probeX, probeY, seq, false)
+    }, 260) as number
+  }
+
+  // 常驻时钟胶囊悬停滚轮微调时间（±10 分钟 / 格），实时更新时钟显示与星空姿态。
+  private scrubTimeByMinutes(deltaMinutes: number): void {
+    this.clearSkyHoverPeek()
+    const baseJd = this.lastSimulationJd > 2000000 ? this.lastSimulationJd : (Date.now() / 86400000.0 + 2440587.5)
+    const nextJd = baseJd + deltaMinutes / 1440.0
+    this.lastSimulationJd = nextJd
+    this.dockClockText = jdToLocalTimeText(nextJd + this.utcOffsetHours / 24.0).substring(11, 16)
+    this.syncSimulatedDateLabel(nextJd)
+    this.commandPort().fire('setTimeToJD', nextJd.toFixed(8))
+    this.resetPanelIdle()
+  }
+
+  // 视场 FOV 胶囊悬停滚轮精细缩放。
+  private scrubFovFine(zoomIn: boolean): void {
+    this.clearSkyHoverPeek()
+    this.zoomStep(zoomIn ? 0.90 : 1.11)
+    this.resetPanelIdle()
+  }
+
+  private detectGyroscopeHardwareSupported(): boolean {
+    const gyroInfo = this.hostSensorPort.probeSensor('gyroscope')
+    if (gyroInfo === undefined || HostSensorPort.isVirtualSensor(gyroInfo)) {
+      hilog.info(0x0000, 'StellariumArkUI', '[gyro-probe] hardwareGyroSupported=false reason=%{public}s',
+        gyroInfo === undefined ? 'no-gyro-sensor' : ('virtual:' + gyroInfo.sensorName))
+      return false
+    }
+    const hasOrientation =
+      this.hostSensorPort.probeSensor('rotation-vector') !== undefined ||
+      this.hostSensorPort.probeSensor('orientation-fallback') !== undefined
+    hilog.info(0x0000, 'StellariumArkUI', '[gyro-probe] hardwareGyroSupported=%{public}s gyro=%{public}s',
+      hasOrientation.toString(), gyroInfo.sensorName)
+    return hasOrientation
+  }
+
+  private toggleMusicFromQuickControl(): void {
+    const now = Date.now()
+    if (now - this.lastAudioQuickToggleMs < 250) { return }
+    this.lastAudioQuickToggleMs = now
+    this.resetPanelIdle()
+    this.audioStore.toggleMusic()
+    this.flashHint(this.audioStore.musicEnabled ? I18n.t('music_on_hint') : I18n.t('music_off_hint'))
+  }
+
+  /** 右上快捷区左上角 X（紧凑与展开/平板模式共用，靠右缘 18vp） */
   private compactTopQuickX(): number {
     return this.skyWidth - 18 - 44
   }
 
+  private topQuickY(): number {
+    return this.isExpandedLayout ? this.scriptControlSafeTop() : compactTopQuickY()
+  }
+
+  private topQuickHeight(): number {
+    return this.gyroHardwareSupported ? 98 : 44
+  }
+
   private isCompactTopQuickPoint(x: number, y: number): boolean {
-    if (this.isExpandedLayout) { return false }
+    if (this.polarScopeStore.polarScopeVisible) { return false }
+    if (this.isExpandedLayout && !this.expandedUiAllowed()) { return false }
     const qx = this.compactTopQuickX()
-    const qy = compactTopQuickY()
-    return x >= qx - 8 && x <= qx + 52 && y >= qy - 8 && y <= qy + 108
+    const qy = this.topQuickY()
+    const qh = this.topQuickHeight()
+    return x >= qx - 8 && x <= qx + 52 && y >= qy - 8 && y <= qy + qh + 10
   }
 
   /**
@@ -6825,10 +7376,13 @@ export struct WindowNativeNode {
   }
 
   private compactQuickIdAt(x: number, y: number): string {
-    if (this.isExpandedLayout) { return '' }
+    if (!this.isCompactTopQuickPoint(x, y)) { return '' }
     const qx = this.compactTopQuickX()
-    const qy = compactTopQuickY()
+    const qy = this.topQuickY()
     if (x < qx || x > qx + 44) { return '' }
+    if (!this.gyroHardwareSupported) {
+      return (y >= qy && y <= qy + 44) ? 'audio' : ''
+    }
     if (y >= qy && y <= qy + 44) { return 'gyro' }
     if (y >= qy + 54 && y <= qy + 98) { return 'audio' }
     return ''
@@ -6838,7 +7392,7 @@ export struct WindowNativeNode {
   // Route these two high-frequency controls through the same coordinate path
   // as the tablet rail so their visual and touch regions always agree.
   private handleCompactTopQuickTap(x: number, y: number): boolean {
-    if (this.isExpandedLayout || !this.isCompactTopQuickPoint(x, y)) {
+    if (!this.isCompactTopQuickPoint(x, y)) {
       return false
     }
     const quickId = this.compactQuickIdAt(x, y)
@@ -6849,9 +7403,7 @@ export struct WindowNativeNode {
       return true
     }
     if (quickId === 'audio') {
-      this.resetPanelIdle()
-      this.audioStore.toggleMusic()
-      this.flashHint(this.audioStore.musicEnabled ? I18n.t('music_on_hint') : I18n.t('music_off_hint'))
+      this.toggleMusicFromQuickControl()
       return true
     }
     return false
@@ -6962,6 +7514,9 @@ export struct WindowNativeNode {
     this.lastDockActionPanel = item.panel
     this.lastDockActionAt = now
     void this.haptics().menu()
+    AudioEngine.getInstance().playUiCue(
+      (this.panelVisible && this.currentDockRootOwner() === item.panel) ? 'panel_close' : 'panel_open'
+    )
     if (item.panel === 'object') {
       this.showFullObjectInspector()
       return
@@ -7323,6 +7878,218 @@ export struct WindowNativeNode {
   // 顺序与编辑态全部收在面板自己的 store（QuickPanelStore，定义在 panels/panels/QuickPanel.ets）：
   // 进入 / 提交 / 丢弃 / 恢复默认 / 拖动-替换都是 store 的方法，宿主只持有实例并注入落盘与提示 hooks。
   @State private quickPanelStore: QuickPanelStore = new QuickPanelStore()
+  // 快捷面板扩展候选区滚动器（有限位可视区内部滚动，顶部 12 格始终锚定）。
+  private quickCandidateScroller: Scroller = new Scroller()
+  // 快捷面板阻尼拉升偏移（vp）与视觉蓄力进度（0..1）：上滚/上拉越过阻尼阈值后弹入长限位。
+  @State private quickDampOffset: number = 0
+  @State private quickDampProgress: number = 0
+  // 快捷面板二梯队特殊星表开关态与桌面沉浸全屏态。
+  @State private quickExoplanetsOn: boolean = false
+  @State private quickPulsarsOn: boolean = false
+  @State private quickQuasarsOn: boolean = false
+  @StorageProp('stellariumDesktopFullscreen') private desktopFullscreenOn: boolean = false
+  private quickWheelAccum: number = 0
+  private quickWheelResetTimer: number = -1
+  private quickTouchActive: boolean = false
+  private quickTouchStartY: number = 0
+  private quickTouchSnapped: boolean = false
+
+  private quickRubberBand(raw: number, maxSpan: number, coeff: number): number {
+    if (raw <= 0) return 0
+    return maxSpan * (1 - Math.exp(-raw / coeff))
+  }
+
+  private resetQuickDampingImmediate(): void {
+    if (this.quickWheelResetTimer >= 0) {
+      clearTimeout(this.quickWheelResetTimer)
+      this.quickWheelResetTimer = -1
+    }
+    if (this.skyHoverTimer >= 0) {
+      clearTimeout(this.skyHoverTimer)
+      this.skyHoverTimer = -1
+    }
+    this.stopSkyHoverRefresh()
+    this.quickWheelAccum = 0
+    this.quickTouchActive = false
+    this.quickTouchSnapped = false
+    this.quickDampOffset = 0
+    this.quickDampProgress = 0
+  }
+
+  private snapQuickDampingBack(): void {
+    if (this.quickWheelResetTimer >= 0) {
+      clearTimeout(this.quickWheelResetTimer)
+      this.quickWheelResetTimer = -1
+    }
+    if (this.skyHoverTimer >= 0) {
+      clearTimeout(this.skyHoverTimer)
+      this.skyHoverTimer = -1
+    }
+    this.stopSkyHoverRefresh()
+    this.quickWheelAccum = 0
+    if (this.quickDampOffset === 0 && this.quickDampProgress === 0) return
+    this.getUIContext().animateTo({
+      duration: 280, curve: curves.springMotion(0.46, 0.86)
+    }, () => {
+      this.quickDampOffset = 0
+      this.quickDampProgress = 0
+    })
+  }
+
+  private commitQuickExpandState(expanded: boolean): void {
+    if (this.quickWheelResetTimer >= 0) {
+      clearTimeout(this.quickWheelResetTimer)
+      this.quickWheelResetTimer = -1
+    }
+    if (this.skyHoverTimer >= 0) {
+      clearTimeout(this.skyHoverTimer)
+      this.skyHoverTimer = -1
+    }
+    this.stopSkyHoverRefresh()
+    this.quickWheelAccum = 0
+    void this.haptics().menu()
+    this.getUIContext().animateTo({
+      duration: 340, curve: curves.springMotion(0.46, 0.86),
+      onFinish: () => { this.panelDragging = false }
+    }, () => {
+      this.quickDampOffset = 0
+      this.quickDampProgress = 0
+      this.compactPanelDragOffsetY = 0
+      this.expandedPanelDragOffsetY = 0
+      this.quickPanelStore.setExpanded(expanded)
+    })
+    this.publishUiPanelState()
+    this.scheduleSelectedObjectForUiChange(360)
+  }
+
+  private isQuickCandidateAtTop(): boolean {
+    try {
+      const off = this.quickCandidateScroller.currentOffset()
+      return !off || off.yOffset <= 1
+    } catch (_) {
+      return true
+    }
+  }
+
+  // 鼠标滚轮 / 触控板双指滚动：短限位下上滚（展示下方内容）带阻尼拉长，越过阈值后整体弹开变长；
+  // 展开态滚回顶部后再反向滚动越过阻尼则收回短限位。
+  private handleQuickPanelAxis(event: AxisEvent): void {
+    if (this.activePanel !== 'quick' || this.quickPanelStore.editable) return
+    if (event.action === AxisAction.CANCEL || event.action === AxisAction.END) {
+      this.snapQuickDampingBack()
+      return
+    }
+    const vertical = event.getVerticalAxisValue()
+    if (!Number.isFinite(vertical) || Math.abs(vertical) < 0.001) return
+    const EXPAND_THRESHOLD = 42
+    const COLLAPSE_THRESHOLD = 52
+    if (!this.quickPanelStore.expanded) {
+      if (vertical > 0) {
+        this.quickWheelAccum += vertical
+        const progress = clamp(this.quickWheelAccum / EXPAND_THRESHOLD, 0, 1)
+        if (this.quickWheelAccum >= EXPAND_THRESHOLD) {
+          this.commitQuickExpandState(true)
+          return
+        }
+        this.quickDampOffset = this.quickRubberBand(this.quickWheelAccum * 0.65, 28, 30)
+        this.quickDampProgress = progress
+        if (this.quickWheelResetTimer >= 0) clearTimeout(this.quickWheelResetTimer)
+        this.quickWheelResetTimer = setTimeout(() => {
+          this.quickWheelResetTimer = -1
+          this.snapQuickDampingBack()
+        }, 280) as number
+      } else if (this.quickWheelAccum > 0) {
+        this.snapQuickDampingBack()
+      }
+      return
+    }
+    // 展开态：候选区在顶部且继续向上回滚时给反向阻尼，越过阈值收起。
+    if (vertical < 0 && this.isQuickCandidateAtTop()) {
+      this.quickWheelAccum += Math.abs(vertical)
+      if (this.quickWheelAccum >= COLLAPSE_THRESHOLD) {
+        this.commitQuickExpandState(false)
+        return
+      }
+      this.quickDampOffset = -this.quickRubberBand(this.quickWheelAccum * 0.45, 22, 28)
+      if (this.quickWheelResetTimer >= 0) clearTimeout(this.quickWheelResetTimer)
+      this.quickWheelResetTimer = setTimeout(() => {
+        this.quickWheelResetTimer = -1
+        this.snapQuickDampingBack()
+      }, 280) as number
+    } else if (vertical > 0 && this.quickWheelAccum > 0) {
+      this.snapQuickDampingBack()
+    }
+  }
+
+  // 触屏上滑/下滑阻尼限位（面板正文内任意位置上滑即可越过阻尼展开，无需精准抓顶部细条）。
+  private handleQuickPanelTouch(event: TouchEvent): void {
+    if (this.activePanel !== 'quick' || this.quickPanelStore.editable) return
+    const points = event.touches.length > 0 ? event.touches : event.changedTouches
+    if (points.length === 0) return
+    const y = touchWindowY(points[0])
+    if (event.type === TouchType.Down) {
+      this.quickTouchActive = true
+      this.quickTouchStartY = y
+      this.quickTouchSnapped = false
+      return
+    }
+    if (event.type === TouchType.Move && this.quickTouchActive && !this.quickTouchSnapped) {
+      const dy = y - this.quickTouchStartY
+      if (!this.quickPanelStore.expanded && dy < -6) {
+        const raw = -dy - 6
+        if (raw >= 44) {
+          this.quickTouchSnapped = true
+          this.commitQuickExpandState(true)
+          return
+        }
+        this.quickDampOffset = this.quickRubberBand(raw, 28, 34)
+        this.quickDampProgress = clamp(raw / 44, 0, 1)
+      } else if (this.quickPanelStore.expanded && dy > 10 && this.isQuickCandidateAtTop()) {
+        const raw = dy - 10
+        if (raw >= 52) {
+          this.quickTouchSnapped = true
+          this.commitQuickExpandState(false)
+          return
+        }
+        this.quickDampOffset = -this.quickRubberBand(raw, 22, 34)
+      }
+      return
+    }
+    if (event.type === TouchType.Up || event.type === TouchType.Cancel) {
+      this.quickTouchActive = false
+      if (!this.quickTouchSnapped) {
+        this.snapQuickDampingBack()
+      }
+      this.quickTouchSnapped = false
+    }
+  }
+
+  private toggleDesktopFullscreen(enable: boolean): void {
+    void (async (): Promise<void> => {
+      try {
+        const context = this.getUIContext().getHostContext() as common.UIAbilityContext
+        const mainWin = await window.getLastWindow(context)
+        if (enable) {
+          if (canIUse('SystemCapability.Window.SessionManager')) {
+            await mainWin.maximize(window.MaximizePresentation.ENTER_IMMERSIVE)
+            try { await mainWin.setTitleAndDockHoverShown(true, true) } catch (_) {}
+          } else {
+            await mainWin.setWindowLayoutFullScreen(true)
+          }
+          AppStorage.setOrCreate('stellariumDesktopFullscreen', true)
+        } else {
+          if (canIUse('SystemCapability.Window.SessionManager')) {
+            await mainWin.recover()
+          } else {
+            await mainWin.setWindowLayoutFullScreen(false)
+          }
+          AppStorage.setOrCreate('stellariumDesktopFullscreen', false)
+        }
+      } catch (err) {
+        hilog.warn(0x0000, 'StellariumArkUI', '[fullscreen] toggle failed: %{public}s', JSON.stringify(err))
+      }
+    })()
+  }
 
   // 标题栏动作按钮的标签：图层面板 = 清除坐标与标记；快捷面板 = 进入 / 退出自定义（编辑态）。
   // 空串即不渲染该按钮（PanelHeader 既有约定）。
@@ -7380,30 +8147,27 @@ export struct WindowNativeNode {
     const cell = this.quickPanelGridCellSize()
     // 槽位固定两行（行宽 6）。
     const slots = cell * 2 + 6
-    // 展开/编辑态才出现：分隔线（上距 10 + 高 1）+ 候选带（首行上距 12，行内径 6）。
-    // 行数必须与 QuickPanel 的行渲染同源，否则高度对不上会被 Scroll 垂直居中。
+    // 展开/编辑态才出现：分隔线（上距 10 + 高 1）+ 有限位候选区（最多展示 QUICK_EXPANDED_VISIBLE_ROWS 行，
+    // 其余行在独立 Scroll 内顺滑滚动，避免面板无限撑高）。
     const showMore = this.quickPanelStore.expanded || this.quickPanelStore.editable
-    const candidateRows = showMore ? quickCandidateRowsFor(this.quickPanelStore.order) : 0
-    const candidates = candidateRows > 0 ? (10 + 1 + 12 + candidateRows * cell + (candidateRows - 1) * 6) : 0
+    const visibleCandidateRows = showMore ? quickCandidateVisibleRowsFor(this.quickPanelStore.order) : 0
+    const candidates = visibleCandidateRows > 0
+      ? (10 + 1 + 12 + visibleCandidateRows * cell + (visibleCandidateRows - 1) * 6 + 4)
+      : 18
     const editableExtra = this.quickPanelStore.editable ? (8 + 28) : 0
     // 开启转动手机（陀螺仪）且非编辑态时，下方伸出 38vp 的「AR 实景相机」快捷标签（上距 10）。
     const arTabExtra = (this.gyroStore.gyroscopeVisualEnabled() && !this.quickPanelStore.editable) ? (10 + 38) : 0
-    // 理论高度之外再留 4 物理像素的「取整余量」：内容里有两类逐项物理像素对齐 ——
-    // 每行 6 格按浮点宽均分后各自对齐（每行最多多占 1px），以及固定 chrome（抓手 / 头部 / 内外边距）
-    // 各自对齐。真机 Mate 80 Pro 实测真实占用比理论值多约 2px，第二行下沿就被 Scroll 视口切掉；
-    // 4px 不足半个 vp，肉眼不可见，但保证视口永远不小于内容。
     const grid = slots + arTabExtra + candidates + editableExtra + this.getUIContext().px2vp(4)
     const header = this.timeStore.panelSubtitle(this.activePanel).length > 0 ? 56 : 44
+    const damp = this.quickPanelStore.editable ? 0 : this.quickDampOffset
     if (this.isExpandedLayout) {
       // PanelHandle 高 30（28 + margin 2），floatingPanel 内边距 18。
-      const height = 18 + 30 + header + 14 + grid + 18
-      // 超出可用高度时交给面板内 Scroll。
-      return Math.min(height, this.expandedPanelUsableHeight())
+      const height = 18 + 30 + header + 14 + grid + 18 + damp
+      return clamp(height, 160, this.expandedPanelUsableHeight())
     }
     // PanelHandle 高 30（28 + margin 2），compactPanel 内边距 top 12 / bottom 16。
-    const height = 12 + 30 + header + 14 + grid + 16
-    // 展开后可能超出可用高度；超出部分交给面板内 Scroll，避免顶到状态栏。
-    return Math.min(height, this.compactPanelUsableHeight())
+    const height = 12 + 30 + header + 14 + grid + 16 + damp
+    return clamp(height, 160, this.compactPanelUsableHeight())
   }
 
   private compactPanelHeight(): number {
@@ -7458,28 +8222,39 @@ export struct WindowNativeNode {
     const usable = this.compactPanelUsableHeight()
     this.compactPanelDragOffsetY = clamp(offsetY, -usable * 0.34, usable * 0.12)
     if (this.activePanel === 'quick') {
-      // 实时预览：上拖略过阈值即展开，下拖即收起（内容高度随 store 变化）。
-      if (this.compactPanelDragOffsetY < -8 && !this.quickPanelStore.expanded) {
-        this.quickPanelStore.setExpanded(true)
-      } else if (this.compactPanelDragOffsetY > 8 && this.quickPanelStore.expanded) {
-        this.quickPanelStore.setExpanded(false)
+      // 阻尼拉升预览：越过阈值前只做阻尼拉长，不提前跳变；松手或越过限位后再弹入目标态。
+      if (!this.quickPanelStore.expanded && offsetY < 0) {
+        const raw = -offsetY
+        this.quickDampOffset = this.quickRubberBand(raw, 28, 34)
+        this.quickDampProgress = clamp(raw / 36, 0, 1)
+      } else if (this.quickPanelStore.expanded && offsetY > 0) {
+        this.quickDampOffset = -this.quickRubberBand(offsetY, 22, 34)
+        this.quickDampProgress = 0
+      } else {
+        this.quickDampOffset = 0
+        this.quickDampProgress = 0
       }
     }
   }
 
   private settleCompactPanelDrag(): void {
     if (this.activePanel === 'quick') {
-      const expand = this.compactPanelDragOffsetY < -24
-      const collapse = this.compactPanelDragOffsetY > 24
-      this.getUIContext().animateTo({
-        duration: 320, curve: curves.springMotion(0.46, 0.86),
-        onFinish: () => { this.panelDragging = false }
-      }, () => {
-        if (expand) this.quickPanelStore.setExpanded(true)
-        if (collapse) this.quickPanelStore.setExpanded(false)
-        this.compactPanelDragOffsetY = 0
-      })
-      this.scheduleSelectedObjectForUiChange(350)
+      const expand = !this.quickPanelStore.expanded && this.compactPanelDragOffsetY < -32
+      const collapse = this.quickPanelStore.expanded && this.compactPanelDragOffsetY > 32
+      if (expand) {
+        this.commitQuickExpandState(true)
+      } else if (collapse) {
+        this.commitQuickExpandState(false)
+      } else {
+        this.getUIContext().animateTo({
+          duration: 300, curve: curves.springMotion(0.46, 0.86),
+          onFinish: () => { this.panelDragging = false }
+        }, () => {
+          this.quickDampOffset = 0
+          this.quickDampProgress = 0
+          this.compactPanelDragOffsetY = 0
+        })
+      }
       return
     }
     const usable = this.compactPanelUsableHeight()
@@ -7501,26 +8276,37 @@ export struct WindowNativeNode {
     if (!this.panelDragging) this.panelDragging = true
     const usable = this.expandedPanelUsableHeight()
     this.expandedPanelDragOffsetY = clamp(offsetY, -usable * 0.34, usable * 0.12)
-    if (this.expandedPanelDragOffsetY < -8 && !this.quickPanelStore.expanded) {
-      this.quickPanelStore.setExpanded(true)
-    } else if (this.expandedPanelDragOffsetY > 8 && this.quickPanelStore.expanded) {
-      this.quickPanelStore.setExpanded(false)
+    if (!this.quickPanelStore.expanded && offsetY < 0) {
+      const raw = -offsetY
+      this.quickDampOffset = this.quickRubberBand(raw, 28, 34)
+      this.quickDampProgress = clamp(raw / 36, 0, 1)
+    } else if (this.quickPanelStore.expanded && offsetY > 0) {
+      this.quickDampOffset = -this.quickRubberBand(offsetY, 22, 34)
+      this.quickDampProgress = 0
+    } else {
+      this.quickDampOffset = 0
+      this.quickDampProgress = 0
     }
   }
 
   private settleExpandedPanelDrag(): void {
     if (this.activePanel !== 'quick') return
-    const expand = this.expandedPanelDragOffsetY < -24
-    const collapse = this.expandedPanelDragOffsetY > 24
-    this.getUIContext().animateTo({
-      duration: 320, curve: curves.springMotion(0.46, 0.86),
-      onFinish: () => { this.panelDragging = false }
-    }, () => {
-      if (expand) this.quickPanelStore.setExpanded(true)
-      if (collapse) this.quickPanelStore.setExpanded(false)
-      this.expandedPanelDragOffsetY = 0
-    })
-    this.scheduleSelectedObjectForUiChange(350)
+    const expand = !this.quickPanelStore.expanded && this.expandedPanelDragOffsetY < -32
+    const collapse = this.quickPanelStore.expanded && this.expandedPanelDragOffsetY > 32
+    if (expand) {
+      this.commitQuickExpandState(true)
+    } else if (collapse) {
+      this.commitQuickExpandState(false)
+    } else {
+      this.getUIContext().animateTo({
+        duration: 300, curve: curves.springMotion(0.46, 0.86),
+        onFinish: () => { this.panelDragging = false }
+      }, () => {
+        this.quickDampOffset = 0
+        this.quickDampProgress = 0
+        this.expandedPanelDragOffsetY = 0
+      })
+    }
   }
 
   private expandedUiAllowed(): boolean {
@@ -7707,7 +8493,27 @@ export struct WindowNativeNode {
       'night_mode': this.nightModeStore.nightMode,
       'equatorial_mount': this.telescopeStore.equatorialMount,
       'flip_horizontal': this.polarScopeStore.polarScopeHorizontalFlip,
-      'red_light': this.redLightOn
+      'red_light': this.redLightOn,
+      // 第一梯队
+      'constellation_boundaries': this.layerStore.constellationBoundaries,
+      'meteor_showers': this.meteorStore.msEnabled || this.layerStore.meteors,
+      'angle_measure': this.tools.angleMeasureEnabled,
+      'asterism_lines': this.layerStore.asterismLines,
+      'hips_surveys': this.layerStore.hipsSurveys,
+      'flip_vertical': this.polarScopeStore.polarScopeVerticalFlip || this.layerStore.flipVert,
+      // 第二梯队
+      'ccd_sensor': this.telescopeStore.ccdOn,
+      'telrad': this.telescopeStore.telradOn,
+      'compass_marks': this.layerStore.compassMarks,
+      'ecliptic_grid': this.layerStore.eclipticGrid,
+      'galactic_grid': this.layerStore.galacticGrid,
+      'planets': this.layerStore.planets,
+      'archaeo_lines': this.archaeoStore.archaeoLinesEnabled,
+      'nav_stars': this.navStarsStore.navStarsEnabled,
+      'exoplanets': this.quickExoplanetsOn,
+      'pulsars': this.quickPulsarsOn,
+      'quasars': this.quickQuasarsOn,
+      'fullscreen': this.desktopFullscreenOn
     }
   }
 
@@ -7734,6 +8540,7 @@ export struct WindowNativeNode {
     // Quick-panel switches are user-visible toggles; give them the same menu
     // pulse as other panel controls before dispatching the actual action.
     void this.haptics().menu()
+    AudioEngine.getInstance().playUiCue('toggle')
     if (id === 'satellites') {
       this.satelliteCtl().setSatelliteFlag('hints', value)
       return
@@ -7768,6 +8575,54 @@ export struct WindowNativeNode {
       // 引擎那一位是**全局**镜像，应用内唯一真值就是极轴镜那一份（由会话 flags.flipHorz 回读），
       // 故复用其写入入口：含乐观写与失败回滚，快捷面板与极轴镜叠层天然同步（见计划 §13.6）。
       this.polarScopeCtl().setPolarScopeHorizontalFlip(value)
+      return
+    }
+    if (id === 'flip_vertical') {
+      this.polarScopeCtl().setPolarScopeVerticalFlip(value)
+      return
+    }
+    if (id === 'meteor_showers') {
+      this.meteorStore.setMeteorShowersFlag('enabled', value)
+      this.layerCtl().applyLayerSwitch('actionShow_MeteorShowers', '', value)
+      return
+    }
+    if (id === 'angle_measure') {
+      this.tools.toggleAngleMeasure(value)
+      return
+    }
+    if (id === 'ccd_sensor') {
+      this.ocularCtl().setCCD(value)
+      return
+    }
+    if (id === 'telrad') {
+      this.ocularCtl().setTelrad(value)
+      return
+    }
+    if (id === 'archaeo_lines') {
+      this.ocularCtl().setArchaeoLineSetting('enabled', value ? '1' : '0')
+      return
+    }
+    if (id === 'nav_stars') {
+      this.navStarsStore.setNavStarsSetting('enabled', value ? '1' : '0')
+      return
+    }
+    if (id === 'exoplanets') {
+      this.quickExoplanetsOn = value
+      this.layerCtl().applyLayerSwitch('actionShow_Exoplanets', '', value)
+      return
+    }
+    if (id === 'pulsars') {
+      this.quickPulsarsOn = value
+      this.layerCtl().applyLayerSwitch('actionShow_Pulsars', '', value)
+      return
+    }
+    if (id === 'quasars') {
+      this.quickQuasarsOn = value
+      this.layerCtl().applyLayerSwitch('actionShow_Quasars', '', value)
+      return
+    }
+    if (id === 'fullscreen') {
+      this.toggleDesktopFullscreen(value)
       return
     }
     // 其余图层类：走公开入口 applyLayerSwitch（与图层面板同一路径，附带「已显示/已隐藏」提示）。
@@ -7921,7 +8776,8 @@ export struct WindowNativeNode {
 
   // 手机上的常驻控件随空闲状态变为轻透玻璃；展开和平板悬停布局保持各自的面板规则。
   private phoneChromeOpacity(): number {
-    return (!this.isExpandedLayout && !this.isFoldHoverLayout) ? this.panelIdleOpacity : 1.0
+    const base = (!this.isExpandedLayout && !this.isFoldHoverLayout) ? this.panelIdleOpacity : 1.0
+    return base * this.startupChromeOpacity
   }
 
   private phoneChromeIsGlass(): boolean {
@@ -8040,6 +8896,7 @@ export struct WindowNativeNode {
       this.placeSelectedObjectInSafeArea('layout')
       return
     }
+    AudioEngine.getInstance().playFlyTo(false)
     this.navigateSelectedObjectTo(this.skyWidth / 2, this.skyHeight / 2, 'center')
   }
 
@@ -8515,7 +9372,7 @@ export struct WindowNativeNode {
       this.gyroCtl().updateGyroTargetGuide(true)
       // 天体名称和资料均来自核心；不再用本地手写别名表覆盖官方名称。
       this.objectDetailStore.selectedInfo = ''
-      // 换了新天体 → 按它的"性格"响一声（模仿 Sky Guide 的叮）
+      // 换了新天体 → 按天体语义与光谱性格触发对应的和弦反馈
       if (isNewSelection) {
         AudioEngine.getInstance().chimeForSelection(result)
       }
@@ -9407,6 +10264,7 @@ export struct WindowNativeNode {
         () => { this.timeCtl().stopTimeWheelSpeed() },
         () => { return this.utcOffsetHours },
         (index: number) => {
+          // 拨动时间转轴仅保留细腻触感反馈，不再触发音效/背景提示音。
           if (this.timeWheelHapticEnabled) void this.haptics().rulerTick(index)
         }
       )
@@ -10430,6 +11288,11 @@ export struct WindowNativeNode {
                 expandedDockWidth: expandedDockWidth(this.skyWidth, this.panelVisible, this.panelWidth, this.panelOffsetX, this.EDGE_MARGIN),
                 dockHeight: this.dockHeight(),
                 expandedDockLeft: expandedDockLeft(this.skyWidth, this.panelVisible, this.panelWidth, this.panelOffsetX, this.EDGE_MARGIN),
+                musicEnabled: this.audioStore.musicEnabled,
+                showGyro: this.gyroHardwareSupported,
+                compactQuickPressed: this.compactQuickPressed,
+                quickX: this.compactTopQuickX(),
+                quickY: this.topQuickY(),
                 gyroPanelLeft: this.EDGE_MARGIN + 64,
                 gyroPanelTop: railTop(this.EDGE_MARGIN) + 120,
                 infoWinVisible: this.infoWindowStore.infoWinVisible,
@@ -10472,6 +11335,8 @@ export struct WindowNativeNode {
                 onDockTap: (item: ShellAction) => { this.activateDockAction(item) },
                 onPanelTouch: (event: TouchEvent) => { this.notePanelTouch(event) },
                 onOpenTime: () => { this.setPanel('time') },
+                onScrubTime: (deltaMinutes: number) => { this.scrubTimeByMinutes(deltaMinutes) },
+                onScrubFov: (zoomIn: boolean) => { this.scrubFovFine(zoomIn) },
                 onZoomIn: () => { this.zoomStep(0.8) },
                 onZoomOut: () => { this.zoomStep(1.25) },
                 fovText: this.currentFovText,
@@ -10480,6 +11345,16 @@ export struct WindowNativeNode {
                 chromeRowPosXLeft: chromeRowPosXLeft(this.isExpandedLayout, this.EDGE_MARGIN, this.skyWidth, this.panelVisible, this.panelWidth, this.panelOffsetX, this.compactDockWidthPercent()),
                 chromeRowPosXRight: chromeRowPosXRight(this.isExpandedLayout, this.EDGE_MARGIN, this.skyWidth, this.panelVisible, this.panelWidth, this.panelOffsetX, this.compactDockWidthPercent()),
                 chromeZoomHorizontal: this.chromeZoomHorizontal(),
+                onGyro: () => {
+                  hilog.info(0x0000, 'StellariumArkUI', '[DIAG] expanded gyro button CLICKED gyroscopeEnabled=%{public}s', this.gyroStore.gyroscopeEnabled.toString())
+                  this.resetPanelIdle()
+                  if (!this.gyroStore.gyroscopeVisualEnabled()) this.syncEquatorialOffForGyro()
+                  this.gyroCtl().requestGyroscopeToggle(!this.gyroStore.gyroscopeVisualEnabled())
+                },
+                onAudio: () => {
+                  hilog.info(0x0000, 'StellariumArkUI', '[DIAG] expanded audio button CLICKED musicEnabled=%{public}s', this.audioStore.musicEnabled.toString())
+                  this.toggleMusicFromQuickControl()
+                },
                 onFlashHint: (text: string) => { this.flashHint(text) },
                 onCalibrate: () => { this.gyroCtl().calibrateGyroscope() },
                 onToggleGyroscope: (enabled: boolean) => { this.gyroCtl().requestGyroscopeToggle(enabled) },
@@ -10548,6 +11423,7 @@ export struct WindowNativeNode {
                 dockLeft: dockLeft(this.isExpandedLayout, this.skyWidth, this.panelVisible, this.panelWidth, this.panelOffsetX, this.EDGE_MARGIN, this.compactDockWidthPercent()),
                 dockTop: this.dockTop(),
                 musicEnabled: this.audioStore.musicEnabled,
+                showGyro: this.gyroHardwareSupported,
                 compactQuickPressed: this.compactQuickPressed,
                 quickX: this.compactTopQuickX(),
                 quickY: compactTopQuickY(),
@@ -10591,6 +11467,8 @@ export struct WindowNativeNode {
                 onDockTap: (item: ShellAction) => { this.activateDockAction(item) },
                 onPanelTouch: (event: TouchEvent) => { this.notePanelTouch(event) },
                 onOpenTime: () => { this.setPanel('time') },
+                onScrubTime: (deltaMinutes: number) => { this.scrubTimeByMinutes(deltaMinutes) },
+                onScrubFov: (zoomIn: boolean) => { this.scrubFovFine(zoomIn) },
                 onZoomIn: () => { this.zoomStep(0.8) },
                 onZoomOut: () => { this.zoomStep(1.25) },
                 fovText: this.currentFovText,
@@ -10602,14 +11480,12 @@ export struct WindowNativeNode {
                 onGyro: () => {
                   hilog.info(0x0000, 'StellariumArkUI', '[DIAG] gyro button CLICKED gyroscopeEnabled=%{public}s', this.gyroStore.gyroscopeEnabled.toString())
                   this.resetPanelIdle()
-                  if (!this.gyroStore.gyroscopeEnabled) this.syncEquatorialOffForGyro()
-                  this.gyroCtl().toggleGyroscope(!this.gyroStore.gyroscopeEnabled)
+                  if (!this.gyroStore.gyroscopeVisualEnabled()) this.syncEquatorialOffForGyro()
+                  this.gyroCtl().requestGyroscopeToggle(!this.gyroStore.gyroscopeVisualEnabled())
                 },
                 onAudio: () => {
                   hilog.info(0x0000, 'StellariumArkUI', '[DIAG] audio button CLICKED musicEnabled=%{public}s', this.audioStore.musicEnabled.toString())
-                  this.resetPanelIdle()
-                  this.audioStore.toggleMusic()
-                  this.flashHint(this.audioStore.musicEnabled ? I18n.t('music_on_hint') : I18n.t('music_off_hint'))
+                  this.toggleMusicFromQuickControl()
                 },
                 onCompactTopQuickTouch: (event: TouchEvent) => { this.handleCompactTopQuickTouch(event) },
                 onFlashHint: (text: string) => { this.flashHint(text) },
@@ -10666,6 +11542,45 @@ export struct WindowNativeNode {
             .onTouch((event: TouchEvent) => {
               this.handleDockTouch(event, true)
             })
+
+          // 桌面端星图悬停微预览浮标（P1）：非阻塞展示天体名 + 类型/星等，不干扰点击与拖拽。
+          if (this.skyHoverPeekVisible && this.skyHoverPeekName.length > 0 && !this.polarScopeStore.polarScopeVisible) {
+            Row({ space: 7 }) {
+              Row()
+                .width(6)
+                .height(6)
+                .borderRadius(3)
+                .backgroundColor(this.hostSlots().accent)
+              Column({ space: 1 }) {
+                Text(this.skyHoverPeekName)
+                  .fontSize(12.5)
+                  .fontWeight(FontWeight.Medium)
+                  .fontColor(this.hostSlots().textStrong)
+                  .maxLines(2)
+                  .wordBreak(WordBreak.BREAK_ALL)
+                  .textOverflow({ overflow: TextOverflow.Ellipsis })
+                if (this.skyHoverPeekMeta.length > 0) {
+                  Text(this.skyHoverPeekMeta)
+                    .fontSize(10.5)
+                    .fontColor(this.hostSlots().sub)
+                    .maxLines(1)
+                    .textOverflow({ overflow: TextOverflow.Ellipsis })
+                }
+              }
+                .alignItems(HorizontalAlign.Start)
+                .constraintSize({ maxWidth: Math.min(340, Math.max(200, this.skyWidth - 48)) })
+            }
+              .padding({ left: 10, right: 12, top: 6, bottom: 6 })
+              .backgroundColor(this.hostSlots().isNight ? '#F0220908' : '#EB132234')
+              .border({ width: 0.8, color: this.hostSlots().border })
+              .borderRadius(16)
+              .shadow({ radius: 14, color: this.hostSlots().shadowSoft, offsetX: 0, offsetY: 6 })
+              .alignItems(VerticalAlign.Center)
+              .position({ x: this.skyHoverPeekX, y: this.skyHoverPeekY })
+              .hitTestBehavior(HitTestMode.None)
+              .zIndex(45)
+              .transition(TransitionEffect.OPACITY.animation({ duration: 150, curve: Curve.EaseOut }))
+          }
 
             HarmonyShell({
               overlayStore: this.overlayStore,
@@ -10748,6 +11663,42 @@ export struct WindowNativeNode {
             onStageTouch: (event: TouchEvent) => { this.objectModelRendererCtl().handleObjectInspectorModelTouch(event) }
           })
         }
+      }
+
+      // 自动定位 / 切换观测星球时的非阻塞原生鸿蒙加载胶囊（LoadingProgress），
+      // 即使操作中收起面板或正在看星图，也能清楚感知当前进度，不再「一脸懵」。
+      if (this.locationPickerStore.deviceLocating || this.sessionToolStore.observerPlanetSwitching) {
+        Row({ space: 8 }) {
+          LoadingProgress()
+            .width(20)
+            .height(20)
+            .color(this.hostSlots().accent)
+          Text(this.locationPickerStore.deviceLocating
+            ? I18n.t('m_getting_location')
+            : I18n.t('m_switching_planet').replace('%s',
+                this.sessionToolStore.observerPlanetLabel(
+                  this.sessionToolStore.observerPlanetTarget.length > 0
+                    ? this.sessionToolStore.observerPlanetTarget
+                    : this.sessionToolStore.observerPlanet)))
+            .fontSize(13)
+            .fontWeight(FontWeight.Medium)
+            .fontColor(this.hostSlots().textStrong)
+            .maxLines(1)
+        }
+          .alignItems(VerticalAlign.Center)
+          .justifyContent(FlexAlign.Center)
+          .padding({ left: 16, right: 18, top: 9, bottom: 9 })
+          .backgroundColor(this.hostSlots().panelGlassStrong)
+          .border({ width: 0.7, color: this.hostSlots().border })
+          .borderRadius(UI_RADIUS_PILL)
+          .position({
+            x: '50%',
+            y: this.landingTimePillY()
+          })
+          .markAnchor({ x: '50%', y: 0 })
+          .hitTestBehavior(HitTestMode.None)
+          .zIndex(96)
+          .transition(TransitionEffect.OPACITY.animation({ duration: 180, curve: Curve.EaseOut }))
       }
 
       if (this.landingBannerVisible && (this.landingBannerHasTimeShift || this.landingTimeResetConfirmed) && !this.panelVisible && !this.locationMapFullscreen) {
@@ -10934,11 +11885,11 @@ export struct WindowNativeNode {
           latitude: this.locationPickerStore.locationPickerLatitude,
           longitude: this.locationPickerStore.locationPickerLongitude,
           mapTexture: this.sessionToolStore.observerPlanetMapTexture(),
-          mapAllowed: this.privacyNativeStartupAllowed && this.applicationInForeground && hasCurrentPrivacyConsent(),
+          mapAllowed: this.privacyNativeStartupAllowed && this.applicationInForeground && this.cachedPrivacyConsent,
           // The local globe needs no native engine or online map service; it
           // still follows the app's privacy consent, but not the native startup
           // gate that the online Petal map requires.
-          localGlobeAllowed: this.applicationInForeground && hasCurrentPrivacyConsent(),
+          localGlobeAllowed: this.applicationInForeground && this.cachedPrivacyConsent,
           expandedLayout: this.isExpandedLayout,
           skyWidth: this.skyWidth,
           skyHeight: this.skyHeight,
@@ -10964,6 +11915,9 @@ export struct WindowNativeNode {
             // "选此点" now applies the observer immediately; previously it
             // only filled the draft and the user had to press Apply again.
             this.locationCtl().applyPickerLocation()
+            if (source === 'gps' && this.sessionToolStore.observerPlanet === 'Earth') {
+              this.locationCtl().enrichGpsPlaceName(latitude, longitude)
+            }
             setTimeout(() => { this.scheduleSpacetimeCultureSuggest('location') }, 450)
           },
           onShare: (latitude: number, longitude: number, name: string) => {
@@ -11291,6 +12245,7 @@ export struct WindowNativeNode {
             headerActionLabel: this.panelHeaderActionLabel(),
             headerActionIcon: this.panelHeaderActionIcon(),
             headerActionAccent: this.activePanel === 'place',
+            headerActionLoading: this.activePanel === 'place' && this.locationPickerStore.deviceLocating,
             titleAsButton: this.activePanel === 'quick',
             compactMargin: true,
             onBack: () => { this.handlePanelBackTap() },
@@ -11326,6 +12281,10 @@ export struct WindowNativeNode {
       .onTouch((event: TouchEvent) => {
         this.notePanelTouch(event)
         this.handleTimeWheelTouch(event)
+        this.handleQuickPanelTouch(event)
+      })
+      .onAxisEvent((event: AxisEvent) => {
+        this.handleQuickPanelAxis(event)
       })
       .scale({ x: this.panelIdleOpacity < 1 ? 0.97 : 1.0, y: this.panelIdleOpacity < 1 ? 0.97 : 1.0 })
       .opacity(this.panelIdleOpacity * this.panelPresentationOpacity)
@@ -11406,6 +12365,7 @@ export struct WindowNativeNode {
             headerActionLabel: this.panelHeaderActionLabel(),
             headerActionIcon: this.panelHeaderActionIcon(),
             headerActionAccent: this.activePanel === 'place',
+            headerActionLoading: this.activePanel === 'place' && this.locationPickerStore.deviceLocating,
             titleAsButton: this.activePanel === 'quick',
             compactMargin: true,
             onBack: () => { this.handlePanelBackTap() },
@@ -11447,6 +12407,10 @@ export struct WindowNativeNode {
       .onTouch((event: TouchEvent) => {
         this.notePanelTouch(event)
         this.handleTimeWheelTouch(event)
+        this.handleQuickPanelTouch(event)
+      })
+      .onAxisEvent((event: AxisEvent) => {
+        this.handleQuickPanelAxis(event)
       })
       .alignSelf(ItemAlign.Center)
       .scale({ x: this.panelIdleOpacity < 1 ? 0.98 : 1.0, y: this.panelIdleOpacity < 1 ? 0.98 : 1.0 })
@@ -11595,7 +12559,7 @@ export struct WindowNativeNode {
         expandedLayout: this.isExpandedLayout,
         skyWidth: this.skyWidth,
         fixedObserverPoint: this.sessionToolStore.isObserverOverviewPoint(),
-        previewMapAllowed: this.privacyNativeStartupAllowed && this.applicationInForeground && hasCurrentPrivacyConsent(),
+        previewMapAllowed: this.privacyNativeStartupAllowed && this.applicationInForeground && this.cachedPrivacyConsent,
         mapSuspended: this.locationMapFullscreen,
         onOpenFullMap: () => { this.locationMapFullscreen = true },
         planetLabel: (en: string) => this.sessionToolStore.observerPlanetLabel(en),
@@ -11656,7 +12620,7 @@ export struct WindowNativeNode {
         layerTabs: this.layerCtl().layerTabItems(),
         skyCultureArtStates: this.skyCultureArtStates,
         narrationParagraphs: this.skyCultureViewStore.skyCultureNarrationParagraphs(),
-        previewMapAllowed: this.privacyNativeStartupAllowed && this.applicationInForeground && hasCurrentPrivacyConsent(),
+        previewMapAllowed: this.privacyNativeStartupAllowed && this.applicationInForeground && this.cachedPrivacyConsent,
         mapContext: this.skyCultureMapContext,
         onSelectTab: (id: number) => { this.switchViewTab(id) },
         onToggleLayer: (actionId: string, cmd: string, value: boolean) => { this.layerCtl().applyLayerSwitch(actionId, cmd, value) },
@@ -11731,7 +12695,11 @@ export struct WindowNativeNode {
         gyroActive: this.gyroStore.gyroscopeVisualEnabled(),
         arCameraActive: this.arStore.arCameraActive,
         arCameraStarting: this.arStore.arCameraStarting,
+        cellSize: this.quickPanelGridCellSize(),
+        dampProgress: this.quickDampProgress,
+        candidateScroller: this.quickCandidateScroller,
         onToggle: (id: string, value: boolean) => { this.quickToggle(id, value) },
+        onToggleExpand: () => { this.commitQuickExpandState(!this.quickPanelStore.expanded) },
         onToggleArCamera: () => {
           const willEnable = !this.arStore.arCameraActive
           void this.arCtl().toggleArCamera().then(() => {
@@ -11799,9 +12767,7 @@ export struct WindowNativeNode {
         scroller: this.searchPanelScroller,
         onInput: (value: string) => { this.searchCtl().scheduleSuggestions(value.trim()) },
         onSubmit: (text: string) => {
-          this.searchCtl().stop()
-          this.searchObject(text)
-          this.searchStore.searchSuggestions = []
+          this.searchCtl().submitSearch(text)
         },
         onInputFocus: () => {
           // 聚焦搜索框时，天空键盘处理器让位给输入法。
@@ -12004,7 +12970,7 @@ export struct WindowNativeNode {
         observerLatitude: this.observerLatLive,
         observerLongitude: this.observerLonLive,
         earthMapUri: this.stellariumFilesDir().length > 0 ? ('file://' + this.stellariumFilesDir() + '/stellarium/textures/earth_cmap.png') : '',
-        onlineMapAllowed: this.privacyNativeStartupAllowed && this.applicationInForeground && hasCurrentPrivacyConsent(),
+        onlineMapAllowed: this.privacyNativeStartupAllowed && this.applicationInForeground && this.cachedPrivacyConsent,
         activeLiveViewEventId: this.liveViewActiveEventId,
         liveViewStatusText: this.liveViewStatusText,
         remoteFeedStatus: this.remoteCalendarFeedStatus,
@@ -12041,7 +13007,51 @@ export struct WindowNativeNode {
           goToCurrentMonth: () => this.calendarCtl().goToCurrentMonth(),
           startLiveView: (event: AstronomyCalendarEvent) => { this.startLiveViewForEvent(event, false) },
           stopLiveView: () => { this.stopActiveLiveView() },
-          syncRemoteFeed: () => { this.syncRemoteCalendarFeed(true) }
+          syncRemoteFeed: () => { this.syncRemoteCalendarFeed(true) },
+          rocketSimHost: {
+            loadCatalog: (onDone: (catalog: RocketCatalogData | undefined) => void) => {
+              this.commandPort().requestLongRunning('getRocketLaunchCatalog', '', (resp: StellariumBridgeResponse) => {
+                const raw = resp as Object as RocketCatalogData
+                onDone(raw && raw.ok === true ? raw : undefined)
+              }, () => { onDone(undefined) }, undefined, 160)
+            },
+            runSimulation: (req: RocketSimulationRequest, onDone: (sim: RocketSimulationData | undefined) => void) => {
+              this.commandPort().requestLongRunning('simulateRocketLaunch', JSON.stringify(req), (resp: StellariumBridgeResponse) => {
+                const raw = resp as Object as RocketSimulationData
+                onDone(raw && raw.ok === true ? raw : undefined)
+              }, () => { onDone(undefined) }, undefined, 160)
+            },
+            previewInSky: (sim: RocketSimulationData) => {
+              // Activate preview in RocketLaunchMgr, jump sky time to launch T0 + peak visibility,
+              // and slew camera straight to rocket azimuth & elevation
+              const previewReq: RocketSimulationRequest = {
+                siteId: sim.site.id,
+                vehicleId: sim.vehicle.id,
+                launchTimeUtc: sim.launchTimeUtc,
+                azimuthDeg: sim.launchAzimuthDeg,
+                timeOffsetMin: 0,
+                dispersionSamples: 0,
+                includeFullTrack: false,
+                activatePreview: true,
+                autoPlay: true,
+                speed: 5
+              }
+              this.commandPort().fire('simulateRocketLaunch', JSON.stringify(previewReq))
+              const jumpSec = sim.summary.peakPlumeSec > 0 ? sim.summary.peakPlumeSec : (sim.summary.maxAltSec > 0 ? sim.summary.maxAltSec : 60)
+              const targetJd = sim.launchJd + jumpSec / 86400.0
+              const targetAz = sim.summary.peakPlumeSec > 0 ? sim.summary.peakPlumeAzDeg : sim.summary.maxAltAzDeg
+              const targetAlt = Math.max(8, Math.min(75, sim.summary.peakPlumeSec > 0 ? sim.summary.peakPlumeAltDeg : Math.max(15, sim.summary.maxAltDeg)))
+              this.closePanel()
+              this.callInteractive('setJD', targetJd.toString(), () => {
+                this.refreshDockClock()
+                this.syncSimulatedDateLabel(targetJd)
+                if (!this.gyroStore.gyroscopeEnabled) {
+                  this.callNativeFire('moveToAltAz', `${targetAz.toFixed(1)}|${targetAlt.toFixed(1)}|0.9`)
+                }
+                this.refreshState()
+              })
+            }
+          }
         }
       })
     } else if (this.activePanel === 'widgets') {
@@ -12380,7 +13390,7 @@ export struct WindowNativeNode {
     } else if (this.activePanel === 'minorBodies') {
       MinorBodiesPanel({
         store: this.minorBodiesStore,
-        onlineMirrorAllowed: !OFFLINE_APPGALLERY_BUILD && this.privacyNativeStartupAllowed && hasCurrentPrivacyConsent(),
+        onlineMirrorAllowed: !OFFLINE_APPGALLERY_BUILD && this.privacyNativeStartupAllowed && this.cachedPrivacyConsent,
         onLocateObject: (englishName: string) => { this.searchObject(englishName, 'SolarSystem', '', 'center') },
         onInspect3dModel: (englishName: string) => {
           this.objectDetailStore.bottomCardIndex = 2
@@ -12497,15 +13507,30 @@ export struct WindowNativeNode {
       AudioPanel({
         audioStore: this.audioStore,
         onToggleMusic: (enabled: boolean) => {
-          this.audioStore.musicEnabled = enabled
-          const engine = AudioEngine.getInstance()
-          if (enabled) { engine.start().then(() => { engine.setMuted(false) }) } else { engine.setMuted(true) }
-          this.audioStore.persistMusicEnabled()
+          this.audioStore.setMusicEnabled(enabled, false)
           this.flashHint(enabled ? I18n.t('music_on_hint') : I18n.t('music_off_hint'))
         },
+        onToggleSfx: (enabled: boolean) => {
+          this.audioStore.setSfxEnabled(enabled)
+          this.flashHint(enabled ? I18n.t('sfx_on_hint') : I18n.t('sfx_off_hint'))
+        },
         onVolumeChange: (value: number) => {
-          this.audioStore.audioVolume = value
-          AudioEngine.getInstance().setVolume(value)
+          this.audioStore.setAudioVolume(value)
+        },
+        onSelectMood: (mood: AetherisMoodId) => {
+          this.audioStore.setAudioMood(mood)
+        },
+        onSelectMaterial: (preset: AetherisMaterialPreset) => {
+          this.audioStore.setAudioMaterial(preset)
+        },
+        onRandomizeDna: () => {
+          this.audioStore.randomizeDna()
+        },
+        onSkipNextAct: () => {
+          this.audioStore.skipNextAct()
+        },
+        onPlayLogo: () => {
+          this.audioStore.playAudioLogo()
         }
       })
     } else {

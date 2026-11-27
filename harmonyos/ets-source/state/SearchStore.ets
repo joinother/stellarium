@@ -32,6 +32,10 @@ export interface SearchHostHooks {
 export class SearchStore {
   searchText: string = ''
   searchSuggestions: SearchSug[] = []
+  // 候选建议加载中标志（涵盖 140ms 去抖与原生检索窗口），避免首帧误闪「未找到匹配天体」。
+  searchSuggestionsLoading: boolean = false
+  // 当前 searchSuggestions 对应的已检索词，用于回车直接命中已就绪的最佳候选。
+  searchSuggestionsQuery: string = ''
 
   // ==== 筛选器 ====
   searchFilterPage: string = ''

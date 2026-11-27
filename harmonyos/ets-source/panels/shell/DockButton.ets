@@ -22,6 +22,7 @@ export struct DockButton {
   @Prop labelFontSize: number
   @Prop itemHeight: number
   @State c: ThemeSlots = DEFAULT_SLOTS
+  @State private hovered: boolean = false
   onTouchEvent: (event: TouchEvent) => void = () => {}
   onTap: () => void = () => {}
 
@@ -53,10 +54,12 @@ export struct DockButton {
       .height(this.itemHeight)
       .justifyContent(FlexAlign.Center)
       .alignItems(HorizontalAlign.Center)
-      .backgroundColor(Color.Transparent)
+      .backgroundColor(this.hovered ? this.c.overlayButton : Color.Transparent)
       .borderRadius(UI_RADIUS_CONTROL)
       .scale({ x: 1.0, y: 1.0 })
+      .hoverEffect(HoverEffect.Highlight)
       .clickEffect({ level: ClickEffectLevel.LIGHT })
+      .onHover((isHover: boolean) => { this.hovered = isHover })
       .onTouch((event: TouchEvent) => { this.onTouchEvent(event) })
       .stateStyles({
         pressed: {

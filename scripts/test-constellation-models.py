@@ -15,11 +15,12 @@ class ConstellationModelTests(unittest.TestCase):
         manifest = json.loads((ROOT / "models/manifest.json").read_text())
         culture = json.loads((ROOT / "index.json").read_text())
         constellations = {entry["id"].split()[-1]: entry for entry in culture["constellations"]}
-        expected = {key for key, entry in constellations.items() if 'image' in entry} - {'Car', 'Cir', 'Col'}
+        expected = {key for key, entry in constellations.items() if 'image' in entry} | {'Pup', 'Vel'}
         self.assertEqual({entry["id"] for entry in manifest["models"]}, expected)
         self.assertEqual(len(manifest["models"]), len(expected))
         self.assertEqual({path.name for path in (ROOT / 'models').glob('*.scm')},
                          {entry['mesh'] for entry in manifest['models']})
+        shared_groups = {}
         for entry in manifest["models"]:
             with self.subTest(constellation=entry["id"]):
                 data = (ROOT / "models" / entry["mesh"]).read_bytes()
@@ -41,7 +42,9 @@ class ConstellationModelTests(unittest.TestCase):
                     self.assertAlmostEqual(normal_x ** 2 + normal_y ** 2 + normal_z ** 2, 1, places=4)
                 indices = struct.unpack_from(f"<{index_count}I", data, 12 + vertex_count * 24)
                 self.assertLess(max(indices), vertex_count)
-                image = constellations[entry["id"]]["image"]
+                group = entry.get("sharedIllustrationGroup")
+                image_owner = "Car" if group == "argonavis" else entry["id"]
+                image = constellations[image_owner]["image"]
                 self.assertEqual(image["file"], entry["illustration"])
                 self.assertEqual(len(image["anchors"]), 3)
                 self.assertTrue((ROOT / entry["illustration"]).is_file())
@@ -63,14 +66,33 @@ class ConstellationModelTests(unittest.TestCase):
                 source_width = source_high[0] - source_low[0]
                 source_height = source_high[1] - source_low[1]
                 self.assertAlmostEqual(pixel_width / pixel_height, source_width / source_height, places=5)
-                self.assertAlmostEqual((mesh_high[0] + mesh_low[0]) * width / 2, (left + right) / 2, places=4)
-                self.assertAlmostEqual((mesh_high[1] + mesh_low[1]) * height / 2, (bottom + top) / 2, places=4)
-                self.assertLessEqual(pixel_width, right - left + 0.0001)
-                self.assertLessEqual(pixel_height, top - bottom + 0.0001)
-                self.assertAlmostEqual(max(pixel_width / (right - left), pixel_height / (top - bottom)), 1., places=5)
+                if group:
+                    shared_groups.setdefault(group, []).append((entry, vertices))
+                else:
+                    self.assertAlmostEqual((mesh_high[0] + mesh_low[0]) * width / 2, (left + right) / 2, places=4)
+                    self.assertAlmostEqual((mesh_high[1] + mesh_low[1]) * height / 2, (bottom + top) / 2, places=4)
+                    self.assertLessEqual(pixel_width, right - left + 0.0001)
+                    self.assertLessEqual(pixel_height, top - bottom + 0.0001)
+                    self.assertAlmostEqual(max(pixel_width / (right - left), pixel_height / (top - bottom)), 1., places=5)
                 for vertex in vertices:
                     self.assertTrue(left / width - 1e-7 <= vertex[0] <= right / width + 1e-7)
                     self.assertTrue(bottom / height - 1e-7 <= vertex[1] <= top / height + 1e-7)
+        for group, members in shared_groups.items():
+            with self.subTest(shared_group=group):
+                first_entry = members[0][0]
+                width, height = first_entry['imageSize']
+                left, bottom, right, top = first_entry['fitBoundsPixels']
+                all_verts = [v for _, verts in members for v in verts]
+                mesh_low = [min(v[axis] for v in all_verts) for axis in range(3)]
+                mesh_high = [max(v[axis] for v in all_verts) for axis in range(3)]
+                pixel_width = (mesh_high[0] - mesh_low[0]) * width
+                pixel_height = (mesh_high[1] - mesh_low[1]) * height
+                source_low, source_high = first_entry['sharedSourceMeshBounds']
+                self.assertAlmostEqual(pixel_width / pixel_height,
+                                       (source_high[0] - source_low[0]) / (source_high[1] - source_low[1]), places=5)
+                self.assertAlmostEqual((mesh_high[0] + mesh_low[0]) * width / 2, (left + right) / 2, places=4)
+                self.assertAlmostEqual((mesh_high[1] + mesh_low[1]) * height / 2, (bottom + top) / 2, places=4)
+                self.assertAlmostEqual(max(pixel_width / (right - left), pixel_height / (top - bottom)), 1., places=5)
 
     def test_upgrade_assets_match_exact_manifest_revision(self):
         manifest_bytes = (ROOT / 'models/manifest.json').read_bytes()

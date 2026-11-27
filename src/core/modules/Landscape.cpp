@@ -21,6 +21,7 @@
 
 #include "Landscape.hpp"
 #include "MistTerrain.hpp"
+#include "OhosStartupChoreography.hpp"
 #include "StelApp.hpp"
 #include "StelTextureMgr.hpp"
 #include "StelFileMgr.hpp"
@@ -705,16 +706,58 @@ ATTRIBUTE highp float terrainFlow;
 VARYING highp vec3 surfacePosition;
 VARYING highp vec3 surfaceNormal;
 VARYING highp float surfaceFlow;
+VARYING highp vec2 startupFold;
 uniform highp vec4 terrainViewport;
+uniform highp vec2 startupLift;
+float mistOrigamiAngle(float p) {
+    if (p <= 0.0) return 0.0;
+    if (p >= 1.0) return 1.5707963;
+    float rise = 1.0 - pow(1.0 - min(p / 0.54, 1.0), 3.0);
+    float post = max(0.0, (p - 0.42) / 0.58);
+    float wobble = sin(post * 12.0) * exp(-post * 4.2) * 0.21 * smoothstep(0.32, 0.54, p);
+    return clamp(rise * 1.5707963 + wobble, 0.0, 1.80);
+}
 void main() {
-    vec3 window = project(terrainPosition);
-    float distance = length(terrainPosition);
+    vec3 pos = terrainPosition;
+    vec3 rotNormal = terrainNormal;
+    vec2 foldData = vec2(0.0, 0.0);
+    if (startupLift.x < 1.5) {
+        float radial = length(terrainPosition.xy);
+        float distBand = clamp((radial - 180.0) / 4200.0, 0.0, 1.0);
+        float layerIdx = floor(distBand * 4.0);
+        float azNorm = fract(atan(terrainPosition.y, terrainPosition.x) / 6.2831853);
+        float sector = floor(azNorm * 12.0);
+        float sectorHash = fract(sin(sector * 127.1 + layerIdx * 311.7) * 43758.5453);
+        float delay = (layerIdx / 4.0) * 0.34 + sectorHash * 0.24;
+        float u = clamp((startupLift.x - delay) / 0.42, 0.0, 1.0);
+        float theta = mistOrigamiAngle(u);
+        float sinT = sin(theta);
+        float cosT = cos(theta);
+        float baseZ = -20.0;
+        if (pos.z > baseZ) {
+            float h = pos.z - baseZ;
+            vec2 dirXY = terrainPosition.xy / max(radial, 1.0);
+            // True 3D hinge rotation: ridge starts folded flat on ground and swings up & back by strut push
+            pos.z = baseZ + h * sinT;
+            pos.xy = terrainPosition.xy - dirXY * (h * cosT * 0.72);
+            // Rotate 3D surface normal with the folding mountain facet so ceiling spotlight sweeps across it
+            float nRad = dot(terrainNormal.xy, dirXY);
+            vec2 nTan = terrainNormal.xy - dirXY * nRad;
+            float nRadRot = nRad * sinT - terrainNormal.z * cosT;
+            float nZRot = nRad * cosT + terrainNormal.z * sinT;
+            rotNormal = normalize(vec3(nTan + dirXY * nRadRot, nZRot));
+            foldData = vec2(max(0.0, cosT), sin(clamp(theta, 0.0, 1.5707963) * 2.0));
+        }
+    }
+    vec3 window = project(pos);
+    float distance = length(pos);
     vec2 clip = (window.xy - terrainViewport.xy) / terrainViewport.zw * 2. - 1.;
     float depth = distance / (distance + 128.);
     gl_Position = vec4(clip * distance, (depth * 2. - 1.) * distance, distance);
-    surfacePosition = terrainPosition;
-    surfaceNormal = terrainNormal;
+    surfacePosition = pos;
+    surfaceNormal = rotNormal;
     surfaceFlow = terrainFlow;
+    startupFold = foldData;
 }
 )");
 		const auto fragmentShader = StelOpenGL::globalShaderPrefix(StelOpenGL::FRAGMENT_SHADER) + QByteArray(R"(
@@ -725,6 +768,7 @@ precision highp float;
 VARYING highp vec3 surfacePosition;
 VARYING highp vec3 surfaceNormal;
 VARYING highp float surfaceFlow;
+VARYING highp vec2 startupFold;
 uniform highp vec4 terrainViewport;
 uniform sampler2D noiseTexture;
 uniform float clockTime;
@@ -735,6 +779,7 @@ uniform float daylight;
 uniform bool nightVision;
 uniform bool vividAtmosphere;
 uniform vec3 sunDirection;
+uniform highp vec2 startupLift;
 float softNoise(vec2 point) {
     vec2 cell = floor(point);
     vec2 blend = fract(point);
@@ -793,6 +838,17 @@ void main() {
     vec3 surface = groundTint * (.50 + .50 * sideLight);
     float fog = aerialPerspective(distance, .5);
     vec3 color = mix(surface, skyTint, fog) * illumination;
+    if (startupLift.x < 1.5) {
+        if (startupLift.x <= 0.002 && altitude > -0.002) discard;
+        // Directional overhead observatory spotlight sweeping across the folding 3D origami ridge slopes
+        float stageSpot = max(dot(normal, normalize(vec3(0.08, 0.22, 0.97))), 0.0);
+        float foldSheen = pow(startupFold.x, 1.15) * (0.12 + 0.34 * stageSpot);
+        float creaseRim = smoothstep(0.06, 0.42, normal.z) * (0.35 + 0.65 * startupFold.y);
+        vec3 silhouette = vec3(0.012, 0.018, 0.032)
+            + creaseRim * vec3(0.038, 0.062, 0.105)
+            + foldSheen * vec3(0.18, 0.28, 0.44);
+        color = mix(silhouette, color, startupLift.y);
+    }
     if (nightVision) color = vec3(dot(color, vec3(.3, .59, .11)), 0., 0.);
     gl_FragDepth = distance / (distance + 128.);
     FRAG_COLOR = vec4(color * alpha, alpha);
@@ -999,6 +1055,7 @@ void main() { FRAG_COLOR = texture(terrainColor, terrainUv); }
 	program.setUniformValue("nightVision", StelApp::getInstance().getVisionModeNight());
 	program.setUniformValue("vividAtmosphere", GETSTELMODULE(LandscapeMgr)->getFlagVividAtmosphere());
 	program.setUniformValue("sunDirection", sunDirection.toQVector());
+	program.setUniformValue("startupLift", QVector2D(OhosStartupChoreography::landscapeLift(), OhosStartupChoreography::landscapeIllum()));
 	program.setUniformValue("noiseTexture", 0);
 	resources.noise->bind(0);
 	resources.meshVao->bind();
@@ -1343,6 +1400,7 @@ uniform float fogCylinderHeight;
 uniform bool calibrated;
 uniform bool tanMode;
 uniform vec4 brightness;
+uniform vec2 startupLift;
 
 vec4 sampleSideTexture(int sideIndex, const vec2 texc, const vec2 texDx, const vec2 texDy)
 {
@@ -1370,6 +1428,10 @@ void main(void)
 	vec3 viewDir = normalize(modelPos);
 
 	vec4 color;
+	float foldCos = 0.0;
+	float foldActive = 0.0;
+	float foldEdge = 0.0;
+	bool origamiClipped = false;
 	if(whatToRender == -1) // ground
 	{
 		vec2 centeredTexCoords = viewDir.z!=0. ? vshift / viewDir.z * viewDir.xy
@@ -1430,7 +1492,62 @@ void main(void)
 		float sideFraction = clamp(sidePosition-float(currentSide), 0., 1.);
 		float s = mix(texCoordLeft, texCoordRight, sideFraction);
 
-		float elevation = asin(viewDir.z);
+		float rawElevation = asin(viewDir.z);
+		float elevation = rawElevation;
+		if(startupLift.x < 1.5 && elevation > 0.0)
+		{
+			float azNorm = fract(atan(viewDir.x, viewDir.y) / (2.0 * PI));
+			float secF = azNorm * 16.0;
+			float secIdx = floor(secF);
+			float secFrac = fract(secF);
+			// Crisp discrete origami pop-up panels with sweeping mechanical cascade + slight organic stagger
+			float waveOrder = mod(secIdx * 5.0 + 3.0, 16.0) / 16.0;
+			float jitter = fract(sin(secIdx * 127.1 + 17.3) * 43758.5453);
+			float delay = waveOrder * 0.34 + jitter * 0.18;
+			float u = clamp((startupLift.x - delay) / 0.48, 0.0, 1.0);
+			float theta = 0.0;
+			if(u >= 1.0)
+			{
+				theta = 1.5707963;
+			}
+			else if(u > 0.0)
+			{
+				// Fast strut push to upright + damped rigid-cardboard rebound wobble (+11 deg -> -4 deg -> 0)
+				float rise = 1.0 - pow(1.0 - min(u / 0.54, 1.0), 3.0);
+				float post = max(0.0, (u - 0.42) / 0.58);
+				float wobble = sin(post * 12.5) * exp(-post * 4.0) * 0.21 * smoothstep(0.32, 0.54, u);
+				theta = clamp(rise * 1.5707963 + wobble, 0.0, 1.80);
+			}
+			float sinT = sin(theta);
+			float cosT = cos(theta);
+			foldCos = max(0.0, cosT);
+			foldActive = sin(clamp(theta, 0.0, 1.5707963) * 2.0);
+			if(sinT <= 0.015)
+			{
+				elevation = 1.55;
+				origamiClipped = true;
+			}
+			else
+			{
+				// 3D hinged cutout ray-plane intersection + subtle perspective trapezoid tilt while unfolding
+				float effElev = atan(tan(elevation) / sinT);
+				float heightRatio = clamp(effElev / 0.24, 0.0, 1.0);
+				float localCentered = secFrac - 0.5;
+				float trapezoidScale = 1.0 / max(0.76, 1.0 - 0.22 * foldCos * heightRatio);
+				float warpedLocal = localCentered * trapezoidScale;
+				if(abs(warpedLocal) > 0.505)
+				{
+					origamiClipped = true;
+				}
+				else
+				{
+					float azShift = (warpedLocal - localCentered) / 16.0;
+					s = clamp(s + azShift * float(totalNumberOfSides) * deltaS, texCoordLeft, texCoordRight);
+					elevation = effElev;
+					foldEdge = smoothstep(0.045, 0.0, 0.5 - abs(warpedLocal)) * foldActive;
+				}
+			}
+		}
 		float texCoordBottom  = perSideTexCoords[currentSideInBatch][1];
 		float texCoordTop     = perSideTexCoords[currentSideInBatch][3];
 		float deltaT = texCoordTop - texCoordBottom;
@@ -1479,7 +1596,7 @@ void main(void)
 			FRAG_COLOR = vec4(0);
 			return;
 		}
-		if(s<texCoordLeft || s>texCoordRight || t<texCoordBottom || t>texCoordTop)
+		if(s<texCoordLeft || s>texCoordRight || t<texCoordBottom || t>texCoordTop || origamiClipped)
 		{
 			FRAG_COLOR = vec4(0);
 			return;
@@ -1499,7 +1616,27 @@ void main(void)
 		color = sampleSideTexture(currentSide, vec2(s,t), texDx, texDy);
 	}
 
-	FRAG_COLOR = color * brightness;
+	vec4 finalColor = color * brightness;
+	if(startupLift.x < 1.5)
+	{
+		if(whatToRender == -2)
+		{
+			finalColor *= startupLift.y;
+		}
+		else
+		{
+			float rawE = max(0.0, asin(viewDir.z));
+			float elevRim = smoothstep(0.0, 0.16, rawE);
+			// Origami folding face catches overhead stage spotlight while tilted (foldCos > 0),
+			// then snaps into crisp pitch-dark backlit silhouette when upright at 90 deg.
+			float foldSheen = pow(foldCos, 1.10) * 0.34;
+			float hingeGlint = exp(-rawE * 95.0) * foldCos * 0.38;
+			vec3 silRgb = mix(vec3(0.010, 0.015, 0.028), vec3(0.030, 0.048, 0.082), elevRim)
+				+ (foldSheen + hingeGlint + foldEdge * 0.24) * vec3(0.28, 0.44, 0.68);
+			finalColor.rgb = mix(silRgb, finalColor.rgb, startupLift.y);
+		}
+	}
+	FRAG_COLOR = finalColor;
 }
 )";
 		ok = renderProgram->addShaderFromSourceCode(QOpenGLShader::Fragment, frag);
@@ -1529,6 +1666,7 @@ void main(void)
 		shaderVars.totalNumberOfSides      = renderProgram->uniformLocation("totalNumberOfSides");
 		shaderVars.numberOfSidesInBatch    = renderProgram->uniformLocation("numberOfSidesInBatch");
 		shaderVars.projectionMatrixInverse = renderProgram->uniformLocation("projectionMatrixInverse");
+		shaderVars.startupLift             = renderProgram->uniformLocation("startupLift");
 		for(unsigned n = 0; n < std::size(shaderVars.sideTexN); ++n)
 		{
 			shaderVars.sideTexN[n] = renderProgram->uniformLocation(("sideTex"+std::to_string(n)).c_str());
@@ -1544,6 +1682,7 @@ void main(void)
 	{
 		auto& gl = *QOpenGLContext::currentContext()->functions();
 		renderProgram->bind();
+		renderProgram->setUniformValue(shaderVars.startupLift, OhosStartupChoreography::landscapeLift(), OhosStartupChoreography::landscapeIllum());
 		bindVAO();
 
 		const int firstFreeTexSampler = 0;
@@ -2192,6 +2331,7 @@ uniform sampler2D mapTex;
 uniform mat4 projectionMatrixInverse;
 uniform float texFov;
 uniform vec4 brightness;
+uniform vec2 startupLift;
 void main(void)
 {
 	const float PI = 3.14159265;
@@ -2203,6 +2343,25 @@ void main(void)
 
 	modelPos = normalize(modelPos);
 	float modelZenithAngle = acos(modelPos.z);
+	float fishElev = 0.5 * PI - modelZenithAngle;
+	if(startupLift.x < 1.5 && fishElev > 0.0)
+	{
+		float azNorm = fract(atan(modelPos.x, modelPos.y) / (2.0 * PI));
+		float secF = azNorm * 20.0;
+		float secIdx = floor(secF);
+		float secFrac = fract(secF);
+		float delay0 = fract(sin(secIdx * 127.1 + 17.3) * 43758.5453) * 0.46;
+		float delay1 = fract(sin(mod(secIdx + 1.0, 20.0) * 127.1 + 17.3) * 43758.5453) * 0.46;
+		float u0 = clamp((startupLift.x - delay0) / 0.48, 0.0, 1.0);
+		float u1 = clamp((startupLift.x - delay1) / 0.48, 0.0, 1.0);
+		float t0 = u0 - 1.0;
+		float lift0 = u0 <= 0.0 ? 0.0 : (1.0 + 2.65 * t0 * t0 * t0 + 1.65 * t0 * t0);
+		float t1 = u1 - 1.0;
+		float lift1 = u1 <= 0.0 ? 0.0 : (1.0 + 2.65 * t1 * t1 * t1 + 1.65 * t1 * t1);
+		float sectorLift = mix(lift0, lift1, smoothstep(0.90, 1.0, secFrac));
+		float effElev = sectorLift <= 0.002 ? 1.55 : (fishElev / sectorLift);
+		modelZenithAngle = 0.5 * PI - effElev;
+	}
 
 	float r = min(modelZenithAngle / texFov, 0.5);
 	vec2 posFromCenter = dot(modelPos,modelPos)==0. ? vec2(0) : r*normalize(modelPos.yx);
@@ -2217,7 +2376,14 @@ void main(void)
 		FRAG_COLOR = vec4(0);
 		return;
 	}
-	FRAG_COLOR = color * brightness;
+	vec4 fishFinal = color * brightness;
+	if(startupLift.x < 1.5)
+	{
+		float elevRim = smoothstep(0.0, 0.16, max(0.0, fishElev));
+		vec3 silRgb = mix(vec3(0.012, 0.018, 0.032), vec3(0.036, 0.056, 0.095), elevRim);
+		fishFinal.rgb = mix(silRgb, fishFinal.rgb, startupLift.y);
+	}
+	FRAG_COLOR = fishFinal;
 }
 )";
 		ok = renderProgram->addShaderFromSourceCode(QOpenGLShader::Fragment, frag);
@@ -2236,6 +2402,7 @@ void main(void)
 		shaderVars.mapTex           = renderProgram->uniformLocation("mapTex");
 		shaderVars.brightness       = renderProgram->uniformLocation("brightness");
 		shaderVars.projectionMatrixInverse = renderProgram->uniformLocation("projectionMatrixInverse");
+		shaderVars.startupLift      = renderProgram->uniformLocation("startupLift");
 		renderProgram->release();
 	}
 	if(!renderProgram || !renderProgram->isLinked())
@@ -2265,6 +2432,7 @@ void main(void)
 		renderProgram->setUniformValue(shaderVars.texFov, texFov);
 		renderProgram->setUniformValue(shaderVars.projectionMatrixInverse,
 					       prj->getProjectionMatrix().toQMatrix().inverted());
+		renderProgram->setUniformValue(shaderVars.startupLift, OhosStartupChoreography::landscapeLift(), OhosStartupChoreography::landscapeIllum());
 		prj->setUnProjectUniforms(*renderProgram);
 
 		gl.glEnable(GL_BLEND);
@@ -2523,6 +2691,7 @@ uniform float mapTexTop;
 uniform float mapTexBottom;
 uniform vec4 bottomCapColor;
 uniform vec4 brightness;
+uniform vec2 startupLift;
 void main(void)
 {
 	const float PI = 3.14159265;
@@ -2534,6 +2703,59 @@ void main(void)
 	modelPos = normalize(modelPos);
 	float modelZenithAngle = acos(modelPos.z);
 	float modelLongitude = atan(modelPos.x, modelPos.y);
+	float sphElev = 0.5 * PI - modelZenithAngle;
+	float sphFoldCos = 0.0;
+	float sphFoldEdge = 0.0;
+	bool sphOrigamiClipped = false;
+	if(startupLift.x < 1.5 && sphElev > 0.0)
+	{
+		float azNorm = fract(modelLongitude / (2.0 * PI));
+		float secF = azNorm * 16.0;
+		float secIdx = floor(secF);
+		float secFrac = fract(secF);
+		float waveOrder = mod(secIdx * 5.0 + 3.0, 16.0) / 16.0;
+		float jitter = fract(sin(secIdx * 127.1 + 17.3) * 43758.5453);
+		float delay = waveOrder * 0.34 + jitter * 0.18;
+		float u = clamp((startupLift.x - delay) / 0.48, 0.0, 1.0);
+		float theta = 0.0;
+		if(u >= 1.0)
+		{
+			theta = 1.5707963;
+		}
+		else if(u > 0.0)
+		{
+			float rise = 1.0 - pow(1.0 - min(u / 0.54, 1.0), 3.0);
+			float post = max(0.0, (u - 0.42) / 0.58);
+			float wobble = sin(post * 12.5) * exp(-post * 4.0) * 0.21 * smoothstep(0.32, 0.54, u);
+			theta = clamp(rise * 1.5707963 + wobble, 0.0, 1.80);
+		}
+		float sinT = sin(theta);
+		sphFoldCos = max(0.0, cos(theta));
+		float foldActive = sin(clamp(theta, 0.0, 1.5707963) * 2.0);
+		if(sinT <= 0.015)
+		{
+			modelZenithAngle = -1.0;
+			sphOrigamiClipped = true;
+		}
+		else
+		{
+			float effElev = atan(tan(sphElev) / sinT);
+			float heightRatio = clamp(effElev / 0.24, 0.0, 1.0);
+			float localCentered = secFrac - 0.5;
+			float trapezoidScale = 1.0 / max(0.76, 1.0 - 0.22 * sphFoldCos * heightRatio);
+			float warpedLocal = localCentered * trapezoidScale;
+			if(abs(warpedLocal) > 0.505)
+			{
+				sphOrigamiClipped = true;
+			}
+			else
+			{
+				modelLongitude += (warpedLocal - localCentered) * (2.0 * PI / 16.0);
+				modelZenithAngle = 0.5 * PI - effElev;
+				sphFoldEdge = smoothstep(0.045, 0.0, 0.5 - abs(warpedLocal)) * foldActive;
+			}
+		}
+	}
 
 	vec2 texc = vec2(modelLongitude/(2.*PI),
 					 1.-(modelZenithAngle-mapTexTop)/(mapTexBottom-mapTexTop));
@@ -2569,16 +2791,30 @@ void main(void)
 	}
 	if(modelZenithAngle > mapTexBottom)
 	{
-		FRAG_COLOR = bottomCapColor;
+		vec4 cap = bottomCapColor;
+		if(startupLift.x < 1.5)
+			cap.rgb = mix(vec3(0.012, 0.018, 0.032), cap.rgb, startupLift.y);
+		FRAG_COLOR = cap;
 		return;
 	}
-	if(modelZenithAngle < mapTexTop)
+	if(modelZenithAngle < mapTexTop || sphOrigamiClipped)
 	{
 		FRAG_COLOR = vec4(0);
 		return;
 	}
 
-	FRAG_COLOR = color * brightness;
+	vec4 sphFinal = color * brightness;
+	if(startupLift.x < 1.5)
+	{
+		float rawE = max(0.0, sphElev);
+		float elevRim = smoothstep(0.0, 0.16, rawE);
+		float foldSheen = pow(sphFoldCos, 1.10) * 0.34;
+		float hingeGlint = exp(-rawE * 95.0) * sphFoldCos * 0.38;
+		vec3 silRgb = mix(vec3(0.010, 0.015, 0.028), vec3(0.030, 0.048, 0.082), elevRim)
+			+ (foldSheen + hingeGlint + sphFoldEdge * 0.24) * vec3(0.28, 0.44, 0.68);
+		sphFinal.rgb = mix(silRgb, sphFinal.rgb, startupLift.y);
+	}
+	FRAG_COLOR = sphFinal;
 }
 )";
 		ok = renderProgram->addShaderFromSourceCode(QOpenGLShader::Fragment, frag);
@@ -2600,6 +2836,7 @@ void main(void)
 		shaderVars.mapTexBottom     = renderProgram->uniformLocation("mapTexBottom");
 		shaderVars.bottomCapColor   = renderProgram->uniformLocation("bottomCapColor");
 		shaderVars.projectionMatrixInverse = renderProgram->uniformLocation("projectionMatrixInverse");
+		shaderVars.startupLift      = renderProgram->uniformLocation("startupLift");
 		renderProgram->release();
 	}
 	if(!renderProgram || !renderProgram->isLinked())
@@ -2630,6 +2867,7 @@ void main(void)
 
 		renderProgram->setUniformValue(shaderVars.projectionMatrixInverse,
 					       prj->getProjectionMatrix().toQMatrix().inverted());
+		renderProgram->setUniformValue(shaderVars.startupLift, OhosStartupChoreography::landscapeLift(), OhosStartupChoreography::landscapeIllum());
 		prj->setUnProjectUniforms(*renderProgram);
 
 		gl.glEnable(GL_BLEND);

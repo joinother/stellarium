@@ -19,6 +19,7 @@
 
 
 #include "AsterismMgr.hpp"
+#include "OhosStartupChoreography.hpp"
 #include "Asterism.hpp"
 #include "StarMgr.hpp"
 #include "StelApp.hpp"
@@ -283,7 +284,7 @@ void AsterismMgr::setRayHelperThickness(const int thickness)
 
 void AsterismMgr::draw(StelCore* core)
 {
-	if (!core->getFlagClearSky())
+	if (!core->getFlagClearSky() || OhosStartupChoreography::constellationScale() <= 0.02f)
 		return;
 
 	const StelProjectorP prj = core->getProjection(StelCore::FrameJ2000);

@@ -18,6 +18,7 @@ import {
   countRemoteDynamicEvents,
   mergeRemoteCalendarEvents
 } from '../state/RemoteCalendarFeed'
+import { RocketCatalogData, RocketLaunchPresetInfo } from '../state/RocketLaunchTypes'
 
 export interface AstronomyCalendarReminderResult extends AstronomyReminderResult {
   message?: string
@@ -42,6 +43,8 @@ export class AstronomyCalendarController {
   private response: CalendarNativeResponse | undefined = undefined
   private extraResponses: CalendarNativeResponse[] = []
   private rawSatellitePasses: NativeSatellitePassRecord[] = []
+  private rocketPresets: RocketLaunchPresetInfo[] = []
+  private rocketCatalogLoaded: boolean = false
 
   constructor(port: CommandPort, store: AstronomyCalendarStore, hooks: AstronomyCalendarHostHooks) {
     this.port = port
@@ -90,6 +93,34 @@ export class AstronomyCalendarController {
         working = working.concat(satEvents)
       }
     }
+    if (isEarthCalendarPlanet(this.store.observerPlanet) && this.rocketPresets.length > 0) {
+      const isZh = this.language.toLowerCase().startsWith('zh')
+      for (let i = 0; i < this.rocketPresets.length; i++) {
+        const p = this.rocketPresets[i]
+        const atMs = Date.parse(p.launchTimeUtc)
+        if (!Number.isFinite(atMs) || atMs < startRange.start || atMs >= endRange.end) continue
+        const jd = atMs / 86400000.0 + 2440587.5
+        working.push({
+          id: 'rocket:' + p.id,
+          kind: 'rocket-launch',
+          title: isZh ? p.titleZh : p.titleEn,
+          at: atMs,
+          jd: jd,
+          body: isZh ? p.descriptionZh : p.descriptionEn,
+          target: p.siteId,
+          panel: 'calendar',
+          tab: 0,
+          observerPlanet: 'Earth',
+          rocketPresetId: p.id,
+          rocketSiteId: p.siteId,
+          rocketVehicleId: p.vehicleId,
+          rocketLaunchTimeUtc: p.launchTimeUtc,
+          rocketAzimuthDeg: p.azimuthDeg,
+          rocketTargetOrbit: p.targetOrbit,
+          rocketBadge: isZh ? p.badgeZh : p.badgeEn
+        })
+      }
+    }
     const remoteEntries = this.hooks.remoteEntries !== undefined ? this.hooks.remoteEntries() : []
     if (remoteEntries.length > 0) {
       const ctx = this.effectiveObserverContext()
@@ -124,6 +155,29 @@ export class AstronomyCalendarController {
     this.hooks.feedChanged(this.store.events.slice())
   }
 
+  private fetchRocketPresetsIfApplicable(sequence: number, planet: string): void {
+    if (!isEarthCalendarPlanet(planet) || this.rocketCatalogLoaded) return
+    this.rocketCatalogLoaded = true
+    try {
+      this.port.requestLongRunning('getRocketLaunchCatalog', '', (resp: StellariumBridgeResponse): void => {
+        if (this.disposed) return
+        const data = resp as Object as RocketCatalogData
+        if (data && data.ok === true && Array.isArray(data.presets) && data.presets.length > 0) {
+          this.rocketPresets = data.presets
+          if (this.response !== undefined) {
+            this.rebuildFromLoadedResponses()
+          }
+        } else {
+          this.rocketCatalogLoaded = false
+        }
+      }, () => {
+        this.rocketCatalogLoaded = false
+      }, undefined, 160, (): boolean => this.disposed)
+    } catch (_e) {
+      this.rocketCatalogLoaded = false
+    }
+  }
+
   refreshRemoteOverlay(): void {
     if (this.disposed || this.response === undefined) return
     try {
@@ -131,8 +185,20 @@ export class AstronomyCalendarController {
     } catch (_) {}
   }
 
+  // 卫星目录更新 / 导入本地 TLE / 切换观测地后，立即重新拉取近 48 小时卫星过境并刷新天象日历与探索页卡片。
+  refreshSatellitePasses(): void {
+    if (this.disposed || !this.store.loaded) return
+    if (!isEarthCalendarPlanet(this.store.observerPlanet)) return
+    const overlapsStart = monthOverlapsSatelliteWindow(this.store.year, this.store.month)
+    const overlapsEnd = monthOverlapsSatelliteWindow(this.store.throughYear, this.store.throughMonth)
+    if (!overlapsStart && !overlapsEnd) return
+    this.fetchSatellitePassesIfApplicable(this.sequence, this.store.year, this.store.month, this.store.observerPlanet)
+  }
+
   private fetchSatellitePassesIfApplicable(sequence: number, year: number, month: number, planet: string): void {
-    if (!isEarthCalendarPlanet(planet) || !monthOverlapsSatelliteWindow(year, month)) {
+    const overlaps = monthOverlapsSatelliteWindow(year, month) ||
+      monthOverlapsSatelliteWindow(this.store.throughYear, this.store.throughMonth)
+    if (!isEarthCalendarPlanet(planet) || !overlaps) {
       this.store.satellitePassesLoading = false
       return
     }
@@ -141,17 +207,17 @@ export class AstronomyCalendarController {
       this.port.requestInteractive('getTonightEvents', '', (response: StellariumBridgeResponse): void => {
         if (this.disposed || sequence !== this.sequence) return
         this.store.satellitePassesLoading = false
+        if (response.ok !== true) return
         const payload = response as Record<string, Object>
         const tonightObj = payload['tonight'] as Record<string, Object> | undefined
         const rawList = tonightObj !== undefined && Array.isArray(tonightObj['satellitePasses'])
           ? tonightObj['satellitePasses']
           : payload['satellitePasses']
-        if (!Array.isArray(rawList) || rawList.length === 0) return
-        this.rawSatellitePasses = rawList as NativeSatellitePassRecord[]
+        this.rawSatellitePasses = Array.isArray(rawList) ? (rawList as NativeSatellitePassRecord[]) : []
         if (this.response !== undefined) {
           this.rebuildFromLoadedResponses()
         } else {
-          const nonSat = this.store.events.filter((ev: AstronomyCalendarEvent) => ev.kind !== 'satellite-pass' && ev.isRemote !== true)
+          const nonSat = this.store.events.filter((ev: AstronomyCalendarEvent) => ev.kind !== 'satellite-pass' && ev.kind !== 'rocket-launch' && ev.isRemote !== true)
           const merged = this.mergeEventsWithSatellites(nonSat)
           this.store.events = merged
           this.recomputeMonthDays()
@@ -212,6 +278,7 @@ export class AstronomyCalendarController {
       this.updateCoverage()
       this.hooks.feedChanged(events.slice())
       this.fetchSatellitePassesIfApplicable(sequence, year, month, planet)
+      this.fetchRocketPresetsIfApplicable(sequence, planet)
       // 首月就绪后顺滑预载后续 2 个月（已缓存则 0ms 秒出），确保滚动与搜索卡片流持续连贯。
       setTimeout(() => { this.prefetchAheadMonths(sequence, fromCache ? 3 : 2) }, fromCache ? 16 : 90)
     }
@@ -286,7 +353,7 @@ export class AstronomyCalendarController {
         this.rebuildFromLoadedResponses()
       } else {
         const events = calendarNativeEvents(native, range, this.language, this.effectiveObserverContext())
-        const nonSat = this.store.events.filter((ev: AstronomyCalendarEvent) => ev.kind !== 'satellite-pass' && ev.isRemote !== true).concat(events)
+        const nonSat = this.store.events.filter((ev: AstronomyCalendarEvent) => ev.kind !== 'satellite-pass' && ev.kind !== 'rocket-launch' && ev.isRemote !== true).concat(events)
         this.store.events = this.mergeEventsWithSatellites(nonSat)
         this.hooks.feedChanged(this.store.events.slice())
       }
